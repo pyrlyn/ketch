@@ -14,9 +14,9 @@ Catch releases straight from GitHub — a package manager for GitHub-released bi
 | B61 | in progress | P2 | 2 | 80% | Cursor / grok 4.7 |
 | B63 | in progress | P1 | 3 | 95% | Cursor / grok 4.7 |
 | B64 | in progress | P0 | 4 | 0% | Claude Code / opus-5.5 |
-| B65 | todo | P0 | 2 | 0% | |
-| R3 | todo | P1 | 3 | 0% | |
-| F8 | todo | P2 | 3 | 0% | |
+| B65 | in progress | P0 | 2 | 0% | Cursor / grok 4.7 high |
+| R3 | in progress | P1 | 3 | 0% | Cursor / grok 4.7 high |
+| F8 | in progress | P2 | 3 | 0% | Cursor / grok 4.7 high |
 | M9 | in progress | P2 | 5 | 0% | Claude Code / opus-5.5 |
 
 ### F1. Notarisation
@@ -156,6 +156,14 @@ Execution plan:
 
 Show a spinner while a command is running so the user sees that it started. Use a progress bar where measurable progress is available, and a spinner elsewhere. Match the behavior in rtok.
 
+Execution plan:
+
+1. Work only in `_worktrees/ketch-f8`. `src/ui.rs` already draws download bars with `indicatif`. Read rtok's spinner and progress and match that behavior.
+2. One helper in `ui.rs`: a progress bar when the total is known, a spinner otherwise. Every line still goes through `ui::`. No `println!`.
+3. Use it on long operations that today sit silent (resolve, extract, registry fetch, self-update outside the existing download bar). Do not change command results or exit codes.
+4. M9 owns `ketch list` and its `N/M packages` line. Do not edit the list command. Expose the helper so M9 can call it later.
+5. Unit-test the helper's mode choice. Run `cargo fmt`, `cargo clippy --all-targets`, and the touched tests.
+
 ### R3. Cross-platform CI
 
 Run verification on macOS, Windows and Linux. A ketch config is either a local file in the project or pushed to a registry; keep that model. The cross-platform check must catch OS-specific binary selection bugs like the one in B64.
@@ -168,9 +176,23 @@ To add:
 2. Both config paths, local file and registry: cover the select-mode prompt when the binary name is missing and several candidates match, and assert the chosen binary is written back into the config.
 3. Caching: rust-cache is already in place. Also evaluate caching the mise toolchain and the target directories on all three OSes. Do this in any case, and base the decision on the before/after build-time numbers from the cox and ketch infra-template PRs.
 
+Execution plan:
+
+1. Work only in `_worktrees/ketch-r3`. Confirm `ci.yml` and `verify.yml` already run the suite on macOS, Linux and Windows, so B65's test is picked up with no extra job.
+2. Do not implement B65's fixture or B64's select-mode prompt and write-back. Those are owned elsewhere. Item 2 lands when B64's API exists; until then leave it.
+3. Evaluate mise-toolchain and target-dir caching on all three OSes. Read the before/after build times from the cox and ketch infra-template PRs. Change the workflows only when the numbers justify it. Keep `Swatinem/rust-cache`.
+4. Verify the workflow YAML still parses. Do not hand-edit `release.yml`.
+
 ### B65. Binary selection regression test
 
 Add a fixture with two similarly named binaries (for example `rtok` and `rtok-hook`) and assert the intended one is chosen on every OS: macOS, Windows and Linux. This is the test that would have caught the Windows alphabetical-sort bug, where `rtok hook` was selected instead of the intended binary.
+
+Execution plan:
+
+1. Work only in `_worktrees/ketch-b65`. The intended binary is the one whose name equals the package name (`rtok` over `rtok-hook`, `.exe` ignored, case-insensitive), per the B64 decision.
+2. Find the pick in `discover_executables` (`src/platform/unix.rs`, `src/platform/windows.rs`) and add a failing test first: a fixture with both names, asserting the package-name match wins on every OS.
+3. If the current Windows sort fails that test, fix only the shared selection order so the exact match wins. Prompts, state persistence, wizard, and `ketch.toml` write-back stay in B64 (Claude Code / opus-5.5, worktree `ketch-b64`). Do not edit those.
+4. Verify with `cargo nextest` on the new tests. Windows is proven in CI, not on this machine.
 
 ### M9. `ketch list` refactor: `local`, `remote`, and both by default
 
