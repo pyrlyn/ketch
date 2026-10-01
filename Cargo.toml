@@ -21,8 +21,8 @@ default-members = [".", "crates/ketch-core"]
 
 # One version for both crates: the core reports it (user agent, `--version`,
 # the statistics database), so it can never be allowed to drift from the
-# binary's. scripts/release.sh, tests/crate-version.sh and site/sync-docs.py
-# read and write this line.
+# binary's. scripts/release.sh and tests/crate-version.sh read and write this
+# line.
 [workspace.package]
 version = "0.9.0"
 edition = "2021"

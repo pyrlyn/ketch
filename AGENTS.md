@@ -202,7 +202,7 @@ cross-platform conditional flows, automated crate installations, or built-in
 scripting extensions such as duckscript tailored specifically for Rust.
 
 For this repository, prefer **Just** if a task runner is introduced: the
-project combines Rust with shell and site tooling, and its current commands
+project combines Rust with shell and Node tooling, and its current commands
 are simple aliases. Use cargo-make instead only when the workflow grows into
 conditional, multi-stage Rust automation.
 
@@ -331,9 +331,9 @@ These are observed throughout; match them rather than introducing your own.
   it exists separately. Every public item has a doc comment.
 - **A generated file says so in its first lines**, and the generator writes
   that header, not a person or a second script: `ketch lock` for `ketch.lock`,
-  `site/sync-docs.py` for `site/content/docs/`, `scripts/cask.sh` for the
-  tap's `Casks/ketch.rb`, `desktop/macos/design/build.mjs` for `Tokens.swift`
-  and the generated blocks of `DESIGN.md` and `preview.html`. To change such a
+  `scripts/cask.sh` for the tap's `Casks/ketch.rb`,
+  `desktop/macos/design/build.mjs` for `Tokens.swift` and the generated blocks
+  of `DESIGN.md` and `preview.html`. To change such a
   file, change its generator.
 - **Comments explain *why*, never *what*.** The code already says what it does.
   A comment earns its place by recording a decision, a constraint, or a

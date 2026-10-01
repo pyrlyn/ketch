@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="site/static/img/favicon.svg" width="72" alt="">
+<img src="assets/favicon.svg" width="72" alt="">
 
 # ketch
 
@@ -10,7 +10,6 @@
 ![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)
 [![release](https://img.shields.io/github/v/release/pyrlyn/ketch?sort=semver)](https://github.com/pyrlyn/ketch/releases/latest)
 [![ci](https://github.com/pyrlyn/ketch/actions/workflows/ci.yml/badge.svg)](https://github.com/pyrlyn/ketch/actions/workflows/ci.yml)
-[![site](https://github.com/pyrlyn/ketch/actions/workflows/pages.yml/badge.svg)](https://github.com/pyrlyn/ketch/actions/workflows/pages.yml)
 <br>
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=listepo_ketch&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=listepo_ketch) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=listepo_ketch&metric=coverage)](https://sonarcloud.io/component_measures?id=listepo_ketch&metric=coverage) [![Tests](https://img.shields.io/sonar/tests/listepo_ketch?server=https%3A%2F%2Fsonarcloud.io&compact_message)](https://sonarcloud.io/component_measures?id=listepo_ketch&metric=tests)
 
@@ -20,8 +19,7 @@ Install command-line tools and apps from GitHub releases on macOS, Linux, and Wi
 No taps, no formulae, no build step — ketch downloads what a project already
 ships, verifies it, and puts it on your `PATH`.
 
-[Website](https://pyrlyn.github.io/ketch/) ·
-[Documentation](https://pyrlyn.github.io/ketch/docs/) ·
+[Documentation](#documentation) ·
 [Registry](https://github.com/pyrlyn/ketch-registry) ·
 [Roadmap](ROADMAP.md)
 
@@ -56,12 +54,12 @@ ketch install local:/abs/or/rel      # same thing, as a package ref
 **Install & verify.** `ketch install pyrlyn/rtok` downloads the release, checks
 the published SHA-256, and leaves the binary on your `PATH`.
 
-![ketch install pyrlyn/rtok, checksum verified, then rtok --version](site/static/img/demo/ketch-install.png)
+![ketch install pyrlyn/rtok, checksum verified, then rtok --version](assets/demo/ketch-install.png)
 
 **Manage.** `ketch list`, `ketch outdated`, and `ketch upgrade` keep installed
 tools current — each upgrade is verified the same way.
 
-![ketch list, outdated, and upgrade for rtok](site/static/img/demo/ketch-manage.png)
+![ketch list, outdated, and upgrade for rtok](assets/demo/ketch-manage.png)
 
 ## Why ketch
 
@@ -456,6 +454,7 @@ the package registry is [`pyrlyn/ketch-registry`](https://github.com/pyrlyn/ketc
 
 | | |
 | --- | --- |
+| [docs/overview.md](docs/overview.md) | Installing, everyday use, and how a name is resolved |
 | [docs/COMMANDS.md](docs/COMMANDS.md) | Every command: what it does, and one working example |
 | [docs/MANIFESTS.md](docs/MANIFESTS.md) | The package config: every field, and when you need one |
 | [docs/REGISTRY.md](docs/REGISTRY.md) | The registry layout, and how to add a package to it |
@@ -465,10 +464,8 @@ the package registry is [`pyrlyn/ketch-registry`](https://github.com/pyrlyn/ketc
 | [AGENTS.md](AGENTS.md) | The layout, the conventions and the trust boundaries |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Short contributor checklist |
 
-The same pages are published at
-**[pyrlyn.github.io/ketch/docs](https://pyrlyn.github.io/ketch/docs/)** — the
-site generates them from the Markdown in this repository, so the two cannot
-drift.
+`.github/workflows/sync-docs.yml` mirrors every `docs/**/*.md` to the pyrlyn
+landing site, so the published pages cannot drift from the Markdown here.
 
 ## Building from source
 
