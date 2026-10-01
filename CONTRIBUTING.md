@@ -37,7 +37,8 @@ User-facing guides: [`docs/MANIFESTS.md`](docs/MANIFESTS.md),
 [`docs/REGISTRY.md`](docs/REGISTRY.md), [`docs/PLUGINS.md`](docs/PLUGINS.md),
 [`docs/LOCKFILE.md`](docs/LOCKFILE.md). `.github/workflows/sync-docs.yml`
 mirrors `docs/**/*.md` to the pyrlyn landing site — edit the Markdown here, not
-the published HTML.
+the published HTML. English is the source; a change to an English doc updates its
+`docs/ru/` and `docs/uk/` translations in the same change (see `AGENTS.md`).
 
 To add a package to the registry, put a `ketch.toml` at the package repo root
 and run `ketch registry push` (see [`docs/REGISTRY.md`](docs/REGISTRY.md)).

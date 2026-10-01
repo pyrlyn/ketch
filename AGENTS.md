@@ -13,7 +13,8 @@ it too — nothing here is agent-specific except the framing and the rule below.
   pull request description is not checked — that part is on the agent.
 - **English for repository files.** Commits, pull request titles and bodies,
   comments, docs, and user-facing strings in this repository are written in
-  English. Do not leave non-English prose in tracked files.
+  English. Do not leave non-English prose in tracked files, except the
+  `docs/ru/` and `docs/uk/` translations (see Documentation translations).
 - If a directory above this repository contains an `AGENTS.md` or
   `CLAUDE.md`, follow it too. If it conflicts with this file, ask the creator.
 - **Config files.** A config file this project owns has a schema generated from its types (Rust: `schemars`), committed and checked by a drift test, and one module owns all config loading, validation and editing. A config file another program owns (an agent host's or an editor's) gets no schema from us: check only our own entry in it and leave the rest byte-for-byte, comments included.
@@ -677,6 +678,17 @@ with a throwaway key, as CI's `macos-app` job does. The ketch-ffi XCFramework
 (R9) does not exist yet: the workflow's XCFramework step is off
 (`XCFRAMEWORK: 'false'`, marked `TODO(R9)`), so a release made before R9
 ships the app on `FakeKetchCore`.
+
+## Documentation translations
+
+English docs in `docs/` are the source of truth. Russian and Ukrainian translations live in
+`docs/ru/` and `docs/uk/` under the same relative path and file name (front matter adds
+`lang: ru` / `lang: uk`). Any change to an English doc must update the matching `docs/ru/` and
+`docs/uk/` translations in the same change, without waiting for a separate request. New English
+docs get translations too, and removing an English doc removes its translations. These two
+directories are the only place non-English prose is allowed.
+Maintainer-only docs stay English-only: `docs/sonarcloud-setup.md`,
+`docs/research-design-system.md` and `docs/research-desktop.md`.
 
 ## Before you call it done
 
