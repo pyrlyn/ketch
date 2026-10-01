@@ -1,7 +1,4 @@
----
-title: "Documentation"
-description: "How ketch resolves a name, picks a release asset and verifies it — plus the manifest schema, the registry layout and the source-plugin protocol."
----
+# Overview
 
 ketch installs command-line tools and apps from GitHub releases on macOS, Linux, and Windows.
 Most of the time it needs nothing from you but a repository name — these pages
