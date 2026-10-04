@@ -338,14 +338,14 @@ pub fn tone(tone: Tone, text: &str) -> String {
 /// and `already installed` share one entry. `uninstall` comes before `install`
 /// because it contains it.
 const OPERATION_ICONS: &[(&str, &str)] = &[
-    ("uninstall", "🗑️"),
-    ("remov", "🗑️"),
-    ("prun", "🗑️"),
+    ("uninstall", "🧹"),
+    ("remov", "🧹"),
+    ("prun", "🧹"),
     ("install", "📦"),
-    ("upgrad", "⬆️"),
-    ("updat", "⬆️"),
-    ("download", "⬇️"),
-    ("fetch", "⬇️"),
+    ("upgrad", "⏫"),
+    ("updat", "⏫"),
+    ("download", "⏬"),
+    ("fetch", "⏬"),
     ("link", "🔗"),
     ("roll", "⏪"),
     ("search", "🔍"),
@@ -361,17 +361,19 @@ fn icon(verb: &str, kind: Tone) -> Option<&'static str> {
     }
     match kind {
         Tone::Success => Some("✅"),
-        Tone::Warning => Some("⚠️"),
+        Tone::Warning => Some("❗"),
         Tone::Error => Some("❌"),
-        Tone::Note => Some("ℹ️"),
+        Tone::Note => Some("💡"),
         Tone::Step | Tone::Hint => None,
     }
 }
 
-/// Columns every icon is padded to. Every icon in the table is two columns
-/// wide, the ones built from a narrow symbol and a presentation selector
-/// (`ℹ️`, `⚠️`) included; each is still measured rather than assumed, so a
-/// narrower icon added later pads out instead of pulling its line left.
+/// Columns every icon is padded to. Every icon is one code point that is wide
+/// by default. A narrow symbol made wide by U+FE0F (`⬆️`, `⚠️`) is two columns
+/// to `unicode-width` but one to terminals that ignore the selector, which
+/// then draw the glyph over the space after it and shift the verb left. Each icon is still
+/// measured rather than assumed, so a narrower one added later pads out
+/// instead of pulling its line left.
 const ICON_WIDTH: usize = 2;
 
 /// The icon gutter in front of the verb column: the icon and a space, or as
@@ -1510,10 +1512,12 @@ mod tests {
     fn every_icon_fills_the_same_gutter() {
         for (_, icon) in OPERATION_ICONS {
             assert_eq!(UnicodeWidthStr::width(*icon), ICON_WIDTH, "{icon}");
+            assert_eq!(icon.chars().count(), 1, "{icon} needs a selector");
         }
         for kind in [Tone::Success, Tone::Warning, Tone::Error, Tone::Note] {
             let icon = icon("", kind).unwrap_or_default();
             assert_eq!(UnicodeWidthStr::width(icon), ICON_WIDTH, "{icon}");
+            assert_eq!(icon.chars().count(), 1, "{icon} needs a selector");
         }
     }
 
@@ -1539,7 +1543,7 @@ mod tests {
     #[test]
     fn an_operation_icon_outranks_the_meaning_icon() {
         assert_eq!(icon("installed", Tone::Success), Some("📦"));
-        assert_eq!(icon("uninstalled", Tone::Success), Some("🗑️"));
+        assert_eq!(icon("uninstalled", Tone::Success), Some("🧹"));
         assert_eq!(icon("rolled back", Tone::Success), Some("⏪"));
         assert_eq!(icon("up to date", Tone::Success), Some("✅"));
         assert_eq!(icon("resolving", Tone::Step), None);

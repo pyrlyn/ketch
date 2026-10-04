@@ -158,7 +158,7 @@ fn an_upgrade_replaces_the_payload_and_the_link_still_works() {
 
 /// Every icon `ui.rs` can put in front of a status line.
 const ICONS: &[&str] = &[
-    "📦", "⬆️", "🗑️", "⬇️", "🔗", "⏪", "🔍", "🩺", "✅", "⚠️", "❌", "ℹ️",
+    "📦", "⏫", "🧹", "⏬", "🔗", "⏪", "🔍", "🩺", "✅", "❗", "❌", "💡",
 ];
 
 fn assert_no_icon(what: &str, text: &str) {

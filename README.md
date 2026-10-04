@@ -427,8 +427,8 @@ ketch config reset --yes    # for scripts and CI
 refresh.
 
 `emoji` (default `true`) puts an icon in front of each status line on a
-terminal: 📦 install, ⬆️ upgrade, 🗑️ uninstall, ⬇️ download, 🔗 link, ⏪ rollback,
-✅ success, ⚠️ warning, ❌ error, ℹ️ note. Set it to `false`, or
+terminal: 📦 install, ⏫ upgrade, 🧹 uninstall, ⏬ download, 🔗 link, ⏪ rollback,
+✅ success, ❗ warning, ❌ error, 💡 note. Set it to `false`, or
 `KETCH_EMOJI=0`, or pass `--no-emoji`, to go without. Icons never reach a pipe,
 `TERM=dumb`, `--json` output or the log.
 
