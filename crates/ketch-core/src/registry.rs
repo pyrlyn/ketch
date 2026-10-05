@@ -817,7 +817,7 @@ mod tests {
     fn git_revision_reads_the_tarball_wrapper_sha() {
         let tmp = tempfile::tempdir().unwrap();
         let sha = "0123456789abcdef0123456789abcdef01234567";
-        let tree = tmp.path().join(format!("listepo-ketch-registry-{sha}"));
+        let tree = tmp.path().join(format!("pyrlyn-ketch-registry-{sha}"));
         std::fs::create_dir(&tree).unwrap();
         assert_eq!(git_revision(&tree).as_deref(), Some(sha));
         assert!(git_revision(tmp.path().join("fresh").as_path()).is_none());

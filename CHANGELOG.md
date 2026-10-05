@@ -8,81 +8,81 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-## [0.10.0](https://github.com/listepo/ketch/releases/tag/v0.10.0) - 2026-10-02
+## [0.10.0](https://github.com/pyrlyn/ketch/releases/tag/v0.10.0) - 2026-10-02
 
 ### Added
 
-- *(ffi)* [**breaking**] foreign traits and per-call callbacks (d1) ([#231](https://github.com/listepo/ketch/pull/231))
-- ketch import from winget, homebrew and linux (m17) ([#215](https://github.com/listepo/ketch/pull/215))
-- ketch-ffi, the core through uniffi ([#208](https://github.com/listepo/ketch/pull/208))
-- json schema for the package manifest ([#206](https://github.com/listepo/ketch/pull/206))
-- *(macos)* screens rebuilt on the liquid glass design ([#200](https://github.com/listepo/ketch/pull/200))
-- *(macos)* the Liquid glass tokens and appearance settings ([#197](https://github.com/listepo/ketch/pull/197))
+- *(ffi)* [**breaking**] foreign traits and per-call callbacks (d1) ([#231](https://github.com/pyrlyn/ketch/pull/231))
+- ketch import from winget, homebrew and linux (m17) ([#215](https://github.com/pyrlyn/ketch/pull/215))
+- ketch-ffi, the core through uniffi ([#208](https://github.com/pyrlyn/ketch/pull/208))
+- json schema for the package manifest ([#206](https://github.com/pyrlyn/ketch/pull/206))
+- *(macos)* screens rebuilt on the liquid glass design ([#200](https://github.com/pyrlyn/ketch/pull/200))
+- *(macos)* the Liquid glass tokens and appearance settings ([#197](https://github.com/pyrlyn/ketch/pull/197))
 
 ### Fixed
 
-- [**breaking**] refuse an ambiguous bin glob instead of taking directory order ([#202](https://github.com/listepo/ketch/pull/202))
+- [**breaking**] refuse an ambiguous bin glob instead of taking directory order ([#202](https://github.com/pyrlyn/ketch/pull/202))
 
 ### Other
 
-- *(license)* add SPDX license headers to source files ([#230](https://github.com/listepo/ketch/pull/230))
-- *(license)* check license files against pyrlyn/infra and add the README license line ([#229](https://github.com/listepo/ketch/pull/229))
-- *(snyk)* switch Snyk off in .github/infra.yml (flag, code kept) ([#234](https://github.com/listepo/ketch/pull/234))
-- *(agents)* point to the org rule for merging the bump PR by rebase ([#226](https://github.com/listepo/ketch/pull/226))
-- *(agents)* drop rules duplicated by the workspace CLAUDE.md and rust.md ([#218](https://github.com/listepo/ketch/pull/218))
-- run swarfr, the renamed dunnage, after tests ([#217](https://github.com/listepo/ketch/pull/217))
-- release only through a bump pull request merged by rebase ([#216](https://github.com/listepo/ketch/pull/216))
-- close r11 in done.md ([#213](https://github.com/listepo/ketch/pull/213))
-- figma for three platforms ([#212](https://github.com/listepo/ketch/pull/212))
-- desktop research for macos, windows and linux, and the platform tasks ([#211](https://github.com/listepo/ketch/pull/211))
-- sync the plan with merged work ([#209](https://github.com/listepo/ketch/pull/209))
-- *(qa)* audit plan and findings (2026-10-01) ([#210](https://github.com/listepo/ketch/pull/210))
-- log level and format as enums in config.toml ([#203](https://github.com/listepo/ketch/pull/203))
-- toolkit research for the windows and linux desktop apps ([#205](https://github.com/listepo/ketch/pull/205))
-- liquid glass design in figma, close f15-f17 ([#207](https://github.com/listepo/ketch/pull/207))
-- binary choice through a decider, not the terminal ([#204](https://github.com/listepo/ketch/pull/204))
-- notify on release failure ([#198](https://github.com/listepo/ketch/pull/198))
-## [0.9.0](https://github.com/listepo/ketch/releases/tag/v0.9.0) - 2026-10-01
+- *(license)* add SPDX license headers to source files ([#230](https://github.com/pyrlyn/ketch/pull/230))
+- *(license)* check license files against pyrlyn/infra and add the README license line ([#229](https://github.com/pyrlyn/ketch/pull/229))
+- *(snyk)* switch Snyk off in .github/infra.yml (flag, code kept) ([#234](https://github.com/pyrlyn/ketch/pull/234))
+- *(agents)* point to the org rule for merging the bump PR by rebase ([#226](https://github.com/pyrlyn/ketch/pull/226))
+- *(agents)* drop rules duplicated by the workspace CLAUDE.md and rust.md ([#218](https://github.com/pyrlyn/ketch/pull/218))
+- run swarfr, the renamed dunnage, after tests ([#217](https://github.com/pyrlyn/ketch/pull/217))
+- release only through a bump pull request merged by rebase ([#216](https://github.com/pyrlyn/ketch/pull/216))
+- close r11 in done.md ([#213](https://github.com/pyrlyn/ketch/pull/213))
+- figma for three platforms ([#212](https://github.com/pyrlyn/ketch/pull/212))
+- desktop research for macos, windows and linux, and the platform tasks ([#211](https://github.com/pyrlyn/ketch/pull/211))
+- sync the plan with merged work ([#209](https://github.com/pyrlyn/ketch/pull/209))
+- *(qa)* audit plan and findings (2026-10-01) ([#210](https://github.com/pyrlyn/ketch/pull/210))
+- log level and format as enums in config.toml ([#203](https://github.com/pyrlyn/ketch/pull/203))
+- toolkit research for the windows and linux desktop apps ([#205](https://github.com/pyrlyn/ketch/pull/205))
+- liquid glass design in figma, close f15-f17 ([#207](https://github.com/pyrlyn/ketch/pull/207))
+- binary choice through a decider, not the terminal ([#204](https://github.com/pyrlyn/ketch/pull/204))
+- notify on release failure ([#198](https://github.com/pyrlyn/ketch/pull/198))
+## [0.9.0](https://github.com/pyrlyn/ketch/releases/tag/v0.9.0) - 2026-10-01
 
 ### Added
 
-- *(macos)* SwiftUI app shell on a fake core ([#185](https://github.com/listepo/ketch/pull/185))
-- [**breaking**] install of an installed package asks before updating it ([#193](https://github.com/listepo/ketch/pull/193))
-- *(ui)* emoji icons on status lines, `emoji` config key ([#179](https://github.com/listepo/ketch/pull/179))
-- *(macos)* design system — DESIGN.md, tokens and preview ([#188](https://github.com/listepo/ketch/pull/188))
-- windows completion for powershell and cmd ([#180](https://github.com/listepo/ketch/pull/180))
-- man page for every command, rendered with clap_mangen ([#176](https://github.com/listepo/ketch/pull/176))
-- complete package names in bash ([#175](https://github.com/listepo/ketch/pull/175))
-- *(ui)* colour whole error, warning and success lines ([#174](https://github.com/listepo/ketch/pull/174))
+- *(macos)* SwiftUI app shell on a fake core ([#185](https://github.com/pyrlyn/ketch/pull/185))
+- [**breaking**] install of an installed package asks before updating it ([#193](https://github.com/pyrlyn/ketch/pull/193))
+- *(ui)* emoji icons on status lines, `emoji` config key ([#179](https://github.com/pyrlyn/ketch/pull/179))
+- *(macos)* design system — DESIGN.md, tokens and preview ([#188](https://github.com/pyrlyn/ketch/pull/188))
+- windows completion for powershell and cmd ([#180](https://github.com/pyrlyn/ketch/pull/180))
+- man page for every command, rendered with clap_mangen ([#176](https://github.com/pyrlyn/ketch/pull/176))
+- complete package names in bash ([#175](https://github.com/pyrlyn/ketch/pull/175))
+- *(ui)* colour whole error, warning and success lines ([#174](https://github.com/pyrlyn/ketch/pull/174))
 
 ### Fixed
 
-- in-process lock guard, typed busy error and cancellation ([#184](https://github.com/listepo/ketch/pull/184))
-- install and upgrade sweep swap leftovers before placing anything ([#186](https://github.com/listepo/ketch/pull/186))
-- uninstall of a name that is not installed prints only "not found" ([#181](https://github.com/listepo/ketch/pull/181))
-- self uninstall removes every registry value ketch wrote on Windows ([#178](https://github.com/listepo/ketch/pull/178))
-- uninstall removes the package's whole store folder ([#173](https://github.com/listepo/ketch/pull/173))
+- in-process lock guard, typed busy error and cancellation ([#184](https://github.com/pyrlyn/ketch/pull/184))
+- install and upgrade sweep swap leftovers before placing anything ([#186](https://github.com/pyrlyn/ketch/pull/186))
+- uninstall of a name that is not installed prints only "not found" ([#181](https://github.com/pyrlyn/ketch/pull/181))
+- self uninstall removes every registry value ketch wrote on Windows ([#178](https://github.com/pyrlyn/ketch/pull/178))
+- uninstall removes the package's whole store folder ([#173](https://github.com/pyrlyn/ketch/pull/173))
 
 ### Other
 
-- the core reports through a Reporter, not ui:: ([#189](https://github.com/listepo/ketch/pull/189))
+- the core reports through a Reporter, not ui:: ([#189](https://github.com/pyrlyn/ketch/pull/189))
 - split the core into a ketch-core library crate
-- plan the native macOS app and the core split ([#183](https://github.com/listepo/ketch/pull/183))
-- add JSON Schema for config.toml and ketch.lock, with drift tests ([#182](https://github.com/listepo/ketch/pull/182))
-- stop tracking insta pending snapshots ([#192](https://github.com/listepo/ketch/pull/192))
-- wait for the sleeper to start instead of a fixed pause ([#191](https://github.com/listepo/ketch/pull/191))
-- *(fuzz)* add cargo-fuzz targets for parsers, extractors and output filters ([#177](https://github.com/listepo/ketch/pull/177))
-## [0.8.1](https://github.com/listepo/ketch/releases/tag/v0.8.1) - 2026-09-30
+- plan the native macOS app and the core split ([#183](https://github.com/pyrlyn/ketch/pull/183))
+- add JSON Schema for config.toml and ketch.lock, with drift tests ([#182](https://github.com/pyrlyn/ketch/pull/182))
+- stop tracking insta pending snapshots ([#192](https://github.com/pyrlyn/ketch/pull/192))
+- wait for the sleeper to start instead of a fixed pause ([#191](https://github.com/pyrlyn/ketch/pull/191))
+- *(fuzz)* add cargo-fuzz targets for parsers, extractors and output filters ([#177](https://github.com/pyrlyn/ketch/pull/177))
+## [0.8.1](https://github.com/pyrlyn/ketch/releases/tag/v0.8.1) - 2026-09-30
 
 ### Other
 
-- bump and release-plz through pyrlyn/infra ([#170](https://github.com/listepo/ketch/pull/170))
-- call pyrlyn/infra ci.yml and pages.yml, repin ci-rust ([#169](https://github.com/listepo/ketch/pull/169))
-## [0.8.0](https://github.com/listepo/ketch/releases/tag/v0.8.0) - 2026-09-30
+- bump and release-plz through pyrlyn/infra ([#170](https://github.com/pyrlyn/ketch/pull/170))
+- call pyrlyn/infra ci.yml and pages.yml, repin ci-rust ([#169](https://github.com/pyrlyn/ketch/pull/169))
+## [0.8.0](https://github.com/pyrlyn/ketch/releases/tag/v0.8.0) - 2026-09-30
 
 ### Added
 
-- run lifecycle hooks from the user's own manifest ([#164](https://github.com/listepo/ketch/pull/164))
+- run lifecycle hooks from the user's own manifest ([#164](https://github.com/pyrlyn/ketch/pull/164))
 
 ### Fixed
 
@@ -90,29 +90,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- record why CI does not add a second cache ([#155](https://github.com/listepo/ketch/pull/155))
-- point docs and the registry repo at pyrlyn ([#163](https://github.com/listepo/ketch/pull/163))
+- record why CI does not add a second cache ([#155](https://github.com/pyrlyn/ketch/pull/155))
+- point docs and the registry repo at pyrlyn ([#163](https://github.com/pyrlyn/ketch/pull/163))
 
-## [0.7.0](https://github.com/listepo/ketch/releases/tag/v0.7.0) - 2026-09-29
-
-### Other
-
-- sync the whole docs/ folder to listepo/landing ([#161](https://github.com/listepo/ketch/pull/161))
-## [0.6.2](https://github.com/listepo/ketch/releases/tag/v0.6.2) - 2026-09-27
+## [0.7.0](https://github.com/pyrlyn/ketch/releases/tag/v0.7.0) - 2026-09-29
 
 ### Other
 
-- run the shared listepo/infra Rust CI and check the rustc pin ([#151](https://github.com/listepo/ketch/pull/151))
+- sync the whole docs/ folder to listepo/landing ([#161](https://github.com/pyrlyn/ketch/pull/161))
+## [0.6.2](https://github.com/pyrlyn/ketch/releases/tag/v0.6.2) - 2026-09-27
+
+### Other
+
+- run the shared listepo/infra Rust CI and check the rustc pin ([#151](https://github.com/pyrlyn/ketch/pull/151))
 - *(plan)* leave B65 with its Cursor owner and point it at B64's test
 - *(plan)* record B64 follow-up decisions and M9 pull request
 - *(plan)* number the 2026-09-27 tasks and claim B64 and M9
 - *(plan)* add ketch list refactor task with local and remote modes
-- install Rust from mise in CI and release ([#150](https://github.com/listepo/ketch/pull/150))
-- refresh README for v0.6.0 — clearer pitch, examples, comparison ([#143](https://github.com/listepo/ketch/pull/143))
-- switch to triple license (GPLv3, royalty-free, commercial) ([#145](https://github.com/listepo/ketch/pull/145))
-- sync docs/site.md to listepo/landing instead of shop-mvp ([#148](https://github.com/listepo/ketch/pull/148))
+- install Rust from mise in CI and release ([#150](https://github.com/pyrlyn/ketch/pull/150))
+- refresh README for v0.6.0 — clearer pitch, examples, comparison ([#143](https://github.com/pyrlyn/ketch/pull/143))
+- switch to triple license (GPLv3, royalty-free, commercial) ([#145](https://github.com/pyrlyn/ketch/pull/145))
+- sync docs/site.md to listepo/landing instead of shop-mvp ([#148](https://github.com/pyrlyn/ketch/pull/148))
 
-## [0.6.1](https://github.com/listepo/ketch/releases/tag/v0.6.1) - 2026-09-27
+## [0.6.1](https://github.com/pyrlyn/ketch/releases/tag/v0.6.1) - 2026-09-27
 
 ### Fixed
 
@@ -120,18 +120,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- name the sources behind docs/site.md ([#147](https://github.com/listepo/ketch/pull/147))
-- add docs/site.md and sync it to the project site ([#144](https://github.com/listepo/ketch/pull/144))
-## [0.6.0](https://github.com/listepo/ketch/releases/tag/v0.6.0) - 2026-09-26
+- name the sources behind docs/site.md ([#147](https://github.com/pyrlyn/ketch/pull/147))
+- add docs/site.md and sync it to the project site ([#144](https://github.com/pyrlyn/ketch/pull/144))
+## [0.6.0](https://github.com/pyrlyn/ketch/releases/tag/v0.6.0) - 2026-09-26
 
 ### Fixed
 
-- prefer the link-named payload file when a bin glob matches several ([#140](https://github.com/listepo/ketch/pull/140))
+- prefer the link-named payload file when a bin glob matches several ([#140](https://github.com/pyrlyn/ketch/pull/140))
 
 ### Other
 
-- add Dependabot updates with CI-gated patch-only auto-merge ([#137](https://github.com/listepo/ketch/pull/137))
-- add SonarCloud OSS analysis ([#135](https://github.com/listepo/ketch/pull/135))
+- add Dependabot updates with CI-gated patch-only auto-merge ([#137](https://github.com/pyrlyn/ketch/pull/137))
+- add SonarCloud OSS analysis ([#135](https://github.com/pyrlyn/ketch/pull/135))
 - Add SonarCloud quality gate, coverage and tests badges to README
 - run CodeRabbit only on manual request
 - *(deps)* pin actions/checkout@v7 in dist config
@@ -143,37 +143,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - *(deps)* bump release-plz/action in the actions group
 - sync ROADMAP and registry docs with shipped work
 
-## [0.5.1](https://github.com/listepo/ketch/releases/tag/v0.5.1) - 2026-09-23
+## [0.5.1](https://github.com/pyrlyn/ketch/releases/tag/v0.5.1) - 2026-09-23
 
 ### Other
 
 - *(process)* stop the process-listing tests racing a killed sleeper
 - *(release)* release through cargo-dist, bump.yml and git-cliff
 
-## [0.5.0](https://github.com/listepo/ketch/releases/tag/v0.5.0) - 2026-09-22
+## [0.5.0](https://github.com/pyrlyn/ketch/releases/tag/v0.5.0) - 2026-09-22
 
 ### Added
 
 - *(site)* add Pagefind site search
 
-## [0.4.7](https://github.com/listepo/ketch/releases/tag/v0.4.7) - 2026-09-20
+## [0.4.7](https://github.com/pyrlyn/ketch/releases/tag/v0.4.7) - 2026-09-20
 
 ### Other
 
-- sync ROADMAP and registry docs with shipped work ([#117](https://github.com/listepo/ketch/pull/117))
+- sync ROADMAP and registry docs with shipped work ([#117](https://github.com/pyrlyn/ketch/pull/117))
 
-## [0.4.6](https://github.com/listepo/ketch/releases/tag/v0.4.6) - 2026-09-20
+## [0.4.6](https://github.com/pyrlyn/ketch/releases/tag/v0.4.6) - 2026-09-20
 
 ### Other
 
-- *(deps)* bump ratatui from 0.29.0 to 0.30.2 ([#115](https://github.com/listepo/ketch/pull/115))
-- *(deps)* bump zip from 2.4.2 to 8.6.0 ([#104](https://github.com/listepo/ketch/pull/104))
-- *(deps)* bump toml from 0.9.12+spec-1.1.0 to 1.1.6+spec-1.1.0 ([#103](https://github.com/listepo/ketch/pull/103))
-- *(deps)* resolve file-backup from crates.io, keep local override ([#114](https://github.com/listepo/ketch/pull/114))
-- *(deps)* bump release-plz/action in the actions group ([#101](https://github.com/listepo/ketch/pull/101))
+- *(deps)* bump ratatui from 0.29.0 to 0.30.2 ([#115](https://github.com/pyrlyn/ketch/pull/115))
+- *(deps)* bump zip from 2.4.2 to 8.6.0 ([#104](https://github.com/pyrlyn/ketch/pull/104))
+- *(deps)* bump toml from 0.9.12+spec-1.1.0 to 1.1.6+spec-1.1.0 ([#103](https://github.com/pyrlyn/ketch/pull/103))
+- *(deps)* resolve file-backup from crates.io, keep local override ([#114](https://github.com/pyrlyn/ketch/pull/114))
+- *(deps)* bump release-plz/action in the actions group ([#101](https://github.com/pyrlyn/ketch/pull/101))
 - Prepare release
 
-## [0.4.5](https://github.com/listepo/ketch/releases/tag/v0.4.5) - 2026-09-19
+## [0.4.5](https://github.com/pyrlyn/ketch/releases/tag/v0.4.5) - 2026-09-19
 
 ### Added
 
@@ -185,13 +185,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - *(windows)* split cmd_hits for case-fold without clippy/E0283
 - *(windows)* repair process.rs string literals after bad patch
 - *(windows)* match in-use .cmd paths case-insensitively
-- *(windows)* replace busy bin copies via rename-aside ([#109](https://github.com/listepo/ketch/pull/109))
+- *(windows)* replace busy bin copies via rename-aside ([#109](https://github.com/pyrlyn/ketch/pull/109))
 
-## [0.4.4](https://github.com/listepo/ketch/releases/tag/v0.4.4) - 2026-09-18
+## [0.4.4](https://github.com/pyrlyn/ketch/releases/tag/v0.4.4) - 2026-09-18
 
 ### Fixed
 
-- skip plugins/ when auto-discovering bins ([#108](https://github.com/listepo/ketch/pull/108))
+- skip plugins/ when auto-discovering bins ([#108](https://github.com/pyrlyn/ketch/pull/108))
 - mixed-case .exe shells and Windows local symlink place
 - detect Windows shells and match store paths case-insensitively
 - find Homebrew casks under every known prefix
@@ -206,24 +206,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- disable workflow on push to main ([#107](https://github.com/listepo/ketch/pull/107))
+- disable workflow on push to main ([#107](https://github.com/pyrlyn/ketch/pull/107))
 - note testing library candidates (2026-09-17)
 - rustfmt self_update mock helper
 - rustfmt pathdiff call in copy_tree
 - use dunce/pathdiff/typed-path for paths; prefer nextest
-- registry include must pick rtok Windows zip ([#87](https://github.com/listepo/ketch/pull/87))
+- registry include must pick rtok Windows zip ([#87](https://github.com/pyrlyn/ketch/pull/87))
 
-## [0.4.3](https://github.com/listepo/ketch/releases/tag/v0.4.3) - 2026-09-16
+## [0.4.3](https://github.com/pyrlyn/ketch/releases/tag/v0.4.3) - 2026-09-16
 
 ### Other
 
-- *(deps)* bump sha2 from 0.10.9 to 0.11.0 ([#82](https://github.com/listepo/ketch/pull/82))
-- *(deps)* bump indicatif from 0.17.11 to 0.18.6 ([#81](https://github.com/listepo/ketch/pull/81))
-- *(deps)* bump trycmd from 0.15.11 to 1.2.1 ([#80](https://github.com/listepo/ketch/pull/80))
-- *(deps)* bump actions/configure-pages from 5 to 6 ([#78](https://github.com/listepo/ketch/pull/78))
-- *(deps)* bump release-plz/action in the actions group ([#77](https://github.com/listepo/ketch/pull/77))
+- *(deps)* bump sha2 from 0.10.9 to 0.11.0 ([#82](https://github.com/pyrlyn/ketch/pull/82))
+- *(deps)* bump indicatif from 0.17.11 to 0.18.6 ([#81](https://github.com/pyrlyn/ketch/pull/81))
+- *(deps)* bump trycmd from 0.15.11 to 1.2.1 ([#80](https://github.com/pyrlyn/ketch/pull/80))
+- *(deps)* bump actions/configure-pages from 5 to 6 ([#78](https://github.com/pyrlyn/ketch/pull/78))
+- *(deps)* bump release-plz/action in the actions group ([#77](https://github.com/pyrlyn/ketch/pull/77))
 
-## [0.4.2](https://github.com/listepo/ketch/releases/tag/v0.4.2) - 2026-09-15
+## [0.4.2](https://github.com/pyrlyn/ketch/releases/tag/v0.4.2) - 2026-09-15
 
 ### Added
 
@@ -234,10 +234,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - commit the cask before brew path-tap smoke
 - authenticate cask smoke and force the local tap
-- warn when PATH shadows the store ketch binary ([#63](https://github.com/listepo/ketch/pull/63))
+- warn when PATH shadows the store ketch binary ([#63](https://github.com/pyrlyn/ketch/pull/63))
 - resolve lightweight tags on force republish
 
-## [0.4.1](https://github.com/listepo/ketch/releases/tag/v0.4.1) - 2026-09-14
+## [0.4.1](https://github.com/pyrlyn/ketch/releases/tag/v0.4.1) - 2026-09-14
 
 ### Fixed
 
@@ -249,7 +249,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - make why snapshots OS-agnostic and headless TUI tests
 - smoke-test cask via local brew tap
 
-## [0.4.0](https://github.com/listepo/ketch/releases/tag/v0.4.0) - 2026-09-13
+## [0.4.0](https://github.com/pyrlyn/ketch/releases/tag/v0.4.0) - 2026-09-13
 
 ### Added
 
@@ -272,23 +272,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Merge remote-tracking branch 'origin/dependabot/github_actions/actions/checkout-7'
 - Merge pull request #40 from listepo/dependabot/cargo/bzip2-0.6.1
 - Merge pull request #38 from listepo/dependabot/cargo/dirs-7.0.0
-- use rtok in landing terminal demo ([#52](https://github.com/listepo/ketch/pull/52))
+- use rtok in landing terminal demo ([#52](https://github.com/pyrlyn/ketch/pull/52))
 - *(site)* nerd flat material glass brand + light/dark
 - auto-revert fb2bd0e — main CI failed
 - run only on main/manual; auto-revert failed main pushes
 - run tests on main push and manual dispatch only
-- add dependabot for cargo, npm and github actions ([#35](https://github.com/listepo/ketch/pull/35))
+- add dependabot for cargo, npm and github actions ([#35](https://github.com/pyrlyn/ketch/pull/35))
 
-## [0.3.2](https://github.com/listepo/ketch/releases/tag/v0.3.2) - 2026-09-10
+## [0.3.2](https://github.com/pyrlyn/ketch/releases/tag/v0.3.2) - 2026-09-10
 
 ### Other
 
-- commitlint rejects agent attribution in commits ([#34](https://github.com/listepo/ketch/pull/34))
-- the human is the only author of every commit and PR ([#33](https://github.com/listepo/ketch/pull/33))
-- release-plz owns the changelog's generated header ([#32](https://github.com/listepo/ketch/pull/32))
-- generated files say so in their first lines ([#30](https://github.com/listepo/ketch/pull/30))
+- commitlint rejects agent attribution in commits ([#34](https://github.com/pyrlyn/ketch/pull/34))
+- the human is the only author of every commit and PR ([#33](https://github.com/pyrlyn/ketch/pull/33))
+- release-plz owns the changelog's generated header ([#32](https://github.com/pyrlyn/ketch/pull/32))
+- generated files say so in their first lines ([#30](https://github.com/pyrlyn/ketch/pull/30))
 
-## [0.3.1](https://github.com/listepo/ketch/releases/tag/v0.3.1) - 2026-09-10
+## [0.3.1](https://github.com/pyrlyn/ketch/releases/tag/v0.3.1) - 2026-09-10
 
 ### Fixed
 
@@ -302,7 +302,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - document installing from disk and local lock entries
 
-## [0.3.0](https://github.com/listepo/ketch/releases/tag/v0.3.0) - 2026-09-10
+## [0.3.0](https://github.com/pyrlyn/ketch/releases/tag/v0.3.0) - 2026-09-10
 
 ### Added
 
@@ -321,14 +321,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - migrate Sandbox to assert_fs
 - cover uninstall for local binary, symlink, and archive
 
-## [0.2.1](https://github.com/listepo/ketch/releases/tag/v0.2.1) - 2026-09-09
+## [0.2.1](https://github.com/pyrlyn/ketch/releases/tag/v0.2.1) - 2026-09-09
 
 ### Other
 
 - note that the tap job cannot be re-run on its own
 - keep the generated cask inside brew style's line limit
 
-## [0.2.0](https://github.com/listepo/ketch/releases/tag/v0.2.0) - 2026-09-09
+## [0.2.0](https://github.com/pyrlyn/ketch/releases/tag/v0.2.0) - 2026-09-09
 
 ### Added
 
@@ -336,13 +336,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- make the version snapshot follow Cargo.toml ([#20](https://github.com/listepo/ketch/pull/20))
+- make the version snapshot follow Cargo.toml ([#20](https://github.com/pyrlyn/ketch/pull/20))
 - let release-plz read the tags instead of crates.io
 - keep the plan page's meta description under the limit
 - document uninstalling, the new release order, and a plan
 - create the tag after the release, not before it
 
-## [0.1.0](https://github.com/listepo/ketch/releases/tag/v0.1.0) - 2026-09-07
+## [0.1.0](https://github.com/pyrlyn/ketch/releases/tag/v0.1.0) - 2026-09-07
 
 ### Added
 
@@ -356,8 +356,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Other
 
 - sign the release binaries with a Developer ID certificate
-- 📝 Add docstrings to `stats-sqlite` ([#10](https://github.com/listepo/ketch/pull/10))
-- Version history in SQLite, cargo-cache via mise, release-plz ([#9](https://github.com/listepo/ketch/pull/9))
+- 📝 Add docstrings to `stats-sqlite` ([#10](https://github.com/pyrlyn/ketch/pull/10))
+- Version history in SQLite, cargo-cache via mise, release-plz ([#9](https://github.com/pyrlyn/ketch/pull/9))
 - expand delivery roadmap
 - add assertion tooling
 - remove task runner links
@@ -365,8 +365,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - compare Rust task runners
 - add cargo cache aliases
 - add Rust CLI testing plan
-- Revert "Rewrite ketch in TypeScript, still shipping one native binary ([#7](https://github.com/listepo/ketch/pull/7))"
-- Close the ledger: the port is merged ([#8](https://github.com/listepo/ketch/pull/8))
+- Revert "Rewrite ketch in TypeScript, still shipping one native binary ([#7](https://github.com/pyrlyn/ketch/pull/7))"
+- Close the ledger: the port is merged ([#8](https://github.com/pyrlyn/ketch/pull/8))
 - Add fallow, configured strict, gating only what a change introduces
 - Tick Phase 11: the review is adjudicated and the runtimes check out
 - Stream a tar to disk instead of holding it all in memory

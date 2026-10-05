@@ -12,7 +12,7 @@ use semver::Version;
 use std::collections::HashSet;
 
 const CHANGELOG: &str = include_str!("../CHANGELOG.md");
-const RELEASE_URL: &str = "https://github.com/listepo/ketch/releases/tag/v";
+const RELEASE_URL: &str = "https://github.com/pyrlyn/ketch/releases/tag/v";
 
 #[derive(Debug)]
 struct Release<'a> {

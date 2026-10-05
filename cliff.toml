@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 # is a contract with release.yml and the tests.
 body = """
 {% if version -%}
-## [{{ version | trim_start_matches(pat="v") }}](https://github.com/listepo/ketch/releases/tag/v{{ version | trim_start_matches(pat="v") }}) - {{ timestamp | date(format="%Y-%m-%d") }}
+## [{{ version | trim_start_matches(pat="v") }}](https://github.com/pyrlyn/ketch/releases/tag/v{{ version | trim_start_matches(pat="v") }}) - {{ timestamp | date(format="%Y-%m-%d") }}
 {% else -%}
 ## [Unreleased]
 {% endif -%}
@@ -61,7 +61,7 @@ topo_order = false
 sort_commits = "newest"
 # A squash merge ends its subject with `(#123)`; that becomes the link.
 commit_preprocessors = [
-  { pattern = '(?m) \(#([0-9]+)\)$', replace = " ([#${1}](https://github.com/listepo/ketch/pull/${1}))" },
+  { pattern = '(?m) \(#([0-9]+)\)$', replace = " ([#${1}](https://github.com/pyrlyn/ketch/pull/${1}))" },
 ]
 # The `<!-- N -->` prefix orders the groups; `striptags` in the body hides it.
 commit_parsers = [

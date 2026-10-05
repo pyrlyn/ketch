@@ -7,14 +7,14 @@ install: 'curl -fsSL https://raw.githubusercontent.com/pyrlyn/ketch/main/install
 install_alternatives:
   - 'irm https://raw.githubusercontent.com/pyrlyn/ketch/main/install.ps1 | iex'
   - 'brew install --cask pyrlyn/tap/ketch'
-  - 'mise use -g github:listepo/ketch'
+  - 'mise use -g github:pyrlyn/ketch'
 version: "0.6.0"
 accent: "#3DDCB0"
 accentLight: "#0F6F5C"
 order: 2
 ---
 
-<!-- Website copy for the listepo project site. The sync-docs workflow copies this file to
+<!-- Website copy for the pyrlyn project site. The sync-docs workflow copies this file to
 pyrlyn/landing (main) as content/projects/ketch.md on every change to main and on every v*
 tag; front matter follows CONTENT_CONTRACT.md in that repository.
 Sources (checked 2026-09-27): README.md and the clap CLI in src/cli.rs; version from the latest
@@ -68,7 +68,7 @@ Homebrew, or mise:
 
 ```bash
 brew install --cask pyrlyn/tap/ketch
-mise use -g github:listepo/ketch && ketch path install
+mise use -g github:pyrlyn/ketch && ketch path install
 ```
 
 Then make sure `~/.ketch/bin` is on your `PATH`; `ketch doctor` tells you if it is not.
