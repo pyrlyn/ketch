@@ -59,7 +59,7 @@ cat >CHANGELOG.md <<'EOF'
 
 ## [Unreleased]
 
-## [1.2.3](https://github.com/listepo/ketch/releases/tag/v1.2.3) - 2020-01-01
+## [1.2.3](https://github.com/pyrlyn/ketch/releases/tag/v1.2.3) - 2020-01-01
 
 ### Added
 
@@ -92,15 +92,15 @@ grep -q '^rust-version = "1.70"$' Cargo.toml || fail "rust-version was rewritten
 grep -q '^version.workspace = true$' Cargo.toml || fail "the inherited version was rewritten"
 grep -q 'name = "fixture"' Cargo.lock && grep -q '^version = "1.2.4"$' Cargo.lock \
     || fail "Cargo.lock does not carry 1.2.4"
-grep -q '^- \*(cli)\* second (\[#7\](https://github.com/listepo/ketch/pull/7))$' CHANGELOG.md \
+grep -q '^- \*(cli)\* second (\[#7\](https://github.com/pyrlyn/ketch/pull/7))$' CHANGELOG.md \
     || fail "the entry does not list the commit with its pull request link"
 
 # The new entry goes between Unreleased and the previous release, which is
 # left exactly as it was.
 headings="$(grep '^## ' CHANGELOG.md | sed 's/ - .*//')"
 expected='## [Unreleased]
-## [1.2.4](https://github.com/listepo/ketch/releases/tag/v1.2.4)
-## [1.2.3](https://github.com/listepo/ketch/releases/tag/v1.2.3)'
+## [1.2.4](https://github.com/pyrlyn/ketch/releases/tag/v1.2.4)
+## [1.2.3](https://github.com/pyrlyn/ketch/releases/tag/v1.2.3)'
 [ "$headings" = "$expected" ] || fail "headings out of order:
 $headings"
 

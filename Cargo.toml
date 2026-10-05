@@ -30,7 +30,7 @@ edition = "2021"
 # database. Nothing else in the tree needs it.
 rust-version = "1.86"
 license = "GPL-3.0-or-later OR LicenseRef-Ketch-Royalty-free-1.0 OR LicenseRef-Ketch-Commercial"
-repository = "https://github.com/listepo/ketch"
+repository = "https://github.com/pyrlyn/ketch"
 
 # There is no unsafe code in ketch and there is no reason for any to appear.
 [workspace.lints.rust]

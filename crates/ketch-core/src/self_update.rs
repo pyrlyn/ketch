@@ -6,7 +6,7 @@
 //!
 //! ketch prefers to be one of its own packages: `self install` puts the running
 //! release into the store under the name `ketch` and links it from the bin dir,
-//! exactly as `ketch install listepo/ketch` would, so `list`, `history` and
+//! exactly as `ketch install pyrlyn/ketch` would, so `list`, `history` and
 //! `doctor` see it and `self upgrade` is an ordinary upgrade. A ketch copied flat
 //! into the bin dir by an older installer is still updated in place.
 //!
@@ -1259,22 +1259,30 @@ fn mise_tool_dir_in(exe: &Path, data_dirs: &[PathBuf]) -> Option<PathBuf> {
 /// The name `mise unuse` takes for the tool in `dir`.
 ///
 /// mise names an install directory after the tool with `:` and `/` turned
-/// into `-`, so `github:listepo/ketch` lives in `github-listepo-ketch`. That
+/// into `-`, so `github:pyrlyn/ketch` lives in `github-pyrlyn-ketch`. That
 /// is only reversible for a name that ends in this repository; anything else
-/// (a registry short name such as `ketch`) is already the tool name.
+/// (a registry short name such as `ketch`) is already the tool name. A copy
+/// mise installed before the repository moved sits in `github-listepo-ketch`
+/// and mise's config still says `github:listepo/ketch`, so the old names in
+/// [`crate::config::RENAMED_REPOS`] count too and keep the name mise knows.
 fn mise_tool_name(dir: &Path, self_repo: &str) -> String {
     let name = dir
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or(SELF_NAME);
-    let backend = name
-        .strip_suffix(&self_repo.replace('/', "-"))
-        .and_then(|rest| rest.strip_suffix('-'))
-        .filter(|b| !b.is_empty() && b.chars().all(|c| c.is_ascii_alphanumeric()));
-    match backend {
-        Some(backend) => format!("{backend}:{self_repo}"),
-        None => name.to_string(),
-    }
+    let old_names = crate::config::RENAMED_REPOS
+        .iter()
+        .filter(|(_, new)| new.eq_ignore_ascii_case(self_repo))
+        .map(|(old, _)| *old);
+    std::iter::once(self_repo)
+        .chain(old_names)
+        .find_map(|repo| {
+            name.strip_suffix(&repo.replace('/', "-"))
+                .and_then(|rest| rest.strip_suffix('-'))
+                .filter(|b| !b.is_empty() && b.chars().all(|c| c.is_ascii_alphanumeric()))
+                .map(|backend| format!("{backend}:{repo}"))
+        })
+        .unwrap_or_else(|| name.to_string())
 }
 
 /// Hand the install back to mise, the only thing that can forget it: removing
@@ -1379,11 +1387,14 @@ mod tests {
     #[test]
     fn a_binary_under_mise_installs_belongs_to_that_tool_directory() {
         let data = PathBuf::from("/home/u/.local/share/mise");
-        let exe = data.join("installs/github-listepo-ketch/0.4.7/ketch");
-        assert_eq!(
-            mise_tool_dir_in(&exe, &[PathBuf::from("/elsewhere"), data.clone()]),
-            Some(data.join("installs/github-listepo-ketch"))
-        );
+        // Before and after the move from listepo to pyrlyn.
+        for tool in ["github-pyrlyn-ketch", "github-listepo-ketch"] {
+            let exe = data.join(format!("installs/{tool}/0.4.7/ketch"));
+            assert_eq!(
+                mise_tool_dir_in(&exe, &[PathBuf::from("/elsewhere"), data.clone()]),
+                Some(data.join("installs").join(tool))
+            );
+        }
     }
 
     #[test]
@@ -1405,15 +1416,27 @@ mod tests {
     #[test]
     fn a_mise_install_directory_maps_back_to_the_tool_name_unuse_takes() {
         for (dir, tool) in [
+            ("github-pyrlyn-ketch", "github:pyrlyn/ketch"),
+            ("ubi-pyrlyn-ketch", "ubi:pyrlyn/ketch"),
+            // Installed before the move: mise's config holds the old name.
             ("github-listepo-ketch", "github:listepo/ketch"),
             ("ubi-listepo-ketch", "ubi:listepo/ketch"),
             ("ketch", "ketch"),
+            ("-pyrlyn-ketch", "-pyrlyn-ketch"),
             ("-listepo-ketch", "-listepo-ketch"),
             ("github-other-ketch", "github-other-ketch"),
         ] {
             let dir = Path::new("/mise/installs").join(dir);
-            assert_eq!(mise_tool_name(&dir, "listepo/ketch"), tool);
+            assert_eq!(mise_tool_name(&dir, crate::config::SELF_REPO), tool);
         }
+        // A fork is not renamed: only its own directory maps back.
+        let fork = Path::new("/mise/installs/github-someone-ketch");
+        assert_eq!(
+            mise_tool_name(fork, "someone/ketch"),
+            "github:someone/ketch"
+        );
+        let old = Path::new("/mise/installs/github-listepo-ketch");
+        assert_eq!(mise_tool_name(old, "someone/ketch"), "github-listepo-ketch");
     }
 
     #[test]
@@ -1569,7 +1592,7 @@ mod tests {
         crate::model::InstalledPackage {
             name: SELF_NAME.into(),
             version: Version::parse("1.0.0"),
-            source: crate::model::PackageRef::github("listepo/ketch"),
+            source: crate::model::PackageRef::github("pyrlyn/ketch"),
             tag: "v1.0.0".into(),
             target: crate::model::TargetSpec::host(),
             asset_name: "a.tar.gz".into(),
