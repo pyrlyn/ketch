@@ -14,10 +14,29 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 /// The upstream repository ketch updates itself from.
-pub const SELF_REPO: &str = "listepo/ketch";
+pub const SELF_REPO: &str = "pyrlyn/ketch";
 /// The package registry ketch resolves names against: a GitHub repository
 /// with one folder per package. See `registry.rs`.
 pub const REGISTRY_REPO: &str = "pyrlyn/ketch-registry";
+/// Repositories that moved from the `listepo` account to the `pyrlyn`
+/// organization, old name first. Copies installed before the move still carry
+/// the old name in `config.toml`, `KETCH_SELF_REPO`, the state file, lockfiles
+/// and mise's install directory; GitHub's redirect for the old name is not
+/// something a release may depend on (a CI token scoped to the new owner gets
+/// a 403 from it), so the old name is read and the new one is used.
+pub const RENAMED_REPOS: &[(&str, &str)] = &[
+    ("listepo/ketch", SELF_REPO),
+    ("listepo/ketch-registry", REGISTRY_REPO),
+];
+
+/// The current name of `repo` (`owner/repo`) when it is one that moved, else
+/// `repo` unchanged. GitHub names are case-insensitive, so the match is too.
+pub fn current_repo(repo: &str) -> &str {
+    RENAMED_REPOS
+        .iter()
+        .find(|(old, _)| old.eq_ignore_ascii_case(repo))
+        .map_or(repo, |(_, new)| new)
+}
 pub const USER_AGENT: &str = concat!("ketch/", env!("CARGO_PKG_VERSION"));
 
 /// On-disk settings. Every field optional so a partial file is valid.
@@ -178,7 +197,8 @@ impl Config {
                 .filter(|v| !v.trim().is_empty())
                 .or(file.self_repo)
                 .unwrap_or_else(|| SELF_REPO.to_string()),
-        )?;
+        )
+        .map(|repo| current_repo(&repo).to_string())?;
         let registry = validate_repo(
             "registry",
             std::env::var("KETCH_REGISTRY")
@@ -186,7 +206,8 @@ impl Config {
                 .filter(|v| !v.trim().is_empty())
                 .or(file.registry)
                 .unwrap_or_else(|| REGISTRY_REPO.to_string()),
-        )?;
+        )
+        .map(|repo| current_repo(&repo).to_string())?;
 
         // Each variable is filtered before the next is tried: `KETCH_GITHUB_TOKEN=`
         // is how CI clears a secret without blocking GITHUB_TOKEN or GH_TOKEN.
@@ -484,7 +505,7 @@ mod tests {
         );
         for bad in [
             "",
-            "listepo",
+            "pyrlyn",
             "a/b/c",
             "../etc",
             "a/../b",
@@ -703,6 +724,47 @@ mod tests {
         assert_eq!(cfg.jobs, 4);
         assert_eq!(cfg.log_level.to_string(), "info");
         assert_eq!(cfg.log_format.to_string(), "text");
+    }
+
+    #[test]
+    fn the_old_self_repo_and_registry_names_load_as_the_new_ones() {
+        let _lock = ENV_GUARD.lock().unwrap();
+        let _env = CleanEnv::take(&["KETCH_ROOT", "KETCH_SELF_REPO", "KETCH_REGISTRY"]);
+        let tmp = tempfile::tempdir().unwrap();
+        let load = || {
+            Config::load(
+                Some(tmp.path().to_path_buf()),
+                &crate::report::Report::silent(),
+            )
+            .unwrap()
+        };
+
+        // A config.toml written by an install from before the move.
+        std::fs::write(
+            tmp.path().join("config.toml"),
+            "self_repo = \"listepo/ketch\"\nregistry = \"github:listepo/ketch-registry\"\n",
+        )
+        .unwrap();
+        let cfg = load();
+        assert_eq!(cfg.self_repo, SELF_REPO);
+        assert_eq!(cfg.registry, REGISTRY_REPO);
+
+        // The variable wins over the file and is read the same way.
+        std::env::set_var("KETCH_SELF_REPO", "Listepo/Ketch");
+        assert_eq!(load().self_repo, SELF_REPO);
+
+        // A fork is somebody's choice, not an old name: kept as written.
+        std::env::set_var("KETCH_SELF_REPO", "someone/ketch");
+        assert_eq!(load().self_repo, "someone/ketch");
+    }
+
+    #[test]
+    fn current_repo_renames_only_the_repositories_that_moved() {
+        assert_eq!(current_repo("listepo/ketch"), SELF_REPO);
+        assert_eq!(current_repo("LISTEPO/KETCH"), SELF_REPO);
+        assert_eq!(current_repo("listepo/ketch-registry"), REGISTRY_REPO);
+        assert_eq!(current_repo(SELF_REPO), SELF_REPO);
+        assert_eq!(current_repo("listepo/swarfr"), "listepo/swarfr");
     }
 
     const LOG_KEYS: &[&str] = &["KETCH_ROOT", "KETCH_LOG_LEVEL", "KETCH_LOG_FORMAT"];

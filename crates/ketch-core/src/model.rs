@@ -185,11 +185,18 @@ impl PackageRef {
                     .chars()
                     .all(|c| c.is_ascii_alphanumeric() || c == '-');
             if looks_like_scheme && !rest.is_empty() {
-                return Some(PackageRef::new(scheme.to_ascii_lowercase(), rest));
+                let scheme = scheme.to_ascii_lowercase();
+                if scheme == "github" {
+                    return Some(PackageRef::github(crate::config::current_repo(rest)));
+                }
+                return Some(PackageRef::new(scheme, rest));
             }
         }
+        // Every stored reference is read through here, so a state file,
+        // lockfile or manifest written before a repository moved resolves
+        // under its new name. See `config::RENAMED_REPOS`.
         if text.contains('/') {
-            return Some(PackageRef::github(text));
+            return Some(PackageRef::github(crate::config::current_repo(text)));
         }
         None
     }
@@ -1543,6 +1550,35 @@ pub fn glob_preferred<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_reference_to_a_moved_repository_reads_as_its_new_name() {
+        for old in [
+            "listepo/ketch",
+            "github:listepo/ketch",
+            "GitHub:Listepo/Ketch",
+            "pyrlyn/ketch",
+            "github:pyrlyn/ketch",
+        ] {
+            assert_eq!(
+                PackageRef::parse(old).unwrap(),
+                PackageRef::github(crate::config::SELF_REPO),
+                "{old}"
+            );
+        }
+        assert_eq!(
+            PackageRef::parse("github:listepo/ketch-registry").unwrap(),
+            PackageRef::github(crate::config::REGISTRY_REPO)
+        );
+        // Only the repositories that moved: the rest of the account stays.
+        assert_eq!(
+            PackageRef::parse("listepo/swarfr").unwrap(),
+            PackageRef::github("listepo/swarfr")
+        );
+        // A stored state entry is read through the same path.
+        let stored: PackageRef = serde_json::from_str(r#""github:listepo/ketch""#).unwrap();
+        assert_eq!(stored.to_string(), "github:pyrlyn/ketch");
+    }
 
     #[test]
     fn validate_refuses_names_that_would_escape_their_directory() {
