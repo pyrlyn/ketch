@@ -5,7 +5,7 @@
 
 # Install Hugo HUGO_VERSION (linux-amd64) from the project's own release, checked against the
 # checksum published beside it: the same thing ketch does for everything it installs.
-# Used by .github/workflows/pages.yml (pyrlyn/infra pages.yml `setup-command`).
+# Used by .github/workflows/pages.yml (pyrlyn/ci pages.yml `setup-command`).
 set -euo pipefail
 : "${HUGO_VERSION:?set HUGO_VERSION, e.g. 0.165.0}"
 work="$(mktemp -d)"

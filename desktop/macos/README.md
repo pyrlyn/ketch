@@ -113,7 +113,7 @@ API names were checked against the macOS 27.0 SDK's
 ## Releases
 
 Releases are made by `.github/workflows/release-apple-desktop.yml` (a thin
-caller of pyrlyn/infra's reusable `release-apple-desktop.yml`), dispatched by
+caller of pyrlyn/ci's reusable `release-apple-desktop.yml`), dispatched by
 hand with a version:
 
 ```bash
