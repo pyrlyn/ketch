@@ -324,7 +324,7 @@ fn is_sha256(text: &str) -> bool {
 /// What `Lockfile::load` does after reading the file, for the `lockfile` fuzz
 /// target (`src/lib.rs`).
 #[cfg(fuzzing)]
-pub(crate) fn fuzz_parse(text: &str) -> Result<Lockfile> {
+pub fn fuzz_parse(text: &str) -> Result<Lockfile> {
     let lock: Lockfile =
         toml::from_str(text).map_err(|e| Error::parse("fuzz".to_string(), e.to_string()))?;
     lock.validate(Path::new("ketch.lock"))?;
