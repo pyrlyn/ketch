@@ -8,7 +8,7 @@ Catch releases straight from GitHub — a package manager for GitHub-released bi
 | B65 | in progress | P0 | 2 | 0% | Cursor / grok 4.7 high |
 | R3 | in progress | P1 | 3 | 67% | Cursor / grok 4.7 high |
 | F8 | in progress | P2 | 3 | 0% | Cursor / grok 4.7 high |
-| M16.3 | todo | P2 | 1 | 0% | |
+| M16.3 | in progress | P2 | 1 | 0% | Claude Code / sonnet-5.5 |
 | M16.4 | todo | P2 | 1 | 0% | |
 | M16.5 | todo | P2 | 1 | 0% | |
 | M16.6 | todo | P2 | 3 | 0% | |
@@ -322,6 +322,8 @@ The creator decided (2026-10-03) to split M16 into the subtasks below, one pull 
 `push::load` parses a project's `ketch.toml` into TOML and then into `serde_json::Value`. The module gains that conversion as one call (same two steps, same error texts), and `push.rs` uses it.
 
 Done when `push.rs` imports no `toml`, the push tests pass unchanged, and the conversion has a test.
+
+Execution plan (Claude Code / sonnet-5.5): add `toml_file::to_json(text, what)` (parse to `toml::Value` through `parse`, then `serde_json::to_value`, both errors naming the file) with two tests; `push::load` calls it in place of its two inline steps and drops no other behaviour; verify with fmt, clippy and nextest.
 
 ### M16.4. `wizard.rs` through the module
 
