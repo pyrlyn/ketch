@@ -2,7 +2,6 @@
 
 - B60. Windows self-update leaves `ketch.exe.old` behind
 - B65. Binary selection regression test
-- B72. The `cfg(fuzzing)` build compiles again
 - R3. Cross-platform CI
 - F8. Spinner and progress bar
 - M16.6. `manifest.rs` (`ketch.toml` user manifests)
