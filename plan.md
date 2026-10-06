@@ -6,6 +6,7 @@ Catch releases straight from GitHub — a package manager for GitHub-released bi
 | --- | --- | --- | --- | --- | --- |
 | B60 | in progress | P3 | 1 | 80% | Cursor / grok 4.7 |
 | B65 | in progress | P0 | 2 | 0% | Cursor / grok 4.7 high |
+| B72 | in progress | P2 | 2 | 90% | Claude Code / opus-5.5 |
 | R3 | in progress | P1 | 3 | 67% | Cursor / grok 4.7 high |
 | F8 | in progress | P2 | 3 | 0% | Cursor / grok 4.7 high |
 | M16.5 | todo | P2 | 1 | 0% | |
@@ -117,6 +118,20 @@ Item 2 stays with B64. Item 1 is B65, which closes with B64's `tests/bin_choice.
 Add a fixture with two similarly named binaries (for example `rtok` and `rtok-hook`) and assert the intended one is chosen on every OS: macOS, Windows and Linux. This is the test that would have caught the Windows alphabetical-sort bug, where `rtok hook` was selected instead of the intended binary.
 
 Note for the owner: B64's branch `b64-bin-name` already adds `tests/bin_choice.rs` with `rtok`, `rtok-hook` and `other-tool` fixtures, not gated by OS. Reuse or extend it once B64 merges instead of writing a second fixture.
+
+### B72. The `cfg(fuzzing)` build compiles again
+
+Since the R5 workspace split, `RUSTFLAGS="--cfg fuzzing" cargo check -p ketch` fails with ~94 errors, so no `fuzz/` target builds. `src/lib.rs` still declares `mod cmd` (whose `crate::` paths need every core module and the binary-only `ui`, `complete`, `man`, `self_docs`), re-exports a `ketch_core::ui` that does not exist, calls `extract_auto` without the `Report` it now takes, and uses `walkdir`, which the root crate does not depend on. The core's fuzz helpers (`lockfile::fuzz_parse`, `manifest::fuzz_parse_registry`, `hooks::fuzz_shell`, `source::plugin::fuzz_parse`, `source::github::fuzz_parse_digest`, `parse_checksum_file`) are `pub(crate)`, so the binary's fuzz library cannot call them.
+
+Done when `cargo +nightly fuzz build` builds every target, `RUSTFLAGS="--cfg fuzzing" cargo check -p ketch -p ketch-core` is clean on stable, the normal public surface of `ketch-core` is unchanged (fuzz-only items exist only under `#[cfg(fuzzing)]`), and `just check` plus CI run that check so it cannot rot again.
+
+Plan:
+
+1. `src/lib.rs`: drop `mod cmd` (no target needs it; `cli.rs` does not use it), re-export only the core modules `cli.rs` and `fuzzing` reach, call `changelog::sanitize` (what `ui::printable` wraps) instead of `ui::printable`, pass a silent `Report` to `extract_auto`; update the header comment.
+2. `crates/ketch-core`: make the `#[cfg(fuzzing)]` helpers `pub`, and add a `#[cfg(fuzzing)] pub` wrapper for `parse_checksum_file`, which stays `pub(crate)` in normal builds.
+3. `Cargo.toml`: `walkdir` as a `[target.'cfg(fuzzing)'.dependencies]` entry, so normal builds do not gain it.
+4. `Justfile`: `fuzz-check` recipe (`RUSTFLAGS="--cfg fuzzing" cargo check --locked -p ketch -p ketch-core`), called from `check`; the same step in the macOS CI job.
+5. Verify: the stable check, `cargo +nightly fuzz build`, a short `just fuzz <target> 5` smoke run, then `just check`.
 
 ### Priorities
 
