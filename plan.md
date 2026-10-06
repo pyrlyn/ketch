@@ -9,7 +9,6 @@ Catch releases straight from GitHub — a package manager for GitHub-released bi
 | R3 | in progress | P1 | 3 | 67% | Cursor / grok 4.7 high |
 | F8 | in progress | P2 | 3 | 0% | Cursor / grok 4.7 high |
 | M16.4 | todo | P2 | 1 | 0% | |
-| M16.5 | in progress | P2 | 1 | 0% | Claude Code / sonnet-5.5 |
 | M16.6 | todo | P2 | 3 | 0% | |
 | M16.7 | todo | P2 | 3 | 0% | |
 | M16.8 | todo | P2 | 2 | 0% | |
@@ -322,14 +321,6 @@ The creator decided (2026-10-03) to split M16 into the subtasks below, one pull 
 `wizard.rs` renders TOML string and string-array literals through `toml::Value` so escaping is never hand-rolled. Those two renderers move into the module, and `wizard.rs` calls them.
 
 Done when `wizard.rs` imports no `toml`, the wizard tests pass unchanged, and the module tests quotes, backslashes and control bytes.
-
-### M16.5. Test-only TOML in `model.rs` and `extra.rs`
-
-The manifest tests in `model.rs` (hooks round trip, schema validation of `ketch.toml`, `builtin.toml` and the docs' examples) and `extra_paths_toml_accepts_strings_and_tables` in `extra.rs` call `toml` directly. They switch to the module's parse, render and TOML-to-JSON calls; the assertions stay as they are.
-
-Done when neither file names `toml` and every test in both passes with unchanged assertions.
-
-Execution plan (Claude Code / sonnet-5.5): `toml_file::Document` gains `into_json` (the same call M16.3 adds for `push.rs`; reconcile on merge, keep one). In `model.rs`, `toml::from_str::<Manifest>` becomes `toml_file::parse`, the hooks round trip renders through `toml_file::render`, and the three `toml::Value` uses (`schema_errors`, builtin packages, docs examples) go through `Document::parse(..).into_json()`. In `extra.rs`, the one manifest parse uses `toml_file::parse`. A test for `into_json`. Verify with fmt, clippy and nextest.
 
 ### M16.6. `manifest.rs` (`ketch.toml` user manifests) — waiting for the creator's choice of scope
 
