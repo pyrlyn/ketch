@@ -1284,6 +1284,16 @@ Done when `wizard.rs` imports no `toml`, the wizard tests pass unchanged, and th
 
 Execution plan (Claude Code / sonnet-5.5): add `string_literal` and `string_array_literal` to `crates/ketch-core/src/toml_file.rs` (moved verbatim from `wizard.rs`'s `string` and `list`, so the bytes are the same), with tests for quotes, backslashes, control bytes, empty and multi-item arrays; `wizard.rs` imports them and drops its two private fns; verify with fmt, clippy and nextest.
 
+### M16.5. Test-only TOML in `model.rs` and `extra.rs`
+
+The manifest tests in `model.rs` (hooks round trip, schema validation of `ketch.toml`, `builtin.toml` and the docs' examples) and `extra_paths_toml_accepts_strings_and_tables` in `extra.rs` call `toml` directly. They switch to the module's parse, render and TOML-to-JSON calls; the assertions stay as they are.
+
+Done when neither file names `toml` and every test in both passes with unchanged assertions.
+
+Execution plan (Claude Code / sonnet-5.5): In `model.rs`, `toml::from_str::<Manifest>` becomes `toml_file::parse`, the hooks round trip renders through `toml_file::render`, and the three `toml::Value` uses (`schema_errors`, builtin packages, docs examples) go through M16.3's `toml_file::to_json`. In `extra.rs`, the one manifest parse uses `toml_file::parse`. Verify with fmt, clippy and nextest.
+
+Status: done.
+
 ### M16.7. `lockfile.rs` (`ketch.lock`)
 
 `lockfile.rs` reads, validates and writes `ketch.lock` (`toml::from_str`, `toml::to_string_pretty`), has a fuzz entry point, and its tests parse and render TOML directly. Two options:
@@ -1292,3 +1302,5 @@ Execution plan (Claude Code / sonnet-5.5): add `string_literal` and `string_arra
 - **B. TOML calls only.** `lockfile.rs` keeps its types, `validate`, header and file handling; only the parse and render calls go through the module.
 
 The creator chose B (2026-10-06): `lockfile.rs` keeps its types, `validate`, header and file handling, and only the parse and render calls go through the module. Done when `lockfile.rs` imports no `toml`, `ketch.lock` is written byte-for-byte as before, `docs/LOCKFILE.md` still matches, its entry is gone from M16.8's allow-list, and the tests pass unchanged.
+
+Status: done.
