@@ -28,6 +28,25 @@ pub(crate) fn render<T: Serialize>(value: &T, what: impl Into<String>) -> Result
     toml::to_string_pretty(value).map_err(|e| Error::parse(what, e.to_string()))
 }
 
+/// A quoted, escaped TOML string.
+///
+/// Built by rendering a `toml::Value` so escaping is never hand-rolled: one
+/// writer, one answer to what quotes, backslashes and control bytes mean.
+pub(crate) fn string_literal(text: &str) -> String {
+    toml::Value::String(text.to_string()).to_string()
+}
+
+/// A TOML array of strings, escaped the same way [`string_literal`] escapes.
+pub(crate) fn string_array_literal(items: &[String]) -> String {
+    toml::Value::Array(
+        items
+            .iter()
+            .map(|i| toml::Value::String(i.clone()))
+            .collect(),
+    )
+    .to_string()
+}
+
 /// A parsed TOML document whose keys a caller reads, or fills in, before it
 /// becomes a typed value.
 ///
@@ -168,5 +187,48 @@ mod tests {
         let doc = Document::parse("name = \"rg\"\n", "/r/rg/ketch.toml").unwrap();
         let err = doc.deserialize::<Sample>().unwrap_err();
         assert!(err.to_string().contains("/r/rg/ketch.toml"), "{err}");
+    }
+
+    #[test]
+    fn a_string_literal_keeps_quotes_and_backslashes_recoverable() {
+        // The writer may choose a literal string over an escaped one; what
+        // matters is that the reader gets the same text back.
+        for text in ["say \"hi\"", "C:\\bin", "both \" and \\ and '"] {
+            let doc = format!("v = {}", string_literal(text));
+            let parsed: toml::Table = parse(&doc, "sample").unwrap();
+            assert_eq!(parsed["v"].as_str(), Some(text), "{doc}");
+        }
+        assert_eq!(string_literal("plain"), "\"plain\"");
+    }
+
+    #[test]
+    fn a_string_literal_escapes_control_bytes_on_one_line() {
+        let text = "a\u{1}b\u{7f}c\td";
+        let rendered = string_literal(text);
+        assert_eq!(rendered, "\"a\\u0001b\\u007Fc\\td\"");
+        assert!(!rendered.contains('\n'));
+    }
+
+    #[test]
+    fn a_string_literal_parses_back_to_the_same_text() {
+        let text = "q\" b\\ n\n t\t \u{0} é";
+        let doc = format!("v = {}", string_literal(text));
+        let parsed: toml::Table = parse(&doc, "sample").unwrap();
+        assert_eq!(parsed["v"].as_str(), Some(text));
+    }
+
+    #[test]
+    fn a_string_array_literal_renders_each_item_and_parses_back() {
+        assert_eq!(string_array_literal(&[]), "[]");
+        let items = vec!["a".to_string(), "b\"c".to_string(), "d\\e".to_string()];
+        let rendered = string_array_literal(&items);
+        let parsed: toml::Table = parse(&format!("v = {rendered}"), "sample").unwrap();
+        let back: Vec<&str> = parsed["v"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(toml::Value::as_str)
+            .collect();
+        assert_eq!(back, ["a", "b\"c", "d\\e"]);
     }
 }

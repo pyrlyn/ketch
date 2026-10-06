@@ -9,7 +9,6 @@ Catch releases straight from GitHub — a package manager for GitHub-released bi
 | R3 | in progress | P1 | 3 | 67% | Cursor / grok 4.7 high |
 | F8 | in progress | P2 | 3 | 0% | Cursor / grok 4.7 high |
 | M16.3 | todo | P2 | 1 | 0% | |
-| M16.4 | in progress | P2 | 1 | 0% | Claude Code / sonnet-5.5 |
 | M16.5 | todo | P2 | 1 | 0% | |
 | M16.6 | todo | P2 | 3 | 0% | |
 | M16.7 | todo | P2 | 3 | 0% | |
@@ -322,14 +321,6 @@ The creator decided (2026-10-03) to split M16 into the subtasks below, one pull 
 `push::load` parses a project's `ketch.toml` into TOML and then into `serde_json::Value`. The module gains that conversion as one call (same two steps, same error texts), and `push.rs` uses it.
 
 Done when `push.rs` imports no `toml`, the push tests pass unchanged, and the conversion has a test.
-
-### M16.4. `wizard.rs` through the module
-
-`wizard.rs` renders TOML string and string-array literals through `toml::Value` so escaping is never hand-rolled. Those two renderers move into the module, and `wizard.rs` calls them.
-
-Done when `wizard.rs` imports no `toml`, the wizard tests pass unchanged, and the module tests quotes, backslashes and control bytes.
-
-Execution plan (Claude Code / sonnet-5.5): add `string_literal` and `string_array_literal` to `crates/ketch-core/src/toml_file.rs` (moved verbatim from `wizard.rs`'s `string` and `list`, so the bytes are the same), with tests for quotes, backslashes, control bytes, empty and multi-item arrays; `wizard.rs` imports them and drops its two private fns; verify with fmt, clippy and nextest.
 
 ### M16.5. Test-only TOML in `model.rs` and `extra.rs`
 

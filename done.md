@@ -1267,3 +1267,11 @@ Execution plan: (1) `desktop/design/build.mjs` writes the XAML `HighContrast` di
 Done when the generated `HighContrast` dictionary holds no hex values, `just design-check` passes with its drift check covering the output, and the docs say so.
 
 Status: done.
+
+### M16.4. `wizard.rs` through the module
+
+`wizard.rs` renders TOML string and string-array literals through `toml::Value` so escaping is never hand-rolled. Those two renderers move into the module, and `wizard.rs` calls them.
+
+Done when `wizard.rs` imports no `toml`, the wizard tests pass unchanged, and the module tests quotes, backslashes and control bytes.
+
+Execution plan (Claude Code / sonnet-5.5): add `string_literal` and `string_array_literal` to `crates/ketch-core/src/toml_file.rs` (moved verbatim from `wizard.rs`'s `string` and `list`, so the bytes are the same), with tests for quotes, backslashes, control bytes, empty and multi-item arrays; `wizard.rs` imports them and drops its two private fns; verify with fmt, clippy and nextest.
