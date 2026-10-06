@@ -1,5 +1,5 @@
 # PRODUCTION / RELEASE BUILDS ONLY. Releases the macOS app through the org-level
-# reusable workflow pyrlyn/infra release-apple-desktop.yml, which needs the
+# reusable workflow pyrlyn/ci release-apple-desktop.yml, which needs the
 # pyrlyn organization signing, notarisation and Sparkle secrets
 # (MACOS_CERTIFICATE, MACOS_CERTIFICATE_PWD, APPSTORE_CONNECT_KEY,
 # APPSTORE_CONNECT_KEY_ID, APPSTORE_CONNECT_ISSUER_ID, SPARKLE_ED_PRIVATE_KEY),
@@ -32,13 +32,13 @@ permissions:
   contents: read
 
 jobs:
-  # Pinned to the pyrlyn/infra#30 merge commit (main).
+  # Pinned to the pyrlyn/ci#30 merge commit (main).
   release:
     permissions:
       contents: write # the desktop-v tag, its release, and the appcast release
       actions: read # notify-failure: failed job names
       issues: write # notify-failure: the release-failure issue
-    uses: pyrlyn/infra/.github/workflows/release-apple-desktop.yml@9b57e680c6841bd330369777f2d1385ecaf8ce97
+    uses: pyrlyn/ci/.github/workflows/release-apple-desktop.yml@9b57e680c6841bd330369777f2d1385ecaf8ce97
     with:
       version: ${{ inputs.version }}
       tag-prefix: desktop-v

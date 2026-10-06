@@ -7,7 +7,7 @@
 # CLI's installers follow /releases/latest. This holds both sides apart:
 #
 # - release-apple-desktop.yml is dispatch-only and a thin caller of the
-#   org-level pyrlyn/infra release-apple-desktop.yml, pinned by commit SHA,
+#   org-level pyrlyn/ci release-apple-desktop.yml, pinned by commit SHA,
 #   with exactly the org secrets it needs, by name, and the desktop-v tag
 #   prefix; that workflow checks the version, the secrets and the placeholder
 #   Sparkle key, and creates every release with make_latest=false;
@@ -47,7 +47,7 @@ ruby -ryaml -e '
   job = jobs["release"]
   abort "local steps in the release job" if job.key?("steps")
   uses = job["uses"].to_s
-  abort "not the infra workflow: #{uses}" unless uses =~ %r{\Apyrlyn/infra/\.github/workflows/release-apple-desktop\.yml@[0-9a-f]{40}\z}
+  abort "not the infra workflow: #{uses}" unless uses =~ %r{\Apyrlyn/ci/\.github/workflows/release-apple-desktop\.yml@[0-9a-f]{40}\z}
   want = %w[MACOS_CERTIFICATE MACOS_CERTIFICATE_PWD APPSTORE_CONNECT_KEY APPSTORE_CONNECT_KEY_ID APPSTORE_CONNECT_ISSUER_ID SPARKLE_ED_PRIVATE_KEY]
   secrets = job["secrets"]
   abort "secrets must be passed by name, not #{secrets.inspect}" unless secrets.is_a?(Hash)

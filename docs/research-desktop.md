@@ -282,7 +282,7 @@ The CLI's tag lookups, checked for `desktop-v*`:
   ranking the letter `d` above the digit `0`: the app release would have won
   and has no tarball. Tags that are not versions now lose to any that are
   (`src/source/mod.rs`).
-- `scripts/release.sh`, pyrlyn/infra's `release-plz.yml` and `tap.yml` use
+- `scripts/release.sh`, pyrlyn/ci's `release-plz.yml` and `tap.yml` use
   exact `v<version>` tags; `sync-docs.yml` ran on any published release and
   would have set the site card's version to `desktop-v…`; it now skips tag
   refs that do not start with `v`.
@@ -331,7 +331,7 @@ decisions are listed there.
   (Release build with Sparkle, the `.dmg`, the appcast and its verification)
   ran locally on 2026-10-01.
 - Which release-plz version `release-plz/action` v0.5.139 (pinned by
-  pyrlyn/infra) runs was not checked; the anchoring above was read at
+  pyrlyn/ci) runs was not checked; the anchoring above was read at
   release-plz v0.3.169.
 - Whether GitHub recomputes `/releases/latest` when the current latest release
   is deleted, and whether it could then pick an app release, was not checked.
