@@ -1,0 +1,32 @@
+name: cla
+
+# Contributor License Agreement check: a thin caller of pyrlyn/ci's cla.yml, which runs the
+# pyrlyn/cla action (setup and rollout: docs/cla.md in pyrlyn/ci). Members of the pyrlyn
+# organization and allowlisted bots pass; anyone else signs CLA.md once by pull request comment.
+# The decision is the commit status `pyrlyn/cla`, which is not a required check here.
+#
+# Off until the repository or organization variable CLA_ENABLED is 'true': the reusable job is
+# skipped (a skipped check passes). It also filters issue_comment down to pull request comments
+# that sign or say `recheck`, so other comments only produce a skipped run.
+#
+# pull_request_target and issue_comment run this file from main, never the pull request's copy,
+# and the reusable workflow never checks out pull request code. Secrets are passed by name.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, closed]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  cla:
+    uses: pyrlyn/ci/.github/workflows/cla.yml@2f03a5d7ef6b77a3e1c6b9bccbb603c067d6af08 # main 2f03a5d
+    permissions:
+      contents: read
+      pull-requests: write # the sticky comment, lock after merge
+      statuses: write # the pyrlyn/cla commit status
+    secrets:
+      CLA_APP_ID: ${{ secrets.CLA_APP_ID }}
+      CLA_APP_PRIVATE_KEY: ${{ secrets.CLA_APP_PRIVATE_KEY }}
