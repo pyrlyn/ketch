@@ -1293,3 +1293,14 @@ Done when neither file names `toml` and every test in both passes with unchanged
 Execution plan (Claude Code / sonnet-5.5): In `model.rs`, `toml::from_str::<Manifest>` becomes `toml_file::parse`, the hooks round trip renders through `toml_file::render`, and the three `toml::Value` uses (`schema_errors`, builtin packages, docs examples) go through M16.3's `toml_file::to_json`. In `extra.rs`, the one manifest parse uses `toml_file::parse`. Verify with fmt, clippy and nextest.
 
 Status: done.
+
+### M16.7. `lockfile.rs` (`ketch.lock`)
+
+`lockfile.rs` reads, validates and writes `ketch.lock` (`toml::from_str`, `toml::to_string_pretty`), has a fuzz entry point, and its tests parse and render TOML directly. Two options:
+
+- **A. Whole move.** The `Lockfile` types' loading, `validate` and writing move into the owning module (or a submodule of it); `lockfile.rs` keeps what `ketch lock` and `ketch sync` do with a lockfile.
+- **B. TOML calls only.** `lockfile.rs` keeps its types, `validate`, header and file handling; only the parse and render calls go through the module.
+
+The creator chose B (2026-10-06): `lockfile.rs` keeps its types, `validate`, header and file handling, and only the parse and render calls go through the module. Done when `lockfile.rs` imports no `toml`, `ketch.lock` is written byte-for-byte as before, `docs/LOCKFILE.md` still matches, its entry is gone from M16.8's allow-list, and the tests pass unchanged.
+
+Status: done.

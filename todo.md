@@ -5,7 +5,6 @@
 - R3. Cross-platform CI
 - F8. Spinner and progress bar
 - M16.6. `manifest.rs` (`ketch.toml` user manifests)
-- M16.7. `lockfile.rs` (`ketch.lock`)
 - M16.8. A guard that only the owner imports `toml`
 - M17. `ketch import`: a package from winget, Homebrew or a Linux repository
 - R5. Workspace split: `ketch-core` library crate
