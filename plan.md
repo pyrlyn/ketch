@@ -10,7 +10,6 @@ Catch releases straight from GitHub — a package manager for GitHub-released bi
 | F8 | in progress | P2 | 3 | 0% | Cursor / grok 4.7 high |
 | M16.5 | todo | P2 | 1 | 0% | |
 | M16.6 | todo | P2 | 3 | 0% | |
-| M16.7 | in progress | P2 | 3 | 0% | Claude Code / sonnet-5.5 |
 | M16.8 | todo | P2 | 2 | 0% | |
 | M17 | in progress | P2 | 4 | 90% | Cursor / grok 4.7 |
 | R5 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
@@ -332,15 +331,6 @@ Done when neither file names `toml` and every test in both passes with unchanged
 The creator chose B (2026-10-06). Done when `manifest.rs` imports neither `toml` nor `toml_edit`, `write_bins` still leaves the rest of the file byte-for-byte, the fuzz entry point still builds, its entry is gone from M16.8's allow-list (if it exists by then), and the tests pass unchanged.
 
 Execution plan (Claude Code / sonnet-5.5): `Lockfile::load`, `to_toml`, the `cfg(fuzzing)` entry point and the tests call `toml_file::parse` and `toml_file::render` (and `string_literal` for the escaped `bin` value in a test) instead of `toml::`; no new module API. A new test pins the exact rendered bytes of a one-package `ketch.lock`. Verify with fmt, clippy, nextest, a `cfg(fuzzing)` `cargo check` of `ketch-core`, and `ketch lock` on a scratch tree before and after.
-
-### M16.7. `lockfile.rs` (`ketch.lock`)
-
-`lockfile.rs` reads, validates and writes `ketch.lock` (`toml::from_str`, `toml::to_string_pretty`), has a fuzz entry point, and its tests parse and render TOML directly. Two options:
-
-- **A. Whole move.** The `Lockfile` types' loading, `validate` and writing move into the owning module (or a submodule of it); `lockfile.rs` keeps what `ketch lock` and `ketch sync` do with a lockfile.
-- **B. TOML calls only.** `lockfile.rs` keeps its types, `validate`, header and file handling; only the parse and render calls go through the module.
-
-The creator chose B (2026-10-06). Done when `lockfile.rs` imports no `toml`, `ketch.lock` is written byte-for-byte as before, `docs/LOCKFILE.md` still matches, its entry is gone from M16.8's allow-list, and the tests pass unchanged.
 
 ### M16.8. A guard that only the owner imports `toml`
 

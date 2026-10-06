@@ -1283,3 +1283,12 @@ Execution plan (Claude Code / sonnet-5.5): add `toml_file::to_json(text, what)` 
 Done when `wizard.rs` imports no `toml`, the wizard tests pass unchanged, and the module tests quotes, backslashes and control bytes.
 
 Execution plan (Claude Code / sonnet-5.5): add `string_literal` and `string_array_literal` to `crates/ketch-core/src/toml_file.rs` (moved verbatim from `wizard.rs`'s `string` and `list`, so the bytes are the same), with tests for quotes, backslashes, control bytes, empty and multi-item arrays; `wizard.rs` imports them and drops its two private fns; verify with fmt, clippy and nextest.
+
+### M16.7. `lockfile.rs` (`ketch.lock`)
+
+`lockfile.rs` reads, validates and writes `ketch.lock` (`toml::from_str`, `toml::to_string_pretty`), has a fuzz entry point, and its tests parse and render TOML directly. Two options:
+
+- **A. Whole move.** The `Lockfile` types' loading, `validate` and writing move into the owning module (or a submodule of it); `lockfile.rs` keeps what `ketch lock` and `ketch sync` do with a lockfile.
+- **B. TOML calls only.** `lockfile.rs` keeps its types, `validate`, header and file handling; only the parse and render calls go through the module.
+
+The creator chose B (2026-10-06): `lockfile.rs` keeps its types, `validate`, header and file handling, and only the parse and render calls go through the module. Done when `lockfile.rs` imports no `toml`, `ketch.lock` is written byte-for-byte as before, `docs/LOCKFILE.md` still matches, its entry is gone from M16.8's allow-list, and the tests pass unchanged.
