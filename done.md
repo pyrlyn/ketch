@@ -1275,3 +1275,11 @@ Status: done.
 Done when `push.rs` imports no `toml`, the push tests pass unchanged, and the conversion has a test.
 
 Execution plan (Claude Code / sonnet-5.5): add `toml_file::to_json(text, what)` (parse to `toml::Value` through `parse`, then `serde_json::to_value`, both errors naming the file) with two tests; `push::load` calls it in place of its two inline steps and drops no other behaviour; verify with fmt, clippy and nextest.
+
+### M16.4. `wizard.rs` through the module
+
+`wizard.rs` renders TOML string and string-array literals through `toml::Value` so escaping is never hand-rolled. Those two renderers move into the module, and `wizard.rs` calls them.
+
+Done when `wizard.rs` imports no `toml`, the wizard tests pass unchanged, and the module tests quotes, backslashes and control bytes.
+
+Execution plan (Claude Code / sonnet-5.5): add `string_literal` and `string_array_literal` to `crates/ketch-core/src/toml_file.rs` (moved verbatim from `wizard.rs`'s `string` and `list`, so the bytes are the same), with tests for quotes, backslashes, control bytes, empty and multi-item arrays; `wizard.rs` imports them and drops its two private fns; verify with fmt, clippy and nextest.
