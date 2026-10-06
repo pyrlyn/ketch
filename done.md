@@ -1268,6 +1268,14 @@ Done when the generated `HighContrast` dictionary holds no hex values, `just des
 
 Status: done.
 
+### M16.3. `push.rs` through the module
+
+`push::load` parses a project's `ketch.toml` into TOML and then into `serde_json::Value`. The module gains that conversion as one call (same two steps, same error texts), and `push.rs` uses it.
+
+Done when `push.rs` imports no `toml`, the push tests pass unchanged, and the conversion has a test.
+
+Execution plan (Claude Code / sonnet-5.5): add `toml_file::to_json(text, what)` (parse to `toml::Value` through `parse`, then `serde_json::to_value`, both errors naming the file) with two tests; `push::load` calls it in place of its two inline steps and drops no other behaviour; verify with fmt, clippy and nextest.
+
 ### M16.4. `wizard.rs` through the module
 
 `wizard.rs` renders TOML string and string-array literals through `toml::Value` so escaping is never hand-rolled. Those two renderers move into the module, and `wizard.rs` calls them.

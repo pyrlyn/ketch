@@ -28,6 +28,15 @@ pub(crate) fn render<T: Serialize>(value: &T, what: impl Into<String>) -> Result
     toml::to_string_pretty(value).map_err(|e| Error::parse(what, e.to_string()))
 }
 
+/// Parse `text` as TOML and return it as a JSON value, for validating a file
+/// against a JSON Schema or handing it to code that works on `serde_json`.
+/// `what` names the file in either step's error.
+pub(crate) fn to_json(text: &str, what: impl Into<String>) -> Result<serde_json::Value> {
+    let what = what.into();
+    let parsed: toml::Value = parse(text, what.as_str())?;
+    serde_json::to_value(parsed).map_err(|e| Error::parse(what, e.to_string()))
+}
+
 /// A quoted, escaped TOML string.
 ///
 /// Built by rendering a `toml::Value` so escaping is never hand-rolled: one
@@ -187,6 +196,18 @@ mod tests {
         let doc = Document::parse("name = \"rg\"\n", "/r/rg/ketch.toml").unwrap();
         let err = doc.deserialize::<Sample>().unwrap_err();
         assert!(err.to_string().contains("/r/rg/ketch.toml"), "{err}");
+    }
+
+    #[test]
+    fn toml_text_becomes_the_same_json_value() {
+        let json = to_json("name = \"rg\"\ntags = [\"a\", \"b\"]\n", "sample").unwrap();
+        assert_eq!(json, serde_json::json!({"name": "rg", "tags": ["a", "b"]}));
+    }
+
+    #[test]
+    fn invalid_toml_names_the_file_when_converted_to_json() {
+        let err = to_json("name = ", "/p/ketch.toml").unwrap_err();
+        assert!(err.to_string().contains("/p/ketch.toml"), "{err}");
     }
 
     #[test]
