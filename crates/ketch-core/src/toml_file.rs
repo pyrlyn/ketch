@@ -385,4 +385,107 @@ mod tests {
             .collect();
         assert_eq!(back, ["a", "b\"c", "d\\e"]);
     }
+
+    /// Whether `line` names the `toml` or `toml_edit` crate. Whole identifiers
+    /// only: `toml_file`, `ketch.toml` and a test called `reads_toml` are not
+    /// the crate, and a substring search would fail on every one of them.
+    fn names_a_toml_crate(line: &str) -> bool {
+        let is_ident = |c: char| c.is_alphanumeric() || c == '_';
+        line.match_indices("toml").any(|(at, _)| {
+            let before = &line[..at];
+            let after = &line[at + "toml".len()..];
+            // A `.` before it is a file name such as `ketch.toml`.
+            if before.ends_with(|c: char| is_ident(c) || c == '.') {
+                return false;
+            }
+            if after.starts_with("::") {
+                return true;
+            }
+            if let Some(rest) = after.strip_prefix("_edit") {
+                return !rest.starts_with(is_ident);
+            }
+            let imports = before
+                .trim_end()
+                .strip_suffix("use")
+                .is_some_and(|b| !b.ends_with(is_ident));
+            imports && !after.starts_with(is_ident)
+        })
+    }
+
+    #[test]
+    fn the_scan_tells_the_crate_from_other_uses_of_the_word() {
+        for line in [
+            "    toml::from_str(text)",
+            "let t: toml::Table = x;",
+            "use toml;",
+            "pub use toml::Value;",
+            "use toml_edit::DocumentMut;",
+            "toml_edit::Item::None",
+        ] {
+            assert!(names_a_toml_crate(line), "{line}");
+        }
+        for line in [
+            "use crate::toml_file;",
+            "toml_file::parse(text, what)",
+            "let path = root.join(\"ketch.toml\");",
+            "fn reads_toml() {}",
+            "// a toml file",
+            "let registry_toml = 1;",
+            "use tomlish::x;",
+        ] {
+            assert!(!names_a_toml_crate(line), "{line}");
+        }
+    }
+
+    fn rust_files(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                rust_files(&path, out);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                out.push(path);
+            }
+        }
+    }
+
+    /// `tests/` and `fuzz/` are left out: they write fixtures and are separate
+    /// crates, not part of the code the guard protects.
+    #[test]
+    fn only_the_owner_module_names_the_toml_crates() {
+        // Canonical, so the owner is recognised however the paths were spelled.
+        let core = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .canonicalize()
+            .expect("crate directory");
+        let root = core.join("../..").canonicalize().expect("repository root");
+        let mut sources = Vec::new();
+        rust_files(&root.join("src"), &mut sources);
+        let crates = std::fs::read_dir(root.join("crates")).expect("list crates");
+        for krate in crates.flatten() {
+            rust_files(&krate.path().join("src"), &mut sources);
+        }
+        let owner = core.join("src/toml_file.rs");
+        assert!(
+            sources.iter().any(|p| p == &owner),
+            "the scan misses its own crate"
+        );
+
+        let mut offenders = Vec::new();
+        for path in sources.iter().filter(|p| **p != owner) {
+            let text = std::fs::read_to_string(path).expect("read source");
+            for (n, line) in text.lines().enumerate() {
+                if names_a_toml_crate(line) {
+                    let shown = path.strip_prefix(&root).unwrap_or(path);
+                    offenders.push(format!("{}:{}: {}", shown.display(), n + 1, line.trim()));
+                }
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "only toml_file.rs may use the toml crates; go through it instead:\n{}",
+            offenders.join("\n")
+        );
+    }
 }

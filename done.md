@@ -1198,6 +1198,12 @@ Execution plan (Claude Code / opus-5.5):
 
 Status: done. `Settings` reports only whether a GitHub token is set, never the token. `prune` with a `keep` stores it as the retention setting, as `ketch prune --keep` does. An empty name list means every installed package for `pin`, `unpin` and `prune`, as on the command line. `registry push` stays out: it owns a tokio runtime. `changelog::manifest_for` from D2 became `Resolver::resolve_or_recorded`, shared with `info`.
 
+### Config file I/O in one module (M16.x)
+
+`AGENTS.md`: one module owns all config loading, validation and editing, and the rest of the code does not import `toml` or `toml_edit`. Every use today is in `crates/ketch-core`: `config.rs` (`config.toml`, and the schema drift helper `assert_schema_current`), `registry.rs` (`registry.toml` update metadata and package folders), `push.rs` (a project's `ketch.toml`), `wizard.rs` (TOML string and array literals), `manifest.rs` (user manifests and `builtin.toml`, the only `toml_edit` user), `lockfile.rs` (`ketch.lock`), and tests in `model.rs` and `extra.rs`. The binary (`src/`) and `crates/ketch-ffi` import neither; `tests/` is a separate crate that writes fixtures and stays out of scope.
+
+The creator decided (2026-10-03) to split M16 into the subtasks below, one pull request each, in id order: M16.1 first, since the rest call into the module it creates; M16.8 last of the ready ones. The creator chose option B for M16.6 and M16.7 (2026-10-06). Behaviour does not change in any subtask: same files read and written, same bytes, same error texts. The whole is done when every subtask is.
+
 ### M16.1. The owning module, and `config.rs` through it
 
 A new `crates/ketch-core/src/toml_file.rs` owns parsing, rendering and the schema export for the TOML files ketch owns. It starts with the two calls `config.rs` needs — parse text into a `T: DeserializeOwned` naming the file in the error (`Error::parse(what, …)`), and render a `T: Serialize` pretty — and takes `assert_schema_current` from `config.rs`, with its callers (`config.rs`, `lockfile.rs`, `log.rs`, `model.rs` tests) pointed at the new path. A helper is added only with its first caller, so nothing is dead code.
@@ -1333,5 +1339,15 @@ Status: done.
 The creator chose option B (2026-10-06). Done when `manifest.rs` imports neither `toml` nor `toml_edit`, `write_bins` still leaves the rest of the file byte-for-byte, the fuzz entry point still builds, its entry is gone from M16.8's allow-list, and the tests pass unchanged.
 
 Result: `toml_file.rs` gained `Document::is_array`, which `parse_registry` uses to tell a single manifest from a `[[package]]` array, and `EditDocument` (wrapping `toml_edit::DocumentMut`) with `package_table`, `render` and the table handle `EditTable` (`contains_key`, `set_inline_tables`). `write_bins` edits through them and `to_toml` calls `toml_file::render`; `package_table` left `manifest.rs`, which imports neither `toml` nor `toml_edit`. Error texts and written bytes are unchanged. `write_bins_in_a_multi_package_file_keeps_every_other_byte` joins the existing byte-for-byte test, with comments and a non-default key order in the input. `ketch-core` checks under `--cfg fuzzing` with `fuzz_parse_registry` intact; the root `ketch` library under `cfg(fuzzing)` already failed to build on `main` (94 errors, the same before and after this change), which this task did not touch. M16.8's allow-list did not exist yet, so nothing was removed from it.
+
+Status: done.
+
+### M16.8. A guard that only the owner imports `toml`
+
+A test in the owning module scans the Rust sources of every workspace crate (`src/`, `crates/*/src/`) and fails when a file other than the owner names `toml::`, `toml_edit` or `use toml`. The allow-list is empty, because M16.6 and M16.7 have landed (M16.6 and M16.7 are done): no file is exempt but the owner.
+
+Done when the test fails on a deliberate `toml::` use in another module (checked once by hand, not committed) and passes on the tree.
+
+Execution plan (Claude Code / sonnet-5.5): one test in `crates/ketch-core/src/toml_file.rs`, `only_the_owner_module_names_the_toml_crates`. It walks `src/` and `crates/*/src/` from `CARGO_MANIFEST_DIR`, skips `toml_file.rs`, and matches whole identifier tokens with std string code (no new dependency): `toml::`, `toml_edit`, `use toml`, so `toml_file`, `ketch.toml` and test names containing `toml` do not trip it. It reports file and line. Verify by hand with a deliberate `toml::` in another module, then fmt, clippy and nextest.
 
 Status: done.
