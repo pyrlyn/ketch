@@ -392,6 +392,16 @@ jobs:
           sh tests/ci-yml-triggers.sh
           sh tests/desktop-release.sh
 
+      # src/lib.rs and the core's fuzz entry points exist only under
+      # cfg(fuzzing), which no other build sets; checked on stable here so they
+      # cannot rot unnoticed again until someone runs the nightly fuzz build.
+      # What `just fuzz-check` runs.
+      - name: The fuzzing library compiles
+        if: env.RUN == 'true' && runner.os == 'macOS'
+        env:
+          RUSTFLAGS: --cfg fuzzing
+        run: cargo check --locked -p ketch -p ketch-core
+
       # release.yml is generated; a dist-workspace.toml or build-*.yml change
       # without `just dist-generate` would ship a workflow nobody reviewed.
       - name: release.yml is what dist generates

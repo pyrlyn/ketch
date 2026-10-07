@@ -525,8 +525,15 @@ fn urlencode_path_segment(raw: &str) -> String {
 
 /// `parse_digest` for the `checksum_file` fuzz target (`src/lib.rs`).
 #[cfg(fuzzing)]
-pub(crate) fn fuzz_parse_digest(raw: &str) -> Option<String> {
+pub fn fuzz_parse_digest(raw: &str) -> Option<String> {
     parse_digest(raw)
+}
+
+/// `parse_checksum_file` for the same target; the parser itself stays
+/// crate-private outside fuzzing.
+#[cfg(fuzzing)]
+pub fn fuzz_parse_checksum_file(body: &str) -> BTreeMap<String, String> {
+    parse_checksum_file(body)
 }
 
 #[cfg(test)]

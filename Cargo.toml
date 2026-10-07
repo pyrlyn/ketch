@@ -87,6 +87,11 @@ ratatui = { version = "0.30", optional = true }
 [target.'cfg(windows)'.dependencies]
 console = { version = "0.16", default-features = false, features = ["std"] }
 
+# `archive_extract` in `src/lib.rs` walks what an archive unpacked; only the
+# `cfg(fuzzing)` library uses it, so ordinary builds do not link it.
+[target.'cfg(fuzzing)'.dependencies]
+walkdir = "2"
+
 [dev-dependencies]
 assert_cmd = "2"
 assert_fs = "1"

@@ -213,7 +213,7 @@ design-check:
 release level="patch" *flags:
     scripts/release.sh {{level}} {{flags}}
 
-check: fmt-check lint test lint-commits lint-shell lint-man dist-check design-check package lint-cask
+check: fmt-check lint fuzz-check test lint-commits lint-shell lint-man dist-check design-check package lint-cask
 
 # $CARGO_HOME sizes (no deletes) and the build output, wherever cargo puts it
 cache:
@@ -290,6 +290,11 @@ capi-test:
 # The WinUI project itself (desktop/windows/Ketch.App) only builds on Windows: the ketch-win-app job.
 windows-app-test:
     cd desktop/windows && dotnet test --project Ketch.AppCore.Tests
+
+# The library the fuzz targets link (src/lib.rs, cfg(fuzzing) only), checked on
+# stable: nothing else builds it, so `check` and CI would not notice it break.
+fuzz-check:
+    RUSTFLAGS="--cfg fuzzing" cargo check --locked -p ketch -p ketch-core
 
 # libFuzzer targets in fuzz/ (fuzz/README.md), on nightly and never part of `check`.
 # `just fuzz` lists them, `just fuzz <target> [secs]` runs one, `just fuzz all [secs]` each in turn.

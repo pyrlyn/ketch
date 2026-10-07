@@ -383,7 +383,7 @@ fn package_table<'a>(
 
 /// `parse_registry` for the `manifest_toml` fuzz target (`src/lib.rs`).
 #[cfg(fuzzing)]
-pub(crate) fn fuzz_parse_registry(text: &str) -> Result<Vec<Manifest>> {
+pub fn fuzz_parse_registry(text: &str) -> Result<Vec<Manifest>> {
     parse_registry(text, "fuzz")
 }
 

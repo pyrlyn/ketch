@@ -45,15 +45,17 @@ plugin, and small archives it makes itself. `corpus/`, `artifacts/` and
 | `extra-paths` | `extra::classify` on a path or a `{ kind, shell, section }` table | a classified path that is not a safe payload member |
 | `plugin-protocol` | every JSON reply a `ketch-source-*` plugin sends | a panic |
 | `hook-line` | a hook script on its way to `sh -c` | the script split or changed |
-| `printable` | `ui::printable` | a control, bidi or zero-width character surviving, or a second pass changing the text |
+| `printable` | `changelog::sanitize`, all `ui::printable` does | a control, bidi or zero-width character surviving, or a second pass changing the text |
 
 ## How the targets reach ketch
 
 ketch is a binary. `src/lib.rs` is empty unless the build sets
-`cfg(fuzzing)`, which `cargo fuzz` does; then it declares the same modules as
-`src/main.rs` and exposes `ketch::fuzzing`, the entry points above. The few
-private functions a target needs have a `#[cfg(fuzzing)]` wrapper beside
-them. A module added to `main.rs` has to be added to `lib.rs` too.
+`cfg(fuzzing)`, which `cargo fuzz` does; then it compiles `src/cli.rs` beside
+the `ketch-core` modules the targets reach and exposes `ketch::fuzzing`, the
+entry points above. The few crate-private core functions a target needs have a
+`pub` wrapper beside them that exists only under `#[cfg(fuzzing)]`, so the
+core's ordinary public surface does not grow. `just fuzz-check` (part of `just
+check` and CI) builds this library on stable, so it fails there when it breaks.
 
 ## A crash
 

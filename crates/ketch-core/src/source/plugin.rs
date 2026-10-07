@@ -463,7 +463,7 @@ fn parse<T: serde::de::DeserializeOwned>(path: &Path, body: &str) -> Result<T> {
 /// filtering `list_releases` applies, for the `plugin_protocol` fuzz target
 /// (`src/lib.rs`).
 #[cfg(fuzzing)]
-pub(crate) fn fuzz_parse(body: &str) {
+pub fn fuzz_parse(body: &str) {
     let path = Path::new("ketch-source-fuzz");
     let _ = parse::<Capabilities>(path, body);
     let _ = parse::<Option<SourceInfo>>(path, body);

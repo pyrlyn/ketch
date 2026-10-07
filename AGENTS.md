@@ -73,7 +73,8 @@ its C# bindings, and the .NET test in `desktop/windows`.
 
 The Justfile wraps the same commands with `--locked`: `just fmt`, `just clippy`
 (or `just lint`), `just test`, and `just check` runs what CI runs on this
-host — format, clippy, `cargo nextest run --workspace --all-targets`, commitlint
+host — format, clippy, the `cfg(fuzzing)` library (`just fuzz-check`),
+`cargo nextest run --workspace --all-targets`, commitlint
 fixtures, shell syntax on `install.sh` and the release scripts, `mandoc -Tlint`
 on the generated man pages when mandoc is present, whether `release.yml` is what
 `dist generate` produces, `dist build` for the host target, and on macOS
@@ -181,7 +182,7 @@ differ by orders of magnitude — the cargo home is the small one. Set
 | --- | --- |
 | `Cargo.toml` | the `ketch` package, and the workspace: members, the one shared version, edition, MSRV and lints |
 | `src/main.rs` | argument parsing, config construction, dispatch — nothing else |
-| `src/lib.rs` | empty except under `cfg(fuzzing)`: the same modules again, and the entry points `fuzz/` drives |
+| `src/lib.rs` | empty except under `cfg(fuzzing)`: `cli.rs`, the core modules the fuzz targets reach, and the entry points `fuzz/` drives; `just fuzz-check` builds it on stable |
 | `src/cli.rs` | the clap surface, kept separate so `cmd/` takes its args directly |
 | `src/cmd/` | thin command bodies: arguments, output, confirmations |
 | `src/complete.rs` | completion scripts, and `ketch __complete`: the package names they ask for at <TAB>, for every shell |
