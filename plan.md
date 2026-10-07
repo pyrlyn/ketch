@@ -9,7 +9,7 @@ Catch releases straight from GitHub — a package manager for GitHub-released bi
 | R3 | in progress | P1 | 3 | 67% | Cursor / grok 4.7 high |
 | F8 | in progress | P2 | 3 | 0% | Cursor / grok 4.7 high |
 | M16.6 | todo | P2 | 3 | 0% | |
-| M16.8 | todo | P2 | 2 | 0% | |
+| M16.8 | in progress | P2 | 2 | 0% | Claude Code / sonnet-5.5 |
 | M17 | in progress | P2 | 4 | 90% | Cursor / grok 4.7 |
 | R5 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
 | R6 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
@@ -328,9 +328,11 @@ Execution plan (Claude Code / sonnet-5.5): `Lockfile::load`, `to_toml`, the `cfg
 
 ### M16.8. A guard that only the owner imports `toml`
 
-A test in the owning module scans the Rust sources of every workspace crate (`src/`, `crates/*/src/`) and fails when a file other than the owner names `toml::`, `toml_edit` or `use toml`. Until M16.6 and M16.7 land, `manifest.rs` and `lockfile.rs` sit on an explicit allow-list in that test, each with a comment naming the subtask that removes it.
+A test in the owning module scans the Rust sources of every workspace crate (`src/`, `crates/*/src/`) and fails when a file other than the owner names `toml::`, `toml_edit` or `use toml`. The allow-list is empty, because M16.6 and M16.7 have landed (M16.7 is merged; M16.6 is PR #267): no file is exempt but the owner.
 
-Done when the test fails on a deliberate `toml::` use in another module (checked once by hand, not committed), passes on the tree, and the allow-list holds only the files of subtasks still open.
+Done when the test fails on a deliberate `toml::` use in another module (checked once by hand, not committed) and passes on the tree.
+
+Execution plan (Claude Code / sonnet-5.5): one test in `crates/ketch-core/src/toml_file.rs`, `only_the_owner_module_names_the_toml_crates`. It walks `src/` and `crates/*/src/` from `CARGO_MANIFEST_DIR`, skips `toml_file.rs`, and matches whole identifier tokens with std string code (no new dependency): `toml::`, `toml_edit`, `use toml`, so `toml_file`, `ketch.toml` and test names containing `toml` do not trip it. It reports file and line. Verify by hand with a deliberate `toml::` in another module, then fmt, clippy and nextest.
 
 
 ### D11. Windows: WinUI 3 app shell on a fake core
