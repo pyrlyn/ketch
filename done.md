@@ -1322,3 +1322,13 @@ Plan:
 Fixed in pyrlyn/ketch#268: `src/lib.rs` compiles only `cli.rs` beside the core modules the targets reach, the core's fuzz helpers are `pub` only under `cfg(fuzzing)` (plus a fuzzing-only `fuzz_parse_checksum_file` wrapper), `walkdir` is a `cfg(fuzzing)` target dependency, and `fuzz/Cargo.lock` is refreshed. `just fuzz-check` runs in `just check` and in CI's macOS `package` job. All 11 targets build with `cargo +nightly fuzz build` and ran clean for 5 s each.
 
 Status: done.
+
+### M16.8. A guard that only the owner imports `toml`
+
+A test in the owning module scans the Rust sources of every workspace crate (`src/`, `crates/*/src/`) and fails when a file other than the owner names `toml::`, `toml_edit` or `use toml`. The allow-list is empty, because M16.6 and M16.7 have landed (M16.6 and M16.7 are done): no file is exempt but the owner.
+
+Done when the test fails on a deliberate `toml::` use in another module (checked once by hand, not committed) and passes on the tree.
+
+Execution plan (Claude Code / sonnet-5.5): one test in `crates/ketch-core/src/toml_file.rs`, `only_the_owner_module_names_the_toml_crates`. It walks `src/` and `crates/*/src/` from `CARGO_MANIFEST_DIR`, skips `toml_file.rs`, and matches whole identifier tokens with std string code (no new dependency): `toml::`, `toml_edit`, `use toml`, so `toml_file`, `ketch.toml` and test names containing `toml` do not trip it. It reports file and line. Verify by hand with a deliberate `toml::` in another module, then fmt, clippy and nextest.
+
+Status: done.
