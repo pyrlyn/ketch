@@ -1322,3 +1322,16 @@ Plan:
 Fixed in pyrlyn/ketch#268: `src/lib.rs` compiles only `cli.rs` beside the core modules the targets reach, the core's fuzz helpers are `pub` only under `cfg(fuzzing)` (plus a fuzzing-only `fuzz_parse_checksum_file` wrapper), `walkdir` is a `cfg(fuzzing)` target dependency, and `fuzz/Cargo.lock` is refreshed. `just fuzz-check` runs in `just check` and in CI's macOS `package` job. All 11 targets build with `cargo +nightly fuzz build` and ran clean for 5 s each.
 
 Status: done.
+
+### M16.6. `manifest.rs` (`ketch.toml` user manifests)
+
+`manifest.rs` parses user manifests and `builtin.toml` (`parse_registry`), renders them (`to_toml`), and edits a user manifest in place with `toml_edit` (`write_bins`, `package_table`), keeping the user's comments and order, and replaces the file atomically (`replace_file`). Two options:
+
+- **A. Whole move.** Reading, validating, editing and atomically writing manifest files move into the owning module (or a submodule of it); `manifest.rs` keeps only resolution across the four tiers.
+- **B. TOML calls only.** `manifest.rs` keeps `parse_registry`, `write_bins`, `write_manifest` and `replace_file`; only the `toml`/`toml_edit` calls move into the module, behind an edit helper for "insert this key into the table for this package, keep the rest of the document as it was".
+
+The creator chose option B (2026-10-06). Done when `manifest.rs` imports neither `toml` nor `toml_edit`, `write_bins` still leaves the rest of the file byte-for-byte, the fuzz entry point still builds, its entry is gone from M16.8's allow-list, and the tests pass unchanged.
+
+Result: `toml_file.rs` gained `Document::is_array`, which `parse_registry` uses to tell a single manifest from a `[[package]]` array, and `EditDocument` (wrapping `toml_edit::DocumentMut`) with `package_table`, `render` and the table handle `EditTable` (`contains_key`, `set_inline_tables`). `write_bins` edits through them and `to_toml` calls `toml_file::render`; `package_table` left `manifest.rs`, which imports neither `toml` nor `toml_edit`. Error texts and written bytes are unchanged. `write_bins_in_a_multi_package_file_keeps_every_other_byte` joins the existing byte-for-byte test, with comments and a non-default key order in the input. `ketch-core` checks under `--cfg fuzzing` with `fuzz_parse_registry` intact; the root `ketch` library under `cfg(fuzzing)` already failed to build on `main` (94 errors, the same before and after this change), which this task did not touch. M16.8's allow-list did not exist yet, so nothing was removed from it.
+
+Status: done.

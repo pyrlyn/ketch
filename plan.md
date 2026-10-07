@@ -8,7 +8,6 @@ Catch releases straight from GitHub — a package manager for GitHub-released bi
 | B65 | in progress | P0 | 2 | 0% | Cursor / grok 4.7 high |
 | R3 | in progress | P1 | 3 | 67% | Cursor / grok 4.7 high |
 | F8 | in progress | P2 | 3 | 0% | Cursor / grok 4.7 high |
-| M16.6 | todo | P2 | 3 | 0% | |
 | M16.8 | todo | P2 | 2 | 0% | |
 | M17 | in progress | P2 | 4 | 90% | Cursor / grok 4.7 |
 | R5 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
@@ -311,20 +310,7 @@ review of the file and the merge of the PR.
 
 `AGENTS.md`: one module owns all config loading, validation and editing, and the rest of the code does not import `toml` or `toml_edit`. Every use today is in `crates/ketch-core`: `config.rs` (`config.toml`, and the schema drift helper `assert_schema_current`), `registry.rs` (`registry.toml` update metadata and package folders), `push.rs` (a project's `ketch.toml`), `wizard.rs` (TOML string and array literals), `manifest.rs` (user manifests and `builtin.toml`, the only `toml_edit` user), `lockfile.rs` (`ketch.lock`), and tests in `model.rs` and `extra.rs`. The binary (`src/`) and `crates/ketch-ffi` import neither; `tests/` is a separate crate that writes fixtures and stays out of scope.
 
-The creator decided (2026-10-03) to split M16 into the subtasks below, one pull request each, in id order: M16.1 first, since the rest call into the module it creates; M16.8 last of the ready ones. M16.6 and M16.7 wait for the creator's choice of scope. Behaviour does not change in any subtask: same files read and written, same bytes, same error texts. The whole is done when every subtask is.
-
-
-
-### M16.6. `manifest.rs` (`ketch.toml` user manifests) — waiting for the creator's choice of scope
-
-`manifest.rs` parses user manifests and `builtin.toml` (`parse_registry`), renders them (`to_toml`), and edits a user manifest in place with `toml_edit` (`write_bins`, `package_table`), keeping the user's comments and order, and replaces the file atomically (`replace_file`). Two options:
-
-- **A. Whole move.** Reading, validating, editing and atomically writing manifest files move into the owning module (or a submodule of it); `manifest.rs` keeps only resolution across the four tiers.
-- **B. TOML calls only.** `manifest.rs` keeps `parse_registry`, `write_bins`, `write_manifest` and `replace_file`; only the `toml`/`toml_edit` calls move into the module, behind an edit helper for "insert this key into the table for this package, keep the rest of the document as it was".
-
-The creator chose B (2026-10-06). Done when `manifest.rs` imports neither `toml` nor `toml_edit`, `write_bins` still leaves the rest of the file byte-for-byte, the fuzz entry point still builds, its entry is gone from M16.8's allow-list (if it exists by then), and the tests pass unchanged.
-
-Execution plan (Claude Code / sonnet-5.5): `Lockfile::load`, `to_toml`, the `cfg(fuzzing)` entry point and the tests call `toml_file::parse` and `toml_file::render` (and `string_literal` for the escaped `bin` value in a test) instead of `toml::`; no new module API. A new test pins the exact rendered bytes of a one-package `ketch.lock`. Verify with fmt, clippy, nextest, a `cfg(fuzzing)` `cargo check` of `ketch-core`, and `ketch lock` on a scratch tree before and after.
+The creator decided (2026-10-03) to split M16 into the subtasks below, one pull request each, in id order: M16.1 first, since the rest call into the module it creates; M16.8 last of the ready ones. The creator chose option B for M16.6 and M16.7 (2026-10-06). Behaviour does not change in any subtask: same files read and written, same bytes, same error texts. The whole is done when every subtask is.
 
 ### M16.8. A guard that only the owner imports `toml`
 
