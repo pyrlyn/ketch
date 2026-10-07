@@ -1,7 +1,7 @@
 name: tap
 
 # The Homebrew cask in pyrlyn/homebrew-tap, regenerated from the release dist
-# has just published: version and both macOS checksums. A dist custom publish
+# has just published: version and the macOS checksum. A dist custom publish
 # job (`publish-jobs = ["./tap"]` in dist-workspace.toml), so it runs after the
 # release exists and `brew install` never names a tarball that is not on the
 # releases page yet. A failure here leaves the release published and the tap a
