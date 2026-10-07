@@ -24,6 +24,9 @@ Catch releases straight from GitHub — a package manager for GitHub-released bi
 | D17 | todo | P3 | 4 | 0% | |
 | D18 | todo | P3 | 3 | 0% | |
 | D19 | todo | P3 | 4 | 0% | |
+| B74 | todo | P3 | 3 | 0% | |
+| R12 | todo | P3 | 1 | 0% | |
+| R13 | todo | P3 | 1 | 0% | |
 
 ### Ketch audit
 
@@ -400,3 +403,15 @@ Rules decided here:
 - Bin paths and asset patterns have the version replaced by `*`, so the manifest keeps matching after the next release.
 
 Status (2026-10-02): steps 1–6 in, on `feat/import-foreign-packages` (draft PR #215). Not done: `docs/ru` and `docs/uk` do not exist on `main` (only on the unmerged `ci/sync-docs-i18n`), so the doc changes are English only; the `serde-saphyr` MSRV question is open for the creator; the binaries inside a cask's `.app` (`binary` under `$APPDIR`) are not linked.
+
+### B74. xz archives decompress entirely into memory
+
+`crates/ketch-core/src/extract/archive.rs:400-409`: `TarXzExtractor` does `xz_decompress` into a `Vec` before tar parsing; a hostile multi-GB `.tar.xz` (checksum-valid, same publisher) is a memory-exhaustion DoS during extraction. The gz/bz2 paths already stream via `lzma-rs` readers. Done means: the xz path streams like the others. Related doc note: the plugin protocol v1 has no checksum channel at all (`source/plugin.rs:125-191` never overrides `Source::checksums`) — state the TOFU limitation in `docs/PLUGINS.md` if not already there.
+
+### R12. Consolidate duplicated helpers
+
+`platform/unix.rs:46-53` and `self_update.rs:180-187` carry identical `remove_any`; `platform/unix.rs:164-170` and `platform/macos.rs:89-93` duplicate `sibling`; `source/local.rs:263-281` re-declares the GZIP/XZ/BZ2/ZIP/ustar magic constants from `extract/archive.rs:145-153`; `http.rs:60-64` keeps `Http::has_token` behind `#[allow(dead_code)]`. Done means: one implementation of each, and `has_token` is either used or gone.
+
+### R13. Stale arm64-only prose left by the cask rewrite
+
+`.github/workflows/tap.yml:4` still says "version and both macOS checksums" (one is computed now, `tap.yml:55`); `AGENTS.md:507` says "It builds all five targets" (dist-workspace.toml ships 4); `AGENTS.md:533-534` repeats the "both checksums" wording; README badges/links say `pyrlyn/ketch` while origin is `listepo/ketch` (cosmetic — `RENAMED_REPOS` maps it). Done means: the prose matches the arm64-only reality.
