@@ -2,6 +2,37 @@
 https://github.com/pyrlyn/ketch
 Catch releases straight from GitHub — a package manager for GitHub-released binaries and apps.
 
+## Cloud review findings (2026-10-08)
+
+New bugs, dead code and moves from a read-only Cursor cloud review of `main` at `077eca5` (agent `bc-89f78a26-1501-5547-96b8-3ef0603e653a`; full report: `cloud/ketch.md` in the private `listepo/roadmap` repo). Bugs take B75–B88; dead code and moves take R14–R19. Ordered P0, P1, P2. **confirmed** means seen in the tree; **suspected** means plausible from the code but not proven. Paths are under `crates/ketch-core/src/` unless shown otherwise; line numbers are as of the review. None of these is in the task table yet: to take one, add its row and a card.
+
+| ID | Priority | Kind | Status | Where | Fix |
+| --- | --- | --- | --- | --- | --- |
+| B75 | P1 | bug | confirmed | `scripts/cask.sh:81-86`; tap run 37154989737 | The cask postflight `run /bin/sh` does not pass a GitHub token: the step had `GITHUB_TOKEN`/`KETCH_GITHUB_TOKEN` and still hit `API rate limit exceeded`. Forward the token into the cask `run` env, or smoke-test `ketch self install` outside Homebrew's isolated postflight. |
+| B76 | P1 | bug | confirmed | `registry.rs:117-120` | After the live registry is moved aside, the rollback is `let _ = rename(aside, registry_dir)`; if it fails, `registry_dir` is left empty. Surface the failure and copy-restore. |
+| B77 | P1 | bug | confirmed | `self_update.rs:932-937` | Uninstall runs `remove_file(exe)?` after packages are gone and state is saved; a busy Windows `.exe` aborts the rest. Warn and continue, like the other uninstall steps. |
+| B78 | P1 | bug | confirmed | `self_update.rs:866-876` | Uninstall drops the lock before deleting the root, the shell blocks and the registry entries. Hold the `Lock` until those edits finish. |
+| B79 | P1 | bug | confirmed | `install.rs:691-729`; `platform/unix.rs:423`; `platform/windows.rs:502` | `place` swaps the store, then links; `ScopedDir` is off when `existing.prefix == store_dir`, so a failure after the swap leaves state pointing at a tree that is not on disk. Restore `.old` on error. |
+| B80 | P2 | bug | confirmed | `extract/archive.rs:397-399`; extractor order in `platform/linux.rs:62-66` | `TarXzExtractor` claims any `XZ_MAGIC` and is listed before `GzFileExtractor`; unlike gzip (`:508-509`), xz/bz2 never peek for ustar, so a lone `.xz` file fails as a tarball. Peek the decompressed head; add lone-file xz/bz2 extractors. |
+| B81 | P2 | bug | confirmed | `extract/archive.rs:280`, `:488` | Extraction keeps `mode & 0o7777`, so setuid/setgid/sticky bits from an archive survive. Mask `0o7000`. |
+| B82 | P2 | bug | confirmed | `source/github.rs:310-312` | Aggregate checksum files are keyed by basename; a later duplicate overwrites an earlier one. Reject or flag a basename that maps to two hashes. |
+| B83 | P2 | bug | confirmed | `source/github.rs:427-431` | A sidecar checksum takes the first sorted entry (`BTreeMap::into_values().next()`), not the asset's. Look up the asset name first; fall back to a single entry only when unambiguous. |
+| B84 | P2 | bug | confirmed | `http.rs:118-186` | Downloads stream with no maximum size. Add a configurable download/unpacked cap and abort over it. |
+| B85 | P2 | bug | confirmed | `registry.rs:61-67`; `listing.rs:390-426` | `registry::update` passes a fresh `Cancel::new()` to `Http::download`, and the parallel `ask_all` never checks for cancellation. Thread the caller's `Cancel` through both. |
+| B86 | P2 | bug | suspected | `source/plugin.rs:159-168` | A plugin's `asset.url` and `headers` go to `Http::anonymous` with no scheme or host check, though plugin JSON is untrusted. Allow `https:` only; drop `Authorization` and hop-by-hop headers. |
+| B87 | P2 | bug | confirmed | `source/local.rs:414-431` | The local tree hash covers `path\0bytes` only: it skips symlinks and ignores modes, so different trees can hash the same. Frame kind/path/mode/length and hash symlink targets. |
+| B88 | P2 | bug | suspected | `process.rs:461-494` | After `offer_to_stop`, ketch waits 200 ms before `/F`; the install can still hit a locked `.exe`. Wait, with a bound, until the pid is gone. |
+| R14 | P2 | dead code | confirmed | `scripts/b32_patch.py:8` | The script opens `src/self_update.rs`, which has moved, and nothing references it. Delete it. |
+| R15 | P2 | dead code | confirmed | root `Cargo.toml:61` (`dirs`); `manifest.rs:137-148` (`Resolver::aliases`); `model.rs:596-599` (`Release::asset`); `platform/mod.rs:49-50` (`Placement::version`); `model.rs:329-331` | Drop the unused root `dirs` dependency, `Resolver::aliases` (or wire it to `__complete`/search), `Release::asset` and the never-read `Placement::version`; remove the stale `allow(dead_code)` on `PackageSpec::raw` (read at `state.rs:162`). |
+| R16 | P2 | dead code | confirmed | `fuzz/seed.sh:42` | The seed script reads `$root/src/builtin.toml`; the file is `crates/ketch-core/src/builtin.toml`. Fix the path. |
+| R17 | P2 | dead code | confirmed | `shell.rs:561-1092` | 23 `cfg_attr(not(windows), allow(dead_code))` on the Windows PATH helpers. Put them in one `#[cfg(any(windows, test))]` module. |
+| R18 | P2 | move | confirmed | `manifest.rs:342-353` (`replace_file`), `shell.rs:1401`, `state.rs`, `platform/*` `move_into_store` | The same rename-over-temp appears five times. Make it one `ketch-core` helper (R12 covers the other duplicates); use a shared `atomic-replace` crate only if it exists. |
+| R19 | P2 | move | suspected | `crates/ketch-core/Cargo.toml:49-66` | `stats` + diesel, `push` + octocrab/tokio, `trust` + sigstore/pgp and the `extract` codecs are always in core, so every desktop/FFI link pays for them (issue #222). Make them optional crates or features. |
+
+Already tracked here, not added again: `Http::has_token` with no callers is in R12; `clap`/`clap_complete` still in `ketch-core` (`Cargo.toml:19-20`, `shell.rs:37`, `model.rs:716-733`, issues #219/#220) is R5 step 5, not done yet.
+
+Not added: the brand move is done (`brand/build.mjs` already uses `@pyrlyn/brand`); the `theme.js` and `cli-argv` fuzz moves were not verified by the agent.
+
 | # | Status | Priority | Complexity | Readiness | Agent |
 | --- | --- | --- | --- | --- | --- |
 | B60 | in progress | P3 | 1 | 80% | Cursor / grok 4.7 |
