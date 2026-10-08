@@ -48,10 +48,12 @@ jobs:
       level: ${{ inputs.level }}
       dry-run: ${{ inputs.dry-run }}
       release-untagged-head: ${{ inputs.release-untagged-head }}
+      # Explicit although they are pyrlyn/ci's defaults: tests/release-workflows.sh asserts them.
+      release-script: scripts/release.sh
+      release-workflows: release.yml
       # git-cliff and the Rust (scripts/release.sh runs cargo) at the mise.toml pins.
-      # release-script (scripts/release.sh), ci-workflows (ci.yml and pipeline.yml, which
-      # report protect-main's required checks) and release-workflows (release.yml) are
-      # pyrlyn/ci's defaults.
+      # ci-workflows: pyrlyn/ci's default (ci.yml and pipeline.yml, which report protect-main's
+      # required checks).
       mise-install-args: rust git-cliff
     secrets:
       BUMP_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}

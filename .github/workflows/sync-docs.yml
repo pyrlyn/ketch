@@ -27,6 +27,9 @@ permissions:
 
 jobs:
   sync:
+    # The macOS app's releases (desktop-v*, and the desktop-appcast feed) are
+    # not the CLI's version: the card would read "desktop-v1.0.0".
+    if: github.ref_type != 'tag' || startsWith(github.ref_name, 'v')
     uses: pyrlyn/ci/.github/workflows/sync-docs.yml@4e652d891cc6e6f0be316eda1a1f9630d76a8b7e # main
     permissions:
       contents: read
