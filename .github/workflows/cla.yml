@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   cla:
-    uses: pyrlyn/ci/.github/workflows/cla.yml@2f03a5d7ef6b77a3e1c6b9bccbb603c067d6af08 # main 2f03a5d
+    uses: pyrlyn/ci/.github/workflows/cla.yml@4e652d891cc6e6f0be316eda1a1f9630d76a8b7e # main
     permissions:
       contents: read
       pull-requests: write # the sticky comment, lock after merge

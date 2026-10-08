@@ -112,8 +112,8 @@ jobs:
           cd tap
           # Commit happened before smoke; push whatever HEAD is (may already
           # match the remote if this job was re-run).
-          if git rev-parse --verify @{u} >/dev/null 2>&1 \
-            && [ "$(git rev-parse HEAD)" = "$(git rev-parse @{u})" ]; then
+          if git rev-parse --verify '@{u}' >/dev/null 2>&1 \
+            && [ "$(git rev-parse HEAD)" = "$(git rev-parse '@{u}')" ]; then
             echo "cask already at $VERSION on the remote"
             exit 0
           fi

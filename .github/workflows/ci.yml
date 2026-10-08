@@ -11,13 +11,9 @@ on:
   issue_comment:
     types: [created]
   workflow_dispatch:
-  # Dependabot pull requests: dependabot.yml calls this workflow so they get the
-  # same jobs before its patch-only auto-merge.
-  workflow_call:
 
 # Build and test jobs need only to read the repository; a job that needs more
-# (review) declares its own. This also caps these jobs when
-# dependabot.yml calls this workflow with wider permissions.
+# (review) declares its own.
 permissions:
   contents: read
 
@@ -36,7 +32,7 @@ jobs:
       docs-only: ${{ steps.config.outputs.docs-only }}
     steps:
       - id: config
-        uses: pyrlyn/ci/.github/actions/config@f880dee803f157cd4268a503418b4ecaf4da7078 # main
+        uses: pyrlyn/ci/.github/actions/config@4e652d891cc6e6f0be316eda1a1f9630d76a8b7e # main
 
   # The shared pyrlyn/ci workflow, pinned by commit, with Rust from
   # mise.toml and a check that rustc is that pin: fmt once, then per target of
@@ -53,13 +49,12 @@ jobs:
     # is marked ready, and a draft must not look broken meanwhile.
     needs: config
     if: ${{ !cancelled() && github.event.pull_request.draft != true }}
-    uses: pyrlyn/ci/.github/workflows/ci-rust.yml@f880dee803f157cd4268a503418b4ecaf4da7078 # main
+    uses: pyrlyn/ci/.github/workflows/ci-rust.yml@4e652d891cc6e6f0be316eda1a1f9630d76a8b7e # main
     # actions: write for infra's cancel-run (the first failing job cancels the run).
     permissions:
       contents: read
       actions: write
     with:
-      clippy-args: --locked
       tools: nextest
       test-command: |
         cargo nextest run --workspace --all-targets --locked
@@ -69,67 +64,24 @@ jobs:
       skip: ${{ needs.config.outputs.docs-only == 'true' }}
 
   # Commits pushed from anywhere but this machine never met the local
-  # commit-msg hook, so a pull request's messages are linted here too.
-  # Pushes to main skip this: every commit there arrived through a pull
-  # request that already passed it.
+  # commit-msg hook, so a pull request's messages are linted here too, with
+  # the repository's commitlint config (pyrlyn/ci's `commits` action: merge
+  # commits and git's "Revert ..." subjects are skipped, every offender is
+  # listed). Pushes to main skip this: every commit there arrived through a
+  # pull request that already passed it.
   commits:
     if: github.event.pull_request.draft != true && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      # Full history: the commit-message check ranges from the pull request's
-      # base branch to HEAD.
-      - uses: actions/checkout@v7
+      # Full history: the check ranges from the pull request's base branch to HEAD.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-
-      - name: Read the Node pin from mise.toml
-        if: github.event_name == 'pull_request'
-        id: node_pin
-        run: |
-          version=$(grep '^node = ' mise.toml | cut -d '"' -f2)
-          [ -n "$version" ] || { echo "no node pin found in mise.toml" >&2; exit 1; }
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      # mise owns the pin but is not installed on GitHub runners, so
-      # setup-node runs the version mise.toml names. A number written here
-      # instead would be a second pin that drifts the first time one changes.
-      - uses: actions/setup-node@v7
-        if: github.event_name == 'pull_request'
+          persist-credentials: false
+      - uses: pyrlyn/ci/.github/actions/commits@4e652d891cc6e6f0be316eda1a1f9630d76a8b7e # main
         with:
-          node-version: ${{ steps.node_pin.outputs.version }}
-
-      - name: Commit messages
-        if: github.event_name == 'pull_request'
-        run: |
-          npm ci
-          # Merge commits are skipped: git writes their subjects, they are
-          # not conventional commits, and nobody may rewrite them — the same
-          # call the local commit-msg hook makes. commitlint has no flag for
-          # it, so each non-merge commit is checked on its own, and every
-          # offender is listed before the step fails rather than stopping at
-          # the first.
-          base="origin/${{ github.base_ref }}"
-          # A range that does not resolve must be an error: rev-list would
-          # print nothing, the loop would see no commits, and a broken check
-          # would pass itself.
-          git rev-parse -q --verify "$base^{commit}" > /dev/null \
-              || { echo "base branch $base not found" >&2; exit 1; }
-          echo "linting $(git rev-list --count --no-merges "$base..HEAD") commit(s) from $base"
-          bad=0
-          for sha in $(git rev-list --no-merges --reverse "$base..HEAD"); do
-              subject=$(git log -1 --format=%s "$sha")
-              # Same passthrough as the local hook: git writes reverts in its
-              # own format, not as conventional commits.
-              case "$subject" in
-                  "Revert "*) continue ;;
-              esac
-              echo "checking $sha: $subject"
-              if ! npx --no-install commitlint --from "$sha^" --to "$sha"; then
-                  echo "not a conventional commit: $sha $subject" >&2
-                  bad=1
-              fi
-          done
-          exit $bad
+          tool: commitlint
 
   # install.ps1 parses and runs; the Rust side of Windows is the `rust` job.
   powershell:
@@ -204,7 +156,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: ./.github/actions/rust
+      - uses: pyrlyn/ci/.github/actions/setup-rust@4e652d891cc6e6f0be316eda1a1f9630d76a8b7e # main
 
       - uses: Swatinem/rust-cache@v2
 
@@ -230,7 +182,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: ./.github/actions/rust
+      - uses: pyrlyn/ci/.github/actions/setup-rust@4e652d891cc6e6f0be316eda1a1f9630d76a8b7e # main
         with:
           install-args: rust dotnet cargo:https://github.com/dennisameling/uniffi-bindgen-cs
 
@@ -256,7 +208,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: ./.github/actions/rust
+      - uses: pyrlyn/ci/.github/actions/setup-rust@4e652d891cc6e6f0be316eda1a1f9630d76a8b7e # main
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
@@ -373,7 +325,7 @@ jobs:
       # scripts/release.sh against. All three at the versions mise.toml pins.
       # Before rust-cache, so the cache keys on this rustc.
       - if: env.RUN == 'true'
-        uses: ./.github/actions/rust
+        uses: pyrlyn/ci/.github/actions/setup-rust@4e652d891cc6e6f0be316eda1a1f9630d76a8b7e # main
         with:
           install-args: rust cargo-dist git-cliff
 

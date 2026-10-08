@@ -38,7 +38,7 @@ concurrency:
 jobs:
   pages:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
-    uses: pyrlyn/ci/.github/workflows/pages.yml@0603d0ae610af9f792c5caf925041292a857e480
+    uses: pyrlyn/ci/.github/workflows/pages.yml@4e652d891cc6e6f0be316eda1a1f9630d76a8b7e # main
     permissions:
       contents: read
       pages: write

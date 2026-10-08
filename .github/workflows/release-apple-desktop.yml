@@ -38,7 +38,7 @@ jobs:
       contents: write # the desktop-v tag, its release, and the appcast release
       actions: read # notify-failure: failed job names
       issues: write # notify-failure: the release-failure issue
-    uses: pyrlyn/ci/.github/workflows/release-apple-desktop.yml@9b57e680c6841bd330369777f2d1385ecaf8ce97
+    uses: pyrlyn/ci/.github/workflows/release-apple-desktop.yml@4e652d891cc6e6f0be316eda1a1f9630d76a8b7e # main
     with:
       version: ${{ inputs.version }}
       tag-prefix: desktop-v
