@@ -17,6 +17,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -58,7 +62,7 @@ jobs:
       tools: nextest
       test-command: |
         cargo nextest run --workspace --all-targets --locked
-        cargo nextest run --workspace --all-targets --locked --features tui
+        cargo nextest run -p ketch --all-targets --locked --features tui
       build-command: cargo build --workspace --all-targets --all-features --locked --target "$TARGET"
       # Docs-only: every job is a no-op that still reports (`rust / <target>` stay required).
       skip: ${{ needs.config.outputs.docs-only == 'true' }}
@@ -158,7 +162,7 @@ jobs:
 
       - uses: pyrlyn/ci/.github/actions/setup-rust@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: XCFramework and bindings
         run: scripts/xcframework.sh --debug
@@ -330,7 +334,7 @@ jobs:
           install-args: rust cargo-dist git-cliff
 
       - if: env.RUN == 'true'
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - if: env.RUN == 'true'
         name: Shell syntax
