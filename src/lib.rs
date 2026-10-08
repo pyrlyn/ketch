@@ -36,7 +36,8 @@ pub use ketch_core::{
 pub mod fuzzing {
     use crate::cli::Cli;
     use crate::extract::archive::{
-        TarBz2Extractor, TarExtractor, TarGzExtractor, TarXzExtractor, ZipExtractor,
+        Bz2FileExtractor, GzFileExtractor, TarBz2Extractor, TarExtractor, TarGzExtractor,
+        TarXzExtractor, XzFileExtractor, ZipExtractor,
     };
     use crate::extract::Extractor;
     use crate::model::{CompletionShell, ExtraKind, ExtraPath, ExtraPathSpec, PackageSpec};
@@ -161,6 +162,9 @@ pub mod fuzzing {
             Box::new(TarBz2Extractor),
             Box::new(TarExtractor),
             Box::new(ZipExtractor),
+            Box::new(GzFileExtractor),
+            Box::new(XzFileExtractor),
+            Box::new(Bz2FileExtractor),
         ];
         let _ = crate::extract::extract_auto(
             &src,

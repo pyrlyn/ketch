@@ -202,8 +202,25 @@ pub(crate) fn move_into_store(payload: &Path, store: &Path) -> Result<()> {
         let _ = remove_any(&staged);
         return Err(Error::io(store, e));
     }
-    let _ = remove_any(&retired);
+    // Leave `.old` until links succeed. A failed place after this swap can
+    // put the working version back; deleting it here would leave none.
     Ok(())
+}
+
+/// Drop the retired previous version once placement has finished successfully.
+#[cfg(target_os = "linux")]
+pub(crate) fn finalize_store_swap(store: &Path) {
+    let _ = remove_any(&sibling(store, ".old"));
+}
+
+/// Put the version we swapped out back, after place failed on the new tree.
+#[cfg(target_os = "linux")]
+pub(crate) fn restore_retired_store(store: &Path) {
+    let retired = sibling(store, ".old");
+    if retired.symlink_metadata().is_ok() {
+        let _ = remove_any(store);
+        let _ = std::fs::rename(&retired, store);
+    }
 }
 
 /// Keep a payload symlink if its target is a regular file inside the tree.
@@ -422,28 +439,42 @@ pub(crate) fn place_cli(platform: &dyn Platform, plan: &Placement<'_>) -> Result
     }
     move_into_store(plan.payload_dir, plan.store_dir)?;
     if !plan.link {
+        finalize_store_swap(plan.store_dir);
         return Ok(Vec::new());
     }
     let mut links = Vec::new();
-    for (target, name) in cli_targets(platform, plan.store_dir, plan)? {
-        links.push(link_binary(
-            &target,
-            plan.bin_dir,
-            &name,
+    let result = (|| -> Result<Vec<LinkRecord>> {
+        for (target, name) in cli_targets(platform, plan.store_dir, plan)? {
+            links.push(link_binary(
+                &target,
+                plan.bin_dir,
+                &name,
+                package_dir,
+                plan.replacing,
+            )?);
+        }
+        links.extend(link_planned_extras(
+            plan.extras,
+            plan.store_dir,
             package_dir,
             plan.replacing,
         )?);
+        if links.is_empty() {
+            return Err(Error::EmptyPayload(plan.store_dir.to_path_buf()));
+        }
+        Ok(std::mem::take(&mut links))
+    })();
+    match result {
+        Ok(links) => {
+            finalize_store_swap(plan.store_dir);
+            Ok(links)
+        }
+        Err(e) => {
+            let _ = unplace(&links, &crate::report::Report::silent());
+            restore_retired_store(plan.store_dir);
+            Err(e)
+        }
     }
-    links.extend(link_planned_extras(
-        plan.extras,
-        plan.store_dir,
-        package_dir,
-        plan.replacing,
-    )?);
-    if links.is_empty() {
-        return Err(Error::EmptyPayload(plan.store_dir.to_path_buf()));
-    }
-    Ok(links)
 }
 
 /// Undo `place`. Must tolerate links that are already gone.
@@ -774,5 +805,24 @@ mod tests {
 
         assert!(clear_destination(&link, &owned, &[]).is_err());
         assert!(link.is_file(), "must not be deleted");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_failed_place_after_the_swap_restores_the_previous_store() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = tmp.path().join("store/tool/1.0");
+        std::fs::create_dir_all(&store).unwrap();
+        std::fs::write(store.join("tool"), b"working").unwrap();
+        let payload = tmp.path().join("payload");
+        std::fs::create_dir_all(&payload).unwrap();
+        std::fs::write(payload.join("tool"), b"new").unwrap();
+        move_into_store(&payload, &store).unwrap();
+        assert_eq!(std::fs::read(store.join("tool")).unwrap(), b"new");
+        assert!(sibling(&store, ".old").exists());
+        restore_retired_store(&store);
+        assert_eq!(std::fs::read(store.join("tool")).unwrap(), b"working");
+        finalize_store_swap(&store);
+        assert!(!sibling(&store, ".old").exists());
     }
 }

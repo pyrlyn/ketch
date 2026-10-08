@@ -64,7 +64,7 @@ pub fn update(cx: &Ctx<'_>) -> Result<usize> {
         &headers,
         true,
         &progress as &dyn ProgressSink,
-        &crate::cancel::Cancel::new(),
+        &cx.cancel,
     )?;
     drop(progress);
 
@@ -116,7 +116,13 @@ fn swap_in(cx: &Ctx<'_>, tree: &Path, repo: &str) -> Result<usize> {
         }
         std::fs::rename(&cfg.registry_dir, &aside).map_err(|e| Error::io(&cfg.registry_dir, e))?;
         if let Err(e) = std::fs::rename(tree, &cfg.registry_dir) {
-            let _ = std::fs::rename(&aside, &cfg.registry_dir);
+            if let Err(rollback) = std::fs::rename(&aside, &cfg.registry_dir) {
+                return Err(Error::msg(format!(
+                    "failed to place the new registry at {} ({e}); \
+                     also failed to restore the previous copy ({rollback})",
+                    cfg.registry_dir.display()
+                )));
+            }
             return Err(Error::io(&cfg.registry_dir, e));
         }
         let _ = std::fs::remove_dir_all(&aside);
