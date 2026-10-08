@@ -506,7 +506,7 @@ committed `release.yml` differs from what that produces.
 
 The release build is `dispatch-releases` with `create-release = false`:
 `release.yml` runs only when bump dispatches it with a `tag`, on the tagged
-commit. It builds all five targets, and only when every one of them has built
+commit. It builds all four targets, and only when every one of them has built
 and passed its smoke test does the `host` job upload the tarballs and
 `SHA256SUMS` to bump's draft release and publish it. dist never tags. A failed
 build leaves the tag and a draft (invisible to `ketch self upgrade` and
@@ -532,8 +532,8 @@ fails the release. A bare binary cannot be stapled, so Gatekeeper looks its
 ticket up online.
 
 After the release is published, dist's publish job `./tap` (`tap.yml`)
-regenerates the Homebrew cask with `scripts/cask.sh` — version and both
-checksums — and pushes it to `Casks/ketch.rb` in `pyrlyn/homebrew-tap`. That
+regenerates the Homebrew cask with `scripts/cask.sh` — version and the
+checksum — and pushes it to `Casks/ketch.rb` in `pyrlyn/homebrew-tap`. That
 push needs `HOMEBREW_TAP_TOKEN`, a token allowed to write to the tap
 repository; the workflow's own token is scoped to this one and cannot. The
 cask is a cask and not a formula because ketch lives in `~/.ketch`: a

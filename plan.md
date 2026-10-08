@@ -26,7 +26,6 @@ Catch releases straight from GitHub — a package manager for GitHub-released bi
 | D19 | todo | P3 | 4 | 0% | |
 | B74 | todo | P3 | 3 | 0% | |
 | R12 | todo | P3 | 1 | 0% | |
-| R13 | todo | P3 | 1 | 0% | |
 
 ### Ketch audit
 
@@ -412,6 +411,3 @@ Status (2026-10-02): steps 1–6 in, on `feat/import-foreign-packages` (draft PR
 
 `platform/unix.rs:46-53` and `self_update.rs:180-187` carry identical `remove_any`; `platform/unix.rs:164-170` and `platform/macos.rs:89-93` duplicate `sibling`; `source/local.rs:263-281` re-declares the GZIP/XZ/BZ2/ZIP/ustar magic constants from `extract/archive.rs:145-153`; `http.rs:60-64` keeps `Http::has_token` behind `#[allow(dead_code)]`. Done means: one implementation of each, and `has_token` is either used or gone.
 
-### R13. Stale arm64-only prose left by the cask rewrite
-
-`.github/workflows/tap.yml:4` still says "version and both macOS checksums" (one is computed now, `tap.yml:55`); `AGENTS.md:507` says "It builds all five targets" (dist-workspace.toml ships 4); `AGENTS.md:533-534` repeats the "both checksums" wording; README badges/links say `pyrlyn/ketch` while origin is `listepo/ketch` (cosmetic — `RENAMED_REPOS` maps it). Done means: the prose matches the arm64-only reality.

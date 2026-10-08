@@ -1356,3 +1356,9 @@ Status: done.
 `install.rs` `verify_checksum` discarded every `Source::checksums` error to a debug line and an empty map, so a release that does publish a checksum was installed as `checksum_verified: false` with nothing the user could see — a proxy eating the sidecar request (api.github.com vs the CDN serving the asset) forced first-use recording while README:76-78 advertised the check. Found by the 2026-10-07 audit. `Ok(empty)` stays the only "publishes no checksum" answer; an `Err` now emits a user-visible `report.warn` naming the asset and the error while the install still fails open (unless `--require-checksums`). Two tests pin the split: a failing lookup warns exactly once, a clean absence stays quiet.
 Model: ZCode / GLM-5.3 · Status: done 2026-10-07 · Priority: P2 · Complexity: 1 · Files: `crates/ketch-core/src/install.rs`
 Check: `cargo test -p ketch-core --lib install::tests::a_` — 11 passed, including the two new tests.
+
+### R13. Stale arm64-only prose left by the cask rewrite
+
+The arm64-only cask rewrite left prose behind: `tap.yml`'s header said "version and both macOS checksums" (one checksum is computed since Intel macOS dropped), `AGENTS.md` said "It builds all five targets" (dist-workspace.toml ships four) and repeated the "both checksums" wording. Found by the 2026-10-07 audit. The README's pyrlyn/ketch badges needed no change: the repository moved to the pyrlyn org, so the links are the current ones. Done means the prose matches the arm64-only reality.
+Model: ZCode / GLM-5.3 · Status: done 2026-10-08 · Priority: P3 · Complexity: 1 · Files: `.github/workflows/tap.yml`, `AGENTS.md`
+Check: `grep -rn "both checksums|five targets" AGENTS.md .github/workflows/tap.yml` — no matches.
