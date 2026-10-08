@@ -513,12 +513,7 @@ pub fn update(cx: &Ctx<'_>, force: bool, dry_run: bool, docs: SelfDocs) -> Resul
         .path()
         .join(crate::config::sanitize_component(&chosen.asset.name));
     let progress = report.download("download");
-    let sha256 = source.download(
-        &chosen.asset,
-        &download,
-        &progress,
-        &crate::cancel::Cancel::new(),
-    )?;
+    let sha256 = source.download(&chosen.asset, &download, &progress, &cx.cancel)?;
 
     // `require` is hard-coded: for its own binary ketch does not accept the
     // trust-on-first-use path it allows for packages.
@@ -948,10 +943,13 @@ pub fn uninstall_self(cx: &Ctx<'_>, plan: &UninstallPlan) -> Result<Vec<PathBuf>
         // Usually already gone with the store prefix or the bin dir; a ketch
         // that was copied in flat by an older installer is not.
         Some(exe) if finishing.is_some_and(|root| is_within(exe, root)) => {}
-        Some(exe) if exe.exists() => {
-            std::fs::remove_file(exe).map_err(|e| Error::io(exe, e))?;
-            removed.push(exe.clone());
-        }
+        Some(exe) if exe.exists() => match std::fs::remove_file(exe) {
+            Ok(()) => removed.push(exe.clone()),
+            Err(e) => report.warn(&format!(
+                "{}: {e} (the running image is kept until nothing holds it)",
+                exe.display()
+            )),
+        },
         Some(_) => {}
         // A ketch outside the root is not ketch's to delete: a `cargo run`
         // build, or a copy someone put on PATH themselves.
