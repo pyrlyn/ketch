@@ -4,7 +4,7 @@
 # Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
 
 # Build the seed corpora in fuzz/corpus/<target>/ from files the repository
-# already has: tests/fixtures, the root ketch.toml, src/builtin.toml, the code
+# already has: tests/fixtures, the root ketch.toml, crates/ketch-core/src/builtin.toml, the code
 # blocks in docs/, the example plugin, and archives made here from a tiny tree.
 # Nothing is committed: fuzz/corpus is ignored, and every run of this script
 # adds the same files again, so a corpus the fuzzer grew is kept alongside.
@@ -39,7 +39,7 @@ blocks() { # <target> <lang> <file>
 
 # manifest-toml
 seed manifest-toml ketch.toml <"$root/ketch.toml"
-seed manifest-toml builtin.toml <"$root/src/builtin.toml"
+seed manifest-toml builtin.toml <"$root/crates/ketch-core/src/builtin.toml"
 blocks manifest-toml toml "$root/docs/MANIFESTS.md"
 blocks manifest-toml toml "$root/docs/REGISTRY.md"
 

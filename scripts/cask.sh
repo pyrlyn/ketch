@@ -71,16 +71,24 @@ cask "ketch" do
     # real one, so the shell asks the user database instead: \`~user\` expands
     # from there, not from HOME. ~/.ketch is the one path under the home
     # directory a step may write, and the only one ketch touches.
+    # run does not inherit the caller's environment; \$4-\$6 carry GitHub
+    # tokens so CI (and a user who exported one) is not 403'd.
     if_path_exists ".ketch/store/ketch", base: :home do
-      run "/bin/sh", args:           ["-c", 'eval "r=~\$1/.ketch" && KETCH_ROOT="\$r" exec "\$2"/*/ketch self upgrade',
-                                      "ketch", "{{user}}", "{{staged_path}}"],
+      run "/bin/sh", args:           ["-c", 'eval "r=~\$1/.ketch" && GITHUB_TOKEN="\$4" GH_TOKEN="\$5" KETCH_GITHUB_TOKEN="\$6" KETCH_ROOT="\$r" exec "\$2"/*/ketch self upgrade',
+                                      "ketch", "{{user}}", "{{staged_path}}",
+                                      ENV.fetch("GITHUB_TOKEN", ""),
+                                      ENV.fetch("GH_TOKEN", ""),
+                                      ENV.fetch("KETCH_GITHUB_TOKEN", "")],
                      network_access: true,
                      writable_paths: [".ketch"],
                      writable_base:  :home
     end
     unless_path_exists ".ketch/store/ketch", base: :home do
-      run "/bin/sh", args:           ["-c", 'eval "r=~\$1/.ketch" && KETCH_ROOT="\$r" exec "\$2"/*/ketch self install',
-                                      "ketch", "{{user}}", "{{staged_path}}"],
+      run "/bin/sh", args:           ["-c", 'eval "r=~\$1/.ketch" && GITHUB_TOKEN="\$4" GH_TOKEN="\$5" KETCH_GITHUB_TOKEN="\$6" KETCH_ROOT="\$r" exec "\$2"/*/ketch self install',
+                                      "ketch", "{{user}}", "{{staged_path}}",
+                                      ENV.fetch("GITHUB_TOKEN", ""),
+                                      ENV.fetch("GH_TOKEN", ""),
+                                      ENV.fetch("KETCH_GITHUB_TOKEN", "")],
                      network_access: true,
                      writable_paths: [".ketch"],
                      writable_base:  :home

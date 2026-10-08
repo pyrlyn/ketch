@@ -58,7 +58,6 @@ clap_mangen = { version = "0.3", features = ["env"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"
-dirs = "7"
 # canonicalize without Windows `\\?\` UNC prefixes (path compare / display)
 dunce = "1"
 # Shared file backup (`<name>.bak-<unix-seconds>`) used by `ketch config reset`.
