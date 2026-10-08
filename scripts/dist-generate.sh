@@ -163,7 +163,7 @@ NOTIFY = """
       "actions": "read"
       "issues": "write"
     steps:
-      - uses: pyrlyn/ci/.github/actions/notify-release-failure@d709124d53dd4923eff8f594b3155842508b0049
+      - uses: pyrlyn/ci/.github/actions/notify-release-failure@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
         with:
           ref: ${{ inputs.tag }}
           needs: ${{ toJSON(needs) }}

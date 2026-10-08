@@ -9,21 +9,20 @@ version: 1
 # package jobs into no-ops or skips (every required check still reports; `commits` still runs).
 # Documentation = any *.md except Markdown that is code or test input: src/, crates/, tests/
 # (trycmd cases, fixtures), desktop/ (DESIGN.md is linted by `design`), examples/, fuzz/,
-# scripts/, README.md and CHANGELOG.md (release, include_str! in tests). Anything else
-# (.github/, mise.toml, a non-.md file) runs the full CI.
+# scripts/. README.md and CHANGELOG.md (release, include_str! in tests) are excluded by
+# pyrlyn/ci's default `base-exclude`. Anything else (.github/, mise.toml, a non-.md file)
+# runs the full CI.
 docs-only:
   enabled: true
   exclude:
     - '^(src|crates|tests|desktop|examples|fuzz|scripts)/'
-    - '^(README|CHANGELOG)\.md$'
 
 codeql:
   # Every language in the repository that supports `build-mode: none`.
   languages: [actions, javascript-typescript, python, rust]
 
 sonarcloud:
-  enabled: true
-  events: [push, pull_request, workflow_dispatch] # as the former sonarcloud.yml
+  enabled: true # push, pull_request and workflow_dispatch (pyrlyn/ci's default events)
   rust: true # llvm-tools-preview, cargo-llvm-cov, `cargo llvm-cov --locked --lcov`
   mise-install-args: rust
 
@@ -34,12 +33,9 @@ dotnet:
   working-directory: desktop/windows
   test-command: dotnet test --project Ketch.AppCore.Tests
 
-# Snyk is switched off (flag; snyk.yml and SNYK_TOKEN stay): the snyk job is skipped and the
-# gate counts it as passed. `enabled: true` turns it back on.
-snyk:
-  enabled: false
+# License files against pyrlyn/ci's canonical ones (replaces license-check.yml).
+license:
+  enabled: true
 
-# actionlint stays off for now: dist-generated release.yml (never hand-edited) has shellcheck
-# findings. Turn on once .github/actionlint.yaml ignores that file.
-lint:
-  enabled: false
+# Snyk stays off and actionlint on (pyrlyn/ci's defaults); actionlint skips the dist-generated
+# release.yml.
