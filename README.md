@@ -1,3 +1,6 @@
+> [!NOTE]
+> This project is under active development. We need "testing volunteers": try it and report what breaks.
+
 <div align="center">
 
 <img src="site/static/img/favicon.svg" width="72" alt="">

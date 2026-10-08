@@ -32,7 +32,7 @@ jobs:
       docs-only: ${{ steps.config.outputs.docs-only }}
     steps:
       - id: config
-        uses: pyrlyn/ci/.github/actions/config@4e652d891cc6e6f0be316eda1a1f9630d76a8b7e # main
+        uses: pyrlyn/ci/.github/actions/config@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
 
   # The shared pyrlyn/ci workflow, pinned by commit, with Rust from
   # mise.toml and a check that rustc is that pin: fmt once, then per target of
@@ -49,7 +49,7 @@ jobs:
     # is marked ready, and a draft must not look broken meanwhile.
     needs: config
     if: ${{ !cancelled() && github.event.pull_request.draft != true }}
-    uses: pyrlyn/ci/.github/workflows/ci-rust.yml@4e652d891cc6e6f0be316eda1a1f9630d76a8b7e # main
+    uses: pyrlyn/ci/.github/workflows/ci-rust.yml@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
     # actions: write for infra's cancel-run (the first failing job cancels the run).
     permissions:
       contents: read
@@ -79,7 +79,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: pyrlyn/ci/.github/actions/commits@4e652d891cc6e6f0be316eda1a1f9630d76a8b7e # main
+      - uses: pyrlyn/ci/.github/actions/commits@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
         with:
           tool: commitlint
 
@@ -156,7 +156,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pyrlyn/ci/.github/actions/setup-rust@4e652d891cc6e6f0be316eda1a1f9630d76a8b7e # main
+      - uses: pyrlyn/ci/.github/actions/setup-rust@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
 
       - uses: Swatinem/rust-cache@v2
 
@@ -182,7 +182,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pyrlyn/ci/.github/actions/setup-rust@4e652d891cc6e6f0be316eda1a1f9630d76a8b7e # main
+      - uses: pyrlyn/ci/.github/actions/setup-rust@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
         with:
           install-args: rust dotnet cargo:https://github.com/dennisameling/uniffi-bindgen-cs
 
@@ -208,7 +208,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pyrlyn/ci/.github/actions/setup-rust@4e652d891cc6e6f0be316eda1a1f9630d76a8b7e # main
+      - uses: pyrlyn/ci/.github/actions/setup-rust@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
@@ -325,7 +325,7 @@ jobs:
       # scripts/release.sh against. All three at the versions mise.toml pins.
       # Before rust-cache, so the cache keys on this rustc.
       - if: env.RUN == 'true'
-        uses: pyrlyn/ci/.github/actions/setup-rust@4e652d891cc6e6f0be316eda1a1f9630d76a8b7e # main
+        uses: pyrlyn/ci/.github/actions/setup-rust@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
         with:
           install-args: rust cargo-dist git-cliff
 
