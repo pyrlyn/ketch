@@ -24,6 +24,7 @@ on:
       - "package-lock.json"
       - "scripts/site-*.sh"
       - ".github/workflows/pages.yml"
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 permissions:
@@ -36,6 +37,7 @@ concurrency:
 
 jobs:
   pages:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     uses: pyrlyn/ci/.github/workflows/pages.yml@0603d0ae610af9f792c5caf925041292a857e480
     permissions:
       contents: read
