@@ -1,3 +1,9 @@
+### B87. Local tree hash collides and skips symlinks and modes
+
+`sha256_tree` used to hash `path \0 bytes` for regular files only. `a` = `X` plus `b` = `Y` was the same digest as one file `a` = `Xb\0Y`, a symlink was invisible, and the exec bit was ignored, so a lockfile could accept a different `.app`. Each file and symlink is now one record: kind, path length, path, permission bits, payload length, and either the file bytes or the symlink's own target. A lock written before this framing does not match an unchanged bundle; `ketch lock` records the new digest. Noted in `docs/LOCKFILE.md`.
+
+Tests: the two-file layout no longer matches the fused file; on Unix a mode change and a retargeted symlink each change the digest, and a symlink does not hash as a regular file with the target's text.
+
 ### B78. Self-uninstall drops the install lock too early
 
 `uninstall_self` held `state::Lock` only for the package uninstall and `state.save`, then dropped it before the Windows registry entries, the shell startup blocks and `remove_root`. The lock file lives in the root, so another ketch could acquire it and write a tree this run was still taking apart. The lock now stays held through those edits. Shell blocks are edited before the root, because removing the root unlinks the lock file; the paths are still reported after the cask, which is the order the command already printed. The cask step stays outside the lock: `brew uninstall` runs a nested `ketch self uninstall`, and with `--keep-packages` that process still has a binary and must be able to take the lock itself.
