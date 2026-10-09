@@ -863,7 +863,7 @@ pub fn uninstall_self(cx: &Ctx<'_>, plan: &UninstallPlan) -> Result<Vec<PathBuf>
 
     // Uninstall properly rather than deleting files: links and copied app
     // bundles live outside the root and would otherwise be left dangling.
-    let lock = Lock::acquire(cx)?;
+    let mut lock = Some(Lock::acquire(cx)?);
     let mut state = State::load(cfg)?;
     for name in &plan.packages {
         match install::uninstall(cx, &mut state, name) {
@@ -872,8 +872,11 @@ pub fn uninstall_self(cx: &Ctx<'_>, plan: &UninstallPlan) -> Result<Vec<PathBuf>
         }
     }
     // Save first: if removing the tree fails, state still matches reality.
+    // The lock is held through the registry entries, the shell blocks and the
+    // root. Dropping it here let another ketch rewrite those while they were
+    // still being deleted (B78). The lock file is the root's `.lock`, so the
+    // directory itself is removed only once the lock drops.
     state.save(cfg)?;
-    drop(lock);
 
     // Before the root: a Path entry spelled differently from the bin dir is
     // matched by resolving both, which needs the folder still there.
@@ -907,10 +910,13 @@ pub fn uninstall_self(cx: &Ctx<'_>, plan: &UninstallPlan) -> Result<Vec<PathBuf>
     // Set when the root is finished off after this process exits: the
     // running binary inside it is then that process's to delete, not ours.
     let mut finishing = None;
+    // `.lock` is still held, so the root directory itself waits until the lock drops.
+    let mut root_after_lock = false;
     if let Some(root) = &plan.root {
-        let (gone, later) = remove_root(cx, root);
+        let (gone, later, after_lock) = remove_root(cx, root);
         removed.extend(gone);
         finishing = later.then_some(root);
+        root_after_lock = after_lock;
     }
 
     // After the root, so the nested `ketch self uninstall` the cask runs on its
@@ -934,7 +940,16 @@ pub fn uninstall_self(cx: &Ctx<'_>, plan: &UninstallPlan) -> Result<Vec<PathBuf>
         // that was copied in flat by an older installer is not.
         Some(exe) if finishing.is_some_and(|root| is_within(exe, root)) => {}
         Some(exe) if exe.exists() => {
-            std::fs::remove_file(exe).map_err(|e| Error::io(exe, e))?;
+            if let Err(e) = std::fs::remove_file(exe) {
+                release_uninstall_lock(
+                    lock.take(),
+                    root_after_lock,
+                    plan.root.as_deref(),
+                    &mut removed,
+                    report,
+                );
+                return Err(Error::io(exe, e));
+            }
             removed.push(exe.clone());
         }
         Some(_) => {}
@@ -963,7 +978,41 @@ pub fn uninstall_self(cx: &Ctx<'_>, plan: &UninstallPlan) -> Result<Vec<PathBuf>
             removed.push(mise.dir.clone());
         }
     }
+    release_uninstall_lock(
+        lock.take(),
+        root_after_lock,
+        plan.root.as_deref(),
+        &mut removed,
+        report,
+    );
     Ok(removed)
+}
+
+/// Drop the uninstall lock, then remove a root whose only remaining entry was
+/// that lock file.
+fn release_uninstall_lock(
+    lock: Option<Lock>,
+    root_after_lock: bool,
+    root: Option<&Path>,
+    removed: &mut Vec<PathBuf>,
+    report: &Report,
+) {
+    drop(lock);
+    if !root_after_lock {
+        return;
+    }
+    let Some(root) = root else {
+        return;
+    };
+    match std::fs::remove_dir(root) {
+        Ok(()) => removed.push(root.to_path_buf()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        // Anything left is something ketch did not write. Say so and leave it.
+        Err(_) => report.note(&format!(
+            "{} was left in place: it holds files ketch did not put there",
+            root.display()
+        )),
+    }
 }
 
 fn doskey_file_exists(cfg: &Config) -> bool {
@@ -990,7 +1039,7 @@ fn is_within(path: &Path, root: &Path) -> bool {
 
 /// Returns what was removed, and whether the rest is removed once this
 /// process has exited.
-fn remove_root(cx: &Ctx<'_>, root: &Path) -> (Vec<PathBuf>, bool) {
+fn remove_root(cx: &Ctx<'_>, root: &Path) -> (Vec<PathBuf>, bool, bool) {
     remove_root_at(cx, root, dirs::home_dir().as_deref(), |root, left| {
         finish_after_exit(root, left, cx.report)
     })
@@ -1003,7 +1052,7 @@ fn remove_root_at(
     root: &Path,
     home: Option<&Path>,
     finish: impl FnOnce(&Path, &[PathBuf]) -> bool,
-) -> (Vec<PathBuf>, bool) {
+) -> (Vec<PathBuf>, bool, bool) {
     let (cfg, report) = (cx.cfg, cx.report);
     let wipe = home.is_none_or(|h| cfg.root != h);
     let mut removed = Vec::new();
@@ -1016,11 +1065,13 @@ fn remove_root_at(
         &cfg.plugin_dir,
         &cfg.registry_dir,
     ];
+    // Not `.lock`. Uninstall still holds it, and deleting the file here would
+    // let another process take the lock while the shell blocks are edited.
+    // The holder removes the file when it drops the lock, then the root.
     let files = [
         &cfg.state_file,
         &cfg.stats_db,
         &cfg.config_file,
-        &cfg.lock_file,
         &cfg.registry_meta,
     ];
     for dir in dirs {
@@ -1042,25 +1093,35 @@ fn remove_root_at(
         }
     }
     if !left.is_empty() {
-        let paths: Vec<PathBuf> = left.iter().map(|(p, _)| p.clone()).collect();
+        let mut paths: Vec<PathBuf> = left.iter().map(|(p, _)| p.clone()).collect();
+        // Drop tries to delete `.lock` before this process exits. Name it
+        // anyway: a failed drop must not leave the root behind for the
+        // process that finishes the removal.
+        if wipe && cfg.lock_file.is_file() {
+            paths.push(cfg.lock_file.clone());
+        }
         // Only a failure nobody will retry is worth a warning.
         if finish(root, &paths) {
             report.note(&format!(
                 "{} is removed once this ketch has exited",
                 root.display()
             ));
-            return (removed, true);
+            return (removed, true, false);
         }
         for (path, e) in &left {
             report.warn(&format!("{}: {e}", path.display()));
         }
     }
+    let mut root_after_lock = false;
     if wipe {
         match std::fs::remove_dir(root) {
             Ok(()) => removed.push(root.to_path_buf()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             // Still holding what the warnings above named.
             Err(_) if !left.is_empty() => {}
+            // The uninstall lock is the one file left. The caller removes the
+            // directory once that lock drops.
+            Err(_) if root_holds_only_lock(root, &cfg.lock_file) => root_after_lock = true,
             // Anything left is something ketch did not write. Say so and leave it.
             Err(_) => report.note(&format!(
                 "{} was left in place: it holds files ketch did not put there",
@@ -1068,7 +1129,29 @@ fn remove_root_at(
             )),
         }
     }
-    (removed, false)
+    (removed, false, root_after_lock)
+}
+
+/// True when `root` contains nothing but the uninstall lock file.
+fn root_holds_only_lock(root: &Path, lock: &Path) -> bool {
+    let Some(lock_name) = lock.file_name() else {
+        return false;
+    };
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return false;
+    };
+    let mut saw_lock = false;
+    for entry in entries {
+        let Ok(entry) = entry else {
+            return false;
+        };
+        if entry.file_name() == lock_name {
+            saw_lock = true;
+            continue;
+        }
+        return false;
+    }
+    saw_lock
 }
 
 fn remove_owned_dir(
@@ -1830,5 +1913,94 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(err.contains("--version"), "{err}");
+    }
+
+    #[test]
+    fn a_root_whose_only_file_is_the_lock_is_recognized() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let root = tmp.path();
+        let lock = root.join(".lock");
+        assert!(!root_holds_only_lock(root, &lock));
+        std::fs::write(&lock, b"1").expect("lock file");
+        assert!(root_holds_only_lock(root, &lock));
+        std::fs::write(root.join("keep"), b"x").expect("other file");
+        assert!(!root_holds_only_lock(root, &lock));
+    }
+
+    /// The shell edit is the step that used to run after the lock was dropped,
+    /// and after `remove_root` had already deleted the lock file. A fifo blocks
+    /// that read so the test can try to take the lock while it is in progress.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn uninstall_holds_the_lock_through_the_shell_edit_and_then_removes_the_root() {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let root = tmp.path().join(".ketch");
+        let cfg = Config::load(Some(root.clone()), &Report::silent()).expect("config");
+        std::fs::create_dir_all(&cfg.root).expect("root");
+        let shell = tmp.path().join("startup");
+        assert!(
+            Command::new("mkfifo")
+                .arg(&shell)
+                .status()
+                .expect("mkfifo")
+                .success(),
+            "mkfifo"
+        );
+        let plan = UninstallPlan {
+            root: Some(root.clone()),
+            shell_files: vec![shell.clone()],
+            ..UninstallPlan::default()
+        };
+        let lock_path = cfg.lock_file.clone();
+        let worker =
+            std::thread::spawn(move || uninstall_self(&Ctx::new(&cfg, &Report::silent()), &plan));
+
+        // `O_NONBLOCK` so a worker that already failed does not leave `open`
+        // waiting for a reader that will never arrive. Linux and macOS do not
+        // share the flag's value.
+        let flags = if cfg!(target_os = "linux") {
+            0o4000
+        } else {
+            0x4
+        };
+        let started = std::time::Instant::now();
+        let mut held = None;
+        while started.elapsed() < Duration::from_secs(5) {
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .custom_flags(flags)
+                .open(&shell)
+            {
+                Ok(mut file) => {
+                    // The reader is blocked in `read` until this file closes.
+                    // The lock has to still be ours here: the shell edit is
+                    // past `remove_root`.
+                    held = Some(Lock::acquire_path(&lock_path, &Report::silent()));
+                    let _ = file.write_all(b"\n");
+                    break;
+                }
+                Err(_) => {
+                    if worker.is_finished() {
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+            }
+        }
+        let joined = worker.join().expect("uninstall thread");
+        if let Err(err) = joined {
+            panic!("uninstall failed: {err}");
+        }
+        match held {
+            Some(Err(Error::Busy { .. })) => {}
+            Some(Ok(_)) => panic!("another ketch acquired the lock during the shell edit"),
+            Some(Err(err)) => panic!("lock check failed: {err}"),
+            None => panic!("the shell edit never started"),
+        }
+        assert!(!root.exists(), "the root goes once the lock drops");
+        assert!(!lock_path.exists(), "the lock file goes with the lock");
     }
 }
