@@ -64,6 +64,8 @@ impl Platform for LinuxPlatform {
             Box::new(TarExtractor),
             Box::new(ZipExtractor),
             Box::new(GzFileExtractor),
+            Box::new(XzFileExtractor),
+            Box::new(Bz2FileExtractor),
             Box::new(RawBinaryExtractor),
         ]
     }

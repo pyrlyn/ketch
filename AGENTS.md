@@ -13,6 +13,10 @@ it too — nothing here is agent-specific except the framing and the rule below.
   pull request description is not checked — that part is on the agent.
 - If a directory above this repository contains an `AGENTS.md` or
   `CLAUDE.md`, follow it too. If it conflicts with this file, ask the creator.
+- Repository files are English: code, docs, comments, commits and pull
+  request text. `docs/ru/` and `docs/uk/` are the exception, and the only
+  non-English prose in the tree. An English doc change updates both
+  translations in the same change. See Documentation translations.
 
 ## What ketch is
 
@@ -663,6 +667,18 @@ stop before building:
 The ketch-ffi XCFramework (R9) does not exist yet: the caller's
 `pre-build-command` is empty (marked `TODO(R9)`), so a release made before R9
 ships the app on `FakeKetchCore`.
+
+## Documentation translations
+
+English docs in `docs/` are the source of truth. Russian and Ukrainian
+translations live in `docs/ru/` and `docs/uk/` under the same file name.
+Front matter on a translated page adds `lang: ru` or `lang: uk`. Any change
+to an English doc updates the matching translations in the same change. A
+new English doc gets both translations, and removing an English doc removes
+them. These two directories are the only place non-English prose is allowed.
+
+Maintainer-only docs stay English: `docs/sonarcloud-setup.md`, anything
+under `docs/qa/`, and the `docs/research-*.md` notes.
 
 ## Before you call it done
 

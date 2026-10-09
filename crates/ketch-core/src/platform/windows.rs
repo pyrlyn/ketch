@@ -149,8 +149,21 @@ fn move_into_store(payload: &Path, store: &Path) -> Result<()> {
         let _ = remove_any(&staged);
         return Err(Error::io(store, e));
     }
-    let _ = remove_any(&retired);
+    // Leave `.old` until copies succeed. A failed place after this swap can
+    // put the working version back; deleting it here would leave none.
     Ok(())
+}
+
+fn finalize_store_swap(store: &Path) {
+    let _ = remove_any(&sibling(store, ".old"));
+}
+
+fn restore_retired_store(store: &Path) {
+    let retired = sibling(store, ".old");
+    if retired.symlink_metadata().is_ok() {
+        let _ = remove_any(store);
+        let _ = std::fs::rename(&retired, store);
+    }
 }
 
 fn writable(dir: &Path) -> std::result::Result<(), String> {
@@ -460,6 +473,8 @@ impl Platform for WindowsPlatform {
             Box::new(TarExtractor),
             Box::new(ZipExtractor),
             Box::new(GzFileExtractor),
+            Box::new(XzFileExtractor),
+            Box::new(Bz2FileExtractor),
             Box::new(RawBinaryExtractor),
         ]
     }
@@ -501,21 +516,35 @@ impl Platform for WindowsPlatform {
         }
         move_into_store(plan.payload_dir, plan.store_dir)?;
         if !plan.link {
+            finalize_store_swap(plan.store_dir);
             return Ok(Vec::new());
         }
         let mut links = Vec::new();
-        for (target, name) in cli_targets(self, plan.store_dir, plan)? {
-            links.push(copy_binary(&target, plan.bin_dir, &name, plan.replacing)?);
+        let result = (|| -> Result<Vec<LinkRecord>> {
+            for (target, name) in cli_targets(self, plan.store_dir, plan)? {
+                links.push(copy_binary(&target, plan.bin_dir, &name, plan.replacing)?);
+            }
+            links.extend(link_planned_extras(
+                plan.extras,
+                plan.store_dir,
+                plan.replacing,
+            )?);
+            if links.is_empty() {
+                return Err(Error::EmptyPayload(plan.store_dir.to_path_buf()));
+            }
+            Ok(std::mem::take(&mut links))
+        })();
+        match result {
+            Ok(links) => {
+                finalize_store_swap(plan.store_dir);
+                Ok(links)
+            }
+            Err(e) => {
+                let _ = self.unplace(&links, &crate::report::Report::silent());
+                restore_retired_store(plan.store_dir);
+                Err(e)
+            }
         }
-        links.extend(link_planned_extras(
-            plan.extras,
-            plan.store_dir,
-            plan.replacing,
-        )?);
-        if links.is_empty() {
-            return Err(Error::EmptyPayload(plan.store_dir.to_path_buf()));
-        }
-        Ok(links)
     }
 
     fn completion_dir(&self, shell: CompletionShell) -> PathBuf {

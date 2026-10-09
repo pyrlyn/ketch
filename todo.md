@@ -3,7 +3,6 @@
 - B60. Windows self-update leaves `ketch.exe.old` behind
 - B65. Binary selection regression test
 - R3. Cross-platform CI
-- F8. Spinner and progress bar
 - M17. `ketch import`: a package from winget, Homebrew or a Linux repository
 - R5. Workspace split: `ketch-core` library crate
 - R6. A reporter instead of the global `ui::` sink
