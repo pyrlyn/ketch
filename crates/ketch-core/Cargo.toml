@@ -62,7 +62,7 @@ tokio = { version = "1", features = ["rt"] }
 # sigstore without its signing, OCI and TUF-fetching halves, rPGP without
 # bzip2 (signatures are never compressed), minisign-verify has no deps.
 sigstore = { version = "0.14", default-features = false, features = ["verify"] }
-minisign-verify = "0.2"
+minisign-verify = "0.3"
 pgp = { version = "0.20", default-features = false }
 
 [dev-dependencies]
