@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 //! End-to-end: which binary a package links when its release ships several
 //! sharing the package's name and no manifest names one (B64).
 //!
@@ -243,5 +247,52 @@ fn sync_repeats_the_choice_the_lockfile_recorded_without_a_terminal() {
 
     sandbox.ok(&["sync", "--file", &lock_arg]);
     assert_eq!(run(&linked(&sandbox, "rtok-cli")), "rtok-cli 1.0.0");
+    assert!(!linked(&sandbox, "rtok-hook").exists());
+}
+
+/// A user manifest whose one `bin` entry globs `rtok*`, with `extra` added
+/// to the entry.
+fn glob_manifest(sandbox: &Sandbox, extra: &str) {
+    let manifests = sandbox.root().join("manifests");
+    std::fs::create_dir_all(&manifests).unwrap();
+    std::fs::write(
+        manifests.join("rtok.toml"),
+        format!(
+            "name   = \"rtok\"\nsource = \"test:rtok\"\nbin = [{{ path = \"rtok*\"{extra} }}]\n"
+        ),
+    )
+    .unwrap();
+}
+
+#[test]
+fn a_bin_glob_matching_several_files_with_no_name_refuses_and_lists_them_sorted() {
+    let sandbox = Sandbox::new();
+    publish(&sandbox, "1.0.0", &["rtok-hook", "rtok"]);
+    glob_manifest(&sandbox, "");
+
+    let err = sandbox.fails(&["install", "rtok", "--yes"]);
+
+    assert!(err.contains("`rtok*` matches 2 files"), "{err}");
+    // Sorted and relative to the payload, so the message is the same on every OS.
+    let listed: Vec<&str> = err.lines().filter(|l| l.starts_with("  rtok")).collect();
+    assert_eq!(listed.len(), 2, "{err}");
+    assert!(listed.is_sorted(), "{err}");
+    assert!(err.contains("set the entry's `name`"), "{err}");
+    assert!(!linked(&sandbox, "rtok").exists());
+    assert!(!linked(&sandbox, "rtok-hook").exists());
+}
+
+#[test]
+fn a_bin_glob_matching_several_files_links_the_one_named_like_the_entry() {
+    let sandbox = Sandbox::new();
+    publish(&sandbox, "1.0.0", &["rtok-hook", "rtok"]);
+    // Windows links a bare name as `.exe`, so the script's entry keeps its suffix;
+    // the stem still names the file to prefer.
+    let name = if cfg!(windows) { "rtok.cmd" } else { "rtok" };
+    glob_manifest(&sandbox, &format!(", name = \"{name}\""));
+
+    sandbox.ok(&["install", "rtok", "--yes"]);
+
+    assert_eq!(run(&linked(&sandbox, "rtok")), "rtok 1.0.0");
     assert!(!linked(&sandbox, "rtok-hook").exists());
 }

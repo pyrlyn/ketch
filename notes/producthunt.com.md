@@ -11,6 +11,7 @@ Tagline (60 characters max):
 Install any CLI tool straight from its GitHub releases
 
 Links:
+- Website: https://pyrlyn.github.io/ketch/
 - Repo: https://github.com/pyrlyn/ketch
 - Release: https://github.com/pyrlyn/ketch/releases/tag/v0.6.0
 

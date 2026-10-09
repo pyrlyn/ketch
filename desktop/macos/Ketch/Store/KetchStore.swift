@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 // The app's one source of state. It lives on the main actor; every core call
 // runs on a background queue, and the core's reporter and decider callbacks
 // hop back here, so views never block and never see a half-applied event.
@@ -38,7 +42,7 @@ struct Activity: Sendable, Hashable {
 
 /// One line of the Activity log.
 struct LogEntry: Sendable, Hashable, Identifiable {
-    enum Level: Sendable, Hashable { case info, warning, error }
+    enum Level: Sendable, Hashable { case info, success, warning, error }
 
     let id: Int
     let date: Date
@@ -66,6 +70,7 @@ struct BusyState: Identifiable {
 final class KetchStore {
     let core: any KetchCoreProtocol
     let settings: AppSettings
+    private let notifier: any UpdateNotifier
 
     private(set) var installed: [InstalledPackage] = []
     private(set) var outdated: [Upgrade] = []
@@ -81,6 +86,13 @@ final class KetchStore {
     var errorMessage: String?
     /// A question from the core's decider, shown as a sheet.
     var pendingChoice: BinaryChoice?
+    /// A package a `ketch://` link asked to show; Discover consumes it.
+    var linkedPackage: String?
+    /// A section a notification click asked for; the window shows it and clears it.
+    var requestedSection: Section?
+    /// Counts requests to bring the main window forward, for the one view that
+    /// is always alive (the menu-bar label) to act on.
+    private(set) var windowRequests = 0
     /// Upgrade-all waits for this confirmation, which the menu bar can raise.
     var confirmingUpgradeAll = false
 
@@ -88,18 +100,32 @@ final class KetchStore {
     @ObservationIgnored private var updateLoop: Task<Void, Never>?
     @ObservationIgnored private var nextLogID = 0
 
-    init(core: any KetchCoreProtocol, settings: AppSettings) {
+    init(
+        core: any KetchCoreProtocol, settings: AppSettings,
+        notifier: any UpdateNotifier = SystemUpdateNotifier()
+    ) {
         self.core = core
         self.settings = settings
+        self.notifier = notifier
     }
 
     var root: URL { core.root }
     var isRunning: Bool { activity != nil }
-    /// What the menu bar shows.
-    var pendingUpgradeCount: Int { outdated.count }
 
+    /// Newer releases `upgrade` would install: everything outdated that no
+    /// `ketch.lock` holds back.
+    var updates: [Upgrade] { outdated.filter { $0.heldBy == nil } }
+    /// Newer releases a `ketch.lock` holds back, shown but never upgraded.
+    var pinned: [Upgrade] { outdated.filter { $0.heldBy != nil } }
+    /// What the sidebar, the menu bar and Upgrade all count.
+    var pendingUpgradeCount: Int { updates.count }
+    /// Doctor findings that are not ok, for the sidebar.
+    var problemCount: Int { findings.count { $0.severity != .ok } }
+
+    /// The version an upgrade would move `name` to; `nil` when it is current
+    /// or pinned.
     func outdatedVersion(of name: String) -> String? {
-        outdated.first { $0.name == name }?.to
+        updates.first { $0.name == name }?.to
     }
 
     // MARK: Reading
@@ -134,6 +160,25 @@ final class KetchStore {
         } catch {
             report(error, retry: nil)
             return nil
+        }
+    }
+
+    /// Handles a `ketch://` link. It only ever shows a package page: nothing a
+    /// link says installs, upgrades or removes anything. The core validates the
+    /// link, and a refusal or an unknown package is shown like any other error.
+    func open(link: URL) async {
+        let text = link.absoluteString
+        do {
+            let known = installed.map(\.name)
+            linkedPackage = try await background { core in
+                let name = try core.packageName(forLink: text)
+                let results = known.contains(name) ? [] : try core.search(query: name)
+                guard known.contains(name) || results.contains(where: { $0.name == name })
+                else { throw KetchError.notFound(name: name) }
+                return name
+            }
+        } catch {
+            report(error, retry: nil)
         }
     }
 
@@ -207,11 +252,55 @@ final class KetchStore {
         answer(nil)
     }
 
+    /// Re-runs what the held lock refused. The banner goes away now and comes
+    /// back with the new holder's pid if the lock is still held.
+    func retryBusy() async {
+        guard let busy else { return }
+        self.busy = nil
+        await busy.retry()
+    }
+
     /// Answers the pending binary choice.
     func answer(_ choice: Int?) {
         guard let pending = pendingChoice else { return }
         pendingChoice = nil
         pending.answer(choice)
+    }
+
+    // MARK: Notifications
+
+    /// Turns update notifications on or off. Permission is asked only here, when
+    /// the user turns them on; a refusal leaves them off and returns what to
+    /// tell the user.
+    func setNotifications(_ enabled: Bool) async -> String? {
+        guard enabled else {
+            settings.notifiesOfUpdates = false
+            return nil
+        }
+        guard await notifier.requestAuthorization() else {
+            settings.notifiesOfUpdates = false
+            return "macOS is not allowing notifications for Ketch. Turn them on in System Settings > Notifications."
+        }
+        settings.notifiesOfUpdates = true
+        return nil
+    }
+
+    /// Posts one notification for the upgrades no earlier one announced.
+    func notifyOfNewUpdates() async {
+        guard settings.notifiesOfUpdates else { return }
+        let fresh = UpdateNotices.fresh(updates, notified: settings.notifiedUpgrades)
+        guard !fresh.isEmpty else { return }
+        let message = UpdateNotices.message(for: fresh)
+        await notifier.post(title: message.title, body: message.body)
+        // Replaced, not added to: an upgrade that was installed or superseded
+        // drops out, so a later release of the same package is news again.
+        settings.notifiedUpgrades = Set(updates.map(UpdateNotices.key))
+    }
+
+    /// A click on a notification: show Updates, with the window in front.
+    func openUpdates() {
+        requestedSection = .updates
+        windowRequests += 1
     }
 
     // MARK: Update checks
@@ -223,7 +312,10 @@ final class KetchStore {
         updateLoop = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                if !self.isRunning { await self.refresh() }
+                if !self.isRunning {
+                    await self.refresh()
+                    await self.notifyOfNewUpdates()
+                }
                 let interval = self.settings.updateCheckInterval
                 try? await Task.sleep(for: interval)
             }
@@ -255,7 +347,7 @@ final class KetchStore {
         let decider = SheetDecider(store: self, cancel: token)
         do {
             try await background { core in try body(core, reporter, decider, token) }
-            append(.info, "Done: \(title)")
+            append(.success, "Done: \(title)")
         } catch {
             report(error, retry: retry)
         }

@@ -10,8 +10,8 @@
 # * uploads those artifacts to temporary workflow zip
 # * on success, uploads the artifacts to a GitHub Release
 #
-# Note that the GitHub Release will be created with a generated
-# title/body based on your changelogs.
+# Note that a GitHub Release with this tag is assumed to exist as a draft
+# with the appropriate title/body, and will be undrafted for you.
 
 name: Release
 permissions:
@@ -280,10 +280,9 @@ jobs:
 
       # Everything install.sh and `ketch self upgrade` rely on, per tarball: the
       # asset name, a `ketch` binary inside it, a Developer ID signature on macOS.
-      # A binary built for another architecture than the runner's is not run — the
-      # arm64 runner builds the Intel slice but cannot execute it. Extraction goes
-      # to a workspace-relative dir: Git Bash on Windows mangles `$RUNNER_TEMP`
-      # (`D:\a\_temp` → `D\:\a\\_temp`) so GNU tar cannot open it.
+      # A binary built for another architecture than the runner's is not run.
+      # Extraction goes to a workspace-relative dir: Git Bash on Windows mangles
+      # `$RUNNER_TEMP` (`D:\a\_temp` → `D\:\a\\_temp`) so GNU tar cannot open it.
       - name: Smoke test
         shell: bash
         env:
@@ -430,18 +429,18 @@ jobs:
       - name: Create GitHub Release
         env:
           PRERELEASE_FLAG: "${{ fromJson(steps.host.outputs.manifest).announcement_is_prerelease && '--prerelease' || '' }}"
-          ANNOUNCEMENT_TITLE: "${{ fromJson(steps.host.outputs.manifest).announcement_title }}"
-          ANNOUNCEMENT_BODY: "${{ fromJson(steps.host.outputs.manifest).announcement_github_body }}"
           RELEASE_COMMIT: "${{ github.sha }}"
         run: |
-          # Write and read notes from a file to avoid quoting breaking things
-          echo "$ANNOUNCEMENT_BODY" > $RUNNER_TEMP/notes.txt
-
           # One aggregate checksum file, named so install.sh, install.ps1 and
           # `ketch self upgrade` find it. Sorted, so the file is reproducible.
           (cd artifacts && sha256sum $(ls ketch-*.tar.gz | sort) > SHA256SUMS && cat SHA256SUMS)
 
-          # Archive sizes, so the release page shows them without opening Assets.
+          # If we're editing a release in place, we need to upload things ahead of time
+          gh release upload "${{ needs.plan.outputs.tag }}" artifacts/*
+
+          # bump.yml wrote the notes; add the archive sizes, so the release page
+          # shows them without opening Assets.
+          gh release view "${{ needs.plan.outputs.tag }}" --json body --jq .body > "$RUNNER_TEMP/notes.txt"
           {
             echo
             echo "## Download sizes"
@@ -455,7 +454,7 @@ jobs:
           } >> "$RUNNER_TEMP/notes.txt"
           sed -n '/^## Download sizes$/,$p' "$RUNNER_TEMP/notes.txt" | tee -a "$GITHUB_STEP_SUMMARY"
 
-          gh release create "${{ needs.plan.outputs.tag }}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --title "$ANNOUNCEMENT_TITLE" --notes-file "$RUNNER_TEMP/notes.txt" artifacts/*
+          gh release edit "${{ needs.plan.outputs.tag }}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --notes-file "$RUNNER_TEMP/notes.txt" --draft=false
 
   custom-tap:
     needs:
@@ -491,7 +490,7 @@ jobs:
   # Added by scripts/dist-generate.sh: a failed release (not a pull request or a dry run)
   # opens or comments on a `release-failure` issue that mentions and assigns @listepo. The
   # only release failure notification: GitHub cannot filter Actions notifications per
-  # workflow. Pinned to pyrlyn/infra's ci/notify-release-failure; repin to its merge commit.
+  # workflow. Pinned to pyrlyn/ci's ci/notify-release-failure; repin to its merge commit.
   notify-failure:
     needs: [plan, build-local-artifacts, build-global-artifacts, host, custom-tap, announce]
     if: >-
@@ -503,7 +502,7 @@ jobs:
       "actions": "read"
       "issues": "write"
     steps:
-      - uses: pyrlyn/infra/.github/actions/notify-release-failure@d709124d53dd4923eff8f594b3155842508b0049
+      - uses: pyrlyn/ci/.github/actions/notify-release-failure@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
         with:
           ref: ${{ inputs.tag }}
           needs: ${{ toJSON(needs) }}

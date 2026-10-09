@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 //! Turning what the user typed into a `Manifest`.
 //!
 //! Four tiers, in order: a user manifest in `~/.ketch/manifests/<name>.toml`,
@@ -6,12 +10,16 @@
 //! lets `ketch install owner/repo` work for a repository nobody has curated.
 //!
 //! It is also the one place a user manifest is edited: [`write_bins`] records
-//! the binaries a package links, and the only module that imports `toml_edit`.
+//! the binaries a package links. The TOML itself is read, rendered and edited
+//! by `toml_file`.
 
 use crate::config::Config;
 use crate::error::{Error, Result};
-use crate::model::{normalize_name, Manifest, ManifestOrigin, PackageRef, PackageSpec};
+use crate::model::{
+    normalize_name, InstalledPackage, Manifest, ManifestOrigin, PackageRef, PackageSpec,
+};
 use crate::report::{Ctx, Report};
+use crate::toml_file::{self, Document, EditDocument};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -31,19 +39,17 @@ struct Registry {
 }
 
 fn parse_registry(text: &str, what: &str) -> Result<Vec<Manifest>> {
-    let value: toml::Value = toml::from_str(text).map_err(|e| Error::parse(what, e.to_string()))?;
+    let doc = Document::parse(text, what)?;
     // One file may hold either a single manifest or a `[[package]]` array.
     // Which one is decided from the parsed shape, not from the source text: a
     // single manifest that merely mentions `[[package]]` — in a description, in
     // a note — is still a manifest, and sniffing for the string parsed it as an
     // array instead, which `#[serde(default)]` then turned into no packages at
     // all. The whole file disappeared without a word.
-    let manifests = if value.get("package").is_some_and(toml::Value::is_array) {
-        Registry::deserialize(value)
-            .map_err(|e| Error::parse(what, e.to_string()))?
-            .package
+    let manifests = if doc.is_array("package") {
+        doc.deserialize::<Registry>()?.package
     } else {
-        vec![Manifest::deserialize(value).map_err(|e| Error::parse(what, e.to_string()))?]
+        vec![doc.deserialize::<Manifest>()?]
     };
     // Serde has checked the shape; this checks the values it cannot judge.
     for manifest in &manifests {
@@ -75,6 +81,28 @@ impl Resolver {
             registry: crate::registry::load(cx),
             builtin,
         })
+    }
+
+    /// Resolve a spec, or fall back to the manifest recorded when `installed`
+    /// was installed, so a package the registry has since dropped can still be
+    /// described. The origin is `None` for the recorded one.
+    pub fn resolve_or_recorded(
+        &self,
+        spec: &PackageSpec,
+        installed: Option<&InstalledPackage>,
+    ) -> Result<(Manifest, Option<ManifestOrigin>)> {
+        match self.resolve(spec) {
+            Ok((m, origin)) => Ok((m, Some(origin))),
+            Err(e) => match installed {
+                Some(pkg) => Ok((
+                    pkg.manifest
+                        .clone()
+                        .unwrap_or_else(|| Manifest::inferred(pkg.source.clone())),
+                    None,
+                )),
+                None => Err(e),
+            },
+        }
     }
 
     /// Resolve a spec, reporting where the manifest came from.
@@ -253,7 +281,7 @@ pub fn user_manifest_path(cfg: &Config, name: &str) -> PathBuf {
 
 /// Serialise a manifest for a user manifest file.
 pub fn to_toml(manifest: &Manifest) -> Result<String> {
-    toml::to_string_pretty(manifest).map_err(|e| Error::parse("manifest", e.to_string()))
+    toml_file::render(manifest, "manifest")
 }
 
 /// Write `bin = [{ name = "<a>" }, { name = "<b>" }, …]` for `package` into
@@ -262,8 +290,8 @@ pub fn to_toml(manifest: &Manifest) -> Result<String> {
 /// choice is only ever written where none was made.
 ///
 /// The file is the user's, so what they wrote — comments, order, spacing —
-/// survives: `toml_edit` changes the one key and renders the rest back as it
-/// was read. The result is parsed as a manifest again before it replaces the
+/// survives: [`EditDocument`] changes the one key and renders the rest back as
+/// it was read. The result is parsed as a manifest again before it replaces the
 /// file, so a write that would leave it unloadable fails instead; and it
 /// replaces the file by renaming a finished copy over it, so an interrupted
 /// write leaves the old one whole.
@@ -273,66 +301,61 @@ pub fn write_bins(path: &Path, package: &str, bins: &[String]) -> Result<bool> {
     let target = std::fs::canonicalize(path).map_err(|e| Error::io(path, e))?;
     let label = target.display().to_string();
     let text = std::fs::read_to_string(&target).map_err(|e| Error::io(&target, e))?;
-    let mut doc: toml_edit::DocumentMut = text
-        .parse()
-        .map_err(|e: toml_edit::TomlError| Error::parse(&label, e.to_string()))?;
-    let table = package_table(&mut doc, package).ok_or_else(|| {
-        Error::msg(format!(
-            "{label} has no `[[package]]` table named `{package}` to write `bin` into"
-        ))
-    })?;
+    let mut doc = EditDocument::parse(&text, &label)?;
+    let wanted = normalize_name(package);
+    let mut table = doc
+        .package_table(|name| normalize_name(name) == wanted)
+        .ok_or_else(|| {
+            Error::msg(format!(
+                "{label} has no `[[package]]` table named `{package}` to write `bin` into"
+            ))
+        })?;
     if table.contains_key("bin") {
         return Ok(false);
     }
-    let mut list = toml_edit::Array::new();
-    for bin in bins {
-        let mut entry = toml_edit::InlineTable::new();
-        entry.insert("name", bin.as_str().into());
-        list.push(entry);
-    }
-    table.insert("bin", toml_edit::value(list));
-    let body = doc.to_string();
+    table.set_inline_tables("bin", "name", bins);
+    let body = doc.render();
     parse_registry(&body, &label)?;
+    replace_file(&target, &body)?;
+    Ok(true)
+}
 
+/// Write a whole user manifest that `ketch import` generated, creating the
+/// manifest directory on first use. The text is parsed as a manifest first,
+/// so a converter bug fails here instead of leaving a file every later
+/// command warns about; a file linked from elsewhere is written through.
+pub fn write_manifest(path: &Path, text: &str) -> Result<()> {
+    let target = match std::fs::canonicalize(path) {
+        Ok(real) => real,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => path.to_path_buf(),
+        Err(e) => return Err(Error::io(path, e)),
+    };
+    parse_registry(text, &target.display().to_string())?;
+    if let Some(dir) = target.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
+    }
+    replace_file(&target, text)
+}
+
+/// Replace `target` by renaming a finished copy over it, so an interrupted
+/// write leaves the old file whole.
+fn replace_file(target: &Path, body: &str) -> Result<()> {
     let dir = target.parent().unwrap_or_else(|| Path::new("."));
     let mut temp = tempfile::NamedTempFile::new_in(dir).map_err(|e| Error::io(dir, e))?;
     std::io::Write::write_all(&mut temp, body.as_bytes()).map_err(|e| Error::io(temp.path(), e))?;
-    if let Ok(meta) = std::fs::metadata(&target) {
+    if let Ok(meta) = std::fs::metadata(target) {
         // A temporary file is created private; the manifest keeps the mode
         // the user gave it.
         let _ = std::fs::set_permissions(temp.path(), meta.permissions());
     }
-    temp.persist(&target)
-        .map_err(|e| Error::io(&target, e.error))?;
-    Ok(true)
-}
-
-/// The table in a manifest file that describes `package`: the whole document
-/// for a single manifest, or the matching entry of a `[[package]]` array.
-fn package_table<'a>(
-    doc: &'a mut toml_edit::DocumentMut,
-    package: &str,
-) -> Option<&'a mut toml_edit::Table> {
-    if !doc
-        .get("package")
-        .is_some_and(toml_edit::Item::is_array_of_tables)
-    {
-        return Some(doc.as_table_mut());
-    }
-    let wanted = normalize_name(package);
-    doc.get_mut("package")?
-        .as_array_of_tables_mut()?
-        .iter_mut()
-        .find(|t| {
-            t.get("name")
-                .and_then(toml_edit::Item::as_str)
-                .is_some_and(|n| normalize_name(n) == wanted)
-        })
+    temp.persist(target)
+        .map_err(|e| Error::io(target, e.error))?;
+    Ok(())
 }
 
 /// `parse_registry` for the `manifest_toml` fuzz target (`src/lib.rs`).
 #[cfg(fuzzing)]
-pub(crate) fn fuzz_parse_registry(text: &str) -> Result<Vec<Manifest>> {
+pub fn fuzz_parse_registry(text: &str) -> Result<Vec<Manifest>> {
     parse_registry(text, "fuzz")
 }
 
@@ -543,6 +566,26 @@ mod tests {
         assert_eq!(parsed[1].bin[0].name.as_deref(), Some("rtok-cli"));
     }
 
+    #[test]
+    fn write_bins_in_a_multi_package_file_keeps_every_other_byte() {
+        let body = concat!(
+            "# two of mine\n",
+            "[[package]]\n",
+            "source = \"github:me/other\"   # source first, on purpose\n",
+            "name = \"other\"\n",
+            "\n",
+            "# the fork\n",
+            "[[package]]\n",
+            "name = \"RTok\"\n",
+            "source = \"github:me/rtok\"\n",
+            "description = \"after source\"\n",
+        );
+        let (_dir, path) = user_file(body);
+        assert!(write_bins(&path, "rtok", &one("rtok-cli")).unwrap());
+        let expected = format!("{body}bin = [{{ name = \"rtok-cli\" }}]\n");
+        pretty_assertions::assert_eq!(std::fs::read_to_string(&path).unwrap(), expected);
+    }
+
     #[cfg(unix)]
     #[test]
     fn write_bins_edits_the_target_of_a_symlinked_manifest() {
@@ -557,5 +600,30 @@ mod tests {
         assert!(std::fs::read_to_string(&target)
             .unwrap()
             .contains("rtok-cli"));
+    }
+
+    #[test]
+    fn write_manifest_creates_the_directory_and_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("manifests").join("fly.toml");
+        let body = "name = \"fly\"\nsource = \"github:superfly/flyctl\"\n";
+        write_manifest(&path, body).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), body);
+    }
+
+    #[test]
+    fn write_manifest_refuses_text_that_is_not_a_manifest_and_writes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("fly.toml");
+        assert!(write_manifest(&path, "name = [\n").is_err());
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn write_manifest_replaces_an_older_copy_whole() {
+        let (_dir, path) = user_file("name = \"rtok\"\nsource = \"github:me/rtok\"\n");
+        let body = "name = \"rtok\"\nsource = \"github:me/rtok-fork\"\n";
+        write_manifest(&path, body).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), body);
     }
 }

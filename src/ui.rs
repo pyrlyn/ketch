@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 //! Terminal output: the only place the binary prints.
 //!
 //! The core prints nothing; it says what happens as `report::Event`s, and
@@ -8,7 +12,9 @@
 //! [`activity`]: a bar when the total is known, a spinner otherwise.
 
 use crate::config::Config;
+use crate::decide::Decider;
 use crate::log;
+use crate::process::Occupant;
 use crate::report::{Ctx, Event, Report, Reporter, Task, TaskId};
 pub use crate::report::{ProgressSink, SilentProgress, Stage};
 pub use crate::text::{bytes, truncate};
@@ -332,14 +338,14 @@ pub fn tone(tone: Tone, text: &str) -> String {
 /// and `already installed` share one entry. `uninstall` comes before `install`
 /// because it contains it.
 const OPERATION_ICONS: &[(&str, &str)] = &[
-    ("uninstall", "🗑️"),
-    ("remov", "🗑️"),
-    ("prun", "🗑️"),
+    ("uninstall", "🧹"),
+    ("remov", "🧹"),
+    ("prun", "🧹"),
     ("install", "📦"),
-    ("upgrad", "⬆️"),
-    ("updat", "⬆️"),
-    ("download", "⬇️"),
-    ("fetch", "⬇️"),
+    ("upgrad", "⏫"),
+    ("updat", "⏫"),
+    ("download", "⏬"),
+    ("fetch", "⏬"),
     ("link", "🔗"),
     ("roll", "⏪"),
     ("search", "🔍"),
@@ -355,17 +361,19 @@ fn icon(verb: &str, kind: Tone) -> Option<&'static str> {
     }
     match kind {
         Tone::Success => Some("✅"),
-        Tone::Warning => Some("⚠️"),
+        Tone::Warning => Some("❗"),
         Tone::Error => Some("❌"),
-        Tone::Note => Some("ℹ️"),
+        Tone::Note => Some("💡"),
         Tone::Step | Tone::Hint => None,
     }
 }
 
-/// Columns every icon is padded to. Every icon in the table is two columns
-/// wide, the ones built from a narrow symbol and a presentation selector
-/// (`ℹ️`, `⚠️`) included; each is still measured rather than assumed, so a
-/// narrower icon added later pads out instead of pulling its line left.
+/// Columns every icon is padded to. Every icon is one code point that is wide
+/// by default. A narrow symbol made wide by U+FE0F (`⬆️`, `⚠️`) is two columns
+/// to `unicode-width` but one to terminals that ignore the selector, which
+/// then draw the glyph over the space after it and shift the verb left. Each icon is still
+/// measured rather than assumed, so a narrower one added later pads out
+/// instead of pulling its line left.
 const ICON_WIDTH: usize = 2;
 
 /// The icon gutter in front of the verb column: the icon and a space, or as
@@ -1335,13 +1343,26 @@ impl Reporter for Terminal {
             Event::Abandoned { id } => drop(self.live().remove(&id)),
         }
     }
+}
 
-    fn choose(&self, question: &str, options: &[String]) -> Option<usize> {
-        select(question, options)
+/// The [`Decider`] for a person at this terminal: today's prompts, which
+/// already answer "nobody" when stdin or stderr is not a terminal.
+pub struct TerminalDecider;
+
+impl Decider for TerminalDecider {
+    fn choose_binary(&self, package: &str, candidates: &[String]) -> Option<usize> {
+        select(
+            &format!("{package} ships several binaries sharing its name; which one to link?"),
+            candidates,
+        )
     }
 
-    fn offer(&self, question: &str, default: bool) -> bool {
-        offer(question, default)
+    fn stop_processes(&self, occupants: &[Occupant]) -> bool {
+        let question = match occupants {
+            [one] => format!("stop process {} using {}?", one.pid, one.path.display()),
+            many => format!("stop {} processes using files being replaced?", many.len()),
+        };
+        offer(&question, false)
     }
 }
 
@@ -1351,9 +1372,20 @@ pub fn report() -> &'static Report {
     REPORT.get_or_init(|| Report::new(Terminal::default()))
 }
 
-/// A core context for `cfg` that reports to this terminal.
+/// A core context for `cfg` that reports to this terminal and asks nothing:
+/// what a run with no person to answer, or `--yes`, wants.
 pub fn ctx(cfg: &Config) -> Ctx<'_> {
     Ctx::new(cfg, report())
+}
+
+/// [`ctx`], with the pipeline's questions put to a person at this terminal
+/// when `ask` is true. `ask` is false under `--yes`, which has answered them.
+pub fn ctx_asking(cfg: &Config, ask: bool) -> Ctx<'_> {
+    if ask {
+        ctx(cfg).with_decider(&TerminalDecider)
+    } else {
+        ctx(cfg)
+    }
 }
 
 #[cfg(test)]
@@ -1480,10 +1512,12 @@ mod tests {
     fn every_icon_fills_the_same_gutter() {
         for (_, icon) in OPERATION_ICONS {
             assert_eq!(UnicodeWidthStr::width(*icon), ICON_WIDTH, "{icon}");
+            assert_eq!(icon.chars().count(), 1, "{icon} needs a selector");
         }
         for kind in [Tone::Success, Tone::Warning, Tone::Error, Tone::Note] {
             let icon = icon("", kind).unwrap_or_default();
             assert_eq!(UnicodeWidthStr::width(icon), ICON_WIDTH, "{icon}");
+            assert_eq!(icon.chars().count(), 1, "{icon} needs a selector");
         }
     }
 
@@ -1509,7 +1543,7 @@ mod tests {
     #[test]
     fn an_operation_icon_outranks_the_meaning_icon() {
         assert_eq!(icon("installed", Tone::Success), Some("📦"));
-        assert_eq!(icon("uninstalled", Tone::Success), Some("🗑️"));
+        assert_eq!(icon("uninstalled", Tone::Success), Some("🧹"));
         assert_eq!(icon("rolled back", Tone::Success), Some("⏪"));
         assert_eq!(icon("up to date", Tone::Success), Some("✅"));
         assert_eq!(icon("resolving", Tone::Step), None);

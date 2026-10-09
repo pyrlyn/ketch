@@ -1,6 +1,6 @@
 # SonarCloud OSS setup (ketch)
 
-Maintainer guide for the SonarCloud job (pyrlyn/infra's `sonarcloud.yml`, run by its `ci.yml` from
+Maintainer guide for the SonarCloud job (pyrlyn/ci's `sonarcloud.yml`, run by its `ci.yml` from
 `.github/workflows/pipeline.yml`, configured under `sonarcloud:` in `.github/infra.yml`) and the
 scanner configuration in `sonar-project.properties`.
 
@@ -79,7 +79,7 @@ and points Sonar at the report with **`sonar.rust.lcov.reportPaths=coverage/lcov
 (not `sonar.coverageReportPaths`). The step is best effort: if tests fail or the report
 is missing, the scan still runs, just without coverage.
 
-Scope: `src/`, `crates/ketch-core/src/` and `tests/`. `scripts/`,
+Scope: `src/`, `crates/ketch-core/src/` and `tests/`. `site/`, `scripts/`,
 `examples/`, `crates/ketch-core/migrations/` and the Node tooling (commitlint)
 are outside the analysis scope; `tests/fixtures/` is excluded.
 Coverage uses the default feature set; add `--features tui` if the TUI should count.
@@ -98,7 +98,7 @@ token into the repository.
 
 ## References
 
-- Workflow: `.github/workflows/pipeline.yml` -> pyrlyn/infra `ci.yml` / `sonarcloud.yml`
+- Workflow: `.github/workflows/pipeline.yml` -> pyrlyn/ci `ci.yml` / `sonarcloud.yml`
 - Configuration: `.github/infra.yml` (`sonarcloud:`)
 - Scanner configuration: `sonar-project.properties`
 - [SonarQube Cloud documentation](https://docs.sonarsource.com/sonarqube-cloud/)

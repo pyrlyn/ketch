@@ -29,16 +29,16 @@ gh workflow run ci.yml --ref <branch>
 
 Commits follow [conventional commits](https://www.conventionalcommits.org). A
 change that alters or removes existing CLI behavior is `feat!:` / `fix!:` or
-carries a `BREAKING CHANGE:` footer so release-plz bumps the minor.
+carries a `BREAKING CHANGE:` footer, so the changelog marks it breaking and the
+next Bump and release is run with `level: minor`.
 
 ## Docs
 
 User-facing guides: [`docs/MANIFESTS.md`](docs/MANIFESTS.md),
 [`docs/REGISTRY.md`](docs/REGISTRY.md), [`docs/PLUGINS.md`](docs/PLUGINS.md),
-[`docs/LOCKFILE.md`](docs/LOCKFILE.md). `.github/workflows/sync-docs.yml`
-mirrors `docs/**/*.md` to the pyrlyn landing site — edit the Markdown here, not
-the published HTML. English is the source; a change to an English doc updates its
-`docs/ru/` and `docs/uk/` translations in the same change (see `AGENTS.md`).
+[`docs/LOCKFILE.md`](docs/LOCKFILE.md). The site at
+[pyrlyn.github.io/ketch/docs](https://pyrlyn.github.io/ketch/docs/) is
+generated from those files — edit the Markdown here, not the published HTML.
 
 To add a package to the registry, put a `ketch.toml` at the package repo root
 and run `ketch registry push` (see [`docs/REGISTRY.md`](docs/REGISTRY.md)).

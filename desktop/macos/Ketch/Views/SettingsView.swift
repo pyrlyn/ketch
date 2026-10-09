@@ -1,12 +1,29 @@
-// Settings: update checks, prereleases, open at login, and where ketch's own
-// configuration lives.
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
+// Settings: General (update checks, prereleases, open at login, and where
+// ketch's own configuration lives) and Appearance (AppearanceSettingsView).
 
 import SwiftUI
 
 struct SettingsView: View {
+    var body: some View {
+        TabView {
+            Tab("General", systemImage: "gearshape") { GeneralSettingsView() }
+            Tab("Appearance", systemImage: "paintpalette") { AppearanceSettingsView() }
+        }
+        // Shown in the Settings window and as the main window's Settings
+        // section, where the backdrop shows through the grouped forms.
+        .scrollContentBackground(.hidden)
+    }
+}
+
+private struct GeneralSettingsView: View {
     @Environment(KetchStore.self) private var store
     @Environment(AppSettings.self) private var settings
     @State private var opensAtLogin = false
+    @State private var notifies = false
     @State private var message: String?
 
     var body: some View {
@@ -18,6 +35,14 @@ struct SettingsView: View {
                 }
             }
             Toggle("Include prereleases when installing", isOn: $settings.includePrereleases)
+            Toggle("Notify when updates are available", isOn: $notifies)
+                .onChange(of: notifies) { _, enabled in
+                    guard enabled != settings.notifiesOfUpdates else { return }
+                    Task {
+                        message = await store.setNotifications(enabled)
+                        notifies = settings.notifiesOfUpdates
+                    }
+                }
             Toggle("Open at login", isOn: $opensAtLogin)
                 .onChange(of: opensAtLogin) { _, enabled in
                     guard enabled != settings.opensAtLogin else { return }
@@ -41,8 +66,10 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460)
-        .onAppear { opensAtLogin = settings.opensAtLogin }
+        .onAppear {
+            opensAtLogin = settings.opensAtLogin
+            notifies = settings.notifiesOfUpdates
+        }
         .onChange(of: settings.updateCheckIntervalMinutes) { store.startUpdateChecks() }
     }
 

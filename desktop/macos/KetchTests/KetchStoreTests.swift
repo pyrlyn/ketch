@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 // KetchStore against FakeKetchCore: the flows the UI depends on, without a
 // window. Each test builds its own fake, so they run in any order.
 
@@ -28,7 +32,45 @@ import Testing
         for stage in Stage.allCases {
             #expect(messages.contains("jq: \(stage.rawValue)"))
         }
-        #expect(messages.contains("Done: Installing jq"))
+        #expect(store.log.contains { $0.level == .success && $0.message == "Done: Installing jq" })
+    }
+
+    @Test func aLinkToAPackagePageOpensItWithoutInstallingAnything() async throws {
+        let core = FakeKetchCore(installed: [])
+        let store = makeStore(core)
+
+        await store.open(link: try #require(URL(string: "ketch://package/RipGrep")))
+
+        #expect(store.linkedPackage == "ripgrep")
+        #expect(store.errorMessage == nil)
+        #expect(store.installed.isEmpty)
+        #expect(!core.calls.contains { $0.hasPrefix("install") })
+    }
+
+    @Test func aLinkThatNamesAnActionIsRefusedAndShowsTheError() async throws {
+        let core = FakeKetchCore(installed: [])
+        let store = makeStore(core)
+
+        await store.open(link: try #require(URL(string: "ketch://install/ripgrep")))
+
+        #expect(store.linkedPackage == nil)
+        #expect(store.errorMessage != nil)
+        #expect(!core.calls.contains { $0.hasPrefix("install") })
+    }
+
+    @Test func aLinkToAnUnknownPackageShowsTheErrorAndOpensNothing() async throws {
+        let store = makeStore()
+
+        await store.open(link: try #require(URL(string: "ketch://package/nope")))
+
+        #expect(store.linkedPackage == nil)
+        #expect(store.errorMessage == "No package named nope.")
+    }
+
+    @Test func theAppRegistersTheKetchLinkScheme() {
+        let types = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]]
+        let schemes = types?.flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
+        #expect(schemes == ["ketch"])
     }
 
     @Test func installOfAnUnknownPackageShowsTheError() async {
@@ -127,6 +169,71 @@ import Testing
 
         await store.upgrade()
         #expect(store.pendingUpgradeCount == 0)
+    }
+
+    @Test func updatesLeaveOutWhatALockfilePins() async throws {
+        let store = makeStore()
+
+        await store.refresh()
+
+        #expect(store.updates.map(\.name).sorted() == ["bat", "ripgrep"])
+        let pin = try #require(store.pinned.first)
+        #expect(store.pinned.count == 1)
+        #expect(pin.name == "jq")
+        #expect(pin.heldBy == "~/work/site/ketch.lock")
+        #expect(store.pendingUpgradeCount == 2)
+        #expect(store.outdatedVersion(of: "jq") == nil)
+    }
+
+    @Test func upgradeAllLeavesPinnedPackagesAlone() async {
+        let store = makeStore()
+        await store.refresh()
+
+        await store.upgrade()
+
+        #expect(store.pendingUpgradeCount == 0)
+        #expect(store.pinned.map(\.name) == ["jq"])
+        #expect(store.installed.first { $0.name == "jq" }?.version == "1.7.1")
+    }
+
+    @Test func retryWhileTheLockIsStillHeldNamesTheNewHolder() async throws {
+        let core = FakeKetchCore()
+        let store = makeStore(core)
+        await store.refresh()
+        core.holdLock(pid: 4242)
+
+        await store.upgrade(["bat"])
+        #expect(try #require(store.busy).pid == 4242)
+
+        core.holdLock(pid: 5151)
+        await store.retryBusy()
+        #expect(try #require(store.busy).pid == 5151)
+        #expect(store.outdatedVersion(of: "bat") == "0.25.0")
+
+        core.holdLock(pid: nil)
+        await store.retryBusy()
+        #expect(store.busy == nil)
+        #expect(store.outdatedVersion(of: "bat") == nil)
+        #expect(store.pendingUpgradeCount == 1)
+    }
+
+    @Test func retryWithNothingRefusedDoesNothing() async {
+        let core = FakeKetchCore()
+        let store = makeStore(core)
+
+        await store.retryBusy()
+
+        #expect(store.busy == nil)
+        #expect(core.calls.isEmpty)
+    }
+
+    @Test func problemCountLeavesOutPassedChecks() async {
+        let store = makeStore()
+
+        await store.runDoctor()
+
+        #expect(store.findings.count == 3)
+        #expect(store.problemCount == 1)
     }
 
     @Test func uninstallRemovesThePackage() async {

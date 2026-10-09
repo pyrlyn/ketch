@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 //! Packages that already live on the local filesystem.
 //!
 //! A `local:<path>` reference points at an archive, a bare binary, a symlink to
@@ -407,25 +411,89 @@ pub fn copy_tree(src: &Path, dest: &Path) -> Result<()> {
 }
 
 /// Stable digest of a directory's contents, for the sha256 field of a local `.app`.
+///
+/// Each file and each symlink is one framed record: kind, path, permission
+/// bits, and either the file bytes or the symlink's own target. Lengths sit
+/// in the frame so `a` = `X` plus `b` = `Y` cannot hash like a single `a`
+/// whose bytes are `Xb\0Y`. The mode is in the record so dropping `+x`
+/// changes the digest, and a symlink is not skipped: retargeting one inside
+/// a bundle is a different tree. A lock written before this framing does not
+/// match; `ketch lock` records the new digest.
 pub fn sha256_tree(root: &Path) -> Result<String> {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     let mut paths = Vec::new();
     for entry in walkdir::WalkDir::new(root) {
         let entry = entry.map_err(|e| Error::io(root, std::io::Error::other(e.to_string())))?;
-        if entry.file_type().is_file() {
+        let kind = entry.file_type();
+        // A fifo or device is not part of a bundle, and reading it can block.
+        if kind.is_file() || kind.is_symlink() {
             paths.push(entry.into_path());
         }
     }
     paths.sort();
     for path in paths {
         let rel = path.strip_prefix(root).unwrap_or(&path);
-        hasher.update(rel.to_string_lossy().as_bytes());
-        hasher.update([0]);
-        let bytes = fs::read(&path).map_err(|e| Error::io(&path, e))?;
-        hasher.update(&bytes);
+        let meta = fs::symlink_metadata(&path).map_err(|e| Error::io(&path, e))?;
+        let (kind, payload) = if meta.file_type().is_symlink() {
+            let target = fs::read_link(&path).map_err(|e| Error::io(&path, e))?;
+            (b'l', path_bytes(&target))
+        } else {
+            let bytes = fs::read(&path).map_err(|e| Error::io(&path, e))?;
+            (b'f', bytes)
+        };
+        hash_record(
+            &mut hasher,
+            kind,
+            &path_bytes(rel),
+            permission_bits(&meta),
+            &payload,
+        );
     }
     Ok(hex::encode(hasher.finalize()))
+}
+
+/// `kind || len(path) || path || mode || len(payload) || payload`.
+///
+/// Fixed-width lengths keep a path or a payload from running into the next
+/// field. `mode` is the permission bits only: owner and timestamps are not
+/// part of what a lockfile is pinning.
+fn hash_record(hasher: &mut sha2::Sha256, kind: u8, path: &[u8], mode: u32, payload: &[u8]) {
+    use sha2::Digest;
+    hasher.update([kind]);
+    hasher.update((path.len() as u64).to_be_bytes());
+    hasher.update(path);
+    hasher.update(mode.to_be_bytes());
+    hasher.update((payload.len() as u64).to_be_bytes());
+    hasher.update(payload);
+}
+
+fn path_bytes(path: &Path) -> Vec<u8> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        path.as_os_str().as_bytes().to_vec()
+    }
+    #[cfg(not(unix))]
+    {
+        path.to_string_lossy().into_owned().into_bytes()
+    }
+}
+
+fn permission_bits(meta: &fs::Metadata) -> u32 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        meta.permissions().mode() & 0o777
+    }
+    #[cfg(not(unix))]
+    {
+        if meta.permissions().readonly() {
+            0o444
+        } else {
+            0o666
+        }
+    }
 }
 
 #[cfg(test)]
@@ -453,6 +521,66 @@ mod tests {
         let first = sha256_tree(dir.path()).unwrap();
         std::fs::write(dir.path().join("a"), b"two").unwrap();
         assert_ne!(first, sha256_tree(dir.path()).unwrap());
+    }
+
+    /// `a` = `X` and `b` = `Y` used to hash the same as one file `a` = `Xb\0Y`,
+    /// because the record was `path \0 bytes` with no lengths.
+    #[test]
+    fn two_files_do_not_hash_like_one_file_that_embeds_the_separator() {
+        let split = tempfile::tempdir().unwrap();
+        std::fs::write(split.path().join("a"), b"X").unwrap();
+        std::fs::write(split.path().join("b"), b"Y").unwrap();
+        let fused = tempfile::tempdir().unwrap();
+        let mut bytes = b"X".to_vec();
+        bytes.extend_from_slice(b"b\0Y");
+        std::fs::write(fused.path().join("a"), bytes).unwrap();
+        assert_ne!(
+            sha256_tree(split.path()).unwrap(),
+            sha256_tree(fused.path()).unwrap()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_mode_change_changes_the_tree_hash() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("a");
+        std::fs::write(&file, b"same").unwrap();
+        let first = sha256_tree(dir.path()).unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert_ne!(first, sha256_tree(dir.path()).unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_is_hashed_by_its_target_and_not_as_a_file() {
+        let linked = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink("target-a", linked.path().join("a")).unwrap();
+        let as_file = tempfile::tempdir().unwrap();
+        std::fs::write(as_file.path().join("a"), b"target-a").unwrap();
+        assert_ne!(
+            sha256_tree(linked.path()).unwrap(),
+            sha256_tree(as_file.path()).unwrap()
+        );
+
+        let empty = tempfile::tempdir().unwrap();
+        let bare = sha256_tree(empty.path()).unwrap();
+        assert_ne!(bare, sha256_tree(linked.path()).unwrap());
+
+        let retargeted = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink("target-b", retargeted.path().join("a")).unwrap();
+        assert_ne!(
+            sha256_tree(linked.path()).unwrap(),
+            sha256_tree(retargeted.path()).unwrap()
+        );
+
+        let again = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink("target-a", again.path().join("a")).unwrap();
+        assert_eq!(
+            sha256_tree(linked.path()).unwrap(),
+            sha256_tree(again.path()).unwrap()
+        );
     }
 
     #[test]

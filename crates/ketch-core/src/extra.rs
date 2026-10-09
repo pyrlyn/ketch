@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 //! Man pages and shell completions declared in `extra_paths`.
 //!
 //! Classification is the trust boundary: a payload path becomes a man page
@@ -507,7 +511,7 @@ mod tests {
 
     #[test]
     fn extra_paths_toml_accepts_strings_and_tables() {
-        let manifest: crate::model::Manifest = toml::from_str(
+        let manifest: crate::model::Manifest = crate::toml_file::parse(
             r#"
 name = "rg"
 source = "github:BurntSushi/ripgrep"
@@ -516,6 +520,7 @@ extra_paths = [
   { path = "misc/custom", kind = "man", section = "1" },
 ]
 "#,
+            "ketch.toml",
         )
         .unwrap();
         manifest.validate().unwrap();

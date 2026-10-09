@@ -13,9 +13,9 @@ lang: uk
 `--no-emoji` прибирає значки перед рядками статусу.
 
 **Значки.** У терміналі кожен рядок статусу починається зі значка того, про що він
-повідомляє: 📦 встановлення, ⬆️ оновлення пакета чи реєстру, 🗑️ видалення, ⬇️ завантаження,
-🔗 посилання, ⏪ відкат, 🔍 пошук, 🩺 doctor, а в решті випадків ✅ успіх, ⚠️ попередження,
-❌ помилка, ℹ️ примітка. Типово вони ввімкнені (`emoji` у `config.toml`,
+повідомляє: 📦 встановлення, ⏫ оновлення пакета чи реєстру, 🧹 видалення, ⏬ завантаження,
+🔗 посилання, ⏪ відкат, 🔍 пошук, 🩺 doctor, а в решті випадків ✅ успіх, ❗ попередження,
+❌ помилка, 💡 примітка. Типово вони ввімкнені (`emoji` у `config.toml`,
 `KETCH_EMOJI`) і ніколи не з'являються в пайпі чи файлі, за `TERM=dumb`, у
 виводі `--json` або `--names-only`, у табличних даних і в лозі.
 
@@ -145,6 +145,55 @@ ketch unpin ripgrep
 ketch unlink ripgrep   # лишити, але прибрати з PATH
 ketch link ripgrep     # повернути назад
 ```
+
+### `ketch import winget|brew|linux <NAME> [--dry-run] [--yes]`
+
+Додає пакет, який уже знає інший пакетний менеджер. ketch читає його
+опис, перетворює його на користувацький маніфест
+`~/.ketch/manifests/<name>.toml` і встановлює звичайним шляхом, з ассетом і
+контрольною сумою з цього опису.
+
+```bash
+ketch import brew codex                    # cask Homebrew (або formula)
+ketch import brew fly --cask               # шукати лише cask; --formula — лише formula
+ketch import winget BurntSushi.ripgrep.MSVC  # ідентифікатор winget, з урахуванням регістру
+ketch import linux lazygit                 # Arch Linux, потім AUR
+ketch import linux obsidian --dry-run      # надрукувати маніфест, нічого не змінюючи
+```
+
+| Джерело | Звідки береться опис |
+| --- | --- |
+| `winget` | маніфест інсталятора найновішої версії в [winget-pkgs](https://github.com/microsoft/winget-pkgs) |
+| `brew` | JSON cask або formula з [formulae.brew.sh](https://formulae.brew.sh/docs/api/) |
+| `linux` | `.SRCINFO` пакета [Arch Linux](https://archlinux.org/packages/), або пакета AUR із суфіксом `-bin`/`-appimage`, якщо Arch збирає його з джерельних кодів |
+
+Перетворюється лише пакет, чиї завантаження — ассети релізу GitHub
+(`https://github.com/<owner>/<repo>/releases/download/...`). Завантаження звідкись
+іще — CDN вендора, SourceForge, джерельний tarball, домашня сторінка GitHub із
+файлами в іншому місці або суміш — нічого не записує і завершується з кодом 1
+і повідомленням
+`<name> can't be converted: it is not distributed through GitHub Releases, and that is not supported yet.`
+Так само й інсталятори, які ketch не вміє запускати (`.msi`, `.msix`, Inno або
+NSIS `.exe`, `.deb`, `.rpm`), артефакти cask окрім застосунку і бінарників
+(`pkg`, `installer`) і два файли на одну платформу.
+
+Маніфест зберігає лише те, що потрібно ketch: `name`, `source`, `kind` для
+застосунку, `bin` і по одному шаблону `[asset.target]` на платформу, де версію
+замінено на `*`, щоб шаблон пасував і далі. Він починається з рядка
+``# Written by `ketch import …` ``; файл із таким ім'ям без цього рядка — ваш,
+і import відмовляється його замінювати.
+
+Повторний запуск безпечний: якщо перетворений маніфест і встановлена
+версія вже збігаються з джерелом, друкується
+`Everything is up to date` і нічого не змінюється. Нова версія вище за течією
+переписує файл і оновлює пакет; змінений маніфест за тієї самої версії
+перевстановлює його.
+
+Адреси каталогів можна перенаправити (дзеркало або тестовий двійник) через
+`KETCH_IMPORT_BREW`, `KETCH_IMPORT_WINGET_API`, `KETCH_IMPORT_WINGET_RAW`,
+`KETCH_IMPORT_ARCH`, `KETCH_IMPORT_ARCH_GITLAB` і `KETCH_IMPORT_AUR`. Список
+winget іде через GitHub API, тому використовується токен GitHub, якщо його задано.
+
 ## Перегляд
 
 ### `ketch list`
@@ -252,11 +301,11 @@ rtok     v0.9.0 (pinned)  github:pyrlyn/rtok
 $ ketch list remote
 package  latest   description
 cox      v0.1.0   Modular terminal coding agent
-dunnage  v0.1.0   Shrink Cargo target directories without slowing builds
 ketch    v0.6.1   Catch releases straight from GitHub
 ripgrep  15.2.0   Recursively search directories for a regex pattern
 rtok     v0.10.0  Reduce the context AI coding agents must carry
 runa     ?        Run AI models locally (GGUF via llama.cpp) or through the OpenAI and Anthropic APIs
+swarfr   v0.1.0   Shrink Cargo target directories without slowing builds
 ? means the latest release could not be checked: runa
 ```
 
@@ -264,12 +313,12 @@ runa     ?        Run AI models locally (GGUF via llama.cpp) or through the Open
 $ ketch list
    package  installed        latest                      source
    cox                       v0.1.0                      github:pyrlyn/cox
-   dunnage                   v0.1.0                      github:listepo/dunnage
 *  fd       v10.4.2          v10.5.0 (update available)  github:sharkdp/fd
    ketch                     v0.6.1                      github:pyrlyn/ketch
 *  ripgrep  14.1.1           15.2.0 (update available)   github:BurntSushi/ripgrep
 *  rtok     v0.9.0 (pinned)  v0.10.0                     github:pyrlyn/rtok
    runa                      ?                           github:pyrlyn/runa
+   swarfr                    v0.1.0                      github:listepo/swarfr
 2 updates available: ketch upgrade fd ripgrep
 ? means the latest release could not be checked: runa
 ```

@@ -65,8 +65,8 @@ choice was made.
 That is the point of writing one down.
 
 **The asset and its hash are only reproducible on the same target.** A lock
-written on Apple Silicon names an `aarch64` tarball that an Intel machine
-cannot run. So:
+written on Apple Silicon names an `aarch64` tarball that an x86_64 Linux
+machine cannot run. So:
 
 - On a machine whose `target` matches, `sync` holds the download to the
   recorded `sha256` and refuses it before unpacking anything if it disagrees.
@@ -79,10 +79,15 @@ cannot run. So:
 
 **A `local:` package is reproducible only where its path is.** The lock records
 the absolute path it was installed from and the hash of what was there — the
-file's bytes, or for an `.app` bundle a digest of every file in the tree.
-`sync` reinstalls from that path and refuses it, before anything is placed, if
-its contents changed since the lock was written. On a machine without the path
-the entry fails like any other source that cannot be reached.
+file's bytes, or for an `.app` bundle a digest of every file and symlink in
+the tree. Each record is framed as kind, path, permission bits, and either
+the file bytes or the symlink's own target, so two layouts cannot share a
+digest and retargeting a symlink or dropping `+x` changes it. `sync`
+reinstalls from that path and refuses it, before anything is placed, if its
+contents changed since the lock was written. A lock written before that
+framing does not match an unchanged bundle; run `ketch lock` again to record
+the new digest. On a machine without the path the entry fails like any other
+source that cannot be reached.
 
 ## `ketch sync`
 

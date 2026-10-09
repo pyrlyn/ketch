@@ -1,7 +1,12 @@
 #!/bin/sh
+# Copyright (c) 2026 Ivan Tugay
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 # scripts/release.sh decides the version, writes the changelog entry and makes
 # the version commit — exercised in a throwaway repository whose origin is a
-# local bare one, so nothing is pushed anywhere real and nothing is dispatched.
+# local bare one, so nothing is pushed anywhere real and nothing is dispatched
+# (the script itself never pushes or tags; bump.yml does the rest).
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -54,7 +59,7 @@ cat >CHANGELOG.md <<'EOF'
 
 ## [Unreleased]
 
-## [1.2.3](https://github.com/listepo/ketch/releases/tag/v1.2.3) - 2020-01-01
+## [1.2.3](https://github.com/pyrlyn/ketch/releases/tag/v1.2.3) - 2020-01-01
 
 ### Added
 
@@ -77,9 +82,8 @@ git push -q origin main --tags
 out="$(scripts/release.sh minor --dry-run)"
 echo "$out" | grep -q 'release v1.3.0' || fail "tagged 1.2.3 raised by minor is not 1.3.0: $out"
 
-out="$(scripts/release.sh patch --no-bump)"
-echo "$out" | grep -q 'already released' || fail "--no-bump went ahead on a tagged version: $out"
-[ "$(git rev-list --count HEAD)" = 2 ] || fail "--no-bump made a commit"
+out="$(scripts/release.sh patch --bogus 2>&1)" && fail "an unknown option was accepted: $out"
+[ "$(git rev-list --count HEAD)" = 2 ] || fail "an unknown option made a commit"
 
 scripts/release.sh patch --local >/dev/null 2>&1 || fail "--local failed"
 [ "$(git log -1 --format=%s)" = "chore: release v1.2.4" ] || fail "wrong version commit subject"
@@ -88,15 +92,15 @@ grep -q '^rust-version = "1.70"$' Cargo.toml || fail "rust-version was rewritten
 grep -q '^version.workspace = true$' Cargo.toml || fail "the inherited version was rewritten"
 grep -q 'name = "fixture"' Cargo.lock && grep -q '^version = "1.2.4"$' Cargo.lock \
     || fail "Cargo.lock does not carry 1.2.4"
-grep -q '^- \*(cli)\* second (\[#7\](https://github.com/listepo/ketch/pull/7))$' CHANGELOG.md \
+grep -q '^- \*(cli)\* second (\[#7\](https://github.com/pyrlyn/ketch/pull/7))$' CHANGELOG.md \
     || fail "the entry does not list the commit with its pull request link"
 
 # The new entry goes between Unreleased and the previous release, which is
 # left exactly as it was.
 headings="$(grep '^## ' CHANGELOG.md | sed 's/ - .*//')"
 expected='## [Unreleased]
-## [1.2.4](https://github.com/listepo/ketch/releases/tag/v1.2.4)
-## [1.2.3](https://github.com/listepo/ketch/releases/tag/v1.2.3)'
+## [1.2.4](https://github.com/pyrlyn/ketch/releases/tag/v1.2.4)
+## [1.2.3](https://github.com/pyrlyn/ketch/releases/tag/v1.2.3)'
 [ "$headings" = "$expected" ] || fail "headings out of order:
 $headings"
 

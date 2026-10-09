@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 //! Read-only commands.
 //!
 //! These never take the lock and never write. Their data output goes to stdout
@@ -14,8 +18,8 @@ use crate::error::{Error, Result};
 use crate::install;
 use crate::listing::{self, Available, Local, Row};
 use crate::manifest::Resolver;
-use crate::model::{InstalledPackage, Manifest, ManifestOrigin, PackageSpec, Release, VersionSpec};
-use crate::source::{ListOpts, SourceRegistry};
+use crate::model::{InstalledPackage, ManifestOrigin, PackageSpec, VersionSpec};
+use crate::source::SourceRegistry;
 use crate::state::State;
 use crate::stats;
 use crate::ui;
@@ -372,53 +376,20 @@ pub fn outdated(cfg: &Config, args: OutdatedArgs) -> Result<()> {
 
 pub fn info(cfg: &Config, args: InfoArgs) -> Result<()> {
     let state = State::load(cfg)?;
-    let installed = state.find(&args.package).cloned();
-    let spec = PackageSpec::parse(&args.package);
-
-    // An installed package always has an answer, even when the registry has
-    // forgotten the name it was installed under.
-    let manifest = match Resolver::new(&crate::ui::ctx(cfg))?.resolve(&spec) {
-        Ok((m, origin)) => {
-            ui::debug(&format!("manifest from {}", describe_origin(&origin)));
-            m
-        }
-        Err(e) => match &installed {
-            Some(pkg) => pkg
-                .manifest
-                .clone()
-                .unwrap_or_else(|| Manifest::inferred(pkg.source.clone())),
-            None => return Err(e),
-        },
-    };
-
-    let sources = SourceRegistry::load(&crate::ui::ctx(cfg));
-    let source = match sources.for_ref(&manifest.source) {
-        Ok(s) => Some(s),
-        Err(e) => {
-            ui::warn(&format!("{}: {e}", manifest.name));
-            None
-        }
-    };
-    let described = source.as_ref().and_then(|s| {
-        s.describe(&manifest.source.id).unwrap_or_else(|e| {
-            ui::debug(&format!("describe failed: {e}"));
-            None
-        })
-    });
-    let opts = ListOpts {
-        include_prerelease: cfg.prerelease || manifest.prerelease,
-        ..Default::default()
-    };
-    let release: Option<Release> = match source.as_ref() {
-        Some(s) => match s.resolve(&manifest.source.id, &VersionSpec::Latest, &opts) {
-            Ok(r) => Some(r),
-            Err(e) => {
-                ui::warn(&format!("{}: {e}", manifest.name));
-                None
-            }
-        },
-        None => None,
-    };
+    let found = crate::info::gather(&crate::ui::ctx(cfg), &state, &args.package)?;
+    if let Some(origin) = &found.origin {
+        ui::debug(&format!("manifest from {}", describe_origin(origin)));
+    }
+    let description = found.description().map(str::to_string);
+    let homepage = found.homepage().map(str::to_string);
+    let crate::info::Info {
+        manifest,
+        installed,
+        url,
+        described,
+        latest: release,
+        ..
+    } = found;
 
     let scored = match &release {
         Some(r) if args.assets => {
@@ -432,9 +403,9 @@ pub fn info(cfg: &Config, args: InfoArgs) -> Result<()> {
         return print_json(&serde_json::json!({
             "name": ui::printable(&manifest.name),
             "source": manifest.source.to_string(),
-            "url": source.as_ref().and_then(|s| s.web_url(&manifest.source.id)),
-            "description": json_prose(manifest.description.clone().or_else(|| described.as_ref().and_then(|d| d.description.clone()))),
-            "homepage": json_prose(manifest.homepage.clone().or_else(|| described.as_ref().and_then(|d| d.homepage.clone()))),
+            "url": url,
+            "description": json_prose(description.clone()),
+            "homepage": json_prose(homepage.clone()),
             "stars": described.as_ref().and_then(|d| d.stars),
             "license": json_prose(described.as_ref().and_then(|d| d.license.clone())),
             "archived": described.as_ref().map(|d| d.archived).unwrap_or(false),
@@ -468,11 +439,7 @@ pub fn info(cfg: &Config, args: InfoArgs) -> Result<()> {
     }
 
     ui::out(&ui::bold(&manifest.name));
-    let description = manifest
-        .description
-        .as_deref()
-        .or_else(|| described.as_ref().and_then(|d| d.description.as_deref()));
-    if let Some(text) = description {
+    if let Some(text) = &description {
         // A registry or user manifest's prose: somebody else's text on its way
         // to a terminal.
         ui::out(&crate::changelog::sanitize(text));
@@ -487,15 +454,11 @@ pub fn info(cfg: &Config, args: InfoArgs) -> Result<()> {
         ))
     };
     field("source", manifest.source.to_string());
-    if let Some(url) = source.as_ref().and_then(|s| s.web_url(&manifest.source.id)) {
+    if let Some(url) = url {
         field("url", url);
     }
-    if let Some(home) = manifest
-        .homepage
-        .as_deref()
-        .or_else(|| described.as_ref().and_then(|d| d.homepage.as_deref()))
-    {
-        field("homepage", home.to_string());
+    if let Some(home) = homepage {
+        field("homepage", home);
     }
     if let Some(d) = &described {
         if let Some(stars) = d.stars {
@@ -609,7 +572,7 @@ pub fn info(cfg: &Config, args: InfoArgs) -> Result<()> {
 pub fn changelog(cfg: &Config, args: ChangelogArgs) -> Result<()> {
     let state = State::load(cfg)?;
     let spec = PackageSpec::parse(&args.package);
-    let installed = installed_for_spec(&state, &spec, &args.package);
+    let installed = state.find_spec(&spec).cloned();
     // Only the installed version has a file; any other release is the source's
     // to answer for. `--file` always reads the payload on disk when installed.
     let elsewhere = !args.file && (args.latest || matches!(spec.version, VersionSpec::Exact(_)));
@@ -644,7 +607,7 @@ pub fn changelog(cfg: &Config, args: ChangelogArgs) -> Result<()> {
         }));
     }
 
-    match published_notes(cfg, &spec, installed, args.latest) {
+    match changelog::published(&crate::ui::ctx(cfg), &spec, installed, args.latest) {
         Ok((name, version, entry)) => show(&entry, &name, &version),
         Err(e) => match whole_file {
             Some((entry, name, version)) => {
@@ -654,51 +617,6 @@ pub fn changelog(cfg: &Config, args: ChangelogArgs) -> Result<()> {
             None => Err(e),
         },
     }
-}
-
-/// The notes the source published for the release being asked about.
-fn published_notes(
-    cfg: &Config,
-    spec: &PackageSpec,
-    installed: Option<InstalledPackage>,
-    latest: bool,
-) -> Result<(String, String, Entry)> {
-    let manifest = match Resolver::new(&crate::ui::ctx(cfg))?.resolve(spec) {
-        Ok((m, _)) => m,
-        Err(e) => match &installed {
-            Some(pkg) => pkg
-                .manifest
-                .clone()
-                .unwrap_or_else(|| Manifest::inferred(pkg.source.clone())),
-            None => return Err(e),
-        },
-    };
-    // Without `--latest` or an explicit version, the notes wanted are the ones
-    // for the release that is installed, not whatever is newest.
-    let want = match &spec.version {
-        VersionSpec::Exact(v) => VersionSpec::Exact(v.clone()),
-        VersionSpec::Latest if latest => VersionSpec::Latest,
-        VersionSpec::Latest => installed
-            .map(|pkg| VersionSpec::Exact(pkg.tag))
-            .unwrap_or(VersionSpec::Latest),
-    };
-
-    let sources = SourceRegistry::load(&crate::ui::ctx(cfg));
-    let source = sources.for_ref(&manifest.source)?;
-    let opts = ListOpts {
-        include_prerelease: cfg.prerelease || manifest.prerelease,
-        ..Default::default()
-    };
-    let release = source.resolve(&manifest.source.id, &want, &opts)?;
-    let version = release.version.to_string();
-    changelog::from_release(release.notes.as_deref())
-        .map(|entry| (manifest.name.clone(), version.clone(), entry))
-        .ok_or_else(|| {
-            Error::msg(format!(
-                "{} {version} published no release notes",
-                manifest.name
-            ))
-        })
 }
 
 /// The changelog itself goes to stdout; where it came from goes to stderr, so
@@ -928,28 +846,6 @@ pub fn stats(cfg: &Config, args: StatsArgs) -> Result<()> {
     }
     ui::table(&["statistic", "value"], &rows);
     Ok(())
-}
-
-/// `pkg@version` is not a state key. Look up by alias or source ref so
-/// `--file` still finds the payload on disk.
-fn installed_for_spec(state: &State, spec: &PackageSpec, raw: &str) -> Option<InstalledPackage> {
-    if let Some(pkg) = state.find(raw) {
-        return Some(pkg.clone());
-    }
-    if let Some(alias) = &spec.alias {
-        if let Some(pkg) = state.find(alias) {
-            return Some(pkg.clone());
-        }
-    }
-    if let Some(reference) = &spec.reference {
-        if let Some(pkg) = state.find(&reference.to_string()) {
-            return Some(pkg.clone());
-        }
-        if let Some(pkg) = state.find(&reference.id) {
-            return Some(pkg.clone());
-        }
-    }
-    None
 }
 
 /// Explain how a package would be resolved, without installing it.

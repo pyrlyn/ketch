@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 //! ketch — catch releases straight from GitHub.
 //!
 //! `main` does three things and nothing else: parse arguments, build the
@@ -17,9 +21,9 @@ mod ui;
 // when they lived here, so `crate::config` and the rest keep resolving in
 // `cmd/`, `ui` and `tui` and the binary's own paths did not have to change.
 use ketch_core::{
-    cancel, changelog, config, diff, error, install, listing, lockfile, log, manifest, model,
-    platform, process, push, registry, report, resolve, self_update, shell, source, state, stats,
-    text, wizard,
+    cancel, changelog, config, decide, diff, doctor, error, import, info, install, listing,
+    lockfile, log, manifest, model, platform, process, push, registry, report, resolve,
+    self_update, shell, source, state, stats, text, wizard,
 };
 
 use clap::Parser;
@@ -125,6 +129,7 @@ fn run(cli: Cli) -> Result<()> {
 
     match cli.command {
         Command::Install(args) => cmd::pkg::install(&cfg, args),
+        Command::Import { command } => cmd::import::run(&cfg, command),
         Command::Uninstall(args) => cmd::pkg::uninstall(&cfg, args),
         Command::Upgrade(args) => cmd::pkg::upgrade(&cfg, args),
         Command::Rollback(args) => cmd::pkg::rollback(&cfg, args),

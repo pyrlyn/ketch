@@ -1,0 +1,290 @@
+{{ define "main" }}
+<section class="hero">
+  <div class="hero-text">
+    <div class="hero-meta">
+      <p class="eyebrow">macOS · Linux · Windows · single binary</p>
+      <p class="release-chip" aria-hidden="true">v{{ site.Params.version }} · preview</p>
+    </div>
+    <h1>Catch releases straight from GitHub.</h1>
+    <p class="lede">
+      ketch installs command-line tools and apps from GitHub
+      releases on macOS, Linux, and Windows. No taps, no formulae, no build step — it downloads what the
+      project already ships, verifies it, and puts it on your <code>PATH</code>.
+    </p>
+
+    <div class="install" data-copy-root>
+      <code id="install-cmd">curl -fsSL https://raw.githubusercontent.com/pyrlyn/ketch/main/install.sh | bash</code>
+      <button type="button" data-copy-for="install-cmd" aria-label="Copy install command">Copy</button>
+    </div>
+
+    <div class="cta">
+      <a class="button primary" href="{{ "docs/" | relURL }}">Read the docs</a>
+      <a class="button" href="{{ site.Params.repo }}" rel="noopener">View on GitHub</a>
+    </div>
+  </div>
+
+  <div class="terminal" aria-hidden="true">
+    <div class="terminal-bar"><span></span><span></span><span></span></div>
+    <pre><code><span class="p">$</span> ketch install pyrlyn/rtok
+<span class="d">  resolving</span> rtok (github:pyrlyn/rtok)
+<span class="d">downloading</span> rtok-aarch64-apple-darwin.tar.xz
+<span class="d">   verified</span> sha256 published by the release
+<span class="d">  installed</span> rtok 0.1.0
+
+<span class="p">$</span> rtok --version
+rtok 0.1.0
+
+<span class="p">$</span> ketch list
+package  version  source
+rtok     0.1.0    github:pyrlyn/rtok</code></pre>
+  </div>
+</section>
+
+<section class="demo">
+  <h2>Demo</h2>
+  <div class="demo-grid">
+    <figure>
+      <img src="{{ "img/demo/ketch-install.png" | relURL }}" width="1200" height="720" alt="ketch install pyrlyn/rtok verifying the published SHA-256, then rtok --version">
+      <figcaption>Install &amp; verify</figcaption>
+    </figure>
+    <figure>
+      <img src="{{ "img/demo/ketch-manage.png" | relURL }}" width="1200" height="720" alt="ketch list, outdated, and upgrade for rtok">
+      <figcaption>Manage</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="features">
+  <h2>What it does differently</h2>
+  <div class="grid grid-cols-1 gap-5 min-[640px]:grid-cols-2 min-[1024px]:grid-cols-3">
+    <article class="glass-card flex min-w-0 flex-col">
+      <div class="mb-4 shrink-0 rounded-[10px] bg-stage p-3" aria-hidden="true">
+        <div class="relative flex h-32 flex-col overflow-hidden rounded-[10px] border border-hairline bg-surface shadow-sm">
+          <div class="absolute inset-x-0 top-0 h-0.5 bg-mint"></div>
+          <div class="flex h-7 shrink-0 items-center gap-1.5 border-b border-hairline px-2.5">
+            <span class="size-1.5 rounded-full bg-mint"></span>
+            <span class="font-mono text-[10px] font-semibold text-ink-muted">resolve</span>
+          </div>
+          <div class="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
+            <div class="font-mono text-xs font-semibold leading-tight text-ink">acme/cli</div>
+            <div class="mt-1 font-mono text-[10px] text-ink-muted">release v1.4.2</div>
+            <div class="mt-auto flex min-w-0 items-center gap-1.5 rounded-full bg-surface-2 py-1 pr-1.5 pl-2.5">
+              <span class="min-w-0 flex-1 truncate font-mono text-[9px] text-ink-muted">cli-darwin-arm64.tar.gz</span>
+              <span class="shrink-0 rounded-full bg-coral px-1.5 py-0.5 font-mono text-[9px] font-bold leading-none text-white">arm64</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="mb-1.5 font-mono text-[0.68rem] font-semibold tracking-[0.08em] text-ink-faint uppercase">01 / RESOLVE</p>
+      <h3>Any repo that ships releases</h3>
+      <p>
+        No formula to write and no maintainer to wait for. Point ketch at
+        <code>owner/repo</code> and it infers the rest — the asset matching your
+        architecture, the binaries inside, what to call them.
+      </p>
+    </article>
+    <article class="glass-card flex min-w-0 flex-col">
+      <div class="mb-4 shrink-0 rounded-[10px] bg-stage p-3" aria-hidden="true">
+        <div class="relative flex h-32 flex-col overflow-hidden rounded-[10px] border border-hairline bg-surface shadow-sm">
+          <div class="absolute inset-x-0 top-0 h-0.5 bg-mint"></div>
+          <div class="flex h-7 shrink-0 items-center gap-1.5 border-b border-hairline px-2.5">
+            <span class="size-1.5 rounded-full bg-mint"></span>
+            <span class="font-mono text-[10px] font-semibold text-ink-muted">checksum</span>
+          </div>
+          <div class="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
+            <div class="flex items-center">
+              <span class="font-mono text-xs font-semibold text-ink">SHA-256</span>
+              <span class="ml-auto flex h-4 min-w-[22px] items-center justify-center rounded-full bg-coral px-1.5 font-mono text-[8px] font-bold tracking-wider text-white">OK</span>
+            </div>
+            <div class="mt-1 mb-1.5 font-mono text-[13px] font-semibold tracking-wide text-ink">a3f2-9c1e</div>
+            <div class="mb-2 h-1 overflow-hidden rounded-full bg-surface-2">
+              <div class="h-full w-[72%] rounded-full bg-mint"></div>
+            </div>
+            <div class="font-mono text-[10px] text-ink-muted">digest matched</div>
+          </div>
+        </div>
+      </div>
+      <p class="mb-1.5 font-mono text-[0.68rem] font-semibold tracking-[0.08em] text-ink-faint uppercase">02 / VERIFY</p>
+      <h3>Verified, not just downloaded</h3>
+      <p>
+        Published SHA-256 checksums are checked against what actually landed on
+        disk. <code>require_checksums</code> refuses anything that publishes
+        none, and ketch's own updates never accept trust-on-first-use.
+      </p>
+    </article>
+    <article class="glass-card flex min-w-0 flex-col">
+      <div class="mb-4 shrink-0 rounded-[10px] bg-stage p-3" aria-hidden="true">
+        <div class="relative flex h-32 flex-col overflow-hidden rounded-[10px] border border-hairline bg-surface shadow-sm">
+          <div class="absolute inset-x-0 top-0 h-0.5 bg-mint"></div>
+          <div class="flex h-7 shrink-0 items-center gap-1.5 border-b border-hairline px-2.5">
+            <span class="size-1.5 rounded-full bg-mint"></span>
+            <span class="font-mono text-[10px] font-semibold text-ink-muted">/Applications</span>
+          </div>
+          <div class="flex min-h-0 flex-1 flex-col justify-between overflow-hidden p-3">
+            <div class="flex min-w-0 items-center gap-1.5">
+              <span class="size-3.5 shrink-0 rounded-full border border-mint bg-mint"></span>
+              <span class="min-w-0 flex-1 truncate font-mono text-[11px] font-medium text-ink">Widget.app</span>
+              <span class="shrink-0 rounded-full bg-coral px-1.5 py-0.5 font-mono text-[9px] font-bold leading-none text-white">new</span>
+            </div>
+            <div class="flex min-w-0 items-center gap-1.5">
+              <span class="size-3.5 shrink-0 rounded-full border border-hairline bg-surface-2"></span>
+              <span class="min-w-0 flex-1 truncate font-mono text-[11px] font-medium text-ink">Other.app</span>
+            </div>
+            <div class="flex min-w-0 items-center gap-1.5">
+              <span class="size-3.5 shrink-0 rounded-full border border-hairline bg-surface-2"></span>
+              <span class="min-w-0 flex-1 truncate font-mono text-[11px] font-medium text-ink">binaries</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="mb-1.5 font-mono text-[0.68rem] font-semibold tracking-[0.08em] text-ink-faint uppercase">03 / INSTALL</p>
+      <h3>Apps as well as binaries</h3>
+      <p>
+        A release that ships an <code>.app</code> bundle gets placed in
+        <code>/Applications</code>, quarantine cleared when the signature checks
+        out — and removed cleanly when you uninstall it.
+      </p>
+    </article>
+    <article class="glass-card flex min-w-0 flex-col">
+      <div class="mb-4 shrink-0 rounded-[10px] bg-stage p-3" aria-hidden="true">
+        <div class="relative flex h-32 flex-col overflow-hidden rounded-[10px] border border-hairline bg-surface shadow-sm">
+          <div class="absolute inset-x-0 top-0 h-0.5 bg-mint"></div>
+          <div class="flex h-7 shrink-0 items-center gap-1.5 border-b border-hairline px-2.5">
+            <span class="size-1.5 rounded-full bg-mint"></span>
+            <span class="font-mono text-[10px] font-semibold text-ink-muted">~/.ketch</span>
+          </div>
+          <div class="flex min-h-0 flex-1 flex-col justify-between overflow-hidden p-3">
+            <div class="flex min-w-0 items-center gap-1.5">
+              <span class="size-1.5 shrink-0 rounded-full bg-mint"></span>
+              <span class="min-w-0 flex-1 truncate font-mono text-[11px] font-medium text-ink">store/</span>
+            </div>
+            <div class="flex min-w-0 items-center gap-1.5">
+              <span class="size-1.5 shrink-0 rounded-full bg-teal"></span>
+              <span class="min-w-0 flex-1 truncate font-mono text-[11px] font-medium text-ink">bin/</span>
+              <span class="shrink-0 rounded-full bg-surface-2 px-1.5 py-0.5 font-mono text-[9px] font-bold leading-none text-ink-muted">linked</span>
+            </div>
+            <div class="flex min-w-0 items-center gap-1.5">
+              <span class="size-1.5 shrink-0 rounded-full bg-coral"></span>
+              <span class="min-w-0 flex-1 truncate font-mono text-[11px] font-medium text-ink">state.json</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="mb-1.5 font-mono text-[0.68rem] font-semibold tracking-[0.08em] text-ink-faint uppercase">04 / STORE</p>
+      <h3>Everything in one tree</h3>
+      <p>
+        Versioned payloads in <code>~/.ketch/store</code>, links in
+        <code>~/.ketch/bin</code>, one <code>state.json</code>. Nothing is
+        written anywhere else. Uninstalling leaves nothing behind.
+      </p>
+    </article>
+    <article class="glass-card flex min-w-0 flex-col">
+      <div class="mb-4 shrink-0 rounded-[10px] bg-stage p-3" aria-hidden="true">
+        <div class="relative flex h-32 flex-col overflow-hidden rounded-[10px] border border-hairline bg-surface shadow-sm">
+          <div class="absolute inset-x-0 top-0 h-0.5 bg-mint"></div>
+          <div class="flex h-7 shrink-0 items-center gap-1.5 border-b border-hairline px-2.5">
+            <span class="size-1.5 rounded-full bg-mint"></span>
+            <span class="font-mono text-[10px] font-semibold text-ink-muted">plugin.json</span>
+          </div>
+          <div class="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
+            <pre class="m-0 overflow-hidden border-0 bg-transparent p-0 font-mono text-[10px] leading-snug text-ink-muted shadow-none">{
+  <span class="font-medium text-ink">"source"</span>: <span class="text-accent">"gitlab"</span>,
+  <span class="font-medium text-ink">"assets"</span>: <span class="text-ink-faint">[…]</span>
+}</pre>
+          </div>
+        </div>
+      </div>
+      <p class="mb-1.5 font-mono text-[0.68rem] font-semibold tracking-[0.08em] text-ink-faint uppercase">05 / EXTEND</p>
+      <h3>Sources beyond GitHub</h3>
+      <p>
+        GitLab, Gitea, an internal artifact server: a plugin is one executable
+        that answers in JSON. No recompile, no ketch release.
+        <a href="{{ "docs/plugins/" | relURL }}">The protocol is one page.</a>
+      </p>
+    </article>
+    <article class="glass-card flex min-w-0 flex-col">
+      <div class="mb-4 shrink-0 rounded-[10px] bg-stage p-3" aria-hidden="true">
+        <div class="relative flex h-32 flex-col overflow-hidden rounded-[10px] border border-hairline bg-surface shadow-sm">
+          <div class="absolute inset-x-0 top-0 h-0.5 bg-mint"></div>
+          <div class="flex h-7 shrink-0 items-center gap-1.5 border-b border-hairline px-2.5">
+            <span class="size-1.5 rounded-full bg-mint"></span>
+            <span class="font-mono text-[10px] font-semibold text-ink-muted">ketch.toml</span>
+          </div>
+          <div class="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
+            <div class="font-mono text-[10px] text-ink-faint">[package]</div>
+            <div class="font-mono text-[10px] text-ink"><span class="font-medium">name</span> = <span class="text-accent">"cli"</span></div>
+            <div class="mt-auto flex h-[22px] items-center justify-center gap-1.5 rounded-full bg-mint font-mono text-[10px] font-bold text-teal">Open PR <span>→</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="mb-1.5 font-mono text-[0.68rem] font-semibold tracking-[0.08em] text-ink-faint uppercase">06 / CONTRIBUTE</p>
+      <h3>A registry you can read</h3>
+      <p>
+        One folder per package, one <code>ketch.toml</code> inside. No index to
+        keep in step, no lockstep releases —
+        <a href="{{ "docs/registry/" | relURL }}">send a pull request</a>.
+      </p>
+    </article>
+  </div>
+</section>
+
+<section class="usage">
+  <h2>The whole surface</h2>
+  <pre><code>ketch install &lt;pkg&gt;...     # install; --pre for prereleases, @version to pin one
+ketch list                 # what is installed
+ketch outdated             # what has a newer release
+ketch upgrade              # bring everything unpinned up to date
+ketch info &lt;pkg&gt;           # details, including --assets and why each scored
+ketch search &lt;query&gt;       # the registry and GitHub
+ketch changelog &lt;pkg&gt;      # what changed: the shipped file, or the release notes
+ketch history [&lt;pkg&gt;]      # every version you have had, newest first
+ketch stats                # how many installs, and how long they take
+ketch update               # refresh the package registry
+ketch pin / unpin &lt;pkg&gt;    # hold a version, or let go
+ketch uninstall &lt;pkg&gt;...   # remove it
+ketch lock / sync          # pin every tool to a release, and reproduce it
+ketch path install         # put ~/.ketch/bin on PATH in bash, zsh and fish
+ketch doctor --fix         # check the environment, and repair what it can
+ketch self upgrade          # upgrade ketch itself
+ketch self uninstall       # remove ketch, its packages, its PATH block, its cask</code></pre>
+
+  <p class="note">
+    Names resolve through four tiers — your own manifests, the fetched registry,
+    the registry compiled into the binary, then inference from
+    <code>owner/repo</code>. The last one is what makes an uncurated repository
+    installable with no manifest at all.
+    <a href="{{ "docs/manifests/" | relURL }}">Writing a manifest →</a>
+  </p>
+</section>
+
+<section class="closing">
+  <h2>Get started</h2>
+  <div class="install" data-copy-root>
+    <code id="install-cmd-2">curl -fsSL https://raw.githubusercontent.com/pyrlyn/ketch/main/install.sh | bash</code>
+    <button type="button" data-copy-for="install-cmd-2" aria-label="Copy install command">Copy</button>
+  </div>
+  <p class="muted">
+    Then add <code>~/.ketch/bin</code> to your <code>PATH</code>.
+    <code>ketch doctor</code> will tell you if it is not.
+  </p>
+</section>
+
+<script>
+  // Progressive enhancement only: the command is selectable text without it.
+  for (const button of document.querySelectorAll('[data-copy-for]')) {
+    button.addEventListener('click', async () => {
+      const source = document.getElementById(button.dataset.copyFor);
+      try {
+        await navigator.clipboard.writeText(source.textContent.trim());
+        const was = button.textContent;
+        button.textContent = 'Copied';
+        setTimeout(() => { button.textContent = was; }, 1600);
+      } catch {
+        // Clipboard blocked (insecure context, denied permission): select the
+        // text instead so the keyboard shortcut still works.
+        getSelection().selectAllChildren(source);
+      }
+    });
+  }
+</script>
+{{ end }}

@@ -11,13 +11,12 @@ it too — nothing here is agent-specific except the framing and the rule below.
   `no-agent-attribution` in `commitlint.config.mjs` rejects such a trailer or
   line in every commit a pull request brings, and in the commit-msg hook. A
   pull request description is not checked — that part is on the agent.
-- **English for repository files.** Commits, pull request titles and bodies,
-  comments, docs, and user-facing strings in this repository are written in
-  English. Do not leave non-English prose in tracked files, except the
-  `docs/ru/` and `docs/uk/` translations (see Documentation translations).
 - If a directory above this repository contains an `AGENTS.md` or
   `CLAUDE.md`, follow it too. If it conflicts with this file, ask the creator.
-- **Config files.** A config file this project owns has a schema generated from its types (Rust: `schemars`), committed and checked by a drift test, and one module owns all config loading, validation and editing. A config file another program owns (an agent host's or an editor's) gets no schema from us: check only our own entry in it and leave the rest byte-for-byte, comments included.
+- Repository files are English: code, docs, comments, commits and pull
+  request text. `docs/ru/` and `docs/uk/` are the exception, and the only
+  non-English prose in the tree. An English doc change updates both
+  translations in the same change. See Documentation translations.
 
 ## What ketch is
 
@@ -63,22 +62,31 @@ cargo fmt --all                  # must be clean
 cargo build                      # debug binary at target/debug/ketch
 ```
 
-The repository is a Cargo workspace of two crates: the root package `ketch`
-(the binary) and `crates/ketch-core` (the library it is built on). Both are
-default members, so a bare `cargo test` or `cargo clippy` at the root covers
-both; `--workspace` says so explicitly, and is what the Justfile and CI pass.
+The repository is a Cargo workspace of four crates: the root package `ketch`
+(the binary), `crates/ketch-core` (the library it is built on),
+`crates/ketch-ffi` (the core exported through UniFFI for the desktop apps) and
+`crates/ketch-capi` (`ketch-ffi` behind a C ABI, for the Vala app).
+All are default members, so a bare `cargo test` or `cargo clippy` at the root
+covers them; `--workspace` says so explicitly, and is what the Justfile and CI
+pass. `just xcframework` builds `ketch-ffi` into the macOS app's XCFramework
+and Swift bindings; `just ffi-test` builds a debug one and runs its Swift test.
+`just csharp-test` does the same for C#: a debug `ketch_ffi` shared library,
+its C# bindings, and the .NET test in `desktop/windows`.
+`just capi-test` builds `ketch-capi` and runs its Vala test through Meson
+(Linux, with valac and json-glib installed).
 
 The Justfile wraps the same commands with `--locked`: `just fmt`, `just clippy`
 (or `just lint`), `just test`, and `just check` runs what CI runs on this
-host — format, clippy, `cargo nextest run --workspace --all-targets`, commitlint
+host — format, clippy, the `cfg(fuzzing)` library (`just fuzz-check`),
+`cargo nextest run --workspace --all-targets`, commitlint
 fixtures, shell syntax on `install.sh` and the release scripts, `mandoc -Tlint`
 on the generated man pages when mandoc is present, whether `release.yml` is what
 `dist generate` produces, `dist build` for the host target, and on macOS
 `brew style` on the generated cask. Cross-target
 builds and the Linux/Windows jobs are CI-only.
 
-`just test` ends with a lossless `dunnage` cleanup of this checkout's cargo
-`target/` dirs (compress + dedupe, never deletes); a machine without `dunnage`
+`just test` ends with a lossless `swarfr` cleanup of this checkout's cargo
+`target/` dirs (compress + dedupe, never deletes); a machine without `swarfr`
 just gets a note to install it, not a failure.
 
 Commitlint checks commit messages against the conventional-commit format:
@@ -108,26 +116,6 @@ KETCH_ROOT=/tmp/ketch-scratch cargo run -- doctor
 ```
 
 ## Rust CLI testing
-
-Testing a Rust CLI application requires a combination of unit tests for
-internal business logic and integration tests to verify end-to-end binary
-execution, argument parsing, and output formatting. Prefer these crates for
-the integration layer:
-
-- `assert_cmd` executes the compiled CLI binary and runs assertions against
-  exit codes, stdout, and stderr.
-- `predicates` composes boolean assertions for output matching, including
-  string containment and regular expressions.
-- `assert_fs` automates setup, tear-down, and verification of temporary files
-  and directories.
-- `trycmd` orchestrates snapshot testing with plain-text or Markdown files so
-  lengthy or complex CLI output doubles as documentation and test assertions.
-- `rstest` expresses related cases as parameterized tests and fixtures without
-  duplicating setup.
-- `insta` records reviewed snapshots for stable structured values or output;
-  use its redactions for volatile values rather than weakening the assertion.
-- `pretty_assertions` makes equality failures readable; import its `assert_eq`
-  and `assert_ne` macros in unit tests that compare non-trivial values.
 
 Keep fast, deterministic business-logic tests beside the Rust module they
 exercise. Put binary-level behavior in `tests/`, using `assert_cmd` and
@@ -192,28 +180,13 @@ count it, and on a machine that redirects `build.target-dir` the two figures
 differ by orders of magnitude — the cargo home is the small one. Set
 `CARGO_CACHE=cargo-cache` to bypass mise if you have it activated already.
 
-## Task runner choice
-
-Choose **Just** when you want a fast, lightweight, and simple command alias
-tool that feels like `make` without the baggage, or when the repository manages
-multiple languages alongside Rust.
-
-Choose **cargo-make** when you need complex CI/CD build pipelines,
-cross-platform conditional flows, automated crate installations, or built-in
-scripting extensions such as duckscript tailored specifically for Rust.
-
-For this repository, prefer **Just** if a task runner is introduced: the
-project combines Rust with shell and Node tooling, and its current commands
-are simple aliases. Use cargo-make instead only when the workflow grows into
-conditional, multi-stage Rust automation.
-
 ## Layout
 
 | Path | Owns |
 | --- | --- |
 | `Cargo.toml` | the `ketch` package, and the workspace: members, the one shared version, edition, MSRV and lints |
 | `src/main.rs` | argument parsing, config construction, dispatch — nothing else |
-| `src/lib.rs` | empty except under `cfg(fuzzing)`: the same modules again, and the entry points `fuzz/` drives |
+| `src/lib.rs` | empty except under `cfg(fuzzing)`: `cli.rs`, the core modules the fuzz targets reach, and the entry points `fuzz/` drives; `just fuzz-check` builds it on stable |
 | `src/cli.rs` | the clap surface, kept separate so `cmd/` takes its args directly |
 | `src/cmd/` | thin command bodies: arguments, output, confirmations |
 | `src/complete.rs` | completion scripts, and `ketch __complete`: the package names they ask for at <TAB>, for every shell |
@@ -232,6 +205,7 @@ conditional, multi-stage Rust automation.
 | `crates/ketch-core/src/registry.rs` | the fetched package registry (see `docs/REGISTRY.md`) |
 | `crates/ketch-core/src/manifest.rs` | resolving a name to a `Manifest` across four tiers |
 | `crates/ketch-core/src/model.rs` | every type that crosses a module boundary |
+| `crates/ketch-core/src/toml_file.rs` | parsing and rendering the TOML files ketch owns, and publishing their JSON Schemas (M16 moves every `toml` call here) |
 | `crates/ketch-core/src/state.rs` | the installed-package record and the process lock |
 | `crates/ketch-core/src/stats.rs` | `stats.db`: the history of what was installed, in SQLite |
 | `crates/ketch-core/src/log.rs` | the log file, in text or JSON Lines |
@@ -241,8 +215,17 @@ conditional, multi-stage Rust automation.
 | `crates/ketch-core/src/push.rs` | `ketch registry push`: a project's `ketch.toml` as a registry pull request, via octocrab |
 | `crates/ketch-core/src/self_update.rs` | `ketch self`: installing, updating and removing the host as a package |
 | `crates/ketch-core/src/report.rs` | how the core says what happens: `Event`, `Reporter`, the `Report` handle, `Ctx`, `LogReporter` and `Recorder` |
+| `crates/ketch-core/src/decide.rs` | what the core asks a person mid-run: the `Decider` trait and `NoDecider`, carried in `Ctx` |
 | `crates/ketch-core/src/text.rs` | byte counts and truncation, spelled the same by the core and every renderer |
-| `src/ui.rs` | all terminal output, and `Terminal`: the `Reporter` that draws the core's events |
+| `crates/ketch-core/src/doctor.rs` | `ketch doctor`'s checks, shared by the command and `ketch-ffi` |
+| `crates/ketch-ffi/` | the core through UniFFI: a coarse, language-neutral surface of plain records, foreign traits for `Reporter` and `Decider` passed with a cancel token to each call, and a typed `KetchError` |
+| `crates/ketch-capi/` | `ketch-ffi` as `extern "C"` functions with JSON records, for front ends no UniFFI generator reaches: the cbindgen header (`include/ketch.h`), the payload schema, the hand-written `vapi/ketch.vapi` and its Meson-built Vala test. The one crate allowed hand-written `unsafe`, scoped to `src/abi.rs` |
+| `scripts/xcframework.sh` | `ketch-ffi` as an XCFramework for both macOS architectures, and its generated Swift bindings; `just xcframework` |
+| `scripts/csharp.sh` | `ketch-ffi` as a shared library and the C# bindings the pinned uniffi-bindgen-cs generates from it, into `desktop/windows/KetchCore/Generated/`; `just csharp`, `just csharp-test` |
+| `desktop/windows/` | the Windows app's C# side: `KetchCore` (the generated binding as a .NET library), its MSTest project, and `uniffi.toml` for the generator |
+| `desktop/windows/Ketch.AppCore/`, `Ketch.AppCore.Tests/`, `Ketch.App/` | the Windows app on a fake core: the core contract, the fake that replays `desktop/contract/scenarios` and the store (plain .NET, tested on any OS with `just windows-app-test`), and the WinUI 3 shell over them (`dotnet build -p:Platform=x64`, Windows only: the `ketch-win-app` CI job) |
+| `desktop/macos/KetchCore/` | the Swift package wrapping that XCFramework and bindings (both build output), and the Swift test that drives the real core through them |
+| `src/ui.rs` | all terminal output, `Terminal`: the `Reporter` that draws the core's events, and `TerminalDecider`: the `Decider` that prompts on the terminal |
 | `src/tui/` | the opt-in full-screen renderer (`tui` feature), driven by `ui.rs` |
 | `crates/ketch-core/src/builtin.toml` | the manifests compiled into the binary, the offline registry tier |
 | `crates/ketch-core/migrations/` | the `stats.db` schema, embedded by `stats.rs` |
@@ -253,10 +236,11 @@ conditional, multi-stage Rust automation.
 | `scripts/dist-generate.sh` | `dist generate` plus the patches to `release.yml` dist has no setting for |
 | `.github/build-setup.yml`, `.github/build-check.yml` | steps dist splices into each release build: before it, and before upload |
 | `.github/workflows/release.yml` | generated by dist; builds every target, then tags and publishes the release |
-| `.github/workflows/bump.yml` | the one-click release (pyrlyn/infra `bump.yml`): verify, bump, commit, dispatch |
+| `.github/workflows/bump.yml` | the only release path (pyrlyn/ci `bump.yml`): version PR, required checks, rebase merge, tag, draft release, dispatch |
 | `.github/workflows/tap.yml` | dist's publish job: the Homebrew cask, pushed to the tap |
+| `.github/workflows/cla.yml` | the contributor license agreement check: a thin caller of pyrlyn/ci `cla.yml`, skipped until the variable `CLA_ENABLED` is `true` |
 | `scripts/release.sh` | the one place a release version is decided; `just release` |
-| `release-plz.toml` | what the release pull request bumps, and what it does not publish |
+| `release-plz.toml` | release-plz kept from tagging, releasing or publishing (local preview only) |
 | `cliff.toml` | the `CHANGELOG.md` entry format, for release-plz and `scripts/release.sh` alike |
 | `plan.md` | what is being built next, and what each piece would take |
 | `scripts/cask.sh` | the Homebrew cask, generated into `pyrlyn/homebrew-tap` on release |
@@ -265,9 +249,8 @@ conditional, multi-stage Rust automation.
 | `.github/dependabot.yml` | weekly `chore(deps)` pull requests for cargo, npm and GitHub Actions; not `mise.toml` |
 | `desktop/macos/` | the SwiftUI macOS app: `project.yml` (XcodeGen), `Ketch/` sources, `KetchTests/`, `KetchUITests/`; see its `README.md` |
 | `desktop/macos/DESIGN.md` | the macOS app's design system in the DESIGN.md format; its front matter is generated |
-| `desktop/macos/design/` | `tokens.json`, the one source of design tokens, and `build.mjs`, which generates `generated/Tokens.swift`, the DESIGN.md front matter and `preview.html`'s CSS (`just design-tokens`) |
-| `.github/workflows/desktop-release.yml` | the macOS app's release: signed, notarised `.dmg` under a `desktop-v*` tag, and its Sparkle appcast |
-| `scripts/desktop-version.sh`, `scripts/desktop-dmg.sh`, `scripts/desktop-appcast.sh` | the app release's version check, disk image and appcast, shared with `tests/desktop-appcast.sh` |
+| `desktop/design/` | `tokens.json`, the one source of design tokens, and `build.mjs`, which generates `generated/Tokens.swift` (macOS), `generated/KetchTokens.xaml` (Windows), `generated/ketch-tokens.css` (Linux), the macOS DESIGN.md front matter and `preview.html`'s CSS (`just design-tokens`) |
+| `.github/workflows/release-apple-desktop.yml` | the macOS app's release: a thin caller of pyrlyn/ci `release-apple-desktop.yml` (signed, notarised `.dmg` under a `desktop-v*` tag, and its Sparkle appcast) |
 | `desktop/cliff.toml` | the app's release notes: commits under `desktop/` and `crates/ketch-ffi/` since the last `desktop-v*` tag |
 
 The rule that keeps `cmd/` thin: anything touching the install tree belongs in
@@ -332,9 +315,9 @@ These are observed throughout; match them rather than introducing your own.
   it exists separately. Every public item has a doc comment.
 - **A generated file says so in its first lines**, and the generator writes
   that header, not a person or a second script: `ketch lock` for `ketch.lock`,
-  `scripts/cask.sh` for the tap's `Casks/ketch.rb`,
-  `desktop/macos/design/build.mjs` for `Tokens.swift` and the generated blocks
-  of `DESIGN.md` and `preview.html`. To change such a
+  `site/sync-docs.py` for `site/content/docs/`, `scripts/cask.sh` for the
+  tap's `Casks/ketch.rb`, `desktop/design/build.mjs` for `Tokens.swift`, `KetchTokens.xaml`, `ketch-tokens.css`
+  and the generated blocks of `DESIGN.md` and `preview.html`. To change such a
   file, change its generator.
 - **Comments explain *why*, never *what*.** The code already says what it does.
   A comment earns its place by recording a decision, a constraint, or a
@@ -343,8 +326,13 @@ These are observed throughout; match them rather than introducing your own.
   never calls `ui::` — `ui.rs` lives in the binary. Code in the core takes a
   `report::Ctx` (config plus `Report`) or a `&Report` and says what happens as
   typed `report::Event`s: `stage`, `step`, `success`, `warn`, `note`, `debug`,
-  and `activity`/`download`/`batch`/`counter` handles for long work. A question
-  goes through `Report::choose`/`offer`, whose defaults answer like a script.
+  and `activity`/`download`/`batch`/`counter` handles for long work. The core
+  never reads stdin: a question goes to the `decide::Decider` in `Ctx`
+  (`choose_binary`, `stop_processes`), and `NoDecider`, the default, answers
+  like a script. The binary asks through `ui::ctx_asking`, which puts
+  `ui::TerminalDecider` there unless `--yes` has already answered. A
+  confirmation a command makes before calling the core stays in `cmd/`: it is
+  the front end's own dialog, and a GUI makes its own.
   The binary hands in `ui::Terminal`, which draws each event through the same
   `ui::` helper a command body calls, so its output is unchanged by who said
   it. In the binary there is no `println!` outside `ui.rs`: data goes to
@@ -471,33 +459,40 @@ delete the guard deliberately and say why in the commit.
 ## Releasing
 
 Nobody types a version number. `scripts/release.sh` is the one place a release
-version is decided, and there are three ways to run it:
+version is decided, and **Actions → Bump and release** (`bump.yml`, pyrlyn/ci
+`bump.yml`, `patch`/`minor`/`major`) is the only way to release — and the only
+thing that creates a `v*` tag:
 
-- **release-plz** keeps one `chore: release vX.Y.Z` pull request up to date on
-  every push to `main`, holding the next version and its `CHANGELOG.md` entry,
-  both derived from the conventional commits since the last tag — so `feat:`
-  moves the minor, `fix:` the patch, and `docs:`/`chore:` move nothing.
-  Merging it runs the verify gate (pyrlyn/infra `release-plz.yml`
-  `verify-command`) on the merge commit and then dispatches `release.yml` for
-  the version the pull request wrote.
-- **`bump.yml`** (Actions → Bump and release, `patch`/`minor`/`major`) runs
-  the verify gate (pyrlyn/infra `bump.yml`), then `scripts/release.sh <level>`: it raises the version, writes
-  the changelog entry with git-cliff, pushes one `chore: release vX.Y.Z` commit
-  straight to `main` and dispatches `release.yml`.
-- **`just release [level]`** does the same from a clean, up-to-date `main`.
-  `--dry-run` prints the version and changes nothing; `--local` makes the
-  version commit without pushing or dispatching.
+1. `scripts/release.sh <level> --local` raises the version, writes the
+   changelog entry with git-cliff and makes one `chore: release vX.Y.Z`
+   commit. Nothing is pushed to `main`.
+2. bump pushes it to `release/bump-vX.Y.Z` and opens a pull request into
+   `main` with `RELEASE_PLZ_TOKEN`, so the pull request's own CI runs and
+   reports every required check of `protect-main`.
+3. When they are all green, bump rebase-merges it with `GITHUB_TOKEN` (no
+   ruleset bypass) and reads back the commit that landed on `main` (rebase
+   gives it a new SHA; its tree must be the tested one).
+4. Only then does bump tag that commit, create a draft release with the
+   version's `CHANGELOG.md` entry, and dispatch `release.yml` on the tag.
 
-The version is raised only when the version in `Cargo.toml` is already tagged,
-so a version a merged release pull request wrote is released as it stands.
-Close release-plz's pull request if you release another way, or it will
-propose a version that has already shipped on its next update.
+Red checks, a timeout or a failed merge close the pull request and fail the
+run: no tag, no release. `dry-run` opens the pull request, waits for the checks
+and closes it. `just release [level]` starts the same workflow;
+`--dry-run` prints the version and changes nothing, `--local` makes the version
+commit without pushing.
 
-One rule follows from deriving the version from commits: a commit that changes
-or removes existing CLI behavior is marked breaking — `feat!:`/`fix!:` or a
-`BREAKING CHANGE:` footer — so the bump lands on the minor, not the patch.
-Below 1.0 that marker is all that keeps a removed command from shipping as a
-patch release. commitlint rejects a malformed subject outright via the opt-in
+The version is raised only when the version in `Cargo.toml` is already tagged.
+A version already on `main` without a tag (v0.10.0, from a release-plz merge
+whose run was cancelled) is not released by accident: bump fails on it unless
+run with `release-untagged-head`, which releases `main` as it stands after its
+required checks pass. release-plz no longer runs in CI; its release pull
+request was a second way to release.
+
+One rule follows from the changelog being derived from commits: a commit that
+changes or removes existing CLI behavior is marked breaking — `feat!:`/`fix!:`
+or a `BREAKING CHANGE:` footer — so the entry says so and the release is cut
+with `level: minor`, not `patch`. Below 1.0 that marker is what flags a removed
+command before it ships as a patch release. commitlint rejects a malformed subject outright via the opt-in
 commit-msg hook (`just hooks`), and CI runs it on every non-draft pull request.
 The commit-msg hook also prints a reminder, not a rejection, when the staged
 diff touches `src/cli.rs` or `src/cmd/` and the message carries no breaking
@@ -513,15 +508,15 @@ signing secrets under ketch's names, the Notarise and Smoke test steps from
 plus a download-size table before the release is created. CI fails when the
 committed `release.yml` differs from what that produces.
 
-The release itself is `dispatch-releases`: `release.yml` runs only when
-dispatched with a `tag`. It builds all five targets, and only when every one
-of them has built and passed its smoke test does the `host` job create the tag
-and the GitHub release, at the commit that was built, with that version's
-`CHANGELOG.md` section as the notes. A tag exists if and only if a release
-finished, so `ketch self upgrade` and `install.sh` can never find a tag whose
-binaries are still building or never arrived; a failed run creates nothing,
-and is re-run from the Actions tab. The version in `Cargo.toml` *is* the tag,
-and `ketch self upgrade` measures itself against exactly that.
+The release build is `dispatch-releases` with `create-release = false`:
+`release.yml` runs only when bump dispatches it with a `tag`, on the tagged
+commit. It builds all four targets, and only when every one of them has built
+and passed its smoke test does the `host` job upload the tarballs and
+`SHA256SUMS` to bump's draft release and publish it. dist never tags. A failed
+build leaves the tag and a draft (invisible to `ketch self upgrade` and
+`install.sh`, which read `/releases/latest`) and opens a `release-failure`
+issue; re-run it from the Actions tab. The version in `Cargo.toml` *is* the
+tag, and `ketch self upgrade` measures itself against exactly that.
 
 The macOS binaries are code-signed with a Developer ID Application
 certificate, held in two repository secrets: `MACOS_CERTIFICATE`, the `.p12`
@@ -541,8 +536,8 @@ fails the release. A bare binary cannot be stapled, so Gatekeeper looks its
 ticket up online.
 
 After the release is published, dist's publish job `./tap` (`tap.yml`)
-regenerates the Homebrew cask with `scripts/cask.sh` — version and both
-checksums — and pushes it to `Casks/ketch.rb` in `pyrlyn/homebrew-tap`. That
+regenerates the Homebrew cask with `scripts/cask.sh` — version and the
+checksum — and pushes it to `Casks/ketch.rb` in `pyrlyn/homebrew-tap`. That
 push needs `HOMEBREW_TAP_TOKEN`, a token allowed to write to the tap
 repository; the workflow's own token is scoped to this one and cannot. The
 cask is a cask and not a formula because ketch lives in `~/.ketch`: a
@@ -555,22 +550,16 @@ exactly as with `install.sh`.
 Seven things about that handoff are easy to break:
 
 - **`RELEASE_PLZ_TOKEN` must be a PAT or GitHub App token**, not the default
-  `GITHUB_TOKEN`, which cannot start another workflow run — so the release
-  pull request it opens would never have CI run on it. `release-plz.yml`
-  fails on the missing secret rather than letting that happen quietly. The
-  other direction is on purpose: the version commit `bump.yml` pushes with
-  `GITHUB_TOKEN` starts neither `ci.yml` nor `release-plz.yml`, and dispatch
-  is the one event that token may start, which is how it reaches `release.yml`.
-- **Only the merge of release-plz's own pull request is a release there.**
-  `release-plz.yml`'s gate wants a line that *is* the `chore: release vX.Y.Z`
-  title and a pull request from a `release-plz-` branch behind the commit:
-  `just release` pushes a commit with the same subject straight to `main` and
-  dispatches the release itself, and a second dispatch would race the first.
-- **release-plz must not propose a version while one is being published.**
-  A release pull request is written against the last released version, and for
-  the minutes between the dispatch and the tag there is none.
-  `release-plz.yml` checks for the tag and leaves the pull request alone until
-  it exists; the next commit after that updates it.
+  `GITHUB_TOKEN`: a pull request opened with that token starts no workflow, so
+  the bump pull request would never get its required checks (and "Allow GitHub
+  Actions to create pull requests" is off in pyrlyn). bump uses the PAT only to
+  push the branch and open the pull request; it merges, tags, releases and
+  dispatches with `GITHUB_TOKEN`, and a tag or release made with that token
+  starts no workflow, which is why bump dispatches `release.yml` itself.
+- **Merge the bump pull request with nothing but bump.** Only bump knows to
+  tag the commit that lands (merge method: pyrlyn/.github
+  `docs/pull-requests.md`). A bump pull request merged by hand leaves an
+  untagged version on `main`.
 - **release-plz reads the tags, not crates.io** (`git_only = true`). By
   default it asks the registry for the last released version, and `ketch` is
   not published there — so the lookup comes back empty, release-plz decides
@@ -579,11 +568,10 @@ Seven things about that handoff are easy to break:
   the pull request simply never appears. It is also why `feat:` needs
   `features_always_increment_minor`, since below 1.0 release-plz would
   otherwise send a feature to the patch.
-- **The changelog has one writer.** `cliff.toml` is the format for both
-  release-plz (`changelog_config`) and `scripts/release.sh`, so an entry reads
-  the same whichever way the release was cut. The tag name is part of it:
-  `release-plz.toml` sets `v{{ version }}`, `scripts/release.sh` dispatches
-  `v<version>`, and `cliff.toml` links each heading to
+- **The changelog has one writer.** `cliff.toml` is the format for
+  `scripts/release.sh` (and release-plz's `changelog_config`, for a local
+  preview). The tag name is part of it: `release-plz.toml` sets
+  `v{{ version }}`, bump tags `v<version>` from `Cargo.toml`, and `cliff.toml` links each heading to
   `releases/tag/v<version>` — which `tests/release_changelog.rs` checks.
   Change one and change all three.
 - **The certificate expires.** A Developer ID certificate lasts five years,
@@ -597,9 +585,9 @@ Seven things about that handoff are easy to break:
   correct.
 
 release-plz does not publish to crates.io (`publish = false`), does not create
-the GitHub release (`git_release_enable = false`), and does not tag: only its
-`release-pr` command is ever run. `release.yml` owns all three, because it is
-what builds and attaches the assets.
+the GitHub release (`git_release_enable = false`), and does not tag
+(`git_tag_enable = false`); it no longer runs in CI at all. bump.yml owns the
+tag and the release; `release.yml` attaches the assets.
 
 Bumping the version by hand in an ordinary commit is what all of this exists
 to stop: the version is written in one place and read as the tag, so a stray
@@ -617,7 +605,9 @@ halfway through a release.
 ### macOS app releases
 
 The app in `desktop/macos/` is released from this repository too, by
-`.github/workflows/desktop-release.yml`, with a version of its own: tags are
+`.github/workflows/release-apple-desktop.yml`, a thin caller of the org-level reusable
+workflow `pyrlyn/ci/.github/workflows/release-apple-desktop.yml` (the organization secrets passed by name),
+with a version of its own: tags are
 `desktop-vX.Y.Z`, never `vX.Y.Z`, and the version is the workflow's input, not
 `Cargo.toml`'s or `project.yml`'s.
 
@@ -626,8 +616,8 @@ and `ketch self upgrade` (the GitHub source's `/releases/latest` fast path)
 all install whatever GitHub calls the latest release. An app release marked
 latest would hand every CLI installer a release with no `ketch-<target>.tar.gz`
 in it. So every `gh release create` in the workflow passes `--latest=false`
-(`make_latest: false`), the feed release is a prerelease as well, and the last
-step checks that `/releases/latest` did not move — restoring the CLI release
+(`make_latest: false`), the feed release is a prerelease as well, and the infra
+workflow's last step checks that `/releases/latest` did not move — restoring the CLI release
 and failing if it did. Likewise the CLI's release tooling never takes a
 `desktop-v*` tag for its own: `cliff.toml`'s `tag_pattern` is anchored
 (`^v[0-9]`; git-cliff matches it anywhere in a tag name), `tests/crate-version.sh`
@@ -639,16 +629,16 @@ of asking for the latest (`--pre`), a tag that is not a version never
 outranks one that is (`select_release` in `src/source/mod.rs`). `tests/desktop-release.sh` (in
 `just lint-shell`) checks all of it.
 
-To cut one: Actions → desktop-release → Run workflow on `main` with the
-version, or `gh workflow run desktop-release.yml --ref main -f version=X.Y.Z`.
+To cut one: Actions → release-apple-desktop → Run workflow on `main` with the
+version, or `gh workflow run release-apple-desktop.yml --ref main -f version=X.Y.Z`.
 The version must be plain `X.Y.Z` and above the last `desktop-v*` tag
-(`scripts/desktop-version.sh`), because it is also `CFBundleVersion`, which
-Sparkle compares. The run archives a universal Release build with the
+(checked by the infra workflow), because it is also `CFBundleVersion`, which
+Sparkle compares. The run archives an Apple Silicon (arm64) Release build with the
 hardened runtime, exports it for Developer ID (`desktop/macos/ExportOptions.plist`),
-notarises and staples the app, builds the `.dmg` (`scripts/desktop-dmg.sh`,
-hdiutil), signs, notarises and staples that, runs `spctl --assess` on both,
-writes `Ketch-X.Y.Z.dmg.sha256`, and writes the Sparkle appcast
-(`scripts/desktop-appcast.sh`). Only then does it create the tag and the
+notarises and staples the app, builds the `.dmg` (hdiutil), signs, notarises
+and staples that, runs `spctl --assess` on both, writes
+`Ketch-X.Y.Z.dmg.sha256`, and writes the Sparkle appcast (`generate_appcast`).
+Only then does it create the tag and the
 release, with release notes from `desktop/cliff.toml`, and replace
 `appcast.xml` on the `desktop-appcast` release, the stable URL the app's
 `SUFeedURL` names. A failed run creates nothing; re-run it. If it failed after
@@ -656,8 +646,9 @@ the versioned release was created but before the feed was replaced, upload
 that release's `appcast.xml` to `desktop-appcast` with `gh release upload
 --clobber` rather than re-running, since the version is then taken.
 
-Secrets, all required; the first step names any that are missing and stops
-before building:
+Secrets, all required and held at the pyrlyn organization level (not in this
+repository); the infra workflow's first steps name any that are missing and
+stop before building:
 
 - `MACOS_CERTIFICATE`, `MACOS_CERTIFICATE_PWD` — the same Developer ID
   Application `.p12` the CLI is signed with.
@@ -668,27 +659,26 @@ before building:
   (the base64 seed). Its public half is `SUPublicEDKey` in
   `desktop/macos/Ketch/Info.plist`, still a placeholder that the workflow
   refuses; commit the real one first. The appcast is checked against the
-  exported app's key before anything is published
-  (`scripts/desktop-appcast-verify.swift`), because `generate_appcast` only
+  exported app's key before anything is published (by the infra workflow),
+  because `generate_appcast` only
   warns on a mismatch. Losing or rotating this key strands every installed
   copy on its version.
 
-`just macos-appcast` runs the disk-image and appcast scripts on a local build
-with a throwaway key, as CI's `macos-app` job does. The ketch-ffi XCFramework
-(R9) does not exist yet: the workflow's XCFramework step is off
-(`XCFRAMEWORK: 'false'`, marked `TODO(R9)`), so a release made before R9
+The ketch-ffi XCFramework (R9) does not exist yet: the caller's
+`pre-build-command` is empty (marked `TODO(R9)`), so a release made before R9
 ships the app on `FakeKetchCore`.
 
 ## Documentation translations
 
-English docs in `docs/` are the source of truth. Russian and Ukrainian translations live in
-`docs/ru/` and `docs/uk/` under the same relative path and file name (front matter adds
-`lang: ru` / `lang: uk`). Any change to an English doc must update the matching `docs/ru/` and
-`docs/uk/` translations in the same change, without waiting for a separate request. New English
-docs get translations too, and removing an English doc removes its translations. These two
-directories are the only place non-English prose is allowed.
-Maintainer-only docs stay English-only: `docs/sonarcloud-setup.md`,
-`docs/research-design-system.md` and `docs/research-desktop.md`.
+English docs in `docs/` are the source of truth. Russian and Ukrainian
+translations live in `docs/ru/` and `docs/uk/` under the same file name.
+Front matter on a translated page adds `lang: ru` or `lang: uk`. Any change
+to an English doc updates the matching translations in the same change. A
+new English doc gets both translations, and removing an English doc removes
+them. These two directories are the only place non-English prose is allowed.
+
+Maintainer-only docs stay English: `docs/sonarcloud-setup.md`, anything
+under `docs/qa/`, and the `docs/research-*.md` notes.
 
 ## Before you call it done
 

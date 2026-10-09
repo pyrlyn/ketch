@@ -1,27 +1,33 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 //! The fuzzing face of ketch: its modules as a library, for `fuzz/` only.
 //!
 //! ketch is a binary, and a cargo-fuzz target can only link a library. This
 //! file exists only under `cfg(fuzzing)`, which `cargo fuzz` sets and nothing
 //! else does, so every stable build — `cargo build`, `just check`, the release
 //! — sees an empty library and `main.rs` stays the one crate root that ships.
-//! Under fuzzing it declares the same modules `main.rs` does, compiling them a
-//! second time as this library, and `fuzzing` hands the targets the few
-//! entry points they drive.
+//! Under fuzzing it compiles `cli.rs` a second time, the one binary module a
+//! target drives, beside the `ketch-core` modules it and the targets reach, and
+//! `fuzzing` hands the targets the few entry points they drive.
 //!
-//! A module added to `main.rs` belongs here too; the nightly fuzz build fails
-//! on a `crate::` path this list does not have, and nothing else notices.
+//! The command bodies in `cmd/` are left out: no target drives them, and their
+//! `crate::` paths would pull in every other binary module with them. `just
+//! fuzz-check` builds this library on stable, so a path missing here fails
+//! `just check` and CI, not only the nightly fuzz build.
 #![cfg(fuzzing)]
 // The modules are compiled for a handful of entry points, so most of what they
 // define is unused from here; that says nothing about the binary.
 #![allow(dead_code, unused_imports)]
 
-// The pipeline lives in `ketch-core`. This library only exists so `fuzz/`
-// can link a crate; the command-line modules stay here because they are the
-// binary's.
 mod cli;
-mod cmd;
 
-pub use ketch_core::{extra, extract, hooks, lockfile, manifest, model, source, state, ui};
+// The same names `main.rs` imports at its crate root, so `crate::shell` in
+// `cli.rs` resolves here too.
+pub use ketch_core::{
+    changelog, extra, extract, hooks, lockfile, manifest, model, report, shell, source, state,
+};
 
 /// Entry points for the targets in `fuzz/fuzz_targets/`, one per trust
 /// boundary. Each takes plain data, returns nothing, and panics only when an
@@ -119,7 +125,7 @@ pub mod fuzzing {
 
     /// A release's `SHA256SUMS` body and GitHub's `sha256:<hex>` asset digest.
     pub fn checksum_file(text: &str) {
-        for (name, hex) in crate::source::github::parse_checksum_file(text) {
+        for (name, hex) in crate::source::github::fuzz_parse_checksum_file(text) {
             assert!(
                 !name.contains('/'),
                 "checksum key keeps a directory: {name:?}"
@@ -156,7 +162,12 @@ pub mod fuzzing {
             Box::new(TarExtractor),
             Box::new(ZipExtractor),
         ];
-        let _ = crate::extract::extract_auto(&src, &dest, &extractors);
+        let _ = crate::extract::extract_auto(
+            &src,
+            &dest,
+            &extractors,
+            &crate::report::Report::silent(),
+        );
 
         if let Ok(entries) = std::fs::read_dir(&work_path) {
             for entry in entries.flatten() {
@@ -267,8 +278,10 @@ pub mod fuzzing {
 
     /// Somebody else's text on its way to the terminal: nothing that can move
     /// the cursor, drive the terminal or reorder the line survives.
+    /// `ui::printable` is this filter and nothing else; `ui.rs` itself stays
+    /// out of the library because it needs the rest of the binary.
     pub fn printable(text: &str) {
-        let out = crate::ui::printable(text);
+        let out = crate::changelog::sanitize(text);
         for c in out.chars() {
             assert!(
                 c == '\n' || c == '\t' || !c.is_control(),
@@ -280,6 +293,6 @@ pub mod fuzzing {
             );
         }
         // Filtering is idempotent: a second pass has nothing left to take.
-        assert_eq!(crate::ui::printable(&out), out);
+        assert_eq!(crate::changelog::sanitize(&out), out);
     }
 }

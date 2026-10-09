@@ -1,6 +1,9 @@
+> [!NOTE]
+> This project is under active development. We need "testing volunteers": try it and report what breaks.
+
 <div align="center">
 
-<img src="assets/favicon.svg" width="72" alt="">
+<img src="site/static/img/favicon.svg" width="72" alt="">
 
 # ketch
 
@@ -10,6 +13,7 @@
 ![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)
 [![release](https://img.shields.io/github/v/release/pyrlyn/ketch?sort=semver)](https://github.com/pyrlyn/ketch/releases/latest)
 [![ci](https://github.com/pyrlyn/ketch/actions/workflows/ci.yml/badge.svg)](https://github.com/pyrlyn/ketch/actions/workflows/ci.yml)
+[![site](https://github.com/pyrlyn/ketch/actions/workflows/pages.yml/badge.svg)](https://github.com/pyrlyn/ketch/actions/workflows/pages.yml)
 <br>
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=listepo_ketch&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=listepo_ketch) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=listepo_ketch&metric=coverage)](https://sonarcloud.io/component_measures?id=listepo_ketch&metric=coverage) [![Tests](https://img.shields.io/sonar/tests/listepo_ketch?server=https%3A%2F%2Fsonarcloud.io&compact_message)](https://sonarcloud.io/component_measures?id=listepo_ketch&metric=tests)
 
@@ -19,7 +23,8 @@ Install command-line tools and apps from GitHub releases on macOS, Linux, and Wi
 No taps, no formulae, no build step — ketch downloads what a project already
 ships, verifies it, and puts it on your `PATH`.
 
-[Documentation](#documentation) ·
+[Website](https://pyrlyn.github.io/ketch/) ·
+[Documentation](https://pyrlyn.github.io/ketch/docs/) ·
 [Registry](https://github.com/pyrlyn/ketch-registry) ·
 [Roadmap](ROADMAP.md)
 
@@ -54,12 +59,12 @@ ketch install local:/abs/or/rel      # same thing, as a package ref
 **Install & verify.** `ketch install pyrlyn/rtok` downloads the release, checks
 the published SHA-256, and leaves the binary on your `PATH`.
 
-![ketch install pyrlyn/rtok, checksum verified, then rtok --version](assets/demo/ketch-install.png)
+![ketch install pyrlyn/rtok, checksum verified, then rtok --version](site/static/img/demo/ketch-install.png)
 
 **Manage.** `ketch list`, `ketch outdated`, and `ketch upgrade` keep installed
 tools current — each upgrade is verified the same way.
 
-![ketch list, outdated, and upgrade for rtok](assets/demo/ketch-manage.png)
+![ketch list, outdated, and upgrade for rtok](site/static/img/demo/ketch-manage.png)
 
 ## Why ketch
 
@@ -141,7 +146,7 @@ With [mise](https://mise.jdx.dev), no installer runs; the release tarball is
 the whole install:
 
 ```bash
-mise use -g github:listepo/ketch
+mise use -g github:pyrlyn/ketch
 ketch path install
 ```
 
@@ -168,8 +173,11 @@ only ketch and leaves the tools it installed alone.
 `brew uninstall --cask ketch` removes only the bootstrap binary Homebrew kept;
 everything under `~/.ketch` and every package ketch installed stays until you
 run `ketch self uninstall` (or delete the tree yourself). The same holds for
-`mise unuse -g github:listepo/ketch`. Run from a mise install, `ketch self
+`mise unuse -g github:pyrlyn/ketch`. Run from a mise install, `ketch self
 uninstall` asks, separately, whether to run that command for you as well.
+A copy mise installed before the repository moved from `listepo` to `pyrlyn`
+is still recognized, and the command names it `github:listepo/ketch`, the way
+mise knows it.
 
 ## Usage
 
@@ -402,10 +410,14 @@ release required. See [docs/PLUGINS.md](docs/PLUGINS.md).
 | `auto_update` | `KETCH_AUTO_UPDATE` | `true` |
 | `emoji` | `KETCH_EMOJI` | `true` |
 | `registry` | `KETCH_REGISTRY` | `pyrlyn/ketch-registry` |
-| `self_repo` | `KETCH_SELF_REPO` | `listepo/ketch` |
+| `self_repo` | `KETCH_SELF_REPO` | `pyrlyn/ketch` |
 | `jobs` | `KETCH_JOBS` | `4` (capped at `16`) |
 | `log_level` | `KETCH_LOG_LEVEL` | `info` |
 | `log_format` | `KETCH_LOG_FORMAT` | `text` |
+
+`self_repo` and `registry` set to the names these repositories had before they
+moved, `listepo/ketch` and `listepo/ketch-registry`, read as the `pyrlyn` ones;
+so do the old names in the state file and in lockfiles.
 
 [docs/config.schema.json](https://github.com/pyrlyn/ketch/blob/main/docs/config.schema.json) is the file's JSON Schema,
 generated from the types ketch reads it into, for editors and linters.
@@ -425,8 +437,8 @@ ketch config reset --yes    # for scripts and CI
 refresh.
 
 `emoji` (default `true`) puts an icon in front of each status line on a
-terminal: 📦 install, ⬆️ upgrade, 🗑️ uninstall, ⬇️ download, 🔗 link, ⏪ rollback,
-✅ success, ⚠️ warning, ❌ error, ℹ️ note. Set it to `false`, or
+terminal: 📦 install, ⏫ upgrade, 🧹 uninstall, ⏬ download, 🔗 link, ⏪ rollback,
+✅ success, ❗ warning, ❌ error, 💡 note. Set it to `false`, or
 `KETCH_EMOJI=0`, or pass `--no-emoji`, to go without. Icons never reach a pipe,
 `TERM=dumb`, `--json` output or the log.
 
@@ -454,7 +466,6 @@ the package registry is [`pyrlyn/ketch-registry`](https://github.com/pyrlyn/ketc
 
 | | |
 | --- | --- |
-| [docs/overview.md](docs/overview.md) | Installing, everyday use, and how a name is resolved |
 | [docs/COMMANDS.md](docs/COMMANDS.md) | Every command: what it does, and one working example |
 | [docs/MANIFESTS.md](docs/MANIFESTS.md) | The package config: every field, and when you need one |
 | [docs/REGISTRY.md](docs/REGISTRY.md) | The registry layout, and how to add a package to it |
@@ -464,8 +475,10 @@ the package registry is [`pyrlyn/ketch-registry`](https://github.com/pyrlyn/ketc
 | [AGENTS.md](AGENTS.md) | The layout, the conventions and the trust boundaries |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Short contributor checklist |
 
-`.github/workflows/sync-docs.yml` mirrors every `docs/**/*.md` to the pyrlyn
-landing site, so the published pages cannot drift from the Markdown here.
+The same pages are published at
+**[pyrlyn.github.io/ketch/docs](https://pyrlyn.github.io/ketch/docs/)** — the
+site generates them from the Markdown in this repository, so the two cannot
+drift.
 
 ## Building from source
 
@@ -488,17 +501,16 @@ KETCH_ROOT=/tmp/ketch-scratch cargo run -- doctor
 
 ## Releasing
 
-Nothing is typed. [release-plz](https://release-plz.dev) keeps one pull request
-up to date on every push to `main`, holding the next version and the
-`CHANGELOG.md` entry for it, both read off the conventional commits since the
-last tag. Merging that pull request is the release; so is Actions → **Bump and
-release** (`bump.yml`), which raises the version and commits the entry itself.
-Either way `scripts/release.sh` dispatches `release.yml`, which
+Nothing is typed. Actions → **Bump and release** (`bump.yml`) is the only way
+to release: `scripts/release.sh` raises the version and writes the
+`CHANGELOG.md` entry in one commit, bump opens a pull request with it, waits for
+every required check, rebase-merges it, and only then tags the commit that
+landed on `main`, creates the release and dispatches `release.yml`, which
 [cargo-dist](https://github.com/axodotdev/cargo-dist) generates: it builds and
 signs both macOS architectures (Linux and Windows unsigned), and only once
-every target has built does it create the tag and the release, after which the
-`tap` job bumps `pyrlyn/homebrew-tap`'s cask. So `v0.4.1` existing means
-v0.4.1 shipped, and a build that fails leaves nothing to clean up.
+every target has built does it upload the tarballs and publish the release,
+after which the `tap` job bumps `pyrlyn/homebrew-tap`'s cask. Red checks leave
+no tag and no release.
 
 CI (`ci.yml`) runs on pushes to `main`, on pull requests that are not drafts,
 and on manual `workflow_dispatch`. Before merging a branch, dispatch the gate
@@ -510,12 +522,11 @@ gh workflow run ci.yml --ref <branch>
 
 ```bash
 just release minor --dry-run    # the version a release would get; changes nothing
-just release minor              # the same thing from a clean, up-to-date main
+just release minor              # starts Bump and release (gh workflow run bump.yml)
 ```
 
 ketch is not on crates.io — it ships as a tarball on a GitHub release, so
-release-plz proposes the version and writes the changelog, and never publishes
-a crate.
+nothing publishes a crate.
 
 ## Where to share
 
@@ -599,3 +610,8 @@ You can use this project under **any** of the following licenses, at your choice
 1. [GNU GPLv3](LICENSE): free for open source applications on any platform, including embedded systems.
 2. [Royalty-free License](LICENSE-ROYALTY-FREE.md): free for proprietary desktop, mobile, and web applications, as long as you disclose that your application uses this project. Embedded systems are not covered.
 3. [Commercial license](PRICING.md): for proprietary applications, including embedded systems, without the attribution requirement.
+
+<!-- license-sync:start -->
+Commercial use not covered by the GPLv3 or the Royalty-free License requires a separate paid
+license — see [PRICING.md](PRICING.md).
+<!-- license-sync:end -->

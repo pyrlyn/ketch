@@ -21,7 +21,7 @@ progress. The real core arrives with `ketch-ffi` (R9); see
 From the repository root:
 
 ```bash
-just macos-app    # generate Ketch.xcodeproj, build a universal (arm64 + x86_64) Debug app
+just macos-app    # generate Ketch.xcodeproj, build an Apple Silicon (arm64) Debug app
 just macos-test   # Swift Testing unit tests, then the UI smoke test
 open desktop/macos/build/Build/Products/Debug/Ketch.app
 ```
@@ -56,8 +56,11 @@ from this directory; CI runs `lint --strict`.
 | `Ketch/Core/KetchRoot.swift` | the root, resolved like the CLI (`KETCH_ROOT`, empty means unset) |
 | `Ketch/Store/KetchStore.swift` | the `@Observable` main-actor store: state, operations, callbacks, update checks |
 | `Ketch/Store/AppSettings.swift` | the app's own preferences (UserDefaults) and Open at login |
+| `Ketch/Store/Appearance.swift` | Settings -> Appearance as values: tint, glass style, accent, wash, and how Reduce Transparency and Increase Contrast override them |
 | `Ketch/Views/` | the window sections, the menu-bar panel, Settings, About, the glass styling |
-| `Ketch/Views/Theme.swift` | every colour, spacing, radius and shadow; the one file to switch to the design system's generated tokens (F14) |
+| `Ketch/Views/Theme.swift` | the views' spacing, radius, shadow and status-colour roles, mapped onto the generated tokens |
+| `Ketch/Views/Glass.swift` | the `appearance` environment value, `ketchAppearance()`, glass cards and the backdrop wash |
+| `../design/generated/Tokens.swift` | generated from `../design/tokens.json` (`just design-tokens`) and compiled into the app; see `DESIGN.md` |
 | `KetchTests/` | Swift Testing tests of the store, settings and root on the fake core |
 | `KetchUITests/` | one XCUITest smoke test: launch against a scratch `KETCH_ROOT` |
 
@@ -109,14 +112,15 @@ API names were checked against the macOS 27.0 SDK's
 
 ## Releases
 
-Releases are made by `.github/workflows/desktop-release.yml`, dispatched by
+Releases are made by `.github/workflows/release-apple-desktop.yml` (a thin
+caller of pyrlyn/ci's reusable `release-apple-desktop.yml`), dispatched by
 hand with a version:
 
 ```bash
-gh workflow run desktop-release.yml --ref main -f version=0.1.0
+gh workflow run release-apple-desktop.yml --ref main -f version=0.1.0
 ```
 
-It builds a universal Release app, signs it with the Developer ID
+It builds an Apple Silicon (arm64) Release app, signs it with the Developer ID
 certificate and the hardened runtime, notarises and staples it, packs it into
 `Ketch-X.Y.Z.dmg` (hdiutil, with an `/Applications` link), signs, notarises
 and staples the image, checks both with `spctl`, and publishes the image, its
@@ -125,7 +129,8 @@ release notes are the commits under `desktop/` and `crates/ketch-ffi/` since
 the last app release (`desktop/cliff.toml`). App releases are never marked
 latest, because the CLI's installers follow `/releases/latest`; the
 repository's `AGENTS.md` ("macOS app releases") has why, the secrets it needs,
-and what to do when a run fails half-way.
+and what to do when a run fails half-way. The secrets are pyrlyn organization
+secrets.
 
 The app version is the workflow input, set as both `CFBundleShortVersionString`
 and `CFBundleVersion`; `MARKETING_VERSION` in `project.yml` only labels local
@@ -137,8 +142,8 @@ Before the first release, the creator generates the update key once with the
 public key as `SUPublicEDKey` in `Ketch/Info.plist`, and store
 `generate_keys -x <file>`'s output as the `SPARKLE_ED_PRIVATE_KEY` secret.
 
-Until R9 ships the ketch-ffi XCFramework, the workflow's XCFramework step is
-switched off (`TODO(R9)`), and a release carries the app on `FakeKetchCore`.
+Until R9 ships the ketch-ffi XCFramework, the caller's `pre-build-command` is
+empty (`TODO(R9)`), and a release carries the app on `FakeKetchCore`.
 
 ### Updates
 
@@ -152,10 +157,6 @@ feed and every archive are EdDSA-signed (`SURequireSignedFeed`,
 key starts the updater; Debug builds and test runs leave "Check for Updates…"
 disabled.
 
-`just macos-appcast` builds the app and runs the release's disk-image and
-appcast scripts on it with a throwaway key: two releases in a row, a
-tampered signature and a mismatched key.
-
 ## Wiring the real core
 
 When R9 lands, `desktop/macos/KetchCore/` is a local Swift package with the
@@ -166,7 +167,7 @@ XCFramework and the UniFFI bindings. Then:
 2. Add `Ketch/Core/LiveKetchCore.swift`: a `KetchCoreProtocol` over the
    generated `KetchCore` object that converts its records and events to the
    types in `KetchCoreProtocol.swift`, maps its `KetchError`, wraps the
-   app's `Reporter`/`Decider` in the generated callback interfaces, and
+   app's `Reporter`/`Decider` in the generated foreign traits per call, and
    forwards `CancelToken.onCancel` to the FFI token.
 3. Return it from `CoreFactory.make`.
 

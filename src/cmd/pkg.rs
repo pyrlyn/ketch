@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 //! Commands that change what is installed.
 //!
 //! Each one takes the lock for the whole batch and writes `state.json` once at
@@ -80,7 +84,6 @@ pub fn install(cfg: &Config, args: InstallArgs) -> Result<()> {
             expected_sha256: None,
             // --name applies to the single package being installed.
             name_override: if i == 0 { name_override.clone() } else { None },
-            interactive: !args.yes,
             bin: args.bin.clone(),
             locked_bin: None,
             // `--yes` has already answered the question this would ask.
@@ -94,7 +97,7 @@ pub fn install(cfg: &Config, args: InstallArgs) -> Result<()> {
     let mut failed: Vec<String> = Vec::new();
 
     let outcomes = install::batch(
-        &crate::ui::ctx(cfg),
+        &crate::ui::ctx_asking(cfg, !args.yes),
         &sources,
         &mut state,
         &reqs,
@@ -143,7 +146,7 @@ pub fn install(cfg: &Config, args: InstallArgs) -> Result<()> {
     // release the question named, update hooks included.
     if !updates.is_empty() {
         let outcomes = install::batch(
-            &crate::ui::ctx(cfg),
+            &crate::ui::ctx_asking(cfg, !args.yes),
             &sources,
             &mut state,
             &updates,
@@ -346,41 +349,26 @@ pub fn upgrade(cfg: &Config, args: UpgradeArgs) -> Result<()> {
                 .flat_map(|link| [link.link.clone(), link.target.clone()])
         })
         .collect();
-    crate::process::offer_to_stop(&files, args.yes, crate::ui::report());
+    crate::process::offer_to_stop(&files, args.yes, &crate::ui::ctx_asking(cfg, !args.yes));
 
     let reqs: Vec<InstallRequest> = plan
         .iter()
-        .map(|(pkg, release)| InstallRequest {
-            spec: PackageSpec {
-                raw: format!("{}@{}", pkg.source, release.tag),
-                reference: Some(pkg.source.clone()),
-                alias: None,
-                // The exact tag that was reported, so nothing can change
-                // between the plan the user approved and what is installed.
-                version: VersionSpec::Exact(release.tag.clone()),
-            },
-            force: true,
-            prerelease,
-            // A package installed with --no-link stays unlinked.
-            link: !pkg.links.is_empty(),
-            require_checksum: cfg.require_checksums,
-            asset_override: None,
-            expected_sha256: None,
-            // The installed name, which `--name` may have chosen. Resolving
-            // the source alone would infer another and install a second copy.
-            name_override: Some(pkg.name.clone()),
-            interactive: !args.yes,
-            bin: args.bin.clone(),
-            locked_bin: None,
-            offer_update: false,
-            cancel: Cancel::new(),
+        .map(|(pkg, release)| {
+            install::upgrade_request(
+                cfg,
+                pkg,
+                &release.tag,
+                prerelease,
+                args.bin.clone(),
+                Cancel::new(),
+            )
         })
         .collect();
 
     let mut done = 0usize;
     let mut failed = Vec::new();
     let outcomes = install::batch(
-        &crate::ui::ctx(cfg),
+        &crate::ui::ctx_asking(cfg, !args.yes),
         &sources,
         &mut state,
         &reqs,
@@ -417,7 +405,7 @@ pub fn rollback(cfg: &Config, args: RollbackArgs) -> Result<()> {
     let _lock = Lock::acquire(&crate::ui::ctx(cfg))?;
     let mut state = State::load(cfg)?;
     let out = install::rollback(
-        &crate::ui::ctx(cfg),
+        &crate::ui::ctx_asking(cfg, true),
         &mut state,
         &args.package,
         args.to.as_deref(),
@@ -480,10 +468,7 @@ pub fn pin(cfg: &Config, args: NameArgs, pinned: bool) -> Result<()> {
     let mut state = State::load(cfg)?;
 
     for name in select(&state, &args.names)? {
-        let Some(entry) = state.get_mut(&name) else {
-            continue;
-        };
-        entry.pinned = pinned;
+        let entry = install::pin(&mut state, &name, pinned)?;
         ui::success(
             if pinned { "pinned" } else { "unpinned" },
             &format!("{} {}", entry.name, entry.version),
@@ -499,7 +484,7 @@ pub fn link(cfg: &Config, args: NameArgs, linked: bool) -> Result<()> {
 
     for name in select(&state, &args.names)? {
         if linked {
-            install::relink(&crate::ui::ctx(cfg), &mut state, &name)?;
+            install::relink(&crate::ui::ctx_asking(cfg, true), &mut state, &name)?;
             ui::success("linked", &name);
         } else {
             install::unlink(&crate::ui::ctx(cfg), &mut state, &name)?;
@@ -536,7 +521,7 @@ pub(crate) fn jobs(cfg: &Config, flag: Option<usize>) -> usize {
     flag.filter(|n| *n > 0).unwrap_or(cfg.jobs).max(1)
 }
 
-fn report(out: &Installed) {
+pub(crate) fn report(out: &Installed) {
     let pkg = &out.package;
     let detail = match &out.replaced {
         Some(old) if old != &pkg.version => format!("{} {} (was {old})", pkg.name, pkg.version),
@@ -567,7 +552,7 @@ fn report(out: &Installed) {
 }
 
 /// Say so once, at the end, when the links we just made are not reachable.
-fn path_hint(cfg: &Config, state: &State) {
+pub(crate) fn path_hint(cfg: &Config, state: &State) {
     if cfg.bin_dir_on_path() || !state.iter().any(|p| p.binaries().next().is_some()) {
         return;
     }

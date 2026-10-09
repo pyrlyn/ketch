@@ -9,6 +9,22 @@
 # npm install output for commit-message tooling (package-lock.json is committed)
 /node_modules/
 
+# Hugo build output, and the doc pages generated from the Markdown in the
+# repository root by site/sync-docs.py.
+/site/public/
+/site/resources/
+/site/.hugo_build.lock
+/site/content/docs/manifests.md
+/site/content/docs/commands.md
+/site/content/docs/registry.md
+/site/content/docs/lockfile.md
+/site/content/docs/plugins.md
+/site/content/docs/troubleshooting.md
+/site/content/docs/roadmap.md
+/site/content/docs/plan.md
+/site/content/docs/contributing.md
+site/__pycache__/
+
 # insta: pending snapshots and their run log, never committed
 *.pending-snap
 *.snap.new

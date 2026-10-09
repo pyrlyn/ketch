@@ -1,19 +1,41 @@
-# Configuration for pyrlyn/infra's ci.yml, called from pipeline.yml (docs/config.md in
-# pyrlyn/infra). Rust CI stays in ci.yml (infra ci-rust.yml); this file turns on the scans and
+# Configuration for pyrlyn/ci's ci.yml, called from pipeline.yml (docs/config.md in
+# pyrlyn/ci). Rust CI stays in ci.yml (infra ci-rust.yml); this file turns on the scans and
 # SonarCloud, which replaces the former sonarcloud.yml.
 version: 1
+
+# Docs-only pull requests (pyrlyn/ci docs/config.md, "Docs-only changes"): when every changed
+# file is documentation, infra's scans and .NET tests are skipped and the gate counts them as
+# passed; ci.yml's `config` job reads the same verdict and turns its Rust, app, FFI, design and
+# package jobs into no-ops or skips (every required check still reports; `commits` still runs).
+# Documentation = any *.md except Markdown that is code or test input: src/, crates/, tests/
+# (trycmd cases, fixtures), desktop/ (DESIGN.md is linted by `design`), examples/, fuzz/,
+# scripts/. README.md and CHANGELOG.md (release, include_str! in tests) are excluded by
+# pyrlyn/ci's default `base-exclude`. Anything else (.github/, mise.toml, a non-.md file)
+# runs the full CI.
+docs-only:
+  enabled: true
+  exclude:
+    - '^(src|crates|tests|desktop|examples|fuzz|scripts)/'
 
 codeql:
   # Every language in the repository that supports `build-mode: none`.
   languages: [actions, javascript-typescript, python, rust]
 
 sonarcloud:
-  enabled: true
-  events: [push, pull_request, workflow_dispatch] # as the former sonarcloud.yml
+  enabled: true # push, pull_request and workflow_dispatch (pyrlyn/ci's default events)
   rust: true # llvm-tools-preview, cargo-llvm-cov, `cargo llvm-cov --locked --lcov`
   mise-install-args: rust
 
-# actionlint stays off for now: dist-generated release.yml (never hand-edited) has shellcheck
-# findings. Turn on once .github/actionlint.yaml ignores that file.
-lint:
-  enabled: false
+# The dotnet job runs on Linux. Ketch.App is WinUI 3 (Windows-only) and KetchCore.Tests needs the
+# native library; ci.yml's ketch-cs and ketch-win-app jobs cover both on Windows. Here only the
+# portable app-core tests run (no native library, any OS).
+dotnet:
+  working-directory: desktop/windows
+  test-command: dotnet test --project Ketch.AppCore.Tests
+
+# License files against pyrlyn/ci's canonical ones (replaces license-check.yml).
+license:
+  enabled: true
+
+# Snyk stays off and actionlint on (pyrlyn/ci's defaults); actionlint skips the dist-generated
+# release.yml.

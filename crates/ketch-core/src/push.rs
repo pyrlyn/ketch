@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 //! `ketch registry push`: offering a package to the registry.
 //!
 //! A `ketch.toml` at a project's root is the same file a registry package
@@ -15,6 +19,7 @@ use crate::config::Config;
 use crate::error::{Error, Result};
 use crate::model::{normalize_name, Manifest};
 use crate::registry::{validate_registry_entry, PACKAGE_FILE};
+use crate::toml_file;
 use octocrab::params::repos::Reference;
 use octocrab::Octocrab;
 use serde::Deserialize;
@@ -41,10 +46,7 @@ pub struct Proposal {
 pub fn load(path: &Path) -> Result<Proposal> {
     let what = path.display().to_string();
     let body = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
-    let parsed: toml::Value =
-        toml::from_str(&body).map_err(|e| Error::parse(what.as_str(), e.to_string()))?;
-    let mut value =
-        serde_json::to_value(parsed).map_err(|e| Error::parse(what.as_str(), e.to_string()))?;
+    let mut value = toml_file::to_json(&body, what.as_str())?;
     let table = value.as_object_mut().ok_or_else(|| {
         Error::parse(
             what.as_str(),

@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 //! Unix symlink, mode and ownership helpers shared by the macOS and Linux
 //! backends. macOS-only app placement stays in `macos.rs`.
 #![cfg(unix)]
@@ -302,7 +306,7 @@ pub(crate) fn resolve_bin_specs(root: &Path, specs: &[BinSpec]) -> Result<Vec<(P
                     })
                     .map(|p| p.as_path())
                     .collect();
-                glob_preferred(&matched, spec.name.as_deref())
+                glob_preferred(root, pattern, &matched, spec.name.as_deref())?
             }
             None => {
                 let want = spec.name.as_deref().unwrap_or_default();

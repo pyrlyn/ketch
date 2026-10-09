@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 Ivan Tugay
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 # Regenerate .github/workflows/release.yml from dist-workspace.toml, then patch
 # in what dist has no setting for:
 #
@@ -105,18 +109,24 @@ steps = "".join(
 )
 text = text[:step] + steps + "\n" + text[step:]
 
-create_old = """          # Write and read notes from a file to avoid quoting breaking things
-          echo "$ANNOUNCEMENT_BODY" > $RUNNER_TEMP/notes.txt
+# create-release = false: bump.yml made the tag and a draft release (notes
+# from CHANGELOG.md); dist uploads to it and publishes it. SHA256SUMS goes up
+# with the tarballs, and the sizes are appended to bump's notes.
+create_old = """          # If we're editing a release in place, we need to upload things ahead of time
+          gh release upload "${{ needs.plan.outputs.tag }}" artifacts/*
 
-          gh release create"""
-create_new = """          # Write and read notes from a file to avoid quoting breaking things
-          echo "$ANNOUNCEMENT_BODY" > $RUNNER_TEMP/notes.txt
-
-          # One aggregate checksum file, named so install.sh, install.ps1 and
+          gh release edit "${{ needs.plan.outputs.tag }}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --draft=false
+"""
+create_new = """          # One aggregate checksum file, named so install.sh, install.ps1 and
           # `ketch self upgrade` find it. Sorted, so the file is reproducible.
           (cd artifacts && sha256sum $(ls ketch-*.tar.gz | sort) > SHA256SUMS && cat SHA256SUMS)
 
-          # Archive sizes, so the release page shows them without opening Assets.
+          # If we're editing a release in place, we need to upload things ahead of time
+          gh release upload "${{ needs.plan.outputs.tag }}" artifacts/*
+
+          # bump.yml wrote the notes; add the archive sizes, so the release page
+          # shows them without opening Assets.
+          gh release view "${{ needs.plan.outputs.tag }}" --json body --jq .body > "$RUNNER_TEMP/notes.txt"
           {
             echo
             echo "## Download sizes"
@@ -130,17 +140,18 @@ create_new = """          # Write and read notes from a file to avoid quoting br
           } >> "$RUNNER_TEMP/notes.txt"
           sed -n '/^## Download sizes$/,$p' "$RUNNER_TEMP/notes.txt" | tee -a "$GITHUB_STEP_SUMMARY"
 
-          gh release create"""
+          gh release edit "${{ needs.plan.outputs.tag }}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --notes-file "$RUNNER_TEMP/notes.txt" --draft=false
+"""
 if create_old not in text:
-    fail("the Create GitHub Release block is missing or changed")
+    fail("the release upload block is missing or changed (create-release = false?)")
 text = text.replace(create_old, create_new, 1)
 
-# A last job that turns a failed release into a `release-failure` issue (pyrlyn/infra).
+# A last job that turns a failed release into a `release-failure` issue (pyrlyn/ci).
 NOTIFY = """
   # Added by scripts/dist-generate.sh: a failed release (not a pull request or a dry run)
   # opens or comments on a `release-failure` issue that mentions and assigns @listepo. The
   # only release failure notification: GitHub cannot filter Actions notifications per
-  # workflow. Pinned to pyrlyn/infra's ci/notify-release-failure; repin to its merge commit.
+  # workflow. Pinned to pyrlyn/ci's ci/notify-release-failure; repin to its merge commit.
   notify-failure:
     needs: [plan, build-local-artifacts, build-global-artifacts, host, custom-tap, announce]
     if: >-
@@ -152,7 +163,7 @@ NOTIFY = """
       "actions": "read"
       "issues": "write"
     steps:
-      - uses: pyrlyn/infra/.github/actions/notify-release-failure@d709124d53dd4923eff8f594b3155842508b0049
+      - uses: pyrlyn/ci/.github/actions/notify-release-failure@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
         with:
           ref: ${{ inputs.tag }}
           needs: ${{ toJSON(needs) }}

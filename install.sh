@@ -1,4 +1,8 @@
 #!/bin/bash
+# Copyright (c) 2026 Ivan Tugay
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -128,6 +132,11 @@ case "${OS}" in
       if [ "${TRANSLATED}" = "1" ]; then
         ARCH="arm64"
       fi
+    fi
+    if [ "${ARCH}" != "arm64" ]; then
+      echo "${RED}Error: Unsupported architecture: ${ARCH}${NC}" >&2
+      echo "ketch ships macOS releases for Apple Silicon (arm64) only." >&2
+      exit 1
     fi
     ;;
   Linux)

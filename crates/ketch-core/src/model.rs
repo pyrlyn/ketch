@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 //! Shared domain types.
 //!
 //! Everything crossing a module boundary is defined here so sources, platforms,
@@ -181,11 +185,18 @@ impl PackageRef {
                     .chars()
                     .all(|c| c.is_ascii_alphanumeric() || c == '-');
             if looks_like_scheme && !rest.is_empty() {
-                return Some(PackageRef::new(scheme.to_ascii_lowercase(), rest));
+                let scheme = scheme.to_ascii_lowercase();
+                if scheme == "github" {
+                    return Some(PackageRef::github(crate::config::current_repo(rest)));
+                }
+                return Some(PackageRef::new(scheme, rest));
             }
         }
+        // Every stored reference is read through here, so a state file,
+        // lockfile or manifest written before a repository moved resolves
+        // under its new name. See `config::RENAMED_REPOS`.
         if text.contains('/') {
-            return Some(PackageRef::github(text));
+            return Some(PackageRef::github(crate::config::current_repo(text)));
         }
         None
     }
@@ -218,6 +229,79 @@ impl fmt::Display for PackageRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.scheme, self.id)
     }
+}
+
+/// The schema describes the string [`PackageRef::parse`] accepts, not the two
+/// fields it parses into: the file holds the string.
+#[cfg(test)]
+impl schemars::JsonSchema for PackageRef {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "PackageRef".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "`scheme:id` (`github:BurntSushi/ripgrep`, `myplugin:some-id`), \
+                            or a bare `owner/repo`, which means GitHub.",
+            "type": "string",
+            "pattern": schema_pattern::PACKAGE_REF,
+        })
+    }
+}
+
+/// Regular expressions for the JSON Schema of a manifest, each the twin of a
+/// check in Rust that `tests::schema_patterns_agree_with_the_rust_checks`
+/// holds them to.
+///
+/// They are written in the subset ECMA-262 and the `regex` crate read alike,
+/// because a JSON Schema `pattern` is ECMA-262 and an editor's validator may
+/// be either. That is also why whitespace is a spelled-out class rather than
+/// `\s`: ECMA-262's `\s` has U+FEFF and lacks U+0085, while `str::trim` and
+/// `char::is_whitespace` go by Unicode `White_Space`.
+#[cfg(test)]
+mod schema_pattern {
+    /// Unicode `White_Space`, as the body of a character class.
+    macro_rules! white_space {
+        () => {
+            r"\x09-\x0d \x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000"
+        };
+    }
+
+    /// What `config::sanitize_component` rewrites wherever it appears: path
+    /// separators, `:`, control characters and bidi overrides.
+    macro_rules! unsafe_in_name {
+        () => {
+            r"/\\:\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069"
+        };
+    }
+
+    /// [`super::PackageRef::parse`]: a scheme of letters, digits and `-`
+    /// before the first `:` with something after it, or anything with a `/`.
+    pub const PACKAGE_REF: &str = concat!(
+        "^[",
+        white_space!(),
+        r"]*[A-Za-z0-9-]+:[\s\S]*[^",
+        white_space!(),
+        "]|/"
+    );
+
+    /// `usable_file_name`: nothing `sanitize_component` would rewrite, and no
+    /// `.`, space or `-` at either end, which it would trim.
+    pub const FILE_NAME: &str = concat!(
+        "^[^",
+        unsafe_in_name!(),
+        r". \-]([^",
+        unsafe_in_name!(),
+        "]*[^",
+        unsafe_in_name!(),
+        r". \-])?$"
+    );
+
+    /// A `provides` alias: not empty, no whitespace anywhere.
+    pub const ALIAS: &str = concat!("^[^", white_space!(), "]+$");
+
+    /// A hook command: something besides whitespace.
+    pub const NOT_BLANK: &str = concat!("[^", white_space!(), "]");
 }
 
 /// Which version the user asked for.
@@ -537,6 +621,7 @@ pub struct SourceInfo {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum PackageKind {
     /// Decide from what the payload actually contains.
@@ -550,6 +635,7 @@ pub enum PackageKind {
 
 /// Which release asset to pick. Empty means "let the platform decide".
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct AssetSelector {
     /// Asset must match at least one of these (glob: `*` and `?`).
     #[serde(default)]
@@ -572,7 +658,13 @@ impl AssetSelector {
 }
 
 /// One executable to expose on PATH.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+// `Manifest::validate` refuses an entry with neither key.
+#[cfg_attr(
+    test,
+    schemars(extend("anyOf" = [{ "required": ["name"] }, { "required": ["path"] }]))
+)]
 pub struct BinSpec {
     /// Path inside the extracted payload. Globs allowed; when a glob matches
     /// several files, the one whose stem is `name` is linked. When absent,
@@ -581,12 +673,14 @@ pub struct BinSpec {
     pub path: Option<String>,
     /// Name of the symlink. Defaults to the file name of `path`.
     #[serde(default)]
+    #[cfg_attr(test, schemars(pattern(schema_pattern::FILE_NAME)))]
     pub name: Option<String>,
 }
 
 /// What an `extra_paths` entry is for. Required in the table form; inferred
 /// from path rules when the entry is a bare string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum ExtraKind {
     /// A man page, linked into the user man root.
@@ -597,6 +691,7 @@ pub enum ExtraKind {
 
 /// Shell whose user completion directory an extra path should land in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum CompletionShell {
     Bash,
@@ -654,6 +749,7 @@ impl CompletionShell {
 
 /// Table form of `extra_paths`: an explicit kind, so path rules are not guessed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct ExtraPathSpec {
     /// Path inside the extracted payload. Same containment rules as a string entry.
@@ -669,6 +765,7 @@ pub struct ExtraPathSpec {
 
 /// One `extra_paths` entry: a payload-relative string, or a table with `kind`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(untagged)]
 pub enum ExtraPath {
     /// Classified by the path rules in `docs/MANIFESTS.md`.
@@ -702,19 +799,26 @@ pub struct ClassifiedExtra {
 /// only from a manifest in the user's own manifest directory: anywhere else
 /// the manifest is someone else's file, and a command in it is their code.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields, default)]
 pub struct Hooks {
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, schemars(pattern(schema_pattern::NOT_BLANK)))]
     pub before_install: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, schemars(pattern(schema_pattern::NOT_BLANK)))]
     pub after_install: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, schemars(pattern(schema_pattern::NOT_BLANK)))]
     pub before_update: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, schemars(pattern(schema_pattern::NOT_BLANK)))]
     pub after_update: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, schemars(pattern(schema_pattern::NOT_BLANK)))]
     pub before_uninstall: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, schemars(pattern(schema_pattern::NOT_BLANK)))]
     pub after_uninstall: Option<String>,
 }
 
@@ -743,28 +847,42 @@ impl Hooks {
 /// someone else, and a misspelt key that is silently ignored produces a package
 /// that installs the wrong thing with no complaint anywhere.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[cfg_attr(test, schemars(transform = name_from_folder))]
 #[serde(deny_unknown_fields)]
 pub struct Manifest {
+    /// The install name: a directory in the store and the key in
+    /// `state.json`. A registry package folder supplies it; elsewhere it is
+    /// required.
+    #[cfg_attr(test, schemars(pattern(schema_pattern::FILE_NAME)))]
     pub name: String,
+    /// Where releases come from.
     pub source: PackageRef,
+    /// One line, shown by `ketch info` and `ketch search`.
     #[serde(default)]
     pub description: Option<String>,
+    /// A URL for humans.
     #[serde(default)]
     pub homepage: Option<String>,
+    /// What the payload is.
     #[serde(default)]
     pub kind: PackageKind,
+    /// Narrows which release asset is chosen.
     #[serde(default)]
     pub asset: AssetSelector,
+    /// Which executables to link, and under what names. Empty means discover.
     #[serde(default)]
     pub bin: Vec<BinSpec>,
     /// Leading path components to drop when extracting.
     #[serde(default)]
+    #[cfg_attr(test, schemars(range(max = MAX_STRIP_PREFIX)))]
     pub strip_prefix: Option<usize>,
     /// Consider prereleases when resolving `latest`.
     #[serde(default)]
     pub prerelease: bool,
     /// Alternate names this package answers to.
     #[serde(default)]
+    #[cfg_attr(test, schemars(inner(pattern(schema_pattern::ALIAS))))]
     pub provides: Vec<String>,
     /// Printed after a successful install.
     #[serde(default)]
@@ -881,8 +999,20 @@ impl Manifest {
 /// How many wrapper directories a manifest may ask to strip.
 const MAX_STRIP_PREFIX: usize = 8;
 
+/// Takes `name` out of the schema's `required`. The schema is for a
+/// `ketch.toml`, and in a registry package folder or a project being pushed
+/// the folder names the package; ketch fills `name` in before this type
+/// reads the file.
+#[cfg(test)]
+fn name_from_folder(schema: &mut schemars::Schema) {
+    if let Some(serde_json::Value::Array(required)) = schema.get_mut("required") {
+        required.retain(|key| key != "name");
+    }
+}
+
 /// Which kind of publisher signature a `trust` table asks for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum Verifier {
     Sigstore,
@@ -917,6 +1047,7 @@ impl std::fmt::Display for Verifier {
 
 /// What an unverifiable signature does to the install.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum TrustMode {
     /// Refuse it. Fail closed.
@@ -931,6 +1062,7 @@ pub enum TrustMode {
 /// Which keys a verifier reads is checked by `crate::trust::check_policy`,
 /// called from [`Manifest::validate`]; `docs/MANIFESTS.md` is the reference.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct TrustPolicy {
     pub verifier: Verifier,
@@ -993,7 +1125,7 @@ pub struct Provenance {
 ///
 /// `sanitize_component` already knows every character that is unsafe here, so
 /// asking whether it would change the value is the whole check.
-fn usable_file_name(what: &str, value: &str) -> Result<()> {
+pub(crate) fn usable_file_name(what: &str, value: &str) -> Result<()> {
     if crate::config::sanitize_component(value) == value {
         Ok(())
     } else {
@@ -1370,26 +1502,84 @@ pub fn glob_match(pattern: &str, text: &str) -> bool {
 
 /// The payload file to link when one `bin` glob matched several: the one whose
 /// stem is the spec's link `name` — `rtok.exe` for `rtok*`, never the
-/// `rtok-hook.exe` a release ships beside it — else the first match. Without
-/// the preference the pick is whatever order the directory lists, and NTFS
-/// puts `rtok-hook.exe` ahead of `rtok.exe` (B62).
-pub fn glob_preferred<'a>(matched: &[&'a Path], name: Option<&str>) -> Option<&'a Path> {
+/// `rtok-hook.exe` a release ships beside it. When several share that stem the
+/// sorted-first one wins. With several matches and none named like the link,
+/// the manifest is ambiguous and this refuses, listing the candidates sorted
+/// and relative to `root` so the message reads the same on every OS: taking
+/// the first match would link whatever the directory lists first, and NTFS
+/// lists `rtok-hook.exe` ahead of `rtok.exe` where ext4 and APFS do not
+/// (B62, B71).
+pub fn glob_preferred<'a>(
+    root: &Path,
+    pattern: &str,
+    matched: &[&'a Path],
+    name: Option<&str>,
+) -> Result<Option<&'a Path>> {
+    let mut sorted: Vec<&'a Path> = matched.to_vec();
+    sorted.sort();
+    if sorted.len() <= 1 {
+        return Ok(sorted.first().copied());
+    }
     let want = name
         .and_then(|n| Path::new(n).file_stem())
         .map(|s| s.to_string_lossy().into_owned());
-    matched
+    let named = sorted.iter().copied().find(|p| {
+        want.as_deref()
+            .is_some_and(|w| p.file_stem().is_some_and(|s| s.eq_ignore_ascii_case(w)))
+    });
+    if named.is_some() {
+        return Ok(named);
+    }
+    let listed = sorted
         .iter()
-        .copied()
-        .find(|p| {
-            want.as_deref()
-                .is_some_and(|w| p.file_stem().is_some_and(|s| s.eq_ignore_ascii_case(w)))
+        .map(|p| {
+            let rel = p.strip_prefix(root).unwrap_or(p);
+            let parts: Vec<_> = rel.iter().map(|c| c.to_string_lossy()).collect();
+            format!("  {}", parts.join("/"))
         })
-        .or_else(|| matched.first().copied())
+        .collect::<Vec<_>>()
+        .join("\n");
+    Err(Error::msg(format!(
+        "the manifest's `bin` path `{pattern}` matches {} files and none is named like the link:\n\
+         {listed}\n\
+         set the entry's `name` to the one to link, or narrow its `path` to a single file",
+        sorted.len()
+    )))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::toml_file;
+
+    #[test]
+    fn a_reference_to_a_moved_repository_reads_as_its_new_name() {
+        for old in [
+            "listepo/ketch",
+            "github:listepo/ketch",
+            "GitHub:Listepo/Ketch",
+            "pyrlyn/ketch",
+            "github:pyrlyn/ketch",
+        ] {
+            assert_eq!(
+                PackageRef::parse(old).unwrap(),
+                PackageRef::github(crate::config::SELF_REPO),
+                "{old}"
+            );
+        }
+        assert_eq!(
+            PackageRef::parse("github:listepo/ketch-registry").unwrap(),
+            PackageRef::github(crate::config::REGISTRY_REPO)
+        );
+        // Only the repositories that moved: the rest of the account stays.
+        assert_eq!(
+            PackageRef::parse("listepo/swarfr").unwrap(),
+            PackageRef::github("listepo/swarfr")
+        );
+        // A stored state entry is read through the same path.
+        let stored: PackageRef = serde_json::from_str(r#""github:listepo/ketch""#).unwrap();
+        assert_eq!(stored.to_string(), "github:pyrlyn/ketch");
+    }
 
     #[test]
     fn validate_refuses_names_that_would_escape_their_directory() {
@@ -1548,16 +1738,40 @@ mod tests {
         let hook = PathBuf::from("payload/rtok-hook.exe");
         let main = PathBuf::from("payload/rtok.exe");
         let matched = [hook.as_path(), main.as_path()];
+        fn pick<'a>(m: &[&'a Path], n: Option<&str>) -> Option<&'a Path> {
+            glob_preferred(Path::new("payload"), "rtok*", m, n).unwrap()
+        }
         // NTFS lists rtok-hook.exe first; the stem preference must win anyway.
-        assert_eq!(glob_preferred(&matched, Some("rtok")), Some(main.as_path()));
+        assert_eq!(pick(&matched, Some("rtok")), Some(main.as_path()));
         // Case-insensitive like glob_match; a name carrying its own suffix still stems.
-        assert_eq!(
-            glob_preferred(&matched, Some("RTOK.EXE")),
-            Some(main.as_path())
-        );
-        // No name to prefer, or nothing matched: the old first-match / None answer.
-        assert_eq!(glob_preferred(&matched, None), Some(hook.as_path()));
-        assert_eq!(glob_preferred(&[], Some("rtok")), None);
+        assert_eq!(pick(&matched, Some("RTOK.EXE")), Some(main.as_path()));
+        // One match is not ambiguous, whatever it is called; nothing matched is None.
+        assert_eq!(pick(&[hook.as_path()], None), Some(hook.as_path()));
+        assert_eq!(pick(&[], Some("rtok")), None);
+    }
+
+    #[test]
+    fn glob_preferred_refuses_several_matches_none_named_like_the_link() {
+        let root = Path::new("payload");
+        let hook = PathBuf::from("payload/bin/rtok-hook.exe");
+        let main = PathBuf::from("payload/bin/rtok.exe");
+        // Both directory orders must give the same message.
+        for matched in [
+            [hook.as_path(), main.as_path()],
+            [main.as_path(), hook.as_path()],
+        ] {
+            for name in [None, Some("other")] {
+                let err = glob_preferred(root, "bin/rtok*", &matched, name)
+                    .unwrap_err()
+                    .to_string();
+                assert!(err.contains("`bin/rtok*` matches 2 files"), "{err}");
+                assert!(
+                    err.contains("  bin/rtok-hook.exe\n  bin/rtok.exe\n"),
+                    "candidates sorted and root-relative: {err}"
+                );
+                assert!(err.contains("set the entry's `name`"), "{err}");
+            }
+        }
     }
 
     #[test]
@@ -1575,27 +1789,222 @@ mod tests {
 
     #[test]
     fn hooks_parse_from_their_table_and_a_blank_one_is_refused() {
-        let manifest: Manifest = toml::from_str(
+        let manifest: Manifest = toml_file::parse(
             "name = \"tool\"\nsource = \"o/r\"\n[hooks]\nafter_install = \"./setup\"\n",
+            "ketch.toml",
         )
         .unwrap();
         assert_eq!(manifest.hooks.after_install.as_deref(), Some("./setup"));
         assert!(manifest.hooks.before_install.is_none());
         manifest.validate().unwrap();
         // Round-trips without writing the five unset keys.
-        let written = toml::to_string(&manifest).unwrap();
+        let written = toml_file::render(&manifest, "ketch.toml").unwrap();
         assert!(written.contains("after_install"), "{written}");
         assert!(!written.contains("before_install"), "{written}");
 
-        let blank: Manifest =
-            toml::from_str("name = \"tool\"\nsource = \"o/r\"\n[hooks]\nbefore_update = \" \"\n")
-                .unwrap();
+        let blank: Manifest = toml_file::parse(
+            "name = \"tool\"\nsource = \"o/r\"\n[hooks]\nbefore_update = \" \"\n",
+            "ketch.toml",
+        )
+        .unwrap();
         let err = blank.validate().unwrap_err().to_string();
         assert!(err.contains("hooks.before_update"), "{err}");
 
-        let unknown = toml::from_str::<Manifest>(
+        let unknown = toml_file::parse::<Manifest>(
             "name = \"tool\"\nsource = \"o/r\"\n[hooks]\nafter_instal = \"x\"\n",
+            "ketch.toml",
         );
         assert!(unknown.is_err(), "a misspelt hook key must not be ignored");
+    }
+
+    #[test]
+    fn committed_manifest_schema_matches_manifest() {
+        toml_file::assert_schema_current::<Manifest>("docs/manifest.schema.json");
+    }
+
+    /// The committed schema, as an editor would load it.
+    fn manifest_schema() -> jsonschema::Validator {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/manifest.schema.json");
+        let text = std::fs::read_to_string(&path).expect("read the manifest schema");
+        let schema: serde_json::Value = serde_json::from_str(&text).expect("parse the schema");
+        jsonschema::validator_for(&schema).expect("compile the schema")
+    }
+
+    /// Schema errors for one manifest written as TOML; empty when it is valid.
+    fn schema_errors(schema: &jsonschema::Validator, toml_text: &str) -> Vec<String> {
+        let json = toml_file::to_json(toml_text, "manifest").expect("parse TOML");
+        schema.iter_errors(&json).map(|e| e.to_string()).collect()
+    }
+
+    /// Whether ketch itself takes this manifest: serde, then `validate`.
+    fn ketch_accepts(toml_text: &str) -> bool {
+        toml_file::parse::<Manifest>(toml_text, "manifest").is_ok_and(|m| m.validate().is_ok())
+    }
+
+    #[test]
+    fn every_manifest_ketch_ships_validates_against_the_schema() {
+        let schema = manifest_schema();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+
+        let own = std::fs::read_to_string(root.join("ketch.toml")).expect("read ketch.toml");
+        let errors = schema_errors(&schema, &own);
+        assert!(errors.is_empty(), "ketch.toml: {errors:?}");
+
+        let builtin =
+            toml_file::to_json(crate::manifest::BUILTIN_TOML, "builtin.toml").expect("parse");
+        let packages = builtin["package"].as_array().expect("[[package]]");
+        assert!(!packages.is_empty());
+        for package in packages {
+            let errors: Vec<String> = schema.iter_errors(package).map(|e| e.to_string()).collect();
+            assert!(errors.is_empty(), "builtin {}: {errors:?}", package["name"]);
+        }
+    }
+
+    /// Every TOML example in `MANIFESTS.md`, and the ones elsewhere in the docs
+    /// that open with a `# <folder>/ketch.toml` comment. Most show one table or
+    /// key, so a `source` is added where the example leaves it out; each must
+    /// also be one ketch accepts, or the example is wrong rather than the schema.
+    #[test]
+    fn every_manifest_example_in_the_docs_validates_against_the_schema() {
+        let schema = manifest_schema();
+        let docs = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs");
+        let mut seen = 0;
+        for file in ["MANIFESTS.md", "REGISTRY.md"] {
+            // A Windows checkout may have turned LF into CRLF.
+            let text = std::fs::read_to_string(docs.join(file))
+                .expect("read docs")
+                .replace("\r\n", "\n");
+            for block in text.split("```toml\n").skip(1) {
+                let body = block.split("```").next().unwrap_or_default();
+                let names_a_package_file = body
+                    .lines()
+                    .next()
+                    .is_some_and(|line| line.starts_with('#') && line.ends_with("/ketch.toml"));
+                if file != "MANIFESTS.md" && !names_a_package_file {
+                    continue;
+                }
+                let parsed = toml_file::to_json(body, file).expect("example parses");
+                let mut example = body.to_string();
+                if parsed.get("source").is_none() {
+                    example = format!("source = \"github:o/r\"\n{example}");
+                }
+                if parsed.get("name").is_none() {
+                    example = format!("name = \"example\"\n{example}");
+                }
+                assert!(ketch_accepts(&example), "{file}: ketch refuses\n{example}");
+                let errors = schema_errors(&schema, &example);
+                assert!(errors.is_empty(), "{file}: {errors:?}\n{example}");
+                seen += 1;
+            }
+        }
+        assert!(seen >= 8, "found only {seen} examples; did the docs move?");
+    }
+
+    /// Manifests ketch refuses, each for a reason the schema can state. The
+    /// schema must refuse them too, or an editor would pass a file that
+    /// fails at install.
+    #[test]
+    fn the_schema_refuses_what_ketch_refuses() {
+        let schema = manifest_schema();
+        let cases = [
+            "source = \"o/r\"\nsourse = \"x\"",
+            "source = \"ripgrep\"",
+            "source = \"github:\"",
+            "source = \"o/r\"\nkind = \"library\"",
+            "name = \"../evil\"\nsource = \"o/r\"",
+            "name = \"-tool\"\nsource = \"o/r\"",
+            "source = \"o/r\"\nbin = [{}]",
+            "source = \"o/r\"\nbin = [{ name = \"a/b\" }]",
+            "source = \"o/r\"\nstrip_prefix = 9",
+            "source = \"o/r\"\nstrip_prefix = -1",
+            "source = \"o/r\"\nprovides = [\"r g\"]",
+            "source = \"o/r\"\nprovides = [\"\"]",
+            "source = \"o/r\"\nextra_paths = [{ path = \"x.1\", kind = \"doc\" }]",
+            "source = \"o/r\"\nextra_paths = [{ path = \"x.1\", kind = \"man\", sect = \"1\" }]",
+            "source = \"o/r\"\n[trust]\nverifier = \"cosign\"",
+            "source = \"o/r\"\n[trust]\nverifier = \"minisign\"\nmode = \"ignore\"",
+            "source = \"o/r\"\n[trust]\nverifier = \"minisign\"\nkey = \"x\"",
+            "source = \"o/r\"\n[hooks]\nafter_instal = \"x\"",
+            "source = \"o/r\"\n[hooks]\nafter_install = \" \"",
+        ];
+        for case in cases {
+            let with_name = if case.starts_with("name") {
+                case.to_string()
+            } else {
+                format!("name = \"tool\"\n{case}")
+            };
+            assert!(!ketch_accepts(&with_name), "ketch takes\n{with_name}");
+            assert!(
+                !schema_errors(&schema, case).is_empty(),
+                "the schema takes\n{case}"
+            );
+        }
+    }
+
+    /// Strings worth trying against the patterns: whatever proptest picks,
+    /// plus the characters where ECMA-262 and Rust disagree about whitespace,
+    /// and the ones `sanitize_component` and `PackageRef::parse` single out.
+    fn tricky_text() -> impl proptest::strategy::Strategy<Value = String> {
+        use proptest::prelude::*;
+        let tricky = proptest::sample::select(vec![
+            ' ', '\t', '\n', '\r', '\u{0b}', '\u{85}', '\u{a0}', '\u{feff}', '\u{2028}',
+            '\u{3000}', '\u{180e}', '/', '\\', ':', '.', '-', '_', '\0', '\u{1f}', '\u{7f}',
+            '\u{9f}', '\u{202e}', '\u{2066}', '\u{200b}', 'a', 'Z', '0', 'é',
+        ]);
+        proptest::collection::vec(prop_oneof![any::<char>(), tricky], 0..6)
+            .prop_map(|chars| chars.into_iter().collect())
+    }
+
+    /// A one-pattern string schema, compiled by each engine a JSON Schema
+    /// validator might use: ECMA-262 semantics over `fancy-regex`, and the
+    /// plain `regex` crate.
+    fn pattern_validators(pattern: &str) -> [jsonschema::Validator; 2] {
+        let schema = serde_json::json!({ "type": "string", "pattern": pattern });
+        [
+            jsonschema::validator_for(&schema).expect("compile"),
+            jsonschema::options()
+                .with_pattern_options(jsonschema::PatternOptions::regex())
+                .build(&schema)
+                .expect("compile"),
+        ]
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn schema_patterns_agree_with_the_rust_checks(text in tricky_text()) {
+            static PATTERNS: std::sync::LazyLock<[[jsonschema::Validator; 2]; 4]> =
+                std::sync::LazyLock::new(|| {
+                    [
+                        pattern_validators(schema_pattern::PACKAGE_REF),
+                        pattern_validators(schema_pattern::FILE_NAME),
+                        pattern_validators(schema_pattern::ALIAS),
+                        pattern_validators(schema_pattern::NOT_BLANK),
+                    ]
+                });
+            let base = Manifest::inferred(PackageRef::github("o/r"));
+            let rust = [
+                PackageRef::parse(&text).is_some(),
+                Manifest { name: text.clone(), ..base.clone() }.validate().is_ok(),
+                Manifest { provides: vec![text.clone()], ..base.clone() }.validate().is_ok(),
+                Manifest {
+                    hooks: Hooks { after_install: Some(text.clone()), ..Hooks::default() },
+                    ..base
+                }
+                .validate()
+                .is_ok(),
+            ];
+            let instance = serde_json::Value::String(text.clone());
+            for (which, (validators, expected)) in PATTERNS.iter().zip(rust).enumerate() {
+                for validator in validators {
+                    proptest::prop_assert_eq!(
+                        validator.is_valid(&instance),
+                        expected,
+                        "pattern {} on {:?}",
+                        which,
+                        text
+                    );
+                }
+            }
+        }
     }
 }

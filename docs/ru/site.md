@@ -2,12 +2,12 @@
 title: ketch
 tagline: Ловите релизы прямо с GitHub — пакетный менеджер в одном бинарнике для консольных утилит и приложений на macOS, Linux и Windows.
 repo: https://github.com/pyrlyn/ketch
-homepage: https://github.com/pyrlyn/ketch
+homepage: https://pyrlyn.github.io/ketch/
 install: 'curl -fsSL https://raw.githubusercontent.com/pyrlyn/ketch/main/install.sh | bash'
 install_alternatives:
   - 'irm https://raw.githubusercontent.com/pyrlyn/ketch/main/install.ps1 | iex'
   - 'brew install --cask pyrlyn/tap/ketch'
-  - 'mise use -g github:listepo/ketch'
+  - 'mise use -g github:pyrlyn/ketch'
 version: "0.6.0"
 accent: "#3DDCB0"
 accentLight: "#0F6F5C"
@@ -15,7 +15,7 @@ order: 2
 lang: ru
 ---
 
-<!-- Website copy for the listepo project site. The sync-docs workflow copies this file to
+<!-- Website copy for the pyrlyn project site. The sync-docs workflow copies this file to
 pyrlyn/landing (main) as content/projects/ketch.md on every change to main and on every v*
 tag; front matter follows CONTENT_CONTRACT.md in that repository.
 Sources (checked 2026-09-27): README.md and the clap CLI in src/cli.rs; version from the latest
@@ -70,7 +70,7 @@ Homebrew или mise:
 
 ```bash
 brew install --cask pyrlyn/tap/ketch
-mise use -g github:listepo/ketch && ketch path install
+mise use -g github:pyrlyn/ketch && ketch path install
 ```
 
 Затем убедитесь, что `~/.ketch/bin` есть в `PATH`; `ketch doctor` скажет, если это не так.
@@ -122,8 +122,8 @@ ketch self uninstall
 ## Ссылки
 
 - Репозиторий: <https://github.com/pyrlyn/ketch>
-- Документация: <https://github.com/pyrlyn/ketch/tree/main/docs>
-- Справочник команд: <https://github.com/pyrlyn/ketch/blob/main/docs/COMMANDS.md>
+- Сайт и документация: <https://pyrlyn.github.io/ketch/>
+- Справочник команд: <https://pyrlyn.github.io/ketch/docs/commands/>
 - Реестр пакетов: <https://github.com/pyrlyn/ketch-registry>
 - Релизы: <https://github.com/pyrlyn/ketch/releases>
 - Лицензия: на ваш выбор GNU GPLv3, бесплатная (royalty-free) лицензия для проприетарных настольных, мобильных и

@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 // The app's view of ketch's core: the operations, records, callbacks and
 // errors R9's `ketch-ffi` will export through UniFFI.
 //
@@ -38,6 +42,9 @@ struct Upgrade: Sendable, Hashable, Identifiable {
     var name: String
     var from: String
     var to: String
+    /// The `ketch.lock` that pins this package at `from`, when one does;
+    /// `upgrade` leaves a held package where it is.
+    var heldBy: String?
 
     var id: String { name }
 }
@@ -162,4 +169,8 @@ protocol KetchCoreProtocol: Sendable {
     /// The changelog between two versions, already sanitized by the core.
     func changelog(name: String, from: String?, to: String?) throws -> String
     func doctor() throws -> [Finding]
+    /// The package a `ketch://package/<name>` link names. Everything in a link
+    /// is untrusted, so the core validates it; a link that names anything but
+    /// a package page throws.
+    func packageName(forLink link: String) throws -> String
 }

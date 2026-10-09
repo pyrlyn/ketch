@@ -17,16 +17,20 @@ Project programs and direct packages from manifests.
 | git-cliff | mise | Writes the `CHANGELOG.md` entry from `cliff.toml` (`scripts/release.sh`), and the macOS app's release notes from `desktop/cliff.toml` | https://github.com/orhun/git-cliff |
 | xcodegen | mise | Generates `desktop/macos/Ketch.xcodeproj` from `project.yml` (`just macos-app`, `just macos-test`) | https://github.com/yonaskolb/XcodeGen |
 | Xcode | global (App Store / developer.apple.com) | Builds and tests the macOS app (`xcodebuild`); 26 or later | https://developer.apple.com/xcode/ |
+| rust-std aarch64-apple-darwin | rustup (`scripts/xcframework.sh` adds it to the pinned toolchain when missing) | `ketch-ffi`'s arm64 XCFramework (`just xcframework`) | https://github.com/rust-lang/rust |
 | swift-format | with Xcode (`xcrun swift-format`) | Formats and lints the macOS app's Swift | https://github.com/swiftlang/swift-format |
-| notarytool, stapler | with Xcode (`xcrun`) | Notarise and staple the macOS app and its `.dmg` (`desktop-release.yml`) | https://developer.apple.com/documentation/security/customizing-the-notarization-workflow |
-| hdiutil, codesign, spctl | with macOS | Build the app's `.dmg` (`scripts/desktop-dmg.sh`), sign it, and assess what Gatekeeper will decide | https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution |
-| generate_appcast | with the Sparkle package (`build/SourcePackages/artifacts/sparkle/Sparkle/bin/`) | Writes and signs the macOS app's appcast (`scripts/desktop-appcast.sh`) | https://github.com/sparkle-project/Sparkle |
+| notarytool, stapler | with Xcode (`xcrun`) | Notarise and staple the macOS app and its `.dmg` (`release-apple-desktop.yml`) | https://developer.apple.com/documentation/security/customizing-the-notarization-workflow |
+| hdiutil, codesign, spctl | with macOS | Build the app's `.dmg` (`release-apple-desktop.yml`, in pyrlyn/ci), sign it, and assess what Gatekeeper will decide | https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution |
+| generate_appcast | with the Sparkle package (`build/SourcePackages/artifacts/sparkle/Sparkle/bin/`) | Writes and signs the macOS app's appcast (`release-apple-desktop.yml`, in pyrlyn/ci) | https://github.com/sparkle-project/Sparkle |
 | cargo-fuzz | mise | Builds and runs the libFuzzer targets in `fuzz/` (`just fuzz`) | https://github.com/rust-fuzz/cargo-fuzz |
 | rustc nightly | rustup (`rustup toolchain install nightly`) | Only for `cargo +nightly fuzz`; every build stays on the `mise.toml` pin | https://github.com/rust-lang/rust |
-| release-plz | GitHub Action | The release pull request | https://github.com/release-plz/release-plz |
-| ketch | see its README | Installs dunnage | https://github.com/pyrlyn/ketch |
-| dunnage | `ketch` | Lossless cleanup of `target/` after tests | https://github.com/listepo/dunnage |
+| release-plz | local only | `release-plz update` preview; no longer run in CI (bump.yml releases) | https://github.com/release-plz/release-plz |
+| ketch | see its README | Installs swarfr | https://github.com/pyrlyn/ketch |
+| swarfr | `ketch` | Lossless cleanup of `target/` after tests | https://github.com/listepo/swarfr |
 | mandoc | ships with macOS; `apt install mandoc` on Linux | `just lint-man` checks the generated man pages | https://mandoc.bsd.lv |
+| uniffi-bindgen-cs | mise (`cargo:` from git, PR #176's commit) | C# bindings for `ketch-ffi` (`just csharp`); no release supports UniFFI 0.32 yet | https://github.com/NordSecurity/uniffi-bindgen-cs |
+| .NET SDK | mise | Builds and runs the C# binding's test (`just csharp-test`), the Windows app's tests (`just windows-app-test`) and, on Windows, the WinUI app (`ketch-win-app` CI job) | https://github.com/dotnet/sdk |
+| valac, Meson, Ninja, json-glib | the distribution's packages (`apt install valac meson ninja-build libjson-glib-dev`); mise has no valac | `just capi-test`: builds and runs `ketch-capi`'s Vala test; Linux CI only | https://vala.dev |
 
 ## cargo
 
@@ -36,6 +40,7 @@ Project programs and direct packages from manifests.
 | assert_cmd | local | https://crates.io/crates/assert_cmd | Rust dependency |
 | assert_fs | local | https://crates.io/crates/assert_fs | Rust dependency |
 | bzip2 | local | https://crates.io/crates/bzip2 | Rust dependency |
+| cbindgen | local (`crates/ketch-capi`, dev) | https://github.com/mozilla/cbindgen | Generates `crates/ketch-capi/include/ketch.h`; a drift test fails when the committed header is stale |
 | clap | local | https://crates.io/crates/clap | CLI |
 | clap_complete | local | https://crates.io/crates/clap_complete | Rust dependency |
 | clap_mangen | local | https://crates.io/crates/clap_mangen | ketch's man pages, one per command (`src/man.rs`) |
@@ -49,6 +54,8 @@ Project programs and direct packages from manifests.
 | hex | local | https://crates.io/crates/hex | Rust dependency |
 | indicatif | local | https://crates.io/crates/indicatif | Rust dependency |
 | insta | local | https://crates.io/crates/insta | Reviewed snapshots |
+| jsonschema | local | https://crates.io/crates/jsonschema | Tests that the manifests ketch ships validate against `docs/manifest.schema.json` |
+| libc | local (`crates/ketch-capi`) | https://github.com/rust-lang/libc | `malloc`/`free` for the strings `ketch-capi` returns, so GLib's `g_free` can release them |
 | libsqlite3-sys | local | https://crates.io/crates/libsqlite3-sys | `bundled` compiles SQLite into the binary. Linking the system one would make ketch's single-binary promise depend on what the host happens to ship, and the release builds both macOS architectures where that answer differs. |
 | libfuzzer-sys | local (`fuzz/`) | https://crates.io/crates/libfuzzer-sys | libFuzzer targets |
 | lzma-rs | local | https://crates.io/crates/lzma-rs | Rust dependency |
@@ -59,7 +66,7 @@ Project programs and direct packages from manifests.
 | proptest | local | https://crates.io/crates/proptest | Property tests |
 | ratatui | local | https://crates.io/crates/ratatui | TUI |
 | rstest | local | https://crates.io/crates/rstest | Parameterized tests |
-| schemars | local | https://crates.io/crates/schemars | JSON Schema of `config.toml` and `ketch.lock`, checked by drift tests |
+| schemars | local | https://crates.io/crates/schemars | JSON Schema of `config.toml`, `ketch.lock` and `ketch.toml`, checked by drift tests |
 | semver | local | https://crates.io/crates/semver | Rust dependency |
 | serde | local | https://crates.io/crates/serde | Serialization |
 | serde_json | local | https://crates.io/crates/serde_json | JSON |
@@ -70,8 +77,10 @@ Project programs and direct packages from manifests.
 | unicode-width | local | https://github.com/unicode-rs/unicode-width | Column width of status-line emoji icons |
 | thiserror | local | https://crates.io/crates/thiserror | Errors |
 | tokio | local | https://crates.io/crates/tokio | Async runtime |
+| uniffi | local (`crates/ketch-ffi`) | https://github.com/mozilla/uniffi-rs | Exports the core to Swift (and later other languages) as `ketch-ffi`; its `cli` feature is the in-tree `uniffi-bindgen` (`just xcframework`) |
 | toml | local | https://crates.io/crates/toml | Config |
 | toml_edit | local | https://crates.io/crates/toml_edit | Writing a chosen `bin` into a user manifest, keeping the rest of the file |
+| serde-saphyr | local | https://crates.io/crates/serde-saphyr | Reading winget-pkgs installer manifests (YAML) for `ketch import winget` |
 | trycmd | local | https://crates.io/crates/trycmd | Rust dependency |
 | typed-path | local | https://crates.io/crates/typed-path | Cross-platform path types for archive members |
 | ureq | local | https://crates.io/crates/ureq | Rust dependency |
@@ -84,8 +93,15 @@ Project programs and direct packages from manifests.
 | --- | --- | --- | --- |
 | @commitlint/cli | local | https://www.npmjs.com/package/@commitlint/cli | Commit messages |
 | @commitlint/config-conventional | local | https://www.npmjs.com/package/@commitlint/config-conventional | Commit rules |
-| style-dictionary | local | https://github.com/style-dictionary/style-dictionary | Generates the macOS app's `Tokens.swift`, the DESIGN.md front matter and the preview CSS from `desktop/macos/design/tokens.json` (`just design-tokens`) |
+| style-dictionary | local | https://github.com/style-dictionary/style-dictionary | Generates the Swift, XAML and GTK token files, the macOS DESIGN.md front matter and the preview CSS from `desktop/design/tokens.json` (`just design-tokens`) |
 | @google/design.md | local | https://github.com/google-labs-code/design.md | Lints `desktop/macos/DESIGN.md` against the DESIGN.md format (`just design-check`) |
+
+## NuGet
+
+| Package | Where | Source | Why here |
+| --- | --- | --- | --- |
+| MSTest.Sdk | local (`desktop/windows/KetchCore.Tests` and `Ketch.AppCore.Tests`, 4.4.1) | https://github.com/microsoft/testfx | Test framework and runner for the C# binding's test and the Windows app's tests |
+| Microsoft.WindowsAppSDK | local (`desktop/windows/Ketch.App`, 2.5.1) | https://github.com/microsoft/WindowsAppSDK | WinUI 3, the XAML compiler and the Windows SDK build tools the Windows app builds with, so no Visual Studio is needed |
 
 ## SwiftPM
 

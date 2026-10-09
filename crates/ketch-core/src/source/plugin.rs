@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 //! External source plugins.
 //!
 //! A plugin is any executable named `ketch-source-<scheme>` found in the
@@ -459,7 +463,7 @@ fn parse<T: serde::de::DeserializeOwned>(path: &Path, body: &str) -> Result<T> {
 /// filtering `list_releases` applies, for the `plugin_protocol` fuzz target
 /// (`src/lib.rs`).
 #[cfg(fuzzing)]
-pub(crate) fn fuzz_parse(body: &str) {
+pub fn fuzz_parse(body: &str) {
     let path = Path::new("ketch-source-fuzz");
     let _ = parse::<Capabilities>(path, body);
     let _ = parse::<Option<SourceInfo>>(path, body);

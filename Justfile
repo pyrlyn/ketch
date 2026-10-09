@@ -22,7 +22,7 @@ lint:
 # the same gate under the name people type
 alias clippy := lint
 
-test: && dunnage
+test: && swarfr
     cargo nextest run --workspace --all-targets --locked
 
 test-install:
@@ -101,15 +101,15 @@ lint-shell:
     bash -n install.sh
     bash -n scripts/release.sh
     bash -n scripts/dist-generate.sh
-    bash -n scripts/desktop-version.sh
-    bash -n scripts/desktop-dmg.sh
-    bash -n scripts/desktop-appcast.sh
+    bash -n scripts/xcframework.sh
+    bash -n scripts/csharp.sh
     bash -n fuzz/seed.sh
     sh tests/crate-version.sh
     sh tests/release-sh.sh
     sh tests/release-workflows.sh
     sh tests/ci-yml-triggers.sh
     sh tests/desktop-release.sh
+    sh tests/docs-i18n.sh
 
 package:
     #!/usr/bin/env bash
@@ -144,8 +144,7 @@ lint-cask:
         exit 0
     fi
     mkdir -p cask/Casks
-    scripts/cask.sh 0.0.0 "$(printf '%064d' 0)" "$(printf '%064d' 1)" \
-        > cask/Casks/ketch.rb
+    scripts/cask.sh 0.0.0 "$(printf '%064d' 0)" > cask/Casks/ketch.rb
     brew style cask/Casks/ketch.rb
 
 # every generated man page through `mandoc -Tlint` at warning level; the
@@ -182,10 +181,10 @@ dist-check:
     diff -u "$before" .github/workflows/release.yml \
         || { echo "release.yml is stale: commit what just dist-generate wrote" >&2; exit 1; }
 
-# regenerate the macOS app's Tokens.swift, DESIGN.md front matter and
-# preview.html tokens from desktop/macos/design/tokens.json
+# regenerate every design-token output (Swift, XAML, GTK CSS, the macOS
+# DESIGN.md front matter and preview.html tokens) from desktop/design/tokens.json
 design-tokens:
-    mise exec -- node desktop/macos/design/build.mjs
+    mise exec -- node desktop/design/build.mjs
 
 # the generated design files are what design-tokens writes (compared with the
 # files as they stand, like dist-check), DESIGN.md lints clean, and text meets
@@ -195,23 +194,27 @@ design-check:
     set -eu
     before="$(mktemp -d)"
     trap 'rm -rf "$before"' EXIT
-    d=desktop/macos
-    cp "$d/DESIGN.md" "$d/design/preview.html" "$d/design/generated/Tokens.swift" "$before/"
-    mise exec -- node "$d/design/build.mjs"
+    files="desktop/macos/DESIGN.md desktop/design/preview.html desktop/design/generated/Tokens.swift desktop/design/generated/KetchTokens.xaml desktop/design/generated/ketch-tokens.css"
+    for f in $files; do
+        mkdir -p "$before/$(dirname "$f")"
+        # A missing output is stale too: the diff below then shows it whole.
+        if [ -f "$f" ]; then cp "$f" "$before/$f"; else : > "$before/$f"; fi
+    done
+    mise exec -- node desktop/design/build.mjs
     stale=0
-    for f in DESIGN.md design/preview.html design/generated/Tokens.swift; do
-        diff -u "$before/$(basename "$f")" "$d/$f" || stale=1
+    for f in $files; do
+        diff -u "$before/$f" "$f" || stale=1
     done
     [ "$stale" = 0 ] || { echo "design tokens were stale: commit what just design-tokens wrote" >&2; exit 1; }
-    mise exec -- node "$d/design/contrast.mjs"
-    mise exec -- npx --no-install designmd lint "$d/DESIGN.md" > "$before/lint.json" \
+    mise exec -- node desktop/design/contrast.mjs
+    mise exec -- npx --no-install designmd lint desktop/macos/DESIGN.md > "$before/lint.json" \
         || { cat "$before/lint.json"; exit 1; }
 
 # release Cargo.toml's version, or the next one if it is tagged (`just release minor --dry-run`)
 release level="patch" *flags:
     scripts/release.sh {{level}} {{flags}}
 
-check: fmt-check lint test lint-commits lint-shell lint-man dist-check design-check package lint-cask
+check: fmt-check lint fuzz-check test lint-commits lint-shell lint-man dist-check design-check package lint-cask
 
 # $CARGO_HOME sizes (no deletes) and the build output, wherever cargo puts it
 cache:
@@ -227,11 +230,11 @@ cache-autoclean:
     {{cache}} --autoclean
 
 # Lossless cleanup of this checkout's cargo target dir (compress + dedupe); never deletes.
-dunnage:
+swarfr:
     #!/usr/bin/env sh
-    command -v dunnage >/dev/null || { echo "dunnage not found; install it with: ketch install dunnage"; exit 0; }
+    command -v swarfr >/dev/null || { echo "swarfr not found; install it with: ketch install swarfr"; exit 0; }
     [ -d target ] || exit 0
-    dunnage run target || test $? -eq 2
+    swarfr run target || test $? -eq 2
 
 # The macOS app (desktop/macos). XcodeGen writes Ketch.xcodeproj from
 # project.yml; the project file and build/ are gitignored. Builds are unsigned:
@@ -245,18 +248,54 @@ macos-project:
     mkdir -p {{macos_dir}}/build
     printf 'Signature: 8a477f597d28d172789f06886806bc55\n# xcodebuild output for the macOS app; safe to delete.\n' > {{macos_dir}}/build/CACHEDIR.TAG
 
-# universal (arm64 + x86_64) Debug build of Ketch.app
+# Apple Silicon (arm64) Debug build of Ketch.app
 macos-app: macos-project
-    {{macos_build}} -configuration Debug -destination 'generic/platform=macOS' ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO -quiet build
+    {{macos_build}} -configuration Debug -destination 'generic/platform=macOS' ARCHS=arm64 ONLY_ACTIVE_ARCH=NO -quiet build
 
 # Swift Testing unit tests on the fake core, then the UI smoke test
 macos-test: macos-project
     {{macos_build}} -destination 'platform=macOS' test
 
-# the release's disk image and Sparkle appcast, round-tripped with a throwaway
-# key: what desktop-release.yml runs, minus signing and notarisation
-macos-appcast: macos-app
-    sh tests/desktop-appcast.sh
+# Built into desktop/macos/KetchCore with the `ffi` profile the app ships.
+#
+# ketch-ffi's XCFramework (arm64 + x86_64) and its Swift bindings
+xcframework:
+    scripts/xcframework.sh
+
+# The dev profile, then a Swift test that drives the real core through the
+# bindings against a scratch root: what CI's ketch-ffi job runs.
+#
+# debug XCFramework and bindings, then their Swift test
+ffi-test:
+    scripts/xcframework.sh --debug
+    swift test --package-path {{macos_dir}}/KetchCore
+
+# ketch-ffi as a C# library: native library and bindings in desktop/windows/KetchCore/Generated.
+csharp:
+    scripts/csharp.sh
+
+# The C# binding's .NET test against the real core, on a debug build of ketch-ffi.
+csharp-test:
+    scripts/csharp.sh --debug
+    cd desktop/windows && dotnet test --project KetchCore.Tests
+
+# Needs valac, Meson, Ninja and json-glib; the ketch-capi CI job runs it.
+# ketch-capi as the Linux app links it: the library, then the Vala test.
+capi-test:
+    cargo build --locked -p ketch-capi
+    rm -rf target/capi-meson
+    meson setup target/capi-meson crates/ketch-capi -Dcapi_dir="$PWD/target/debug"
+    meson test -C target/capi-meson --print-errorlogs
+
+# The Windows app's fake core and store against the contract scenarios; runs on any OS.
+# The WinUI project itself (desktop/windows/Ketch.App) only builds on Windows: the ketch-win-app job.
+windows-app-test:
+    cd desktop/windows && dotnet test --project Ketch.AppCore.Tests
+
+# The library the fuzz targets link (src/lib.rs, cfg(fuzzing) only), checked on
+# stable: nothing else builds it, so `check` and CI would not notice it break.
+fuzz-check:
+    RUSTFLAGS="--cfg fuzzing" cargo check --locked -p ketch -p ketch-core
 
 # libFuzzer targets in fuzz/ (fuzz/README.md), on nightly and never part of `check`.
 # `just fuzz` lists them, `just fuzz <target> [secs]` runs one, `just fuzz all [secs]` each in turn.

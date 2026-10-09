@@ -1,8 +1,12 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 //! Installing and updating ketch with ketch.
 //!
 //! ketch prefers to be one of its own packages: `self install` puts the running
 //! release into the store under the name `ketch` and links it from the bin dir,
-//! exactly as `ketch install listepo/ketch` would, so `list`, `history` and
+//! exactly as `ketch install pyrlyn/ketch` would, so `list`, `history` and
 //! `doctor` see it and `self upgrade` is an ordinary upgrade. A ketch copied flat
 //! into the bin dir by an older installer is still updated in place.
 //!
@@ -853,6 +857,11 @@ pub fn uninstall_plan(cfg: &Config, keep_packages: bool, no_brew: bool) -> Resul
 /// Best effort past the first package: someone who has said yes to this wants
 /// ketch gone, and stopping halfway would leave a tree they now have to take
 /// apart by hand. Every failure is warned about instead.
+///
+/// The install lock stays held until the registry entries, the shell blocks
+/// and the root are gone. The cask step is outside it: `brew uninstall`
+/// starts a nested `ketch self uninstall`, which has to be able to take the
+/// lock when `--keep-packages` left the binary in place.
 pub fn uninstall_self(cx: &Ctx<'_>, plan: &UninstallPlan) -> Result<Vec<PathBuf>> {
     let (cfg, report) = (cx.cfg, cx.report);
     let mut removed = Vec::new();
@@ -868,8 +877,9 @@ pub fn uninstall_self(cx: &Ctx<'_>, plan: &UninstallPlan) -> Result<Vec<PathBuf>
         }
     }
     // Save first: if removing the tree fails, state still matches reality.
+    // The lock stays. It lives in the root, so dropping it here let another
+    // ketch rewrite a tree this run was still taking apart.
     state.save(cfg)?;
-    drop(lock);
 
     // Before the root: a Path entry spelled differently from the bin dir is
     // matched by resolving both, which needs the folder still there.
@@ -900,6 +910,18 @@ pub fn uninstall_self(cx: &Ctx<'_>, plan: &UninstallPlan) -> Result<Vec<PathBuf>
         }
     }
 
+    // Shell blocks before the root too: removing the root unlinks the lock
+    // file, and these files live outside it. Reported after the cask, which
+    // is where they have always appeared in the list this function returns.
+    let mut shell_removed = Vec::new();
+    for file in &plan.shell_files {
+        match crate::shell::uninstall_file(file) {
+            Ok(true) => shell_removed.push(file.clone()),
+            Ok(false) => {}
+            Err(e) => report.warn(&format!("{}: {e}", file.display())),
+        }
+    }
+
     // Set when the root is finished off after this process exits: the
     // running binary inside it is then that process's to delete, not ours.
     let mut finishing = None;
@@ -908,22 +930,19 @@ pub fn uninstall_self(cx: &Ctx<'_>, plan: &UninstallPlan) -> Result<Vec<PathBuf>
         removed.extend(gone);
         finishing = later.then_some(root);
     }
+    drop(lock);
 
     // After the root, so the nested `ketch self uninstall` the cask runs on its
     // way out finds no binary and gives up harmlessly instead of recursing.
+    // Also after the lock: that nested process takes the lock itself when the
+    // binary is still there (`--keep-packages`).
     if let Some(cask) = &plan.cask {
         if remove_cask(cask, report) {
             removed.push(cask.clone());
         }
     }
 
-    for file in &plan.shell_files {
-        match crate::shell::uninstall_file(file) {
-            Ok(true) => removed.push(file.clone()),
-            Ok(false) => {}
-            Err(e) => report.warn(&format!("{}: {e}", file.display())),
-        }
-    }
+    removed.extend(shell_removed);
 
     match &plan.exe {
         // Usually already gone with the store prefix or the bin dir; a ketch
@@ -1255,22 +1274,30 @@ fn mise_tool_dir_in(exe: &Path, data_dirs: &[PathBuf]) -> Option<PathBuf> {
 /// The name `mise unuse` takes for the tool in `dir`.
 ///
 /// mise names an install directory after the tool with `:` and `/` turned
-/// into `-`, so `github:listepo/ketch` lives in `github-listepo-ketch`. That
+/// into `-`, so `github:pyrlyn/ketch` lives in `github-pyrlyn-ketch`. That
 /// is only reversible for a name that ends in this repository; anything else
-/// (a registry short name such as `ketch`) is already the tool name.
+/// (a registry short name such as `ketch`) is already the tool name. A copy
+/// mise installed before the repository moved sits in `github-listepo-ketch`
+/// and mise's config still says `github:listepo/ketch`, so the old names in
+/// [`crate::config::RENAMED_REPOS`] count too and keep the name mise knows.
 fn mise_tool_name(dir: &Path, self_repo: &str) -> String {
     let name = dir
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or(SELF_NAME);
-    let backend = name
-        .strip_suffix(&self_repo.replace('/', "-"))
-        .and_then(|rest| rest.strip_suffix('-'))
-        .filter(|b| !b.is_empty() && b.chars().all(|c| c.is_ascii_alphanumeric()));
-    match backend {
-        Some(backend) => format!("{backend}:{self_repo}"),
-        None => name.to_string(),
-    }
+    let old_names = crate::config::RENAMED_REPOS
+        .iter()
+        .filter(|(_, new)| new.eq_ignore_ascii_case(self_repo))
+        .map(|(old, _)| *old);
+    std::iter::once(self_repo)
+        .chain(old_names)
+        .find_map(|repo| {
+            name.strip_suffix(&repo.replace('/', "-"))
+                .and_then(|rest| rest.strip_suffix('-'))
+                .filter(|b| !b.is_empty() && b.chars().all(|c| c.is_ascii_alphanumeric()))
+                .map(|backend| format!("{backend}:{repo}"))
+        })
+        .unwrap_or_else(|| name.to_string())
 }
 
 /// Hand the install back to mise, the only thing that can forget it: removing
@@ -1375,11 +1402,14 @@ mod tests {
     #[test]
     fn a_binary_under_mise_installs_belongs_to_that_tool_directory() {
         let data = PathBuf::from("/home/u/.local/share/mise");
-        let exe = data.join("installs/github-listepo-ketch/0.4.7/ketch");
-        assert_eq!(
-            mise_tool_dir_in(&exe, &[PathBuf::from("/elsewhere"), data.clone()]),
-            Some(data.join("installs/github-listepo-ketch"))
-        );
+        // Before and after the move from listepo to pyrlyn.
+        for tool in ["github-pyrlyn-ketch", "github-listepo-ketch"] {
+            let exe = data.join(format!("installs/{tool}/0.4.7/ketch"));
+            assert_eq!(
+                mise_tool_dir_in(&exe, &[PathBuf::from("/elsewhere"), data.clone()]),
+                Some(data.join("installs").join(tool))
+            );
+        }
     }
 
     #[test]
@@ -1401,15 +1431,27 @@ mod tests {
     #[test]
     fn a_mise_install_directory_maps_back_to_the_tool_name_unuse_takes() {
         for (dir, tool) in [
+            ("github-pyrlyn-ketch", "github:pyrlyn/ketch"),
+            ("ubi-pyrlyn-ketch", "ubi:pyrlyn/ketch"),
+            // Installed before the move: mise's config holds the old name.
             ("github-listepo-ketch", "github:listepo/ketch"),
             ("ubi-listepo-ketch", "ubi:listepo/ketch"),
             ("ketch", "ketch"),
+            ("-pyrlyn-ketch", "-pyrlyn-ketch"),
             ("-listepo-ketch", "-listepo-ketch"),
             ("github-other-ketch", "github-other-ketch"),
         ] {
             let dir = Path::new("/mise/installs").join(dir);
-            assert_eq!(mise_tool_name(&dir, "listepo/ketch"), tool);
+            assert_eq!(mise_tool_name(&dir, crate::config::SELF_REPO), tool);
         }
+        // A fork is not renamed: only its own directory maps back.
+        let fork = Path::new("/mise/installs/github-someone-ketch");
+        assert_eq!(
+            mise_tool_name(fork, "someone/ketch"),
+            "github:someone/ketch"
+        );
+        let old = Path::new("/mise/installs/github-listepo-ketch");
+        assert_eq!(mise_tool_name(old, "someone/ketch"), "github-listepo-ketch");
     }
 
     #[test]
@@ -1565,7 +1607,7 @@ mod tests {
         crate::model::InstalledPackage {
             name: SELF_NAME.into(),
             version: Version::parse("1.0.0"),
-            source: crate::model::PackageRef::github("listepo/ketch"),
+            source: crate::model::PackageRef::github("pyrlyn/ketch"),
             tag: "v1.0.0".into(),
             target: crate::model::TargetSpec::host(),
             asset_name: "a.tar.gz".into(),
@@ -1789,6 +1831,93 @@ mod tests {
         assert!(is_transient_lock(&std::io::Error::from_raw_os_error(5)));
         assert!(is_transient_lock(&std::io::Error::from_raw_os_error(32)));
         assert!(!is_transient_lock(&std::io::Error::from_raw_os_error(2)));
+    }
+
+    /// A shell startup file opened as a fifo blocks in `read` until the test
+    /// writes it. That is the moment the lock must still be held, and the
+    /// lock file must still be on disk: the root has not been deleted yet.
+    #[cfg(unix)]
+    #[test]
+    fn uninstall_holds_the_lock_while_the_shell_block_and_the_root_go() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let cfg = Config::load(Some(tmp.path().join(".ketch")), &Report::silent()).expect("config");
+        std::fs::create_dir_all(&cfg.bin_dir).expect("bin");
+        std::fs::write(cfg.bin_dir.join("ketch"), b"bin").expect("bin file");
+        let root = cfg.root.clone();
+        let lock_file = cfg.lock_file.clone();
+
+        let fifo = tmp.path().join(".bashrc");
+        let made = std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .expect("mkfifo");
+        assert!(made.success(), "mkfifo failed");
+
+        let plan = UninstallPlan {
+            root: Some(root.clone()),
+            shell_files: vec![fifo.clone()],
+            ..UninstallPlan::default()
+        };
+        let (reached_tx, reached_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+        let fifo_for_writer = fifo.clone();
+        let writer = std::thread::spawn(move || {
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .open(&fifo_for_writer)
+                .expect("open the fifo for write");
+            reached_tx
+                .send(())
+                .expect("tell the test the shell file is being read");
+            release_rx.recv().expect("the lock check finished");
+            use std::io::Write;
+            file.write_all(
+                b"# kept\n# >>> ketch >>>\nexport PATH=\"/tmp/ketch/bin:$PATH\"\n# <<< ketch <<<\n# also kept\n",
+            )
+            .expect("write the block");
+        });
+        let uninstaller = std::thread::spawn(move || {
+            let report = Report::silent();
+            uninstall_self(&Ctx::new(&cfg, &report), &plan)
+        });
+
+        if reached_rx.recv_timeout(Duration::from_secs(5)).is_err() {
+            // A reader unblocks `open` for write, so a failed test can exit.
+            let _ = std::fs::File::open(&fifo);
+            let _ = release_tx.send(());
+            let _ = writer.join();
+            let _ = uninstaller.join();
+            panic!("uninstall did not reach the shell file");
+        }
+
+        match Lock::acquire_path(&lock_file, &Report::silent()) {
+            Err(Error::Busy { .. }) => {}
+            other => {
+                drop(other);
+                let _ = release_tx.send(());
+                let _ = writer.join();
+                let _ = uninstaller.join();
+                panic!("the install lock was free while the shell block was being read");
+            }
+        }
+        assert!(
+            lock_file.is_file(),
+            "the lock file was already gone, so the root was deleted before the shell block"
+        );
+        release_tx.send(()).expect("release the shell read");
+
+        let removed = uninstaller
+            .join()
+            .expect("uninstall thread")
+            .expect("uninstall");
+        writer.join().expect("writer thread");
+        assert!(!root.exists(), "the root survived uninstall: {removed:?}");
+        let text = std::fs::read_to_string(&fifo).expect("shell file after uninstall");
+        assert_eq!(text, "# kept\n# also kept\n");
+        assert!(
+            removed.iter().any(|p| p == &fifo),
+            "the shell file was not reported removed: {removed:?}"
+        );
     }
 
     #[cfg(windows)]

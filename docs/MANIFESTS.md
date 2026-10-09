@@ -37,6 +37,45 @@ so the questionnaire works from a script as well as a terminal. From there,
 offering the file to everyone is a registry pull request — see
 [REGISTRY.md](REGISTRY.md).
 
+When the package is already in winget, Homebrew or Arch Linux, `ketch import`
+writes the manifest from that definition instead, keeping only the fields
+below that ketch needs — see
+[`ketch import`](COMMANDS.md#ketch-import-wingetbrewlinux-name---dry-run---yes).
+
+```bash
+ketch import brew codex --dry-run   # print ~/.ketch/manifests/codex.toml
+```
+
+## Editor support
+
+[manifest.schema.json](https://github.com/pyrlyn/ketch/blob/main/docs/manifest.schema.json)
+is the JSON Schema of a `ketch.toml`, generated from the types ketch reads it
+into. A TOML language server that reads a `#:schema` directive — Taplo, which
+the Even Better TOML extension runs, or Tombi — then completes keys, shows the
+documentation below as you type, and flags a misspelt key before ketch does.
+Put the directive on the first line:
+
+```toml
+#:schema https://raw.githubusercontent.com/pyrlyn/ketch/main/docs/manifest.schema.json
+source = "github:BurntSushi/ripgrep"
+```
+
+It describes one package: a registry or project `ketch.toml`, or a
+single-package file in `~/.ketch/manifests/`. A file holding a `[[package]]`
+array, as `builtin.toml` does, is a list of them and not this shape. `name` is
+optional in the schema because a registry folder supplies it; everywhere else
+ketch still requires it.
+
+The schema states what a schema can: unknown keys, the allowed values of
+`kind`, `verifier`, `mode` and `extra_paths` kinds, `source` syntax, names
+usable as a file name, `provides` aliases without whitespace, `strip_prefix` at
+most 8, a `bin` entry with `name` or `path`, and no blank hooks. The rest of
+[What ketch checks](#what-ketch-checks) — paths that must stay inside the
+payload, how an `extra_paths` entry is classified, which `trust` keys belong to
+which verifier, and whether a key parses — is still ketch's, at load time. As
+in ketch, `bin` entries and the `asset` table do not reject keys they do not
+know.
+
 ## The smallest one
 
 ```toml
@@ -124,6 +163,13 @@ bin = [
 
 `path` is a glob (`*` and `?`) matched against the path relative to the payload
 root. `name` is the file name of the symlink in `~/.ketch/bin`.
+
+A glob that matches several files links the one whose stem is `name`
+(case-insensitive, `.exe` ignored): `rtok*` with `name = "rtok"` takes `rtok`,
+not `rtok-hook`. When several files match and none is named like `name` — or
+the entry has no `name` — the install refuses and lists the candidates, because
+directory order differs between operating systems and would link a different
+file on each. Set `name` or narrow `path` to one file.
 
 With no `bin` at all, ketch discovers executables itself: it looks up to four
 levels deep, ignores documentation directories and bundle internals, and prefers

@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 #![allow(dead_code)]
 //! Scaffolding for the end-to-end tests: a throwaway ketch root, fixture
 //! archives that stand in for real release assets, and a source plugin that
@@ -14,6 +18,10 @@ use assert_fs::TempDir;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+
+/// mise's directory for ketch under its current name, then under the name it
+/// had before it moved from listepo to pyrlyn, which older installs still use.
+pub const MISE_TOOL_DIRS: [&str; 2] = ["github-pyrlyn-ketch", "github-listepo-ketch"];
 
 /// A ketch root, applications directory and plugin, all inside one temp dir
 /// that is removed when the test ends.
@@ -114,21 +122,31 @@ impl Sandbox {
         self.tmp.child("mise").to_path_buf()
     }
 
-    /// Copy the ketch under test to where `mise use -g github:listepo/ketch`
+    /// Copy the ketch under test to where `mise use -g github:pyrlyn/ketch`
     /// would have put release 0.4.7. Returns the copy, to run it from there.
     pub fn install_with_mise(&self) -> PathBuf {
-        let dir = self.mise_tool_dir().join("0.4.7");
+        self.install_with_mise_as(MISE_TOOL_DIRS[0])
+    }
+
+    /// As [`Self::install_with_mise`], into the mise tool directory `tool`:
+    /// one of [`MISE_TOOL_DIRS`].
+    pub fn install_with_mise_as(&self, tool: &str) -> PathBuf {
+        let dir = self.mise_data().join("installs").join(tool).join("0.4.7");
         std::fs::create_dir_all(&dir).expect("create mise install dir");
         let exe = dir.join(if cfg!(windows) { "ketch.exe" } else { "ketch" });
         std::fs::copy(env!("CARGO_BIN_EXE_ketch"), &exe).expect("copy ketch into mise tree");
         exe
     }
 
-    /// The tool directory `mise unuse` removes.
+    /// The tool directory `mise unuse` removes: the one `install_with_mise*`
+    /// created, else where the current name would put it.
     pub fn mise_tool_dir(&self) -> PathBuf {
-        self.mise_data()
-            .join("installs")
-            .join("github-listepo-ketch")
+        let installs = self.mise_data().join("installs");
+        MISE_TOOL_DIRS
+            .iter()
+            .map(|tool| installs.join(tool))
+            .find(|dir| dir.exists())
+            .unwrap_or_else(|| installs.join(MISE_TOOL_DIRS[0]))
     }
 
     /// A `mise` that records its arguments and removes the tool directory, as

@@ -125,7 +125,7 @@ ketch self upgrade
 
 ## `ketch self upgrade` каже, що ketch керується mise
 
-ketch, встановлений через `mise use -g github:listepo/ketch`, лежить у дереві встановлення mise,
+ketch, встановлений через `mise use -g github:pyrlyn/ketch`, лежить у дереві встановлення mise,
 у каталозі з назвою своєї версії. Перезапис цього бінарника
 змусив би mise повідомляти версію, якої вже немає на диску, тому ketch
 відмовляється. Або дозвольте mise оновити його:

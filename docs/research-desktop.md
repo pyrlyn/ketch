@@ -282,7 +282,7 @@ The CLI's tag lookups, checked for `desktop-v*`:
   ranking the letter `d` above the digit `0`: the app release would have won
   and has no tarball. Tags that are not versions now lose to any that are
   (`src/source/mod.rs`).
-- `scripts/release.sh`, pyrlyn/infra's `release-plz.yml` and `tap.yml` use
+- `scripts/release.sh`, pyrlyn/ci's `release-plz.yml` and `tap.yml` use
   exact `v<version>` tags; `sync-docs.yml` ran on any published release and
   would have set the site card's version to `desktop-v…`; it now skips tag
   refs that do not start with `v`.
@@ -305,6 +305,19 @@ staples the image. `xcodebuild -help` (Xcode 27.0, 27A266a) lists
 `developer-id` as the export method and `Developer ID Application` as an
 automatic `signingCertificate` selector.
 
+## Windows and Linux toolkits (R10, checked 2026-10-01)
+
+The toolkit research for the Windows and Linux apps on the roadmap lives in
+[`docs/research-desktop-windows-linux.md`](research-desktop-windows-linux.md):
+a separate page because this one records choices already made for macOS,
+while that one is still a proposal. In short, it proposes WinUI 3 in C#
+over R9's binding (through `uniffi-bindgen-cs`, which targets UniFFI 0.31,
+not R9's 0.32.2) for Windows, with Microsoft's new Rust `windows-reactor` as
+the alternative to spike. For Linux it proposes GTK 4 + libadwaita through
+gtk4-rs linking `ketch-core` directly. It also shows that MSIX would
+virtualize, and Flatpak sandbox, the writes ketch makes outside its root. The open
+decisions are listed there.
+
 ## Unverified
 
 - Tauri's macOS notarization flow: the page
@@ -318,7 +331,15 @@ automatic `signingCertificate` selector.
   (Release build with Sparkle, the `.dmg`, the appcast and its verification)
   ran locally on 2026-10-01.
 - Which release-plz version `release-plz/action` v0.5.139 (pinned by
-  pyrlyn/infra) runs was not checked; the anchoring above was read at
+  pyrlyn/ci) runs was not checked; the anchoring above was read at
   release-plz v0.3.169.
 - Whether GitHub recomputes `/releases/latest` when the current latest release
   is deleted, and whether it could then pick an app release, was not checked.
+
+## All three apps (R11, checked 2026-10-01)
+
+What the macOS, Windows and Linux apps each do, what is written once and what
+each platform writes for itself, the contract between the apps and the core,
+and the Linux app in Vala are in
+[`docs/research-desktop-platforms.md`](research-desktop-platforms.md). It
+builds on the sections above and on R10, and lists the `D` tasks it produced.

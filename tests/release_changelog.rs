@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
 //! Contracts for the host changelog git-cliff writes from cliff.toml.
 //!
 //! A release entry is consumed by people rather than the binary, but its
@@ -8,7 +12,7 @@ use semver::Version;
 use std::collections::HashSet;
 
 const CHANGELOG: &str = include_str!("../CHANGELOG.md");
-const RELEASE_URL: &str = "https://github.com/listepo/ketch/releases/tag/v";
+const RELEASE_URL: &str = "https://github.com/pyrlyn/ketch/releases/tag/v";
 
 #[derive(Debug)]
 struct Release<'a> {
