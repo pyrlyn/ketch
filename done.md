@@ -1374,3 +1374,9 @@ Check: `cargo test -p ketch-core --lib install::tests::a_` — 11 passed, includ
 The arm64-only cask rewrite left prose behind: `tap.yml`'s header said "version and both macOS checksums" (one checksum is computed since Intel macOS dropped), `AGENTS.md` said "It builds all five targets" (dist-workspace.toml ships four) and repeated the "both checksums" wording. Found by the 2026-10-07 audit. The README's pyrlyn/ketch badges needed no change: the repository moved to the pyrlyn org, so the links are the current ones. Done means the prose matches the arm64-only reality.
 Model: ZCode / GLM-5.3 · Status: done 2026-10-08 · Priority: P3 · Complexity: 1 · Files: `.github/workflows/tap.yml`, `AGENTS.md`
 Check: `grep -rn "both checksums|five targets" AGENTS.md .github/workflows/tap.yml` — no matches.
+
+### F8. Spinner and progress bar
+
+Long steps used to sit silent until the download bar. `ui::activity` now draws a progress bar when the total is known and a spinner otherwise, in rtok's form (`{spinner:.cyan} {msg}` on stderr, 120ms tick, nothing when stderr is not a terminal). Resolve, extract, registry fetch and self-update hold one for the length of the work. `ketch list` counts packages with `counter` while `latest` is looked up. Quiet mode, a pipe and the full-screen renderer draw nothing.
+Model: Cursor / grok 4.7 · Status: done 2026-10-09 · Priority: P2 · Complexity: 3 · Files: `src/ui.rs`, `crates/ketch-core/src/install.rs`, `crates/ketch-core/src/listing.rs`
+Check: `a_known_total_is_a_bar` and `an_unknown_total_is_a_spinner` in `src/ui.rs`.
