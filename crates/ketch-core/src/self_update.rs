@@ -852,6 +852,11 @@ pub fn uninstall_plan(cfg: &Config, keep_packages: bool, no_brew: bool) -> Resul
 /// Best effort past the first package: someone who has said yes to this wants
 /// ketch gone, and stopping halfway would leave a tree they now have to take
 /// apart by hand. Every failure is warned about instead.
+///
+/// The install lock stays held until the registry entries, the shell blocks
+/// and the root are gone. The cask step is outside it: `brew uninstall`
+/// starts a nested `ketch self uninstall`, which has to be able to take the
+/// lock when `--keep-packages` left the binary in place.
 pub fn uninstall_self(cx: &Ctx<'_>, plan: &UninstallPlan) -> Result<Vec<PathBuf>> {
     let (cfg, report) = (cx.cfg, cx.report);
     let mut removed = Vec::new();
@@ -867,8 +872,9 @@ pub fn uninstall_self(cx: &Ctx<'_>, plan: &UninstallPlan) -> Result<Vec<PathBuf>
         }
     }
     // Save first: if removing the tree fails, state still matches reality.
+    // The lock stays. It lives in the root, so dropping it here let another
+    // ketch rewrite a tree this run was still taking apart.
     state.save(cfg)?;
-    drop(lock);
 
     // Before the root: a Path entry spelled differently from the bin dir is
     // matched by resolving both, which needs the folder still there.
@@ -899,6 +905,18 @@ pub fn uninstall_self(cx: &Ctx<'_>, plan: &UninstallPlan) -> Result<Vec<PathBuf>
         }
     }
 
+    // Shell blocks before the root too: removing the root unlinks the lock
+    // file, and these files live outside it. Reported after the cask, which
+    // is where they have always appeared in the list this function returns.
+    let mut shell_removed = Vec::new();
+    for file in &plan.shell_files {
+        match crate::shell::uninstall_file(file) {
+            Ok(true) => shell_removed.push(file.clone()),
+            Ok(false) => {}
+            Err(e) => report.warn(&format!("{}: {e}", file.display())),
+        }
+    }
+
     // Set when the root is finished off after this process exits: the
     // running binary inside it is then that process's to delete, not ours.
     let mut finishing = None;
@@ -907,22 +925,19 @@ pub fn uninstall_self(cx: &Ctx<'_>, plan: &UninstallPlan) -> Result<Vec<PathBuf>
         removed.extend(gone);
         finishing = later.then_some(root);
     }
+    drop(lock);
 
     // After the root, so the nested `ketch self uninstall` the cask runs on its
     // way out finds no binary and gives up harmlessly instead of recursing.
+    // Also after the lock: that nested process takes the lock itself when the
+    // binary is still there (`--keep-packages`).
     if let Some(cask) = &plan.cask {
         if remove_cask(cask, report) {
             removed.push(cask.clone());
         }
     }
 
-    for file in &plan.shell_files {
-        match crate::shell::uninstall_file(file) {
-            Ok(true) => removed.push(file.clone()),
-            Ok(false) => {}
-            Err(e) => report.warn(&format!("{}: {e}", file.display())),
-        }
-    }
+    removed.extend(shell_removed);
 
     match &plan.exe {
         // Usually already gone with the store prefix or the bin dir; a ketch
@@ -1814,6 +1829,93 @@ mod tests {
         assert!(is_transient_lock(&std::io::Error::from_raw_os_error(5)));
         assert!(is_transient_lock(&std::io::Error::from_raw_os_error(32)));
         assert!(!is_transient_lock(&std::io::Error::from_raw_os_error(2)));
+    }
+
+    /// A shell startup file opened as a fifo blocks in `read` until the test
+    /// writes it. That is the moment the lock must still be held, and the
+    /// lock file must still be on disk: the root has not been deleted yet.
+    #[cfg(unix)]
+    #[test]
+    fn uninstall_holds_the_lock_while_the_shell_block_and_the_root_go() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let cfg = Config::load(Some(tmp.path().join(".ketch")), &Report::silent()).expect("config");
+        std::fs::create_dir_all(&cfg.bin_dir).expect("bin");
+        std::fs::write(cfg.bin_dir.join("ketch"), b"bin").expect("bin file");
+        let root = cfg.root.clone();
+        let lock_file = cfg.lock_file.clone();
+
+        let fifo = tmp.path().join(".bashrc");
+        let made = std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .expect("mkfifo");
+        assert!(made.success(), "mkfifo failed");
+
+        let plan = UninstallPlan {
+            root: Some(root.clone()),
+            shell_files: vec![fifo.clone()],
+            ..UninstallPlan::default()
+        };
+        let (reached_tx, reached_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+        let fifo_for_writer = fifo.clone();
+        let writer = std::thread::spawn(move || {
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .open(&fifo_for_writer)
+                .expect("open the fifo for write");
+            reached_tx
+                .send(())
+                .expect("tell the test the shell file is being read");
+            release_rx.recv().expect("the lock check finished");
+            use std::io::Write;
+            file.write_all(
+                b"# kept\n# >>> ketch >>>\nexport PATH=\"/tmp/ketch/bin:$PATH\"\n# <<< ketch <<<\n# also kept\n",
+            )
+            .expect("write the block");
+        });
+        let uninstaller = std::thread::spawn(move || {
+            let report = Report::silent();
+            uninstall_self(&Ctx::new(&cfg, &report), &plan)
+        });
+
+        if reached_rx.recv_timeout(Duration::from_secs(5)).is_err() {
+            // A reader unblocks `open` for write, so a failed test can exit.
+            let _ = std::fs::File::open(&fifo);
+            let _ = release_tx.send(());
+            let _ = writer.join();
+            let _ = uninstaller.join();
+            panic!("uninstall did not reach the shell file");
+        }
+
+        match Lock::acquire_path(&lock_file, &Report::silent()) {
+            Err(Error::Busy { .. }) => {}
+            other => {
+                drop(other);
+                let _ = release_tx.send(());
+                let _ = writer.join();
+                let _ = uninstaller.join();
+                panic!("the install lock was free while the shell block was being read");
+            }
+        }
+        assert!(
+            lock_file.is_file(),
+            "the lock file was already gone, so the root was deleted before the shell block"
+        );
+        release_tx.send(()).expect("release the shell read");
+
+        let removed = uninstaller
+            .join()
+            .expect("uninstall thread")
+            .expect("uninstall");
+        writer.join().expect("writer thread");
+        assert!(!root.exists(), "the root survived uninstall: {removed:?}");
+        let text = std::fs::read_to_string(&fifo).expect("shell file after uninstall");
+        assert_eq!(text, "# kept\n# also kept\n");
+        assert!(
+            removed.iter().any(|p| p == &fifo),
+            "the shell file was not reported removed: {removed:?}"
+        );
     }
 
     #[cfg(windows)]

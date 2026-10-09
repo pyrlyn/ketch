@@ -1,3 +1,15 @@
+### B87. Local tree hash collides and skips symlinks and modes
+
+`sha256_tree` used to hash `path \0 bytes` for regular files only. `a` = `X` plus `b` = `Y` was the same digest as one file `a` = `Xb\0Y`, a symlink was invisible, and the exec bit was ignored, so a lockfile could accept a different `.app`. Each file and symlink is now one record: kind, path length, path, permission bits, payload length, and either the file bytes or the symlink's own target. A lock written before this framing does not match an unchanged bundle; `ketch lock` records the new digest. Noted in `docs/LOCKFILE.md`.
+
+Tests: the two-file layout no longer matches the fused file; on Unix a mode change and a retargeted symlink each change the digest, and a symlink does not hash as a regular file with the target's text.
+
+### B78. Self-uninstall drops the install lock too early
+
+`uninstall_self` held `state::Lock` only for the package uninstall and `state.save`, then dropped it before the Windows registry entries, the shell startup blocks and `remove_root`. The lock file lives in the root, so another ketch could acquire it and write a tree this run was still taking apart. The lock now stays held through those edits. Shell blocks are edited before the root, because removing the root unlinks the lock file; the paths are still reported after the cask, which is the order the command already printed. The cask step stays outside the lock: `brew uninstall` runs a nested `ketch self uninstall`, and with `--keep-packages` that process still has a binary and must be able to take the lock itself.
+
+Test: `self_update::tests::uninstall_holds_the_lock_while_the_shell_block_and_the_root_go` (Unix). A shell file opened as a fifo blocks in `read`; while it is blocked the lock is `Busy` and the lock file is still on disk. After the run the root is gone and the block is taken out of the file.
+
 ### M8. Lifecycle hooks in a manifest
 
 A manifest's `[hooks]` table names one shell line for each of `before_install`, `after_install`, `before_update`, `after_update`, `before_uninstall` and `after_uninstall`. `src/hooks.rs` runs them with `sh -c` (`cmd /C` on Windows), `KETCH_HOOK`, `KETCH_PACKAGE`, `KETCH_VERSION`, `KETCH_PREVIOUS_VERSION`, `KETCH_PREFIX`, `KETCH_BIN_DIR` and `KETCH_ROOT` in the environment, and the store prefix as the working directory whenever it exists. `install::commit` runs the before hook ahead of placement and the after hook once `state` records the package; `install::uninstall` does the same around unplace and removal. A reinstall of the same version is an install, not an update. A failing `before_*` hook stops the operation with its stderr as the detail; a failing `after_*` hook is a warning. Rollback runs the two update hooks; prune runs none. A hook is killed with its process tree after ten minutes via `plugin::run_with_deadline`, the runner source plugins already used.
