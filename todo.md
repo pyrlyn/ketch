@@ -1,5 +1,6 @@
 # ketch — todo
 
+- B78. Uninstall drops the lock before the root and the shell edits
 - B60. Windows self-update leaves `ketch.exe.old` behind
 - B65. Binary selection regression test
 - R3. Cross-platform CI

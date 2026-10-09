@@ -11,7 +11,7 @@ New bugs, dead code and moves from a read-only Cursor cloud review of `main` at 
 | B75 | P1 | bug | confirmed | `scripts/cask.sh:81-86`; tap run 37154989737 | The cask postflight `run /bin/sh` does not pass a GitHub token: the step had `GITHUB_TOKEN`/`KETCH_GITHUB_TOKEN` and still hit `API rate limit exceeded`. Forward the token into the cask `run` env, or smoke-test `ketch self install` outside Homebrew's isolated postflight. |
 | B76 | P1 | bug | confirmed | `registry.rs:117-120` | After the live registry is moved aside, the rollback is `let _ = rename(aside, registry_dir)`; if it fails, `registry_dir` is left empty. Surface the failure and copy-restore. |
 | B77 | P1 | bug | confirmed | `self_update.rs:932-937` | Uninstall runs `remove_file(exe)?` after packages are gone and state is saved; a busy Windows `.exe` aborts the rest. Warn and continue, like the other uninstall steps. |
-| B78 | P1 | bug | confirmed | `self_update.rs:866-876` | Uninstall drops the lock before deleting the root, the shell blocks and the registry entries. Hold the `Lock` until those edits finish. |
+| B78 | P1 | bug | in progress | `self_update.rs:866-876` | Uninstall drops the lock before deleting the root, the shell blocks and the registry entries. Hold the `Lock` until those edits finish. |
 | B79 | P1 | bug | confirmed | `install.rs:691-729`; `platform/unix.rs:423`; `platform/windows.rs:502` | `place` swaps the store, then links; `ScopedDir` is off when `existing.prefix == store_dir`, so a failure after the swap leaves state pointing at a tree that is not on disk. Restore `.old` on error. |
 | B80 | P2 | bug | confirmed | `extract/archive.rs:397-399`; extractor order in `platform/linux.rs:62-66` | `TarXzExtractor` claims any `XZ_MAGIC` and is listed before `GzFileExtractor`; unlike gzip (`:508-509`), xz/bz2 never peek for ustar, so a lone `.xz` file fails as a tarball. Peek the decompressed head; add lone-file xz/bz2 extractors. |
 | B81 | P2 | bug | confirmed | `extract/archive.rs:280`, `:488` | Extraction keeps `mode & 0o7777`, so setuid/setgid/sticky bits from an archive survive. Mask `0o7000`. |
@@ -35,6 +35,7 @@ Not added: the brand move is done (`brand/build.mjs` already uses `@pyrlyn/brand
 
 | # | Status | Priority | Complexity | Readiness | Agent |
 | --- | --- | --- | --- | --- | --- |
+| B78 | in progress | P1 | 2 | 0% | Cursor / grok 4.7 |
 | B60 | in progress | P3 | 1 | 80% | Cursor / grok 4.7 |
 | B65 | in progress | P0 | 2 | 0% | Cursor / grok 4.7 high |
 | R3 | in progress | P1 | 3 | 67% | Cursor / grok 4.7 high |
@@ -99,6 +100,10 @@ Fits for ketch (1–3):
 Already covered: `assert_cmd`, `assert_fs`, `insta`, `predicates`,
 `pretty_assertions`, `proptest`, `rstest`, `trycmd`. Skip `mockall` /
 `tokio-test` / `testcontainers` / extra fuzzers unless a new seam needs them.
+
+### B78. Uninstall drops the lock before the root and the shell edits
+
+`uninstall_self` saves state and then drops `state::Lock` before it removes registry entries, shell blocks, PowerShell profiles and the root. Another ketch can acquire the lock and rewrite those while uninstall is still deleting them. The lock file is `<root>/.lock`, so the root directory itself can be removed only after the lock drops; every edit before that stays inside the hold.
 
 ### B60. Windows self-update leaves `ketch.exe.old` behind
 
