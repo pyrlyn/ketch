@@ -109,6 +109,7 @@ lint-shell:
     sh tests/release-workflows.sh
     sh tests/ci-yml-triggers.sh
     sh tests/desktop-release.sh
+    sh tests/docs-i18n.sh
 
 package:
     #!/usr/bin/env bash

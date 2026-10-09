@@ -71,6 +71,8 @@ cask "ketch" do
     # real one, so the shell asks the user database instead: \`~user\` expands
     # from there, not from HOME. ~/.ketch is the one path under the home
     # directory a step may write, and the only one ketch touches.
+    # run does not inherit brew's environment. A GitHub token for
+    # \`ketch self install\` belongs in ~/.ketch/config.toml.
     if_path_exists ".ketch/store/ketch", base: :home do
       run "/bin/sh", args:           ["-c", 'eval "r=~\$1/.ketch" && KETCH_ROOT="\$r" exec "\$2"/*/ketch self upgrade',
                                       "ketch", "{{user}}", "{{staged_path}}"],

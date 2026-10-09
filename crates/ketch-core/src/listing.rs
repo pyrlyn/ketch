@@ -401,9 +401,13 @@ fn ask_all(
     let jobs = cx.cfg.jobs.clamp(1, stale.len());
     let next = AtomicUsize::new(0);
     let done = Mutex::new(Vec::new());
+    let cancel = cx.cancel.clone();
     std::thread::scope(|scope| {
         for _ in 0..jobs {
             scope.spawn(|| loop {
+                if cancel.check().is_err() {
+                    return;
+                }
                 let i = next.fetch_add(1, Ordering::Relaxed);
                 let Some((key, lookup)) = stale.get(i) else {
                     return;

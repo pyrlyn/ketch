@@ -326,8 +326,6 @@ impl fmt::Display for VersionSpec {
 /// `github:cli/cli`, `myplugin:some-id@2.0`.
 #[derive(Debug, Clone)]
 pub struct PackageSpec {
-    /// Part of the public surface, with no reader in the tree yet.
-    #[allow(dead_code)]
     pub raw: String,
     /// Set when the input names a source explicitly or looks like `owner/repo`.
     pub reference: Option<PackageRef>,
@@ -367,8 +365,6 @@ impl PackageSpec {
     }
 
     /// Best available human label before a manifest is resolved.
-    // Part of the public surface, with no caller in the tree yet.
-    #[allow(dead_code)]
     pub fn label(&self) -> String {
         match (&self.alias, &self.reference) {
             (Some(a), _) => a.clone(),
@@ -589,14 +585,6 @@ pub struct Release {
     pub notes: Option<String>,
     #[serde(default)]
     pub assets: Vec<ReleaseAsset>,
-}
-
-impl Release {
-    // Part of the public surface, with no caller in the tree yet.
-    #[allow(dead_code)]
-    pub fn asset(&self, name: &str) -> Option<&ReleaseAsset> {
-        self.assets.iter().find(|a| a.name == name)
-    }
 }
 
 /// Repository-level metadata, used by `info` and `search`.

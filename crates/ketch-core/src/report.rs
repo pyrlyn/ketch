@@ -23,6 +23,7 @@
 //! needs (a cancellation token, say) is one more field, not one more argument
 //! on every signature.
 
+use crate::cancel::Cancel;
 use crate::config::Config;
 use crate::decide::{Decider, NoDecider};
 use crate::log;
@@ -322,13 +323,15 @@ impl Report {
 
 /// What a core operation runs with: the configuration, where to report and
 /// who answers its questions.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Ctx<'a> {
     pub cfg: &'a Config,
     pub report: &'a Report,
     /// Asked what inference cannot decide. [`NoDecider`] unless a front end
     /// with a person in front of it says otherwise.
     pub decider: &'a dyn Decider,
+    /// Stop the operation at the next check. The CLI passes one that never fires.
+    pub cancel: Cancel,
 }
 
 impl<'a> Ctx<'a> {
@@ -338,12 +341,18 @@ impl<'a> Ctx<'a> {
             cfg,
             report,
             decider: &NoDecider,
+            cancel: Cancel::new(),
         }
     }
 
     /// The same context, with `decider` answering the pipeline's questions.
     pub fn with_decider(self, decider: &'a dyn Decider) -> Self {
         Ctx { decider, ..self }
+    }
+
+    /// The same context, with `cancel` observed by long-running steps.
+    pub fn with_cancel(self, cancel: Cancel) -> Self {
+        Ctx { cancel, ..self }
     }
 }
 

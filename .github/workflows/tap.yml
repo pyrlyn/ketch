@@ -18,6 +18,9 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   tap:
     runs-on: macos-latest
@@ -92,6 +95,12 @@ jobs:
           KETCH_GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # postflight `run` does not inherit this step's environment, and brew
+          # style allows only a literal `env:` hash, so the token cannot go on
+          # the cask. ketch reads github_token from KETCH_ROOT/config.toml, and
+          # the cask sets KETCH_ROOT to ~user/.ketch (this runner).
+          mkdir -p "$HOME/.ketch"
+          python3 -c "from pathlib import Path; import os; t=os.environ.get('KETCH_GITHUB_TOKEN') or os.environ.get('GITHUB_TOKEN') or os.environ.get('GH_TOKEN') or ''; p=Path.home()/'.ketch'/'config.toml'; p.write_text('github_token = '+repr(t)+'\n', encoding='utf-8'); p.chmod(0o600)"
           # Homebrew 4.6+ rejects bare cask paths; install via a local tap of
           # the clone about to be pushed (pyrlyn/homebrew-tap → pyrlyn/tap).
           # Drop a prior tap first, or `brew tap name path` can leave the
