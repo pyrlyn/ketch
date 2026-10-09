@@ -520,7 +520,7 @@ extra_paths = [
   { path = "misc/custom", kind = "man", section = "1" },
 ]
 "#,
-            "test",
+            "ketch.toml",
         )
         .unwrap();
         manifest.validate().unwrap();

@@ -9,9 +9,9 @@ prints only errors and requested data, `--no-color` disables colour, and
 `--no-emoji` drops the icons in front of status lines.
 
 **Icons.** On a terminal, each status line starts with an icon for what it
-reports: 📦 install, ⬆️ upgrade or update, 🗑️ uninstall or remove, ⬇️ download,
-🔗 link, ⏪ rollback, 🔍 search, 🩺 doctor, and otherwise ✅ success, ⚠️ warning,
-❌ error, ℹ️ note. They are on by default (`emoji` in `config.toml`,
+reports: 📦 install, ⏫ upgrade or update, 🧹 uninstall or remove, ⏬ download,
+🔗 link, ⏪ rollback, 🔍 search, 🩺 doctor, and otherwise ✅ success, ❗ warning,
+❌ error, 💡 note. They are on by default (`emoji` in `config.toml`,
 `KETCH_EMOJI`) and never appear in a pipe or a file, under `TERM=dumb`, in
 `--json` or `--names-only` output, in table data, or in the log.
 

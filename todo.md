@@ -3,7 +3,6 @@
 - B60. Windows self-update leaves `ketch.exe.old` behind
 - B65. Binary selection regression test
 - R3. Cross-platform CI
-- F8. Spinner and progress bar
 - M17. `ketch import`: a package from winget, Homebrew or a Linux repository
 - R5. Workspace split: `ketch-core` library crate
 - R6. A reporter instead of the global `ui::` sink
@@ -12,14 +11,13 @@
 - F13. macOS app release pipeline
 - F14. Design system for the macOS app: `DESIGN.md` and tokens
 - F18. Figma design for macOS, Windows and Linux
-- D3. `ketch-ffi`: the remaining CLI operations
-- D7. macOS: update notifications
 - D11. Windows: WinUI 3 app shell on a fake core
 - D12. Windows: the app on the real core
 - D13. Windows: tray icon, notifications, start at login, links
 - D14. Windows: release pipeline
-- D15. Linux: `ketch-capi`, a C ABI and VAPI for Vala
 - D16. Linux: Vala + GTK 4 app shell on a fake core
 - D17. Linux: the app on the real core
 - D18. Linux: notifications, background and autostart
 - D19. Linux: packaging and release
+- B74. xz archives decompress entirely into memory
+- R12. Consolidate duplicated helpers

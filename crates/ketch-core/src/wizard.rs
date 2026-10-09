@@ -11,7 +11,7 @@
 
 use crate::error::{Error, Result};
 use crate::model::{normalize_name, BinSpec, ExtraPath, Manifest, PackageKind, PackageRef};
-use crate::toml_file::{string_list_literal, string_literal};
+use crate::toml_file::{string_array_literal, string_literal};
 use std::collections::BTreeMap;
 
 /// The answers the questionnaire collected, before they become a manifest.
@@ -163,7 +163,7 @@ pub fn render_with_header(manifest: &Manifest, header: &str) -> String {
     if !manifest.provides.is_empty() {
         out.push_str(&format!(
             "provides = {}\n",
-            string_list_literal(&manifest.provides)
+            string_array_literal(&manifest.provides)
         ));
     }
     if let Some(notes) = &manifest.notes {
@@ -190,13 +190,13 @@ pub fn render_with_header(manifest: &Manifest, header: &str) -> String {
         if !manifest.asset.include.is_empty() {
             out.push_str(&format!(
                 "include = {}\n",
-                string_list_literal(&manifest.asset.include)
+                string_array_literal(&manifest.asset.include)
             ));
         }
         if !manifest.asset.exclude.is_empty() {
             out.push_str(&format!(
                 "exclude = {}\n",
-                string_list_literal(&manifest.asset.exclude)
+                string_array_literal(&manifest.asset.exclude)
             ));
         }
     }

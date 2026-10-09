@@ -121,7 +121,7 @@ ketch self upgrade
 
 ## `ketch self upgrade` says ketch is managed by mise
 
-A ketch installed with `mise use -g github:listepo/ketch` lives in mise's
+A ketch installed with `mise use -g github:pyrlyn/ketch` lives in mise's
 install tree, under a directory named for its version. Rewriting that binary
 would leave mise reporting a version that is no longer on disk, so ketch
 declines. Either let mise upgrade it:

@@ -4,8 +4,8 @@ expression: shown
 ---
 📦 installing ripgrep 14.1.0
 📦  installed ripgrep 14.1.0
-⚠️    warning ripgrep ships no checksum
-ℹ️       note ripgrep is pinned
+❗    warning ripgrep ships no checksum
+💡       note ripgrep is pinned
         debug GET /repos/BurntSushi/ripgrep
 ❌      error `ghost` is not installed
               looked in state.json

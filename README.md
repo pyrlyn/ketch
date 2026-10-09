@@ -1,3 +1,6 @@
+> [!NOTE]
+> This project is under active development. We need "testing volunteers": try it and report what breaks.
+
 <div align="center">
 
 <img src="site/static/img/favicon.svg" width="72" alt="">
@@ -143,7 +146,7 @@ With [mise](https://mise.jdx.dev), no installer runs; the release tarball is
 the whole install:
 
 ```bash
-mise use -g github:listepo/ketch
+mise use -g github:pyrlyn/ketch
 ketch path install
 ```
 
@@ -170,8 +173,11 @@ only ketch and leaves the tools it installed alone.
 `brew uninstall --cask ketch` removes only the bootstrap binary Homebrew kept;
 everything under `~/.ketch` and every package ketch installed stays until you
 run `ketch self uninstall` (or delete the tree yourself). The same holds for
-`mise unuse -g github:listepo/ketch`. Run from a mise install, `ketch self
+`mise unuse -g github:pyrlyn/ketch`. Run from a mise install, `ketch self
 uninstall` asks, separately, whether to run that command for you as well.
+A copy mise installed before the repository moved from `listepo` to `pyrlyn`
+is still recognized, and the command names it `github:listepo/ketch`, the way
+mise knows it.
 
 ## Usage
 
@@ -404,10 +410,14 @@ release required. See [docs/PLUGINS.md](docs/PLUGINS.md).
 | `auto_update` | `KETCH_AUTO_UPDATE` | `true` |
 | `emoji` | `KETCH_EMOJI` | `true` |
 | `registry` | `KETCH_REGISTRY` | `pyrlyn/ketch-registry` |
-| `self_repo` | `KETCH_SELF_REPO` | `listepo/ketch` |
+| `self_repo` | `KETCH_SELF_REPO` | `pyrlyn/ketch` |
 | `jobs` | `KETCH_JOBS` | `4` (capped at `16`) |
 | `log_level` | `KETCH_LOG_LEVEL` | `info` |
 | `log_format` | `KETCH_LOG_FORMAT` | `text` |
+
+`self_repo` and `registry` set to the names these repositories had before they
+moved, `listepo/ketch` and `listepo/ketch-registry`, read as the `pyrlyn` ones;
+so do the old names in the state file and in lockfiles.
 
 [docs/config.schema.json](https://github.com/pyrlyn/ketch/blob/main/docs/config.schema.json) is the file's JSON Schema,
 generated from the types ketch reads it into, for editors and linters.
@@ -427,8 +437,8 @@ ketch config reset --yes    # for scripts and CI
 refresh.
 
 `emoji` (default `true`) puts an icon in front of each status line on a
-terminal: 📦 install, ⬆️ upgrade, 🗑️ uninstall, ⬇️ download, 🔗 link, ⏪ rollback,
-✅ success, ⚠️ warning, ❌ error, ℹ️ note. Set it to `false`, or
+terminal: 📦 install, ⏫ upgrade, 🧹 uninstall, ⏬ download, 🔗 link, ⏪ rollback,
+✅ success, ❗ warning, ❌ error, 💡 note. Set it to `false`, or
 `KETCH_EMOJI=0`, or pass `--no-emoji`, to go without. Icons never reach a pipe,
 `TERM=dumb`, `--json` output or the log.
 

@@ -2,13 +2,46 @@
 https://github.com/pyrlyn/ketch
 Catch releases straight from GitHub — a package manager for GitHub-released binaries and apps.
 
+## Cloud review findings (2026-10-08)
+
+New bugs, dead code and moves from a read-only Cursor cloud review of `main` at `077eca5` (agent `bc-89f78a26-1501-5547-96b8-3ef0603e653a`; full report: `cloud/ketch.md` in the private `listepo/roadmap` repo). Bugs take B75–B88; dead code and moves take R14–R19. Ordered P0, P1, P2. **confirmed** means seen in the tree; **suspected** means plausible from the code but not proven. Paths are under `crates/ketch-core/src/` unless shown otherwise; line numbers are as of the review. None of these is in the task table yet: to take one, add its row and a card.
+
+| ID | Priority | Kind | Status | Where | Fix |
+| --- | --- | --- | --- | --- | --- |
+| B75 | P1 | bug | confirmed | `scripts/cask.sh:81-86`; tap run 37154989737 | The cask postflight `run /bin/sh` does not pass a GitHub token: the step had `GITHUB_TOKEN`/`KETCH_GITHUB_TOKEN` and still hit `API rate limit exceeded`. Forward the token into the cask `run` env, or smoke-test `ketch self install` outside Homebrew's isolated postflight. |
+| B76 | P1 | bug | confirmed | `registry.rs:117-120` | After the live registry is moved aside, the rollback is `let _ = rename(aside, registry_dir)`; if it fails, `registry_dir` is left empty. Surface the failure and copy-restore. |
+| B77 | P1 | bug | confirmed | `self_update.rs:932-937` | Uninstall runs `remove_file(exe)?` after packages are gone and state is saved; a busy Windows `.exe` aborts the rest. Warn and continue, like the other uninstall steps. |
+| B79 | P1 | bug | confirmed | `install.rs:691-729`; `platform/unix.rs:423`; `platform/windows.rs:502` | `place` swaps the store, then links; `ScopedDir` is off when `existing.prefix == store_dir`, so a failure after the swap leaves state pointing at a tree that is not on disk. Restore `.old` on error. |
+| B80 | P2 | bug | confirmed | `extract/archive.rs:397-399`; extractor order in `platform/linux.rs:62-66` | `TarXzExtractor` claims any `XZ_MAGIC` and is listed before `GzFileExtractor`; unlike gzip (`:508-509`), xz/bz2 never peek for ustar, so a lone `.xz` file fails as a tarball. Peek the decompressed head; add lone-file xz/bz2 extractors. |
+| B81 | P2 | bug | confirmed | `extract/archive.rs:280`, `:488` | Extraction keeps `mode & 0o7777`, so setuid/setgid/sticky bits from an archive survive. Mask `0o7000`. |
+| B82 | P2 | bug | confirmed | `source/github.rs:310-312` | Aggregate checksum files are keyed by basename; a later duplicate overwrites an earlier one. Reject or flag a basename that maps to two hashes. |
+| B83 | P2 | bug | confirmed | `source/github.rs:427-431` | A sidecar checksum takes the first sorted entry (`BTreeMap::into_values().next()`), not the asset's. Look up the asset name first; fall back to a single entry only when unambiguous. |
+| B84 | P2 | bug | confirmed | `http.rs:118-186` | Downloads stream with no maximum size. Add a configurable download/unpacked cap and abort over it. |
+| B85 | P2 | bug | confirmed | `registry.rs:61-67`; `listing.rs:390-426` | `registry::update` passes a fresh `Cancel::new()` to `Http::download`, and the parallel `ask_all` never checks for cancellation. Thread the caller's `Cancel` through both. |
+| B86 | P2 | bug | suspected | `source/plugin.rs:159-168` | A plugin's `asset.url` and `headers` go to `Http::anonymous` with no scheme or host check, though plugin JSON is untrusted. Allow `https:` only; drop `Authorization` and hop-by-hop headers. |
+| B87 | P2 | bug | fixed | `source/local.rs` `sha256_tree` | The local tree hash framed only `path\0bytes`. It now frames kind, path, permission bits and length, and hashes a symlink's target. A lock from before this framing does not match until `ketch lock`. |
+| B88 | P2 | bug | suspected | `process.rs:461-494` | After `offer_to_stop`, ketch waits 200 ms before `/F`; the install can still hit a locked `.exe`. Wait, with a bound, until the pid is gone. |
+| R14 | P2 | dead code | confirmed | `scripts/b32_patch.py:8` | The script opens `src/self_update.rs`, which has moved, and nothing references it. Delete it. |
+| R15 | P2 | dead code | confirmed | root `Cargo.toml:61` (`dirs`); `manifest.rs:137-148` (`Resolver::aliases`); `model.rs:596-599` (`Release::asset`); `platform/mod.rs:49-50` (`Placement::version`); `model.rs:329-331` | Drop the unused root `dirs` dependency, `Resolver::aliases` (or wire it to `__complete`/search), `Release::asset` and the never-read `Placement::version`; remove the stale `allow(dead_code)` on `PackageSpec::raw` (read at `state.rs:162`). |
+| R16 | P2 | dead code | confirmed | `fuzz/seed.sh:42` | The seed script reads `$root/src/builtin.toml`; the file is `crates/ketch-core/src/builtin.toml`. Fix the path. |
+| R17 | P2 | dead code | confirmed | `shell.rs:561-1092` | 23 `cfg_attr(not(windows), allow(dead_code))` on the Windows PATH helpers. Put them in one `#[cfg(any(windows, test))]` module. |
+| R18 | P2 | move | confirmed | `manifest.rs:342-353` (`replace_file`), `shell.rs:1401`, `state.rs`, `platform/*` `move_into_store` | The same rename-over-temp appears five times. Make it one `ketch-core` helper (R12 covers the other duplicates); use a shared `atomic-replace` crate only if it exists. |
+| R19 | P2 | move | suspected | `crates/ketch-core/Cargo.toml:49-66` | `stats` + diesel, `push` + octocrab/tokio, `trust` + sigstore/pgp and the `extract` codecs are always in core, so every desktop/FFI link pays for them (issue #222). Make them optional crates or features. |
+
+B78 is done: `uninstall_self` holds the install lock through the registry entries, the shell blocks and the root. See `done.md`.
+
+B87 is done: `sha256_tree` frames kind, path, mode and length, and includes symlink targets. See `done.md`.
+
+Already tracked here, not added again: `Http::has_token` with no callers is in R12; `clap`/`clap_complete` still in `ketch-core` (`Cargo.toml:19-20`, `shell.rs:37`, `model.rs:716-733`, issues #219/#220) is R5 step 5, not done yet.
+
+Not added: the brand move is done (`brand/build.mjs` already uses `@pyrlyn/brand`); the `theme.js` and `cli-argv` fuzz moves were not verified by the agent.
+
 | # | Status | Priority | Complexity | Readiness | Agent |
 | --- | --- | --- | --- | --- | --- |
 | B60 | in progress | P3 | 1 | 80% | Cursor / grok 4.7 |
 | B65 | in progress | P0 | 2 | 0% | Cursor / grok 4.7 high |
 | R3 | in progress | P1 | 3 | 67% | Cursor / grok 4.7 high |
-| F8 | in progress | P2 | 3 | 0% | Cursor / grok 4.7 high |
-| M17 | in progress | P2 | 4 | 90% | Cursor / grok 4.7 |
+| M17 | in progress | P2 | 4 | 95% | Cursor / grok 4.7 |
 | R5 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
 | R6 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
 | R8 | in progress | P3 | 3 | 90% | Claude Code / sonnet-5.5 |
@@ -16,17 +49,16 @@ Catch releases straight from GitHub — a package manager for GitHub-released bi
 | F13 | in progress | P3 | 4 | 80% | Claude Code / opus-5.5 |
 | F14 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | F18 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
-| D3 | todo | P3 | 3 | 0% | |
-| D7 | todo | P3 | 2 | 0% | |
-| D11 | todo | P3 | 5 | 0% | |
+| D11 | in progress | P3 | 5 | 10% | Claude Code / sonnet-5.5 |
 | D12 | todo | P3 | 4 | 0% | |
 | D13 | todo | P3 | 3 | 0% | |
 | D14 | todo | P3 | 4 | 0% | |
-| D15 | todo | P2 | 4 | 0% | |
 | D16 | todo | P3 | 5 | 0% | |
 | D17 | todo | P3 | 4 | 0% | |
 | D18 | todo | P3 | 3 | 0% | |
 | D19 | todo | P3 | 4 | 0% | |
+| B74 | todo | P3 | 3 | 0% | |
+| R12 | todo | P3 | 1 | 0% | |
 
 ### Ketch audit
 
@@ -88,6 +120,8 @@ Execution: `aside_candidates` names both leftovers (`ketch.exe.old` from `replac
 
 Show a spinner while a command is running so the user sees that it started. Use a progress bar where measurable progress is available, and a spinner elsewhere. Match the behavior in rtok.
 
+Status: done. `ui::activity` draws a bar when the total is known and a spinner otherwise (`{spinner:.cyan} {msg}`, ticking every 120ms). Resolve, extract, registry fetch and self-update hold one. `ketch list` counts `N/M packages` with `counter`. Tests: `a_known_total_is_a_bar`, `an_unknown_total_is_a_spinner`.
+
 ### R3. Cross-platform CI
 
 Run verification on macOS, Windows and Linux. A ketch config is either a local file in the project or pushed to a registry; keep that model. The cross-platform check must catch OS-specific binary selection bugs like the one in B64.
@@ -102,7 +136,7 @@ To add:
 
 Findings: no workflow edit. `ci.yml` jobs `check` (`macos-latest`), `check-linux` (`ubuntu-latest`), `check-windows` (`windows-latest`) and `package` (all three) already run lint and the full nextest suite, so a binary-selection test is picked up with no extra job. `verify.yml` job `verify` uses the same three runners. `Swatinem/rust-cache@v2` is already in each of those jobs.
 
-Do not add a second cache. `jdx/mise-action` already caches the toolchain, and `rust-cache` already caches `target/`. Numbers from [ketch#151](https://github.com/listepo/ketch/pull/151) run [36318217579](https://github.com/listepo/ketch/actions/runs/36318217579), the current-workflow run [36318223420](https://github.com/listepo/ketch/actions/runs/36318223420), the following warm main run [36320755597](https://github.com/listepo/ketch/actions/runs/36320755597), and [cox#57](https://github.com/listepo/cox/pull/57) run [36318140763](https://github.com/listepo/cox/actions/runs/36318140763):
+Do not add a second cache. `jdx/mise-action` already caches the toolchain, and `rust-cache` already caches `target/`. Numbers from [ketch#151](https://github.com/pyrlyn/ketch/pull/151) run [36318217579](https://github.com/pyrlyn/ketch/actions/runs/36318217579), the current-workflow run [36318223420](https://github.com/pyrlyn/ketch/actions/runs/36318223420), the following warm main run [36320755597](https://github.com/pyrlyn/ketch/actions/runs/36320755597), and [cox#57](https://github.com/listepo/cox/pull/57) run [36318140763](https://github.com/listepo/cox/actions/runs/36318140763):
 
 - Mise cache hits on the ketch infra-template jobs: 35 MB macOS, 46 MB Linux, 62 MB Windows. Cox shows the same macOS and Linux hits and has no Windows job.
 - macOS `check`: 8m9s on a target-cache miss, then 1m47s after restoring 778 MB.
@@ -308,30 +342,28 @@ Windows (Fluent) and Linux (libadwaita, per R11) pages in light and dark, protot
 every page. `figma.md` lives in `desktop/design/`. Left: the creator's
 review of the file and the merge of the PR.
 
-### D3. `ketch-ffi`: the remaining CLI operations
-
-Screens the apps already draw (Activity history, package info, pin, rollback, Doctor fixes, PATH status) have no core call behind them. Research: section 3a, gap G6.
-
-Done when history (`stats.db`), info, pin/unpin, rollback, prune, registry refresh, `path` status and install, a doctor fix action and reading ketch's config are exported as thin calls into existing core code, each with a test; `registry push` stays out (it owns a tokio runtime).
-
-
-### D7. macOS: update notifications
-
-The macOS app checks for updates on a timer (F12) but tells nobody unless the window or menu-bar panel is open. Builds on F12's live core; F12's remaining work (the `LiveKetchCore` adapter and the manual checks) stays in F12. Research: section 1.
-
-Done when new upgrades since the last notice post one `UNUserNotificationCenter` notification, authorisation is asked only when the user turns notifications on in Settings, clicking it opens Updates, and a unit test covers which upgrades count as new.
-
 ### D11. Windows: WinUI 3 app shell on a fake core
 
 The Windows app's screens can be built before the binding is settled, the way F12 started on macOS. Research: sections 3b and 3c.
 
 Done when a WinUI 3 app (Windows App SDK, .NET 10, built with `dotnet build`, no Visual Studio required) has the common screens in a `NavigationView` with a `TitleBar` over Mica, `ContentDialog` and `InfoBar` for decisions and busy, light, dark and contrast themes, all on a fake core reading D4's fixtures, with a Windows CI job that builds and runs its tests.
 
+Execution plan:
+
+1. `desktop/windows/Ketch.AppCore` (net10.0, no UI types, so it builds and tests anywhere): `IKetchCore`, the records, `CancelToken`, `ContractScenario` (System.Text.Json over `desktop/contract/scenarios`, the same mapping as `ContractScenario.swift`), `FakeKetchCore` (a port of the macOS fake: samples, simulated pipeline, scripted replay, lock switch) and `KetchStore` (`INotifyPropertyChanged`; installed, updates, held, search, doctor, activity, log, busy, pending binary choice; install, upgrade, uninstall, cancel, retry).
+2. `desktop/windows/Ketch.AppCore.Tests` (MSTest, as `KetchCore.Tests`): every scenario decodes and maps, the fake replays them (events, questions, busy, cancelled, errors), and the store's states.
+3. `desktop/windows/Ketch.App` (WinUI 3, `WindowsPackageType=None`, self-contained, built by `dotnet build`): `App.xaml` merges `desktop/design/generated/KetchTokens.xaml`; `MainWindow` with a `TitleBar` over `MicaBackdrop` and a `NavigationView` (Installed, Discover, Updates, Activity, Doctor, Settings pinned at the bottom); a package detail page; `ContentDialog` for uninstall, upgrade-all and binary choice; `InfoBar` for busy and errors; Settings picks light, dark or system, and high contrast follows Windows through the token file's `HighContrast` dictionary.
+4. CI: a `ketch-win-app` job on `windows-latest` with SHA-pinned actions: `dotnet test` for `Ketch.AppCore.Tests`, `dotnet build` for `Ketch.App`. If the Windows App SDK cannot build without Visual Studio, stop and report rather than work around it.
+5. `toolchain.md` rows (Windows App SDK, `Microsoft.WindowsAppSDK`), `desktop/windows/README`-level notes in the contract README (the Windows fake is now here), SPDX headers on every new source file.
+6. Verify: `dotnet test` for `Ketch.AppCore.Tests` locally (net10.0 builds on this Mac), `dotnet build` of the WinUI project only in CI (not buildable on macOS; noted in the PR).
+
 ### D12. Windows: the app on the real core
 
 Swap the Windows app's fake core for the binding. Depends on D10, D11, D1 and D2.
 
 Done when the app runs every screen on `ketch-ffi` through D10's binding, work runs off the UI thread with events marshalled to the `DispatcherQueue`, cancel and `Busy` behave as in the contract, and a manual pass against a scratch root is recorded.
+
+The app ships both as an MSIX and unpackaged (D14), and an unpackaged app has no `ApplicationData`, so settings go in a file under `%LOCALAPPDATA%\ketch` that works in both.
 
 ### D13. Windows: tray icon, notifications, start at login, links
 
@@ -343,13 +375,9 @@ Done when a notification-area icon opens the tray panel, `AppNotificationManager
 
 How the Windows app reaches users and updates itself, separate from the CLI's release. R10's open decisions on distribution and the Windows App SDK licence come first.
 
-Done when CI builds an unpackaged, signed (Artifact Signing or the creator's choice) release on `desktop-windows-v*` tags without touching `/releases/latest`, updates arrive through the chosen route (Velopack or winget), and the creator's answers to R10's decisions are recorded.
+Done when CI builds, on `desktop-windows-v*` tags and without touching `/releases/latest`, both an MSIX and an unpackaged self-contained zip, signed (Artifact Signing or the creator's choice), updates arrive through the chosen route (Velopack or winget), and the creator's answers to R10's decisions are recorded. The creator chose to ship both forms. The MSIX is signed with a certificate held in repository secrets named the way the macOS ones are (`MACOS_CERTIFICATE`, `MACOS_CERTIFICATE_PWD`), and the release fails when they are missing rather than shipping unsigned.
 
-### D15. Linux: `ketch-capi`, a C ABI and VAPI for Vala
-
-UniFFI has no Vala or C generator, so the Vala app needs a C ABI. R11 recommends one small crate with an opaque core handle, callbacks with user data, records as JSON strings and a hand-written VAPI; it is also the fallback C# route in D10. Depends on D1 and D2 for the per-call shape. Research: section 5.
-
-Done when `crates/ketch-capi` exports the contract over `extern "C"` with a cbindgen header checked for drift, its `unsafe_code` exception is scoped and explained, a `.vapi` binds it, a Vala test built with Meson calls `installed`, `doctor` and a cancelled install against a scratch root on Linux CI, and the JSON payloads have a schema. The creator chose JSON records and a hand-written VAPI, and allowed hand-written `unsafe` in `ketch-capi` only (2026-10-01, open decision 3): the crate sets `unsafe_code = "deny"` with a scoped `allow` and a `SAFETY` comment on each unsafe block, and the rest of the workspace keeps `forbid`.
+Settings persistence differs between the two: an MSIX has `ApplicationData`, an unpackaged app has none (D12 stores settings in a way that works in both).
 
 ### D16. Linux: Vala + GTK 4 app shell on a fake core
 
@@ -408,4 +436,13 @@ Rules decided here:
 - Idempotency: the rendered file is compared byte for byte with the one on disk, the installed version with the source's tag. Same file and installed ≥ source → "Everything is up to date", nothing touched; a newer tag → rewrite and upgrade; same version, changed file → reinstall (`force`); installed newer than the source → the installed release stays and only the manifest is redone. The install pins the source's asset (`asset_override`) and checksum (`expected_sha256`); a missing checksum warns and installs, checked the usual way.
 - Bin paths and asset patterns have the version replaced by `*`, so the manifest keeps matching after the next release.
 
-Status (2026-10-02): steps 1–6 in, on `feat/import-foreign-packages` (draft PR #215). Not done: `docs/ru` and `docs/uk` do not exist on `main` (only on the unmerged `ci/sync-docs-i18n`), so the doc changes are English only; the `serde-saphyr` MSRV question is open for the creator; the binaries inside a cask's `.app` (`binary` under `$APPDIR`) are not linked.
+Status: steps 1–6 landed in #215. `docs/ru` and `docs/uk` translate the user-facing docs, including `ketch import`. Still open for the creator: `serde-saphyr`'s MSRV is 1.89, above the declared 1.86. A cask `binary` whose source starts with `$APPDIR` stays inside the app bundle; `kind = "app"` places the bundle and links nothing.
+
+### B74. xz archives decompress entirely into memory
+
+`crates/ketch-core/src/extract/archive.rs:400-409`: `TarXzExtractor` does `xz_decompress` into a `Vec` before tar parsing; a hostile multi-GB `.tar.xz` (checksum-valid, same publisher) is a memory-exhaustion DoS during extraction. The gz/bz2 paths already stream via `lzma-rs` readers. Done means: the xz path streams like the others. Related doc note: the plugin protocol v1 has no checksum channel at all (`source/plugin.rs:125-191` never overrides `Source::checksums`) — state the TOFU limitation in `docs/PLUGINS.md` if not already there.
+
+### R12. Consolidate duplicated helpers
+
+`platform/unix.rs:46-53` and `self_update.rs:180-187` carry identical `remove_any`; `platform/unix.rs:164-170` and `platform/macos.rs:89-93` duplicate `sibling`; `source/local.rs:263-281` re-declares the GZIP/XZ/BZ2/ZIP/ustar magic constants from `extract/archive.rs:145-153`; `http.rs:60-64` keeps `Http::has_token` behind `#[allow(dead_code)]`. Done means: one implementation of each, and `has_token` is either used or gone.
+

@@ -9,9 +9,10 @@
 # is not a conventional commit. A merged cargo bump still changes Cargo.lock, so
 # release-plz proposes a patch release for it; merging that stays a human call.
 #
-# .github/workflows/dependabot.yml runs the full CI on every one of these pull
-# requests and merges a patch update once that run is green; minor and major
-# updates are labelled `needs-review` and wait for a human.
+# Every one of these pull requests runs the full CI (ci.yml) on its own;
+# .github/workflows/dependabot.yml merges a patch update once that run is
+# green; minor and major updates are labelled `needs-review` and wait for a
+# human.
 #
 # Patch and minor updates arrive as separate grouped pull requests per
 # ecosystem, so a patch-only one can merge on its own; a major update arrives

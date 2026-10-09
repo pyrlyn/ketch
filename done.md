@@ -1,3 +1,15 @@
+### B87. Local tree hash collides and skips symlinks and modes
+
+`sha256_tree` used to hash `path \0 bytes` for regular files only. `a` = `X` plus `b` = `Y` was the same digest as one file `a` = `Xb\0Y`, a symlink was invisible, and the exec bit was ignored, so a lockfile could accept a different `.app`. Each file and symlink is now one record: kind, path length, path, permission bits, payload length, and either the file bytes or the symlink's own target. A lock written before this framing does not match an unchanged bundle; `ketch lock` records the new digest. Noted in `docs/LOCKFILE.md`.
+
+Tests: the two-file layout no longer matches the fused file; on Unix a mode change and a retargeted symlink each change the digest, and a symlink does not hash as a regular file with the target's text.
+
+### B78. Self-uninstall drops the install lock too early
+
+`uninstall_self` held `state::Lock` only for the package uninstall and `state.save`, then dropped it before the Windows registry entries, the shell startup blocks and `remove_root`. The lock file lives in the root, so another ketch could acquire it and write a tree this run was still taking apart. The lock now stays held through those edits. Shell blocks are edited before the root, because removing the root unlinks the lock file; the paths are still reported after the cask, which is the order the command already printed. The cask step stays outside the lock: `brew uninstall` runs a nested `ketch self uninstall`, and with `--keep-packages` that process still has a binary and must be able to take the lock itself.
+
+Test: `self_update::tests::uninstall_holds_the_lock_while_the_shell_block_and_the_root_go` (Unix). A shell file opened as a fifo blocks in `read`; while it is blocked the lock is `Busy` and the lock file is still on disk. After the run the root is gone and the block is taken out of the file.
+
 ### M8. Lifecycle hooks in a manifest
 
 A manifest's `[hooks]` table names one shell line for each of `before_install`, `after_install`, `before_update`, `after_update`, `before_uninstall` and `after_uninstall`. `src/hooks.rs` runs them with `sh -c` (`cmd /C` on Windows), `KETCH_HOOK`, `KETCH_PACKAGE`, `KETCH_VERSION`, `KETCH_PREVIOUS_VERSION`, `KETCH_PREFIX`, `KETCH_BIN_DIR` and `KETCH_ROOT` in the environment, and the store prefix as the working directory whenever it exists. `install::commit` runs the before hook ahead of placement and the after hook once `state` records the package; `install::uninstall` does the same around unplace and removal. A reinstall of the same version is an install, not an update. A failing `before_*` hook stops the operation with its stderr as the detail; a failing `after_*` hook is a warning. Rollback runs the two update hooks; prune runs none. A hook is killed with its process tree after ten minutes via `plugin::run_with_deadline`, the runner source plugins already used.
@@ -1148,6 +1160,62 @@ Execution plan (Claude Code / opus-5.5):
 
 Status: done. `changelog_range` reads release notes only: the installed payload's file belongs to the old version and has no sections for the newer ones. `held_by` is always `None` for now, because `ketch sync` restores a pin without recording which `ketch.lock` it came from; recording that is a state change left for a later task. `outdated` now reports pinned packages, marked, and `upgrade` still skips them. `uninstall` reports a `removing` status and a `removed` success per package. Core gained `changelog::published_range` / `between` and `listing::fill_cached`; `published` shares its manifest fallback with the range through `manifest_for`. A breaking change to the binding (new record fields, pinned rows in `outdated`).
 
+### D3. `ketch-ffi`: the remaining CLI operations
+
+Screens the apps already draw (Activity history, package info, pin, rollback, Doctor fixes, PATH status) have no core call behind them. Research: section 3a, gap G6.
+
+Done when history (`stats.db`), info, pin/unpin, rollback, prune, registry refresh, `path` status and install, a doctor fix action and reading ketch's config are exported as thin calls into existing core code, each with a test; `registry push` stays out (it owns a tokio runtime).
+
+Execution plan (Claude Code / opus-5.5):
+
+1. Core first, so the CLI and the binding share one path: `shell::status`, `shell::detected` and `shell::install_here` (the PATH report and setup the CLI computed inline), `doctor::fix` (moved from `cmd/system.rs`), `install::pin` (from `cmd/pkg.rs`), `Resolver::resolve_or_recorded` (the registry, else the manifest recorded at install time), and a new `info` module whose `gather` is what `ketch info` assembled. The CLI commands call these and only format.
+2. `crates/ketch-ffi`: `history`, `info`, `pin`/`unpin`, `rollback`, `prune`, `registry_refresh`, `path_status`, `path_install`, `doctor_fix` and `config`, each a thin call into step 1 or existing core code, with records `HistoryEvent`, `PackageInfo`, `Pruned`, `PathStatus`, `ShellSetup`, `PathChange` and `Settings`. Mutating calls hold the lock, as the CLI does.
+3. A Rust unit test per call in `lib.rs`; `doctor_fix` runs against a scratch `HOME` on Unix only.
+4. Swift binding test: pin holds an upgrade, unpin lets it through, rollback undoes it, history records all three, info carries the record, and path status plus settings describe the scratch root.
+5. Verify: `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo nextest run --workspace`, `just ffi-test`.
+
+Status: done. `Settings` reports only whether a GitHub token is set, never the token. `prune` with a `keep` stores it as the retention setting, as `ketch prune --keep` does. An empty name list means every installed package for `pin`, `unpin` and `prune`, as on the command line. `registry push` stays out: it owns a tokio runtime. `changelog::manifest_for` from D2 became `Resolver::resolve_or_recorded`, shared with `info`.
+
+### D15. Linux: `ketch-capi`, a C ABI and VAPI for Vala
+
+UniFFI has no Vala or C generator, so the Vala app needs a C ABI. R11 recommends one small crate with an opaque core handle, callbacks with user data, records as JSON strings and a hand-written VAPI; it is also the fallback C# route in D10. Depends on D1 and D2 for the per-call shape. Research: section 5.
+
+Done when `crates/ketch-capi` exports the contract over `extern "C"` with a cbindgen header checked for drift, its `unsafe_code` exception is scoped and explained, a `.vapi` binds it, a Vala test built with Meson calls `installed`, `doctor` and a cancelled install against a scratch root on Linux CI, and the JSON payloads have a schema. The creator chose JSON records and a hand-written VAPI, and allowed hand-written `unsafe` in `ketch-capi` only (2026-10-01, open decision 3): the crate sets `unsafe_code = "deny"` with a scoped `allow` and a `SAFETY` comment on each unsafe block, and the rest of the workspace keeps `forbid`.
+
+Execution plan (Claude Code / opus-5.5):
+
+1. `crates/ketch-ffi`: `serde::Serialize` on every record, event, holder and `KetchError` (snake_case, data enums tagged by `type`, as D4's contract scenarios publish them), `Deserialize` on `InstallOptions`, and `schemars::JsonSchema` behind a `schema` feature only the capi tests enable. The C ABI reuses `ketch_ffi::KetchCore`, so both bindings run the same calls.
+2. `crates/ketch-capi` (new): `ketch.h`-facing `extern "C"` functions over an opaque `KetchCore` and `KetchCancel` (`Box`), one per `KetchCore` method. Every call returns a malloc'd JSON envelope, `{"ok": …}` or `{"error": {"type": …, "message": …}}`, freed with `ketch_string_free` (or `g_free`, which is `free`). Callbacks are a function pointer plus `user_data` each, so a Vala delegate's target maps onto them. Panics are caught at the boundary. `[lints.rust] unsafe_code = "deny"` with the `allow` on the one `abi` module, a `SAFETY` comment on each unsafe block, and `clippy::undocumented_unsafe_blocks` on.
+3. `include/ketch.h` generated by cbindgen 0.29.4 (dev-dependency), a drift test that fails when it is stale; `schema/payloads.schema.json` from the `schema` feature, with the same drift test (`KETCH_BLESS=1` rewrites both).
+4. `vapi/ketch.vapi` by hand; `meson.build` and `tests/capi.vala` a Meson project whose test calls `installed`, `doctor` and a cancelled install against a scratch root, parsing the envelopes with json-glib.
+5. CI: a `ketch-capi` job on `ubuntu-latest` (valac, meson, json-glib from apt) that builds the crate and runs `meson test`; `just capi-test` runs the same.
+6. Docs: `toolchain.md` and `rust.md` rows for cbindgen and libc, the AGENTS.md layout row.
+7. Verify: `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo nextest run --workspace`, `just ffi-test`; the Vala test on Linux CI.
+
+Status: done. `crates/ketch-capi` wraps `ketch_ffi::KetchCore` one function per method, from `installed` to `config`, so the C ABI and the UniFFI bindings run the same calls. The Vala test also runs a real install with a closure reporter. The error envelope is tagged `type`, not the `kind` first planned, because D4's contract scenarios already publish `KetchError` that way and one wire shape serves every fake. Linux CI installs valac, Meson and json-glib from apt; nothing is pinned in `mise.toml` for them, because mise has no backend for them. The `rust.md` rows for cbindgen and libc were not written here: that file lives outside this repository.
+
+### D3. `ketch-ffi`: the remaining CLI operations
+
+Screens the apps already draw (Activity history, package info, pin, rollback, Doctor fixes, PATH status) have no core call behind them. Research: section 3a, gap G6.
+
+Done when history (`stats.db`), info, pin/unpin, rollback, prune, registry refresh, `path` status and install, a doctor fix action and reading ketch's config are exported as thin calls into existing core code, each with a test; `registry push` stays out (it owns a tokio runtime).
+
+Execution plan (Claude Code / opus-5.5):
+
+1. Core first, so the CLI and the binding share one path: `shell::status`, `shell::detected` and `shell::install_here` (the PATH report and setup the CLI computed inline), `doctor::fix` (moved from `cmd/system.rs`), `install::pin` (from `cmd/pkg.rs`), `Resolver::resolve_or_recorded` (the registry, else the manifest recorded at install time), and a new `info` module whose `gather` is what `ketch info` assembled. The CLI commands call these and only format.
+2. `crates/ketch-ffi`: `history`, `info`, `pin`/`unpin`, `rollback`, `prune`, `registry_refresh`, `path_status`, `path_install`, `doctor_fix` and `config`, each a thin call into step 1 or existing core code, with records `HistoryEvent`, `PackageInfo`, `Pruned`, `PathStatus`, `ShellSetup`, `PathChange` and `Settings`. Mutating calls hold the lock, as the CLI does.
+3. A Rust unit test per call in `lib.rs`; `doctor_fix` runs against a scratch `HOME` on Unix only.
+4. Swift binding test: pin holds an upgrade, unpin lets it through, rollback undoes it, history records all three, info carries the record, and path status plus settings describe the scratch root.
+5. Verify: `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo nextest run --workspace`, `just ffi-test`.
+
+Status: done. `Settings` reports only whether a GitHub token is set, never the token. `prune` with a `keep` stores it as the retention setting, as `ketch prune --keep` does. An empty name list means every installed package for `pin`, `unpin` and `prune`, as on the command line. `registry push` stays out: it owns a tokio runtime. `changelog::manifest_for` from D2 became `Resolver::resolve_or_recorded`, shared with `info`.
+
+### Config file I/O in one module (M16.x)
+
+`AGENTS.md`: one module owns all config loading, validation and editing, and the rest of the code does not import `toml` or `toml_edit`. Every use today is in `crates/ketch-core`: `config.rs` (`config.toml`, and the schema drift helper `assert_schema_current`), `registry.rs` (`registry.toml` update metadata and package folders), `push.rs` (a project's `ketch.toml`), `wizard.rs` (TOML string and array literals), `manifest.rs` (user manifests and `builtin.toml`, the only `toml_edit` user), `lockfile.rs` (`ketch.lock`), and tests in `model.rs` and `extra.rs`. The binary (`src/`) and `crates/ketch-ffi` import neither; `tests/` is a separate crate that writes fixtures and stays out of scope.
+
+The creator decided (2026-10-03) to split M16 into the subtasks below, one pull request each, in id order: M16.1 first, since the rest call into the module it creates; M16.8 last of the ready ones. The creator chose option B for M16.6 and M16.7 (2026-10-06). Behaviour does not change in any subtask: same files read and written, same bytes, same error texts. The whole is done when every subtask is.
+
 ### M16.1. The owning module, and `config.rs` through it
 
 A new `crates/ketch-core/src/toml_file.rs` owns parsing, rendering and the schema export for the TOML files ketch owns. It starts with the two calls `config.rs` needs — parse text into a `T: DeserializeOwned` naming the file in the error (`Error::parse(what, …)`), and render a `T: Serialize` pretty — and takes `assert_schema_current` from `config.rs`, with its callers (`config.rs`, `lockfile.rs`, `log.rs`, `model.rs` tests) pointed at the new path. A helper is added only with its first caller, so nothing is dead code.
@@ -1193,6 +1261,29 @@ Done when `registry.rs` imports neither `toml` nor `toml_edit`, the existing reg
 
 Execution plan (Claude Code / opus-5.5): `load_meta`/`write_meta` call `toml_file::parse`/`render` with the same file name in the error; `toml_file::Document` (parse into a table, `str`, `set_str`, `deserialize`) carries `read_package`'s fill-in of `name`. Parsing straight into a table makes the old "expected a table of package fields" branch unreachable (a TOML document is a table), so it goes. Tests for `Document`; fmt, clippy, nextest; `ketch update` twice (writes then reads `registry.meta.toml`) and `ketch search ripgrep` against a scratch root.
 
+### D7. macOS: update notifications
+
+The macOS app checks for updates on a timer (F12) but tells nobody unless the window or menu-bar panel is open. Builds on F12's live core; F12's remaining work (the `LiveKetchCore` adapter and the manual checks) stays in F12. Research: section 1.
+
+Done when new upgrades since the last notice post one `UNUserNotificationCenter` notification, authorisation is asked only when the user turns notifications on in Settings, clicking it opens Updates, and a unit test covers which upgrades count as new.
+
+Execution plan:
+
+1. `Ketch/Store/UpdateNotices.swift`: the pure rule (`fresh(updates:notified:)`: held packages never count, an upgrade is new by `name@version`, a version already noticed is not new again), the notice text (at most three names, control characters stripped, since versions come from release tags), an `UpdateNotifier` protocol, and `SystemUpdateNotifier` over `UNUserNotificationCenter` plus its delegate.
+2. `AppSettings`: `notifiesOfUpdates` (off by default) and the set of already-noticed upgrades, in UserDefaults.
+3. `KetchStore`: after each background check, post one notice for the new upgrades and remember them; `setNotifications(_:)` asks authorisation only when the user turns the switch on, and turns it back off with an explanation when macOS refuses. A click sets `requestedSection = .updates` and asks for the main window; `ContentView` switches to Updates, `MenuBarLabel` (always alive) opens the window if it was closed.
+4. Settings: a "Notify when updates are available" toggle in General.
+5. Tests: `UpdateNoticesTests` for which upgrades count as new, store tests against a fake notifier (one notice for several new upgrades, none for held or already-noticed ones, none when off, authorisation asked only on turning on, refusal turns it off).
+6. Verify: `swift-format lint --strict`, `just macos-test` unit tests (the UI test needs an unlocked screen; CI runs it).
+
+### D20. Windows: XAML `HighContrast` follows the user's contrast theme
+
+Requested by the creator (2026-10-03). `KetchTokens.xaml`'s `HighContrast` dictionary carries the tokens' `highContrast` hex values, which are macOS Increase Contrast ink tuned for a light background (AccentInk `#003A75`, StatusInstalled `#0B5A31`). Windows applies that one dictionary under all four contrast themes (Aquatic, Desert, Dusk, Night sky), three of them dark, so text becomes unreadable, and an app in a contrast theme is expected to use the user's palette rather than brand colours.
+
+Execution plan: (1) `desktop/design/build.mjs` writes the XAML `HighContrast` dictionary as references to WinUI's `SystemColor*` resources, chosen from Microsoft's contrast-themes pairings (https://learn.microsoft.com/en-us/windows/apps/design/accessibility/high-contrast-themes, checked 2026-10-03): accent fills to Highlight, text on accent to HighlightText, text, status glyphs and focus ring to WindowText, surfaces to Window; brushes use `{ThemeResource SystemColor...Color}` as the page shows. (2) Light, Dark and the GTK output stay as they are. (3) `contrast.mjs` skips these pairs, with a comment. (4) Regenerate, then `just design-check` and `xmllint` on the XAML. (5) The generated header, `DESIGN.md`, `desktop/design/README.md` and `desktop/contract/README.md` state the rule.
+
+Done when the generated `HighContrast` dictionary holds no hex values, `just design-check` passes with its drift check covering the output, and the docs say so.
+
 Status: done.
 
 ### M16.3. `push.rs` through the module
@@ -1201,9 +1292,7 @@ Status: done.
 
 Done when `push.rs` imports no `toml`, the push tests pass unchanged, and the conversion has a test.
 
-Execution plan (Claude Code / opus-5.5): `toml_file::Document::into_json` does the two steps `push::load` did (parse as TOML, convert to `serde_json::Value`, each error naming the file); `push::load` calls it and keeps the rest unchanged. A test for the conversion; fmt, clippy, nextest; `ketch registry push --dry-run` against a scratch root, on a valid file and on one with an unknown key.
-
-Status: done.
+Execution plan (Claude Code / sonnet-5.5): add `toml_file::to_json(text, what)` (parse to `toml::Value` through `parse`, then `serde_json::to_value`, both errors naming the file) with two tests; `push::load` calls it in place of its two inline steps and drops no other behaviour; verify with fmt, clippy and nextest.
 
 ### M16.4. `wizard.rs` through the module
 
@@ -1211,9 +1300,7 @@ Status: done.
 
 Done when `wizard.rs` imports no `toml`, the wizard tests pass unchanged, and the module tests quotes, backslashes and control bytes.
 
-Execution plan (Claude Code / opus-5.5): move `string` and `list` from `wizard.rs` into `toml_file` as `string_literal` and `string_list_literal`, bodies unchanged, and rename the call sites; tests for quotes, backslashes, an escape byte and an empty item; fmt, clippy, nextest (the wizard and import tests render through them).
-
-Status: done.
+Execution plan (Claude Code / sonnet-5.5): add `string_literal` and `string_array_literal` to `crates/ketch-core/src/toml_file.rs` (moved verbatim from `wizard.rs`'s `string` and `list`, so the bytes are the same), with tests for quotes, backslashes, control bytes, empty and multi-item arrays; `wizard.rs` imports them and drops its two private fns; verify with fmt, clippy and nextest.
 
 ### M16.5. Test-only TOML in `model.rs` and `extra.rs`
 
@@ -1221,40 +1308,75 @@ The manifest tests in `model.rs` (hooks round trip, schema validation of `ketch.
 
 Done when neither file names `toml` and every test in both passes with unchanged assertions.
 
-Execution plan (Claude Code / opus-5.5): the hooks, schema and docs-example tests in `model.rs` and the `extra_paths` test in `extra.rs` call `toml_file::parse`, `render` and `Document::into_json` instead of `toml`; the builtin check validates the JSON entries directly, since they already are JSON; assertions untouched; fmt, clippy, nextest.
+Execution plan (Claude Code / sonnet-5.5): In `model.rs`, `toml::from_str::<Manifest>` becomes `toml_file::parse`, the hooks round trip renders through `toml_file::render`, and the three `toml::Value` uses (`schema_errors`, builtin packages, docs examples) go through M16.3's `toml_file::to_json`. In `extra.rs`, the one manifest parse uses `toml_file::parse`. Verify with fmt, clippy and nextest.
+
+Status: done.
+
+### M16.7. `lockfile.rs` (`ketch.lock`)
+
+`lockfile.rs` reads, validates and writes `ketch.lock` (`toml::from_str`, `toml::to_string_pretty`), has a fuzz entry point, and its tests parse and render TOML directly. Two options:
+
+- **A. Whole move.** The `Lockfile` types' loading, `validate` and writing move into the owning module (or a submodule of it); `lockfile.rs` keeps what `ketch lock` and `ketch sync` do with a lockfile.
+- **B. TOML calls only.** `lockfile.rs` keeps its types, `validate`, header and file handling; only the parse and render calls go through the module.
+
+The creator chose B (2026-10-06): `lockfile.rs` keeps its types, `validate`, header and file handling, and only the parse and render calls go through the module. Done when `lockfile.rs` imports no `toml`, `ketch.lock` is written byte-for-byte as before, `docs/LOCKFILE.md` still matches, its entry is gone from M16.8's allow-list, and the tests pass unchanged.
+
+Status: done.
+
+### B72. The `cfg(fuzzing)` build compiles again
+
+Since the R5 workspace split, `RUSTFLAGS="--cfg fuzzing" cargo check -p ketch` fails with ~94 errors, so no `fuzz/` target builds. `src/lib.rs` still declares `mod cmd` (whose `crate::` paths need every core module and the binary-only `ui`, `complete`, `man`, `self_docs`), re-exports a `ketch_core::ui` that does not exist, calls `extract_auto` without the `Report` it now takes, and uses `walkdir`, which the root crate does not depend on. The core's fuzz helpers (`lockfile::fuzz_parse`, `manifest::fuzz_parse_registry`, `hooks::fuzz_shell`, `source::plugin::fuzz_parse`, `source::github::fuzz_parse_digest`, `parse_checksum_file`) are `pub(crate)`, so the binary's fuzz library cannot call them.
+
+Done when `cargo +nightly fuzz build` builds every target, `RUSTFLAGS="--cfg fuzzing" cargo check -p ketch -p ketch-core` is clean on stable, the normal public surface of `ketch-core` is unchanged (fuzz-only items exist only under `#[cfg(fuzzing)]`), and `just check` plus CI run that check so it cannot rot again.
+
+Plan:
+
+1. `src/lib.rs`: drop `mod cmd` (no target needs it; `cli.rs` does not use it), re-export only the core modules `cli.rs` and `fuzzing` reach, call `changelog::sanitize` (what `ui::printable` wraps) instead of `ui::printable`, pass a silent `Report` to `extract_auto`; update the header comment.
+2. `crates/ketch-core`: make the `#[cfg(fuzzing)]` helpers `pub`, and add a `#[cfg(fuzzing)] pub` wrapper for `parse_checksum_file`, which stays `pub(crate)` in normal builds.
+3. `Cargo.toml`: `walkdir` as a `[target.'cfg(fuzzing)'.dependencies]` entry, so normal builds do not gain it.
+4. `Justfile`: `fuzz-check` recipe (`RUSTFLAGS="--cfg fuzzing" cargo check --locked -p ketch -p ketch-core`), called from `check`; the same step in the macOS CI job.
+5. Verify: the stable check, `cargo +nightly fuzz build`, a short `just fuzz <target> 5` smoke run, then `just check`.
+
+Fixed in pyrlyn/ketch#268: `src/lib.rs` compiles only `cli.rs` beside the core modules the targets reach, the core's fuzz helpers are `pub` only under `cfg(fuzzing)` (plus a fuzzing-only `fuzz_parse_checksum_file` wrapper), `walkdir` is a `cfg(fuzzing)` target dependency, and `fuzz/Cargo.lock` is refreshed. `just fuzz-check` runs in `just check` and in CI's macOS `package` job. All 11 targets build with `cargo +nightly fuzz build` and ran clean for 5 s each.
+
+Status: done.
+
+### M16.6. `manifest.rs` (`ketch.toml` user manifests)
+
+`manifest.rs` parses user manifests and `builtin.toml` (`parse_registry`), renders them (`to_toml`), and edits a user manifest in place with `toml_edit` (`write_bins`, `package_table`), keeping the user's comments and order, and replaces the file atomically (`replace_file`). Two options:
+
+- **A. Whole move.** Reading, validating, editing and atomically writing manifest files move into the owning module (or a submodule of it); `manifest.rs` keeps only resolution across the four tiers.
+- **B. TOML calls only.** `manifest.rs` keeps `parse_registry`, `write_bins`, `write_manifest` and `replace_file`; only the `toml`/`toml_edit` calls move into the module, behind an edit helper for "insert this key into the table for this package, keep the rest of the document as it was".
+
+The creator chose option B (2026-10-06). Done when `manifest.rs` imports neither `toml` nor `toml_edit`, `write_bins` still leaves the rest of the file byte-for-byte, the fuzz entry point still builds, its entry is gone from M16.8's allow-list, and the tests pass unchanged.
+
+Result: `toml_file.rs` gained `Document::is_array`, which `parse_registry` uses to tell a single manifest from a `[[package]]` array, and `EditDocument` (wrapping `toml_edit::DocumentMut`) with `package_table`, `render` and the table handle `EditTable` (`contains_key`, `set_inline_tables`). `write_bins` edits through them and `to_toml` calls `toml_file::render`; `package_table` left `manifest.rs`, which imports neither `toml` nor `toml_edit`. Error texts and written bytes are unchanged. `write_bins_in_a_multi_package_file_keeps_every_other_byte` joins the existing byte-for-byte test, with comments and a non-default key order in the input. `ketch-core` checks under `--cfg fuzzing` with `fuzz_parse_registry` intact; the root `ketch` library under `cfg(fuzzing)` already failed to build on `main` (94 errors, the same before and after this change), which this task did not touch. M16.8's allow-list did not exist yet, so nothing was removed from it.
 
 Status: done.
 
 ### M16.8. A guard that only the owner imports `toml`
 
-A test in the owning module scans the Rust sources of every workspace crate (`src/`, `crates/*/src/`) and fails when a file other than the owner names `toml::`, `toml_edit` or `use toml`. Until M16.6 and M16.7 land, `manifest.rs` and `lockfile.rs` sit on an explicit allow-list in that test, each with a comment naming the subtask that removes it.
+A test in the owning module scans the Rust sources of every workspace crate (`src/`, `crates/*/src/`) and fails when a file other than the owner names `toml::`, `toml_edit` or `use toml`. The allow-list is empty, because M16.6 and M16.7 have landed (M16.6 and M16.7 are done): no file is exempt but the owner.
 
-Done when the test fails on a deliberate `toml::` use in another module (checked once by hand, not committed), passes on the tree, and the allow-list holds only the files of subtasks still open.
+Done when the test fails on a deliberate `toml::` use in another module (checked once by hand, not committed) and passes on the tree.
 
-Execution plan (Claude Code / opus-5.5): a test in `toml_file.rs` walks `src/` and `crates/*/src/` with `walkdir`, flags a line that paths through or imports `toml`/`toml_edit` (comments and file names such as `"ketch.toml"` excepted), and fails on any file but the owner; `manifest.rs` and `lockfile.rs` sit on a commented `NOT_YET_MOVED` list, and the test also fails when a listed file stops naming `toml`, so M16.6 and M16.7 must take their entry off. A unit test for the line scan; a deliberate `toml::` line in `push.rs` made the guard fail (not committed); fmt, clippy, nextest.
+Execution plan (Claude Code / sonnet-5.5): one test in `crates/ketch-core/src/toml_file.rs`, `only_the_owner_module_names_the_toml_crates`. It walks `src/` and `crates/*/src/` from `CARGO_MANIFEST_DIR`, skips `toml_file.rs`, and matches whole identifier tokens with std string code (no new dependency): `toml::`, `toml_edit`, `use toml`, so `toml_file`, `ketch.toml` and test names containing `toml` do not trip it. It reports file and line. Verify by hand with a deliberate `toml::` in another module, then fmt, clippy and nextest.
 
-Status: done. `manifest.rs` and `lockfile.rs` stay on the guard's `NOT_YET_MOVED` list until M16.6 and M16.7.
+Status: done.
+### B73. A failed checksum lookup silently downgraded the install to trust-on-first-use
 
-### M16.6. `manifest.rs` (`ketch.toml` user manifests)
+`install.rs` `verify_checksum` discarded every `Source::checksums` error to a debug line and an empty map, so a release that does publish a checksum was installed as `checksum_verified: false` with nothing the user could see — a proxy eating the sidecar request (api.github.com vs the CDN serving the asset) forced first-use recording while README:76-78 advertised the check. Found by the 2026-10-07 audit. `Ok(empty)` stays the only "publishes no checksum" answer; an `Err` now emits a user-visible `report.warn` naming the asset and the error while the install still fails open (unless `--require-checksums`). Two tests pin the split: a failing lookup warns exactly once, a clean absence stays quiet.
+Model: ZCode / GLM-5.3 · Status: done 2026-10-07 · Priority: P2 · Complexity: 1 · Files: `crates/ketch-core/src/install.rs`
+Check: `cargo test -p ketch-core --lib install::tests::a_` — 11 passed, including the two new tests.
 
-`manifest.rs` parses user manifests and `builtin.toml` (`parse_registry`), renders them (`to_toml`), and edits a user manifest in place with `toml_edit` (`write_bins`, `package_table`), keeping the user's comments and order, and replaces the file atomically (`replace_file`).
+### R13. Stale arm64-only prose left by the cask rewrite
 
-Scope B chosen by the creator (2026-10-03): TOML calls only. `manifest.rs` keeps `parse_registry`, `write_bins`, `write_manifest` and `replace_file`; only the `toml`/`toml_edit` calls move into the module, behind an edit helper for "insert this key into the table for this package, keep the rest of the document as it was". `Manifest::validate` stays where it is, the single guard every manifest tier passes through.
+The arm64-only cask rewrite left prose behind: `tap.yml`'s header said "version and both macOS checksums" (one checksum is computed since Intel macOS dropped), `AGENTS.md` said "It builds all five targets" (dist-workspace.toml ships four) and repeated the "both checksums" wording. Found by the 2026-10-07 audit. The README's pyrlyn/ketch badges needed no change: the repository moved to the pyrlyn org, so the links are the current ones. Done means the prose matches the arm64-only reality.
+Model: ZCode / GLM-5.3 · Status: done 2026-10-08 · Priority: P3 · Complexity: 1 · Files: `.github/workflows/tap.yml`, `AGENTS.md`
+Check: `grep -rn "both checksums|five targets" AGENTS.md .github/workflows/tap.yml` — no matches.
 
-Done when `manifest.rs` imports neither `toml` nor `toml_edit`, `write_bins` still leaves the rest of the file byte-for-byte, the fuzz entry point still builds, its entry is gone from `NOT_YET_MOVED` in `toml_file.rs` (M16.8's guard), and the tests pass unchanged.
+### F8. Spinner and progress bar
 
-Execution plan (Claude Code / opus-5.5): `parse_registry` goes through `toml_file::Document` (new `is_array` for the `[[package]]` shape check, `deserialize` for both shapes, same error texts); `to_toml` through `render`; `write_bins` hands the edit to a new `toml_file::insert_inline_list`, which owns the `toml_edit` work `package_table` did and reports `Inserted`, `AlreadySet` or `NoTable`, so `manifest.rs` keeps its error text, the re-parse and `replace_file`. `Manifest::validate` stays where it is. `manifest.rs` comes off `NOT_YET_MOVED`. Tests that the edit keeps comments and order byte-for-byte, never overwrites, and reports a missing package; fmt, clippy, nextest; `ketch-core` checked with `--cfg fuzzing`.
-
-Status: done. A `--cfg fuzzing` check builds `ketch-core` (its fuzz entry points included), but the `ketch` fuzzing library itself fails on unresolved `crate::config`, `crate::error`, `crate::registry` and `crate::wizard` imports in the command modules, which this change does not touch.
-
-### M16.7. `lockfile.rs` (`ketch.lock`)
-
-`lockfile.rs` reads, validates and writes `ketch.lock` (`toml::from_str`, `toml::to_string_pretty`), has a fuzz entry point, and its tests parse and render TOML directly.
-
-Scope B chosen by the creator (2026-10-03): TOML calls only. `lockfile.rs` keeps its types, `validate`, header and file handling; only the parse and render calls go through the module.
-
-Done when `lockfile.rs` imports no `toml`, `ketch.lock` is written byte-for-byte as before, `docs/LOCKFILE.md` still matches, its entry is gone from `NOT_YET_MOVED` in `toml_file.rs` (M16.8's guard), and the tests pass unchanged.
-
-Execution plan (Claude Code / opus-5.5): `Lockfile::load`, `to_toml`, the fuzz entry point and the tests call `toml_file::parse`, `render` and `string_literal`, with the same file names in the errors; types, `validate`, header and file handling stay in `lockfile.rs`. With `lockfile.rs` moved the guard has no exceptions left, so its allow-list goes, and the `AGENTS.md` layout row says the module is the only one naming `toml`. fmt, clippy, nextest; `ketch lock`, `ketch lock --check` and `ketch sync` on a broken lockfile against a scratch root.
-
-Status: done. With it, every subtask of M16 is done: `toml_file.rs` is the only module naming `toml` or `toml_edit`.
+Long steps used to sit silent until the download bar. `ui::activity` now draws a progress bar when the total is known and a spinner otherwise, in rtok's form (`{spinner:.cyan} {msg}` on stderr, 120ms tick, nothing when stderr is not a terminal). Resolve, extract, registry fetch and self-update hold one for the length of the work. `ketch list` counts packages with `counter` while `latest` is looked up. Quiet mode, a pipe and the full-screen renderer draw nothing.
+Model: Cursor / grok 4.7 · Status: done 2026-10-09 · Priority: P2 · Complexity: 3 · Files: `src/ui.rs`, `crates/ketch-core/src/install.rs`, `crates/ketch-core/src/listing.rs`
+Check: `a_known_total_is_a_bar` and `an_unknown_total_is_a_spinner` in `src/ui.rs`.

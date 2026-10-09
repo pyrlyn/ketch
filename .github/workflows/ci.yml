@@ -11,21 +11,34 @@ on:
   issue_comment:
     types: [created]
   workflow_dispatch:
-  # Dependabot pull requests: dependabot.yml calls this workflow so they get the
-  # same jobs before its patch-only auto-merge.
-  workflow_call:
 
 # Build and test jobs need only to read the repository; a job that needs more
-# (review) declares its own. This also caps these jobs when
-# dependabot.yml calls this workflow with wider permissions.
+# (review) declares its own.
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # The shared pyrlyn/infra workflow, pinned by commit, with Rust from
+  # infra's config action on .github/infra.yml: `docs-only` is "true" when every changed file
+  # is documentation (fails open: "false" when unsure, e.g. a .github/ change). The jobs below
+  # then do no work but still report under their names, so the required checks pass. A failed
+  # `config` runs everything.
+  config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs-only: ${{ steps.config.outputs.docs-only }}
+    steps:
+      - id: config
+        uses: pyrlyn/ci/.github/actions/config@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
+
+  # The shared pyrlyn/ci workflow, pinned by commit, with Rust from
   # mise.toml and a check that rustc is that pin: fmt once, then per target of
   # its shared matrix clippy (--all-targets --all-features, so the tui feature
   # is linted too), check, and the tests on every target (Linux x86_64 and
@@ -38,86 +51,48 @@ jobs:
   rust:
     # Draft PRs are skipped here and reported green: review happens when the PR
     # is marked ready, and a draft must not look broken meanwhile.
-    if: github.event.pull_request.draft != true
-    uses: pyrlyn/infra/.github/workflows/ci-rust.yml@0603d0ae610af9f792c5caf925041292a857e480
+    needs: config
+    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
+    uses: pyrlyn/ci/.github/workflows/ci-rust.yml@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
     # actions: write for infra's cancel-run (the first failing job cancels the run).
     permissions:
       contents: read
       actions: write
     with:
-      clippy-args: --locked
       tools: nextest
       test-command: |
         cargo nextest run --workspace --all-targets --locked
-        cargo nextest run --workspace --all-targets --locked --features tui
+        cargo nextest run -p ketch --all-targets --locked --features tui
       build-command: cargo build --workspace --all-targets --all-features --locked --target "$TARGET"
+      # Docs-only: every job is a no-op that still reports (`rust / <target>` stay required).
+      skip: ${{ needs.config.outputs.docs-only == 'true' }}
 
   # Commits pushed from anywhere but this machine never met the local
-  # commit-msg hook, so a pull request's messages are linted here too.
-  # Pushes to main skip this: every commit there arrived through a pull
-  # request that already passed it.
+  # commit-msg hook, so a pull request's messages are linted here too, with
+  # the repository's commitlint config (pyrlyn/ci's `commits` action: merge
+  # commits and git's "Revert ..." subjects are skipped, every offender is
+  # listed). Pushes to main skip this: every commit there arrived through a
+  # pull request that already passed it.
   commits:
     if: github.event.pull_request.draft != true && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      # Full history: the commit-message check ranges from the pull request's
-      # base branch to HEAD.
-      - uses: actions/checkout@v7
+      # Full history: the check ranges from the pull request's base branch to HEAD.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-
-      - name: Read the Node pin from mise.toml
-        if: github.event_name == 'pull_request'
-        id: node_pin
-        run: |
-          version=$(grep '^node = ' mise.toml | cut -d '"' -f2)
-          [ -n "$version" ] || { echo "no node pin found in mise.toml" >&2; exit 1; }
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      # mise owns the pin but is not installed on GitHub runners, so
-      # setup-node runs the version mise.toml names. A number written here
-      # instead would be a second pin that drifts the first time one changes.
-      - uses: actions/setup-node@v7
-        if: github.event_name == 'pull_request'
+          persist-credentials: false
+      - uses: pyrlyn/ci/.github/actions/commits@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
         with:
-          node-version: ${{ steps.node_pin.outputs.version }}
-
-      - name: Commit messages
-        if: github.event_name == 'pull_request'
-        run: |
-          npm ci
-          # Merge commits are skipped: git writes their subjects, they are
-          # not conventional commits, and nobody may rewrite them — the same
-          # call the local commit-msg hook makes. commitlint has no flag for
-          # it, so each non-merge commit is checked on its own, and every
-          # offender is listed before the step fails rather than stopping at
-          # the first.
-          base="origin/${{ github.base_ref }}"
-          # A range that does not resolve must be an error: rev-list would
-          # print nothing, the loop would see no commits, and a broken check
-          # would pass itself.
-          git rev-parse -q --verify "$base^{commit}" > /dev/null \
-              || { echo "base branch $base not found" >&2; exit 1; }
-          echo "linting $(git rev-list --count --no-merges "$base..HEAD") commit(s) from $base"
-          bad=0
-          for sha in $(git rev-list --no-merges --reverse "$base..HEAD"); do
-              subject=$(git log -1 --format=%s "$sha")
-              # Same passthrough as the local hook: git writes reverts in its
-              # own format, not as conventional commits.
-              case "$subject" in
-                  "Revert "*) continue ;;
-              esac
-              echo "checking $sha: $subject"
-              if ! npx --no-install commitlint --from "$sha^" --to "$sha"; then
-                  echo "not a conventional commit: $sha $subject" >&2
-                  bad=1
-              fi
-          done
-          exit $bad
+          tool: commitlint
 
   # install.ps1 parses and runs; the Rust side of Windows is the `rust` job.
   powershell:
-    if: github.event.pull_request.draft != true
+    needs: config
+    if: >-
+      !cancelled() && github.event.pull_request.draft != true
+      && needs.config.outputs.docs-only != 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -134,7 +109,10 @@ jobs:
   # ones, not in front of them. XcodeGen at the mise.toml pin; the runner's
   # default Xcode (26.x on macos-26) is new enough for the macOS 26 target.
   macos-app:
-    if: github.event.pull_request.draft != true
+    needs: config
+    if: >-
+      !cancelled() && github.event.pull_request.draft != true
+      && needs.config.outputs.docs-only != 'true'
     runs-on: macos-26
     defaults:
       run:
@@ -166,11 +144,6 @@ jobs:
           xcodebuild -project Ketch.xcodeproj -scheme Ketch -derivedDataPath build
           -destination 'platform=macOS' test
 
-      # The release's disk image and appcast scripts on the app just built,
-      # with a throwaway key: `just macos-appcast`.
-      - name: Update feed round trip
-        run: sh ../../tests/desktop-appcast.sh
-
   # ketch-ffi as the macOS app will link it: the XCFramework for both
   # architectures, the Swift bindings UniFFI generates from it, and the Swift
   # test that runs the real core against a scratch root through them. What
@@ -179,14 +152,17 @@ jobs:
   # would need another action. Kept cheap: the dev profile, one runner, and
   # rust-cache; it does not block the Rust jobs.
   ketch-ffi:
-    if: github.event.pull_request.draft != true
+    needs: config
+    if: >-
+      !cancelled() && github.event.pull_request.draft != true
+      && needs.config.outputs.docs-only != 'true'
     runs-on: macos-26
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: ./.github/actions/rust
+      - uses: pyrlyn/ci/.github/actions/setup-rust@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: XCFramework and bindings
         run: scripts/xcframework.sh --debug
@@ -199,7 +175,10 @@ jobs:
   # the real core against a scratch root through them. What `just csharp-test`
   # runs. The generator and the .NET SDK are mise.toml pins.
   ketch-cs:
-    if: github.event.pull_request.draft != true
+    needs: config
+    if: >-
+      !cancelled() && github.event.pull_request.draft != true
+      && needs.config.outputs.docs-only != 'true'
     runs-on: windows-latest
     defaults:
       run:
@@ -207,7 +186,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: ./.github/actions/rust
+      - uses: pyrlyn/ci/.github/actions/setup-rust@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
         with:
           install-args: rust dotnet cargo:https://github.com/dennisameling/uniffi-bindgen-cs
 
@@ -220,12 +199,75 @@ jobs:
         working-directory: desktop/windows
         run: dotnet test --project KetchCore.Tests
 
+  # ketch-capi as the Linux app will link it: the shared library, and the Vala
+  # test Meson builds against vapi/ketch.vapi and runs against a scratch root.
+  # What `just capi-test` runs. The header and schema drift tests run in the
+  # rust job with the rest of the workspace.
+  ketch-capi:
+    needs: config
+    if: >-
+      !cancelled() && github.event.pull_request.draft != true
+      && needs.config.outputs.docs-only != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pyrlyn/ci/.github/actions/setup-rust@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      # mise has no valac or json-glib, so the Vala toolchain is the
+      # distribution's, on the runner only.
+      - name: Vala toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends valac meson ninja-build libjson-glib-dev
+
+      - name: Library
+        run: cargo build --locked -p ketch-capi
+
+      - name: Vala test
+        run: |
+          meson setup target/capi-meson crates/ketch-capi -Dcapi_dir="$PWD/target/debug"
+          meson test -C target/capi-meson --print-errorlogs
+
+  # The Windows app: the fake core and store tested against the contract
+  # scenarios, then the WinUI 3 project built with the .NET SDK alone (the
+  # runner's Visual Studio is not used: the XAML compiler and the Windows SDK
+  # build tools come from the Microsoft.WindowsAppSDK package). The tests run
+  # on any OS; only the build needs Windows. The .NET SDK is a mise.toml pin.
+  ketch-win-app:
+    needs: config
+    if: >-
+      !cancelled() && github.event.pull_request.draft != true
+      && needs.config.outputs.docs-only != 'true'
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop/windows
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          install_args: dotnet
+
+      - name: App core tests
+        run: dotnet test --project Ketch.AppCore.Tests
+
+      - name: Build the WinUI app
+        run: dotnet build Ketch.App/Ketch.App.csproj -c Release -p:Platform=x64
+
   # The design tokens: every generated copy (Swift, XAML, GTK CSS, DESIGN.md,
   # preview.html) is what desktop/design/build.mjs writes from tokens.json, DESIGN.md passes
   # the DESIGN.md linter, and text meets WCAG AA on its glass backgrounds.
   # Offline after npm ci; the same steps as `just design-check`.
   design:
-    if: github.event.pull_request.draft != true
+    needs: config
+    if: >-
+      !cancelled() && github.event.pull_request.draft != true
+      && needs.config.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -255,7 +297,10 @@ jobs:
   # Packaging is exercised on every pull request, so it breaks here rather than
   # halfway through a release, after the merge that started one.
   package:
-    if: github.event.pull_request.draft != true
+    # A matrix job skipped at job level reports one check under its raw name, so the required
+    # `package (<os>, <target>)` checks would wait: on a docs-only change every step is a no-op.
+    needs: config
+    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
     strategy:
       fail-fast: false
       matrix:
@@ -267,12 +312,15 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
+    env:
+      RUN: ${{ needs.config.outputs.docs-only != 'true' }}
     defaults:
       run:
         shell: bash
     steps:
       # Tags are required by tests/crate-version.sh (latest tag vs Cargo.toml).
-      - uses: actions/checkout@v7
+      - if: env.RUN == 'true'
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -280,40 +328,53 @@ jobs:
       # release.yml installs; git-cliff is what tests/release-sh.sh runs
       # scripts/release.sh against. All three at the versions mise.toml pins.
       # Before rust-cache, so the cache keys on this rustc.
-      - uses: ./.github/actions/rust
+      - if: env.RUN == 'true'
+        uses: pyrlyn/ci/.github/actions/setup-rust@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
         with:
           install-args: rust cargo-dist git-cliff
 
-      - uses: Swatinem/rust-cache@v2
+      - if: env.RUN == 'true'
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
-      - name: Shell syntax
+      - if: env.RUN == 'true'
+        name: Shell syntax
         run: |
           bash -n install.sh
           bash -n scripts/release.sh
           bash -n scripts/dist-generate.sh
-          bash -n scripts/desktop-version.sh
-          bash -n scripts/desktop-dmg.sh
-          bash -n scripts/desktop-appcast.sh
           sh tests/release-sh.sh
           sh tests/crate-version.sh
           sh tests/release-workflows.sh
           sh tests/ci-yml-triggers.sh
           sh tests/desktop-release.sh
+          sh tests/docs-i18n.sh
+
+      # src/lib.rs and the core's fuzz entry points exist only under
+      # cfg(fuzzing), which no other build sets; checked on stable here so they
+      # cannot rot unnoticed again until someone runs the nightly fuzz build.
+      # What `just fuzz-check` runs.
+      - name: The fuzzing library compiles
+        if: env.RUN == 'true' && runner.os == 'macOS'
+        env:
+          RUSTFLAGS: --cfg fuzzing
+        run: cargo check --locked -p ketch -p ketch-core
 
       # release.yml is generated; a dist-workspace.toml or build-*.yml change
       # without `just dist-generate` would ship a workflow nobody reviewed.
       - name: release.yml is what dist generates
-        if: runner.os == 'Linux'
+        if: env.RUN == 'true' && runner.os == 'Linux'
         run: |
           DIST=dist scripts/dist-generate.sh
           git diff --exit-code -- .github/workflows/release.yml
 
-      - name: Package the host target
+      - if: env.RUN == 'true'
+        name: Package the host target
         run: dist build --artifacts=local --target ${{ matrix.target }}
 
       # Everything install.sh relies on: an aggregate SHA256SUMS it can grep, a
       # checksum that verifies, and a `ketch` binary it can find and run.
-      - name: The tarball is what install.sh expects
+      - if: env.RUN == 'true'
+        name: The tarball is what install.sh expects
         run: |
           cd target/distrib
           if command -v shasum >/dev/null 2>&1; then
@@ -342,7 +403,7 @@ jobs:
       # checksums are placeholders; rubocop only reads the shape of the file.
       # `brew style` applies its cask rules by the `Casks/` directory name.
       - name: The generated cask passes brew style
-        if: runner.os == 'macOS'
+        if: env.RUN == 'true' && runner.os == 'macOS'
         run: |
           mkdir -p cask/Casks
           scripts/cask.sh 0.0.0 "$(printf '%064d' 0)" > cask/Casks/ketch.rb

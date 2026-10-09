@@ -15,9 +15,9 @@ categories = ["command-line-utilities", "development-tools"]
 # `crates/ketch-core` holds everything the binary does besides parsing the
 # command line, so another front end can link it without clap.
 [workspace]
-members = [".", "crates/ketch-core", "crates/ketch-ffi"]
+members = [".", "crates/ketch-core", "crates/ketch-ffi", "crates/ketch-capi"]
 # A bare `cargo test` or `cargo clippy` at the root covers the core too.
-default-members = [".", "crates/ketch-core", "crates/ketch-ffi"]
+default-members = [".", "crates/ketch-core", "crates/ketch-ffi", "crates/ketch-capi"]
 
 # One version for both crates: the core reports it (user agent, `--version`,
 # the statistics database), so it can never be allowed to drift from the
@@ -30,7 +30,7 @@ edition = "2021"
 # database. Nothing else in the tree needs it.
 rust-version = "1.86"
 license = "GPL-3.0-or-later OR LicenseRef-Ketch-Royalty-free-1.0 OR LicenseRef-Ketch-Commercial"
-repository = "https://github.com/listepo/ketch"
+repository = "https://github.com/pyrlyn/ketch"
 
 # There is no unsafe code in ketch and there is no reason for any to appear.
 [workspace.lints.rust]
@@ -58,7 +58,6 @@ clap_mangen = { version = "0.3", features = ["env"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"
-dirs = "7"
 # canonicalize without Windows `\\?\` UNC prefixes (path compare / display)
 dunce = "1"
 # Shared file backup (`<name>.bak-<unix-seconds>`) used by `ketch config reset`.
@@ -86,6 +85,11 @@ ratatui = { version = "0.30", optional = true }
 # on our side, and is already in the tree through indicatif.
 [target.'cfg(windows)'.dependencies]
 console = { version = "0.16", default-features = false, features = ["std"] }
+
+# `archive_extract` in `src/lib.rs` walks what an archive unpacked; only the
+# `cfg(fuzzing)` library uses it, so ordinary builds do not link it.
+[target.'cfg(fuzzing)'.dependencies]
+walkdir = "2"
 
 [dev-dependencies]
 assert_cmd = "2"
@@ -115,9 +119,10 @@ codegen-units = 1
 strip = true
 panic = "abort"
 
-# What `dist build` compiles the release tarballs with: exactly `release`.
+# What `dist build` compiles the release tarballs with: the `dev` profile, so
+# every release is a dev build (unoptimized, debug info, panics unwind).
 [profile.dist]
-inherits = "release"
+inherits = "dev"
 
 # The ketch-ffi static library inside the macOS app's XCFramework
 # (scripts/xcframework.sh). A panic must unwind so UniFFI can turn it into an

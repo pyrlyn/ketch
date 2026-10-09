@@ -157,6 +157,13 @@ impl Source for PluginSource {
     ) -> Result<String> {
         cancel.check()?;
         if !self.downloads {
+            if !allowed_asset_url(&asset.url) {
+                return Err(Error::Plugin {
+                    name: self.name().to_string(),
+                    detail: format!("refusing to fetch {}", asset.url),
+                    stderr: String::new(),
+                });
+            }
             // No token is ever handed to a plugin's URLs: whatever credentials
             // an asset needs must come from the plugin's own headers.
             return Http::anonymous(&self.report).download(
@@ -241,6 +248,37 @@ fn file_name(path: &Path) -> String {
         .and_then(|n| n.to_str())
         .unwrap_or("plugin")
         .to_string()
+}
+
+/// URLs ketch itself will fetch on a plugin's behalf.
+///
+/// HTTPS is the production path. Loopback HTTP is how tests and a local plugin
+/// serve fixtures; anything else — `http://evil.example`, file URLs, a
+/// `localhost` prefix that is really another host — is refused.
+fn allowed_asset_url(url: &str) -> bool {
+    let Some(rest) = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("HTTPS://"))
+    else {
+        let Some(rest) = url
+            .strip_prefix("http://")
+            .or_else(|| url.strip_prefix("HTTP://"))
+        else {
+            return false;
+        };
+        return loopback_host(rest);
+    };
+    !rest.is_empty()
+}
+
+fn loopback_host(rest: &str) -> bool {
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or(rest);
+    let hostport = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+    matches!(hostport, "127.0.0.1" | "localhost")
+        || hostport.starts_with("127.0.0.1:")
+        || hostport.starts_with("localhost:")
 }
 
 /// Run one plugin subcommand and return its stdout.
@@ -463,7 +501,7 @@ fn parse<T: serde::de::DeserializeOwned>(path: &Path, body: &str) -> Result<T> {
 /// filtering `list_releases` applies, for the `plugin_protocol` fuzz target
 /// (`src/lib.rs`).
 #[cfg(fuzzing)]
-pub(crate) fn fuzz_parse(body: &str) {
+pub fn fuzz_parse(body: &str) {
     let path = Path::new("ketch-source-fuzz");
     let _ = parse::<Capabilities>(path, body);
     let _ = parse::<Option<SourceInfo>>(path, body);
@@ -682,5 +720,21 @@ esac
                 .any(|line| line.contains("utf8 stderr")),
             "{err:?}"
         );
+    }
+}
+
+#[cfg(test)]
+mod url_tests {
+    use super::allowed_asset_url;
+
+    #[test]
+    fn https_and_loopback_http_are_allowed_and_anything_else_is_not() {
+        assert!(allowed_asset_url("https://example.com/a.tar.gz"));
+        assert!(allowed_asset_url("http://127.0.0.1:9/a.bin"));
+        assert!(allowed_asset_url("http://localhost/a.bin"));
+        assert!(!allowed_asset_url("http://evil.example/a.bin"));
+        assert!(!allowed_asset_url("http://localhost.evil.example/a.bin"));
+        assert!(!allowed_asset_url("file:///etc/passwd"));
+        assert!(!allowed_asset_url("ftp://127.0.0.1/a.bin"));
     }
 }

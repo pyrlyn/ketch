@@ -13,6 +13,10 @@ it too — nothing here is agent-specific except the framing and the rule below.
   pull request description is not checked — that part is on the agent.
 - If a directory above this repository contains an `AGENTS.md` or
   `CLAUDE.md`, follow it too. If it conflicts with this file, ask the creator.
+- Repository files are English: code, docs, comments, commits and pull
+  request text. `docs/ru/` and `docs/uk/` are the exception, and the only
+  non-English prose in the tree. An English doc change updates both
+  translations in the same change. See Documentation translations.
 
 ## What ketch is
 
@@ -58,19 +62,23 @@ cargo fmt --all                  # must be clean
 cargo build                      # debug binary at target/debug/ketch
 ```
 
-The repository is a Cargo workspace of three crates: the root package `ketch`
-(the binary), `crates/ketch-core` (the library it is built on) and
-`crates/ketch-ffi` (the core exported through UniFFI for the desktop apps).
+The repository is a Cargo workspace of four crates: the root package `ketch`
+(the binary), `crates/ketch-core` (the library it is built on),
+`crates/ketch-ffi` (the core exported through UniFFI for the desktop apps) and
+`crates/ketch-capi` (`ketch-ffi` behind a C ABI, for the Vala app).
 All are default members, so a bare `cargo test` or `cargo clippy` at the root
 covers them; `--workspace` says so explicitly, and is what the Justfile and CI
 pass. `just xcframework` builds `ketch-ffi` into the macOS app's XCFramework
 and Swift bindings; `just ffi-test` builds a debug one and runs its Swift test.
 `just csharp-test` does the same for C#: a debug `ketch_ffi` shared library,
 its C# bindings, and the .NET test in `desktop/windows`.
+`just capi-test` builds `ketch-capi` and runs its Vala test through Meson
+(Linux, with valac and json-glib installed).
 
 The Justfile wraps the same commands with `--locked`: `just fmt`, `just clippy`
 (or `just lint`), `just test`, and `just check` runs what CI runs on this
-host — format, clippy, `cargo nextest run --workspace --all-targets`, commitlint
+host — format, clippy, the `cfg(fuzzing)` library (`just fuzz-check`),
+`cargo nextest run --workspace --all-targets`, commitlint
 fixtures, shell syntax on `install.sh` and the release scripts, `mandoc -Tlint`
 on the generated man pages when mandoc is present, whether `release.yml` is what
 `dist generate` produces, `dist build` for the host target, and on macOS
@@ -178,7 +186,7 @@ differ by orders of magnitude — the cargo home is the small one. Set
 | --- | --- |
 | `Cargo.toml` | the `ketch` package, and the workspace: members, the one shared version, edition, MSRV and lints |
 | `src/main.rs` | argument parsing, config construction, dispatch — nothing else |
-| `src/lib.rs` | empty except under `cfg(fuzzing)`: the same modules again, and the entry points `fuzz/` drives |
+| `src/lib.rs` | empty except under `cfg(fuzzing)`: `cli.rs`, the core modules the fuzz targets reach, and the entry points `fuzz/` drives; `just fuzz-check` builds it on stable |
 | `src/cli.rs` | the clap surface, kept separate so `cmd/` takes its args directly |
 | `src/cmd/` | thin command bodies: arguments, output, confirmations |
 | `src/complete.rs` | completion scripts, and `ketch __complete`: the package names they ask for at <TAB>, for every shell |
@@ -211,9 +219,11 @@ differ by orders of magnitude — the cargo home is the small one. Set
 | `crates/ketch-core/src/text.rs` | byte counts and truncation, spelled the same by the core and every renderer |
 | `crates/ketch-core/src/doctor.rs` | `ketch doctor`'s checks, shared by the command and `ketch-ffi` |
 | `crates/ketch-ffi/` | the core through UniFFI: a coarse, language-neutral surface of plain records, foreign traits for `Reporter` and `Decider` passed with a cancel token to each call, and a typed `KetchError` |
+| `crates/ketch-capi/` | `ketch-ffi` as `extern "C"` functions with JSON records, for front ends no UniFFI generator reaches: the cbindgen header (`include/ketch.h`), the payload schema, the hand-written `vapi/ketch.vapi` and its Meson-built Vala test. The one crate allowed hand-written `unsafe`, scoped to `src/abi.rs` |
 | `scripts/xcframework.sh` | `ketch-ffi` as an XCFramework for both macOS architectures, and its generated Swift bindings; `just xcframework` |
 | `scripts/csharp.sh` | `ketch-ffi` as a shared library and the C# bindings the pinned uniffi-bindgen-cs generates from it, into `desktop/windows/KetchCore/Generated/`; `just csharp`, `just csharp-test` |
 | `desktop/windows/` | the Windows app's C# side: `KetchCore` (the generated binding as a .NET library), its MSTest project, and `uniffi.toml` for the generator |
+| `desktop/windows/Ketch.AppCore/`, `Ketch.AppCore.Tests/`, `Ketch.App/` | the Windows app on a fake core: the core contract, the fake that replays `desktop/contract/scenarios` and the store (plain .NET, tested on any OS with `just windows-app-test`), and the WinUI 3 shell over them (`dotnet build -p:Platform=x64`, Windows only: the `ketch-win-app` CI job) |
 | `desktop/macos/KetchCore/` | the Swift package wrapping that XCFramework and bindings (both build output), and the Swift test that drives the real core through them |
 | `src/ui.rs` | all terminal output, `Terminal`: the `Reporter` that draws the core's events, and `TerminalDecider`: the `Decider` that prompts on the terminal |
 | `src/tui/` | the opt-in full-screen renderer (`tui` feature), driven by `ui.rs` |
@@ -226,8 +236,9 @@ differ by orders of magnitude — the cargo home is the small one. Set
 | `scripts/dist-generate.sh` | `dist generate` plus the patches to `release.yml` dist has no setting for |
 | `.github/build-setup.yml`, `.github/build-check.yml` | steps dist splices into each release build: before it, and before upload |
 | `.github/workflows/release.yml` | generated by dist; builds every target, then tags and publishes the release |
-| `.github/workflows/bump.yml` | the only release path (pyrlyn/infra `bump.yml`): version PR, required checks, rebase merge, tag, draft release, dispatch |
+| `.github/workflows/bump.yml` | the only release path (pyrlyn/ci `bump.yml`): version PR, required checks, rebase merge, tag, draft release, dispatch |
 | `.github/workflows/tap.yml` | dist's publish job: the Homebrew cask, pushed to the tap |
+| `.github/workflows/cla.yml` | the contributor license agreement check: a thin caller of pyrlyn/ci `cla.yml`, skipped until the variable `CLA_ENABLED` is `true` |
 | `scripts/release.sh` | the one place a release version is decided; `just release` |
 | `release-plz.toml` | release-plz kept from tagging, releasing or publishing (local preview only) |
 | `cliff.toml` | the `CHANGELOG.md` entry format, for release-plz and `scripts/release.sh` alike |
@@ -239,8 +250,7 @@ differ by orders of magnitude — the cargo home is the small one. Set
 | `desktop/macos/` | the SwiftUI macOS app: `project.yml` (XcodeGen), `Ketch/` sources, `KetchTests/`, `KetchUITests/`; see its `README.md` |
 | `desktop/macos/DESIGN.md` | the macOS app's design system in the DESIGN.md format; its front matter is generated |
 | `desktop/design/` | `tokens.json`, the one source of design tokens, and `build.mjs`, which generates `generated/Tokens.swift` (macOS), `generated/KetchTokens.xaml` (Windows), `generated/ketch-tokens.css` (Linux), the macOS DESIGN.md front matter and `preview.html`'s CSS (`just design-tokens`) |
-| `.github/workflows/desktop-release.yml` | the macOS app's release: signed, notarised `.dmg` under a `desktop-v*` tag, and its Sparkle appcast |
-| `scripts/desktop-version.sh`, `scripts/desktop-dmg.sh`, `scripts/desktop-appcast.sh` | the app release's version check, disk image and appcast, shared with `tests/desktop-appcast.sh` |
+| `.github/workflows/release-apple-desktop.yml` | the macOS app's release: a thin caller of pyrlyn/ci `release-apple-desktop.yml` (signed, notarised `.dmg` under a `desktop-v*` tag, and its Sparkle appcast) |
 | `desktop/cliff.toml` | the app's release notes: commits under `desktop/` and `crates/ketch-ffi/` since the last `desktop-v*` tag |
 
 The rule that keeps `cmd/` thin: anything touching the install tree belongs in
@@ -449,7 +459,7 @@ delete the guard deliberately and say why in the commit.
 ## Releasing
 
 Nobody types a version number. `scripts/release.sh` is the one place a release
-version is decided, and **Actions → Bump and release** (`bump.yml`, pyrlyn/infra
+version is decided, and **Actions → Bump and release** (`bump.yml`, pyrlyn/ci
 `bump.yml`, `patch`/`minor`/`major`) is the only way to release — and the only
 thing that creates a `v*` tag:
 
@@ -500,7 +510,7 @@ committed `release.yml` differs from what that produces.
 
 The release build is `dispatch-releases` with `create-release = false`:
 `release.yml` runs only when bump dispatches it with a `tag`, on the tagged
-commit. It builds all five targets, and only when every one of them has built
+commit. It builds all four targets, and only when every one of them has built
 and passed its smoke test does the `host` job upload the tarballs and
 `SHA256SUMS` to bump's draft release and publish it. dist never tags. A failed
 build leaves the tag and a draft (invisible to `ketch self upgrade` and
@@ -526,8 +536,8 @@ fails the release. A bare binary cannot be stapled, so Gatekeeper looks its
 ticket up online.
 
 After the release is published, dist's publish job `./tap` (`tap.yml`)
-regenerates the Homebrew cask with `scripts/cask.sh` — version and both
-checksums — and pushes it to `Casks/ketch.rb` in `pyrlyn/homebrew-tap`. That
+regenerates the Homebrew cask with `scripts/cask.sh` — version and the
+checksum — and pushes it to `Casks/ketch.rb` in `pyrlyn/homebrew-tap`. That
 push needs `HOMEBREW_TAP_TOKEN`, a token allowed to write to the tap
 repository; the workflow's own token is scoped to this one and cannot. The
 cask is a cask and not a formula because ketch lives in `~/.ketch`: a
@@ -595,7 +605,9 @@ halfway through a release.
 ### macOS app releases
 
 The app in `desktop/macos/` is released from this repository too, by
-`.github/workflows/desktop-release.yml`, with a version of its own: tags are
+`.github/workflows/release-apple-desktop.yml`, a thin caller of the org-level reusable
+workflow `pyrlyn/ci/.github/workflows/release-apple-desktop.yml` (the organization secrets passed by name),
+with a version of its own: tags are
 `desktop-vX.Y.Z`, never `vX.Y.Z`, and the version is the workflow's input, not
 `Cargo.toml`'s or `project.yml`'s.
 
@@ -604,8 +616,8 @@ and `ketch self upgrade` (the GitHub source's `/releases/latest` fast path)
 all install whatever GitHub calls the latest release. An app release marked
 latest would hand every CLI installer a release with no `ketch-<target>.tar.gz`
 in it. So every `gh release create` in the workflow passes `--latest=false`
-(`make_latest: false`), the feed release is a prerelease as well, and the last
-step checks that `/releases/latest` did not move — restoring the CLI release
+(`make_latest: false`), the feed release is a prerelease as well, and the infra
+workflow's last step checks that `/releases/latest` did not move — restoring the CLI release
 and failing if it did. Likewise the CLI's release tooling never takes a
 `desktop-v*` tag for its own: `cliff.toml`'s `tag_pattern` is anchored
 (`^v[0-9]`; git-cliff matches it anywhere in a tag name), `tests/crate-version.sh`
@@ -617,16 +629,16 @@ of asking for the latest (`--pre`), a tag that is not a version never
 outranks one that is (`select_release` in `src/source/mod.rs`). `tests/desktop-release.sh` (in
 `just lint-shell`) checks all of it.
 
-To cut one: Actions → desktop-release → Run workflow on `main` with the
-version, or `gh workflow run desktop-release.yml --ref main -f version=X.Y.Z`.
+To cut one: Actions → release-apple-desktop → Run workflow on `main` with the
+version, or `gh workflow run release-apple-desktop.yml --ref main -f version=X.Y.Z`.
 The version must be plain `X.Y.Z` and above the last `desktop-v*` tag
-(`scripts/desktop-version.sh`), because it is also `CFBundleVersion`, which
+(checked by the infra workflow), because it is also `CFBundleVersion`, which
 Sparkle compares. The run archives an Apple Silicon (arm64) Release build with the
 hardened runtime, exports it for Developer ID (`desktop/macos/ExportOptions.plist`),
-notarises and staples the app, builds the `.dmg` (`scripts/desktop-dmg.sh`,
-hdiutil), signs, notarises and staples that, runs `spctl --assess` on both,
-writes `Ketch-X.Y.Z.dmg.sha256`, and writes the Sparkle appcast
-(`scripts/desktop-appcast.sh`). Only then does it create the tag and the
+notarises and staples the app, builds the `.dmg` (hdiutil), signs, notarises
+and staples that, runs `spctl --assess` on both, writes
+`Ketch-X.Y.Z.dmg.sha256`, and writes the Sparkle appcast (`generate_appcast`).
+Only then does it create the tag and the
 release, with release notes from `desktop/cliff.toml`, and replace
 `appcast.xml` on the `desktop-appcast` release, the stable URL the app's
 `SUFeedURL` names. A failed run creates nothing; re-run it. If it failed after
@@ -634,8 +646,9 @@ the versioned release was created but before the feed was replaced, upload
 that release's `appcast.xml` to `desktop-appcast` with `gh release upload
 --clobber` rather than re-running, since the version is then taken.
 
-Secrets, all required; the first step names any that are missing and stops
-before building:
+Secrets, all required and held at the pyrlyn organization level (not in this
+repository); the infra workflow's first steps name any that are missing and
+stop before building:
 
 - `MACOS_CERTIFICATE`, `MACOS_CERTIFICATE_PWD` — the same Developer ID
   Application `.p12` the CLI is signed with.
@@ -646,16 +659,26 @@ before building:
   (the base64 seed). Its public half is `SUPublicEDKey` in
   `desktop/macos/Ketch/Info.plist`, still a placeholder that the workflow
   refuses; commit the real one first. The appcast is checked against the
-  exported app's key before anything is published
-  (`scripts/desktop-appcast-verify.swift`), because `generate_appcast` only
+  exported app's key before anything is published (by the infra workflow),
+  because `generate_appcast` only
   warns on a mismatch. Losing or rotating this key strands every installed
   copy on its version.
 
-`just macos-appcast` runs the disk-image and appcast scripts on a local build
-with a throwaway key, as CI's `macos-app` job does. The ketch-ffi XCFramework
-(R9) does not exist yet: the workflow's XCFramework step is off
-(`XCFRAMEWORK: 'false'`, marked `TODO(R9)`), so a release made before R9
+The ketch-ffi XCFramework (R9) does not exist yet: the caller's
+`pre-build-command` is empty (marked `TODO(R9)`), so a release made before R9
 ships the app on `FakeKetchCore`.
+
+## Documentation translations
+
+English docs in `docs/` are the source of truth. Russian and Ukrainian
+translations live in `docs/ru/` and `docs/uk/` under the same file name.
+Front matter on a translated page adds `lang: ru` or `lang: uk`. Any change
+to an English doc updates the matching translations in the same change. A
+new English doc gets both translations, and removing an English doc removes
+them. These two directories are the only place non-English prose is allowed.
+
+Maintainer-only docs stay English: `docs/sonarcloud-setup.md`, anything
+under `docs/qa/`, and the `docs/research-*.md` notes.
 
 ## Before you call it done
 

@@ -127,8 +127,21 @@ fn move_into_store(payload: &Path, store: &Path) -> Result<()> {
         let _ = remove_any(&staged);
         return Err(Error::io(store, e));
     }
-    let _ = remove_any(&retired);
+    // Leave `.old` until links succeed. A failed place after this swap can
+    // put the working version back; deleting it here would leave none.
     Ok(())
+}
+
+fn finalize_store_swap(store: &Path) {
+    let _ = remove_any(&sibling(store, ".old"));
+}
+
+fn restore_retired_store(store: &Path) {
+    let retired = sibling(store, ".old");
+    if retired.symlink_metadata().is_ok() {
+        let _ = remove_any(store);
+        let _ = std::fs::rename(&retired, store);
+    }
 }
 
 /// True when `path` sits inside *another* bundle — a helper app nested in the
@@ -305,6 +318,8 @@ impl Platform for MacOsPlatform {
             Box::new(TarExtractor),
             Box::new(ZipExtractor),
             Box::new(GzFileExtractor),
+            Box::new(XzFileExtractor),
+            Box::new(Bz2FileExtractor),
             // Accepts anything, so it must stay last.
             Box::new(RawBinaryExtractor),
         ]
@@ -332,77 +347,91 @@ impl Platform for MacOsPlatform {
         }
         move_into_store(plan.payload_dir, plan.store_dir)?;
         if !plan.link {
+            finalize_store_swap(plan.store_dir);
             return Ok(Vec::new());
         }
         let mut links = Vec::new();
-        // Every version of this package lives under here. The version being
-        // replaced still owns its links at this point: install retires them
-        // only once placement has succeeded.
+        let result = (|| -> Result<Vec<LinkRecord>> {
+            // Every version of this package lives under here. The version being
+            // replaced still owns its links at this point: install retires them
+            // only once placement has succeeded.
 
-        if plan.kind != PackageKind::Binary {
-            for bundle in find_app_bundles(plan.store_dir) {
-                links.push(place_app(
-                    &bundle,
-                    plan.apps_dir,
-                    plan.link_apps,
-                    package_dir,
-                    plan.replacing,
-                )?);
+            if plan.kind != PackageKind::Binary {
+                for bundle in find_app_bundles(plan.store_dir) {
+                    links.push(place_app(
+                        &bundle,
+                        plan.apps_dir,
+                        plan.link_apps,
+                        package_dir,
+                        plan.replacing,
+                    )?);
+                }
             }
-        }
 
-        // An app bundle carries its own executables; do not also scatter them
-        // across PATH.
-        let want_binaries = match plan.kind {
-            PackageKind::App => false,
-            PackageKind::Binary => true,
-            PackageKind::Auto => links.is_empty(),
-        };
-        if want_binaries {
-            let targets = if plan.bin_specs.is_empty() {
-                let found = discover_executables(self, plan.store_dir, plan.name);
-                let sole = found.len() == 1;
-                found
-                    .into_iter()
-                    .map(|path| {
-                        let file_name = path
-                            .file_name()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                            .into_owned();
-                        let link_name = if sole && looks_like_build_artifact(&file_name) {
-                            plan.name.to_string()
-                        } else {
-                            file_name
-                        };
-                        (path, link_name)
-                    })
-                    .collect()
-            } else {
-                resolve_bin_specs(plan.store_dir, plan.bin_specs)?
+            // An app bundle carries its own executables; do not also scatter them
+            // across PATH.
+            let want_binaries = match plan.kind {
+                PackageKind::App => false,
+                PackageKind::Binary => true,
+                PackageKind::Auto => links.is_empty(),
             };
-            for (target, name) in targets {
-                links.push(link_binary(
-                    &target,
-                    plan.bin_dir,
-                    &name,
-                    package_dir,
-                    plan.replacing,
-                )?);
+            if want_binaries {
+                let targets = if plan.bin_specs.is_empty() {
+                    let found = discover_executables(self, plan.store_dir, plan.name);
+                    let sole = found.len() == 1;
+                    found
+                        .into_iter()
+                        .map(|path| {
+                            let file_name = path
+                                .file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .into_owned();
+                            let link_name = if sole && looks_like_build_artifact(&file_name) {
+                                plan.name.to_string()
+                            } else {
+                                file_name
+                            };
+                            (path, link_name)
+                        })
+                        .collect()
+                } else {
+                    resolve_bin_specs(plan.store_dir, plan.bin_specs)?
+                };
+                for (target, name) in targets {
+                    links.push(link_binary(
+                        &target,
+                        plan.bin_dir,
+                        &name,
+                        package_dir,
+                        plan.replacing,
+                    )?);
+                }
+            }
+
+            links.extend(super::unix::link_planned_extras(
+                plan.extras,
+                plan.store_dir,
+                package_dir,
+                plan.replacing,
+            )?);
+
+            if links.is_empty() {
+                return Err(Error::EmptyPayload(plan.store_dir.to_path_buf()));
+            }
+            Ok(std::mem::take(&mut links))
+        })();
+        match result {
+            Ok(links) => {
+                finalize_store_swap(plan.store_dir);
+                Ok(links)
+            }
+            Err(e) => {
+                let _ = super::unix::unplace(&links, &crate::report::Report::silent());
+                restore_retired_store(plan.store_dir);
+                Err(e)
             }
         }
-
-        links.extend(super::unix::link_planned_extras(
-            plan.extras,
-            plan.store_dir,
-            package_dir,
-            plan.replacing,
-        )?);
-
-        if links.is_empty() {
-            return Err(Error::EmptyPayload(plan.store_dir.to_path_buf()));
-        }
-        Ok(links)
     }
 
     fn unplace(&self, links: &[LinkRecord], report: &crate::report::Report) -> Result<()> {
@@ -593,8 +622,18 @@ mod tests {
             std::fs::read(store.join("tool")).unwrap(),
             b"the new version"
         );
-        assert!(!store.with_file_name("1.0.old").exists());
+        assert!(
+            store.with_file_name("1.0.old").exists(),
+            "the previous version stays until links succeed"
+        );
         assert!(!store.with_file_name("1.0.incoming").exists());
+        restore_retired_store(&store);
+        assert_eq!(
+            std::fs::read(store.join("tool")).unwrap(),
+            b"the working version"
+        );
+        finalize_store_swap(&store);
+        assert!(!store.with_file_name("1.0.old").exists());
     }
 
     #[test]

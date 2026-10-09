@@ -10,7 +10,7 @@
 #
 # The version in Cargo.toml is the version to release. It is raised only when
 # that version is already tagged. This script never pushes and never tags: the
-# Bump workflow (pyrlyn/infra bump.yml) runs it with --local, opens a pull
+# Bump workflow (pyrlyn/ci bump.yml) runs it with --local, opens a pull
 # request with the version commit, rebase-merges it once the required checks
 # pass, then tags the commit that landed on main, creates the draft release and
 # dispatches release.yml, where dist uploads the tarballs and publishes it.

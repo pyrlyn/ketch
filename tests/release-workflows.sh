@@ -41,7 +41,7 @@ need "$r" 'source=Notarized Developer ID' 'the spctl smoke check'
 need "$r" 'name: Smoke test' 'the smoke test'
 need "$r" 'sha256sum $(ls ketch-\*.tar.gz | sort) > SHA256SUMS' 'the aggregate SHA256SUMS'
 need "$r" 'uses: ./.github/workflows/tap.yml' 'the tap publish job'
-need "$r" 'pyrlyn/infra/.github/actions/notify-release-failure@' 'the release-failure job'
+need "$r" 'pyrlyn/ci/.github/actions/notify-release-failure@' 'the release-failure job'
 need "$r" 'gh release upload "${{ needs.plan.outputs.tag }}" artifacts/\*' 'the upload to bump'"'"'s draft (create-release = false)'
 if grep -q 'gh release create' "$r"; then
     echo "release-workflows: release.yml creates a release (and a tag); bump.yml does that" >&2
@@ -54,7 +54,7 @@ need "$ROOT/release-plz.toml" '^git_tag_enable = false' 'git_tag_enable = false'
 
 b="$wf/bump.yml"
 need "$b" 'options: \[patch, minor, major\]' 'the patch/minor/major choice'
-need "$b" 'uses: pyrlyn/infra/.github/workflows/bump.yml@' 'the shared bump workflow'
+need "$b" 'uses: pyrlyn/ci/.github/workflows/bump.yml@' 'the shared bump workflow'
 need "$b" 'release-script: scripts/release.sh' 'the release.sh call'
 need "$b" 'BUMP_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}' 'the token that gives the bump pull request its CI'
 need "$b" 'release-workflows: release.yml' 'the release.yml dispatch'

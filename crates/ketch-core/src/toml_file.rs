@@ -9,6 +9,9 @@
 //! publishes their JSON Schemas. Keeping the `toml` crate behind one module
 //! means one answer to how a parse error names its file and how a file is
 //! rendered, and one place to look when the format or the crate changes.
+//!
+//! A user manifest is also edited in place, and that edit uses `toml_edit`
+//! ([`EditDocument`]) because only it renders back what it did not change.
 
 use crate::error::{Error, Result};
 use serde::de::DeserializeOwned;
@@ -28,7 +31,16 @@ pub(crate) fn render<T: Serialize>(value: &T, what: impl Into<String>) -> Result
     toml::to_string_pretty(value).map_err(|e| Error::parse(what, e.to_string()))
 }
 
-/// A quoted, escaped TOML string, for text that writes TOML line by line.
+/// Parse `text` as TOML and return it as a JSON value, for validating a file
+/// against a JSON Schema or handing it to code that works on `serde_json`.
+/// `what` names the file in either step's error.
+pub(crate) fn to_json(text: &str, what: impl Into<String>) -> Result<serde_json::Value> {
+    let what = what.into();
+    let parsed: toml::Value = parse(text, what.as_str())?;
+    serde_json::to_value(parsed).map_err(|e| Error::parse(what, e.to_string()))
+}
+
+/// A quoted, escaped TOML string.
 ///
 /// Built by rendering a `toml::Value` so escaping is never hand-rolled: one
 /// writer, one answer to what quotes, backslashes and control bytes mean.
@@ -37,7 +49,7 @@ pub(crate) fn string_literal(text: &str) -> String {
 }
 
 /// A TOML array of strings, escaped the same way [`string_literal`] escapes.
-pub(crate) fn string_list_literal(items: &[String]) -> String {
+pub(crate) fn string_array_literal(items: &[String]) -> String {
     toml::Value::Array(
         items
             .iter()
@@ -79,16 +91,9 @@ impl Document {
             .insert(key.to_string(), toml::Value::String(value.to_string()));
     }
 
-    /// Whether the top-level `key` is an array, as `package` is in a file
-    /// holding several manifests.
+    /// Whether the top-level `key` holds an array.
     pub(crate) fn is_array(&self, key: &str) -> bool {
         self.table.get(key).is_some_and(toml::Value::is_array)
-    }
-
-    /// The document as JSON, for code that works on `serde_json::Value`.
-    pub(crate) fn into_json(self) -> Result<serde_json::Value> {
-        serde_json::to_value(toml::Value::Table(self.table))
-            .map_err(|e| Error::parse(self.what, e.to_string()))
     }
 
     /// Deserialize the document, keys added or not, into `T`.
@@ -98,72 +103,80 @@ impl Document {
     }
 }
 
-/// What [`insert_inline_list`] did.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum ListInsert {
-    /// The key was added; the whole document, rendered.
-    Inserted(String),
-    /// The table already has the key, and nothing was changed.
-    AlreadySet,
-    /// No table describes the package.
-    NoTable,
-}
-
-/// Add `key = [{ field = "<value>" }, …]`, one entry per value, to the table
-/// that describes one package in `text`: the whole document for a single
-/// manifest, or the `[[package]]` entry whose `name` `is_package` accepts.
+/// A TOML file a key is inserted into while everything else — comments, key
+/// order, spacing — renders back exactly as it was read.
 ///
-/// The file is someone's own, so `toml_edit` is used rather than a parse and
-/// re-render: it changes the one key and gives back every comment, blank line
-/// and key order as it was read. A key already present is never overwritten.
-pub(crate) fn insert_inline_list(
-    text: &str,
-    what: &str,
-    is_package: impl Fn(&str) -> bool,
-    key: &str,
-    field: &str,
-    values: &[String],
-) -> Result<ListInsert> {
-    let mut doc: toml_edit::DocumentMut = text
-        .parse()
-        .map_err(|e: toml_edit::TomlError| Error::parse(what, e.to_string()))?;
-    let Some(table) = package_table(&mut doc, is_package) else {
-        return Ok(ListInsert::NoTable);
-    };
-    if table.contains_key(key) {
-        return Ok(ListInsert::AlreadySet);
-    }
-    let mut list = toml_edit::Array::new();
-    for value in values {
-        let mut entry = toml_edit::InlineTable::new();
-        entry.insert(field, value.as_str().into());
-        list.push(entry);
-    }
-    table.insert(key, toml_edit::value(list));
-    Ok(ListInsert::Inserted(doc.to_string()))
+/// The file is the user's, so a round trip through serde, which keeps only
+/// the values, would be a rewrite of what they wrote.
+pub(crate) struct EditDocument {
+    doc: toml_edit::DocumentMut,
 }
 
-/// The table in a manifest file that describes one package: the whole
-/// document for a single manifest, or the matching entry of a `[[package]]`
-/// array.
-fn package_table(
-    doc: &mut toml_edit::DocumentMut,
-    is_package: impl Fn(&str) -> bool,
-) -> Option<&mut toml_edit::Table> {
-    if !doc
-        .get("package")
-        .is_some_and(toml_edit::Item::is_array_of_tables)
-    {
-        return Some(doc.as_table_mut());
+/// One table of an [`EditDocument`], borrowed for an edit.
+pub(crate) struct EditTable<'a> {
+    table: &'a mut toml_edit::Table,
+}
+
+impl EditDocument {
+    /// Parse `text`; `what` names the file in the error.
+    pub(crate) fn parse(text: &str, what: &str) -> Result<Self> {
+        let doc = text
+            .parse()
+            .map_err(|e: toml_edit::TomlError| Error::parse(what, e.to_string()))?;
+        Ok(Self { doc })
     }
-    doc.get_mut("package")?
-        .as_array_of_tables_mut()?
-        .iter_mut()
-        .find(|t| {
-            t.get("name")
-                .and_then(toml_edit::Item::as_str)
-                .is_some_and(&is_package)
-        })
+
+    /// The table describing one package: the whole document when it is a
+    /// single manifest, or else the `[[package]]` entry whose `name`
+    /// `is_package` accepts. `None` when no entry does.
+    pub(crate) fn package_table(
+        &mut self,
+        is_package: impl Fn(&str) -> bool,
+    ) -> Option<EditTable<'_>> {
+        if !self
+            .doc
+            .get("package")
+            .is_some_and(toml_edit::Item::is_array_of_tables)
+        {
+            return Some(EditTable {
+                table: self.doc.as_table_mut(),
+            });
+        }
+        self.doc
+            .get_mut("package")?
+            .as_array_of_tables_mut()?
+            .iter_mut()
+            .find(|t| {
+                t.get("name")
+                    .and_then(toml_edit::Item::as_str)
+                    .is_some_and(&is_package)
+            })
+            .map(|table| EditTable { table })
+    }
+
+    /// The document as text, edits included.
+    pub(crate) fn render(&self) -> String {
+        self.doc.to_string()
+    }
+}
+
+impl EditTable<'_> {
+    /// Whether the table already has `key`, whatever its value.
+    pub(crate) fn contains_key(&self, key: &str) -> bool {
+        self.table.contains_key(key)
+    }
+
+    /// Set `key` to `[{ <field> = "<value>" }, …]`, one inline table per
+    /// value, in order.
+    pub(crate) fn set_inline_tables(&mut self, key: &str, field: &str, values: &[String]) {
+        let mut list = toml_edit::Array::new();
+        for value in values {
+            let mut entry = toml_edit::InlineTable::new();
+            entry.insert(field, value.as_str().into());
+            list.push(entry);
+        }
+        self.table.insert(key, toml_edit::value(list));
+    }
 }
 
 /// Fails when the JSON Schema committed at `relative` (from the repository
@@ -217,30 +230,6 @@ pub(crate) fn assert_schema_current<T: schemars::JsonSchema>(relative: &str) {
     );
 }
 
-/// Whether `line` reaches the `toml` or `toml_edit` crate: a path through
-/// one (`toml::from_str`) or an import of one (`use toml_edit;`). File names
-/// such as `"ketch.toml"` and mentions in comments do not count.
-#[cfg(test)]
-fn names_toml_crate(line: &str) -> bool {
-    let code = line.trim_start();
-    if code.starts_with("//") {
-        return false;
-    }
-    let imports = ["use ", "pub use ", "pub(crate) use ", "extern crate "]
-        .iter()
-        .any(|p| code.starts_with(p));
-    let ident = |c: char| c.is_alphanumeric() || c == '_';
-    ["toml_edit", "toml"].iter().any(|name| {
-        code.match_indices(name).any(|(at, _)| {
-            let before = code[..at].chars().next_back();
-            let after = &code[at + name.len()..];
-            let whole = !before.is_some_and(|c| ident(c) || c == '.' || c == '-')
-                && !after.starts_with(ident);
-            whole && (after.trim_start().starts_with("::") || imports)
-        })
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -270,23 +259,6 @@ mod tests {
     }
 
     #[test]
-    fn a_string_literal_escapes_quotes_backslashes_and_control_bytes() {
-        let text = "say \"hi\" \\ tab\there\u{1b}";
-        let literal = string_literal(text);
-        assert!(!literal.contains('\u{1b}'), "{literal}");
-        let parsed: toml::Table = parse(&format!("v = {literal}"), "literal").unwrap();
-        assert_eq!(parsed["v"].as_str(), Some(text));
-    }
-
-    #[test]
-    fn a_string_list_literal_parses_back_to_the_same_items() {
-        let items = vec!["a\"b".to_string(), "c\\d".to_string(), String::new()];
-        let literal = string_list_literal(&items);
-        let parsed: Sample = parse(&format!("name = \"x\"\ntags = {literal}"), "list").unwrap();
-        assert_eq!(parsed.tags, items);
-    }
-
-    #[test]
     fn a_key_set_on_a_document_is_deserialized_as_if_the_file_had_it() {
         let mut doc = Document::parse("tags = [\"a\"]\n", "sample").unwrap();
         assert_eq!(doc.str("name"), None);
@@ -295,55 +267,6 @@ mod tests {
         let sample: Sample = doc.deserialize().unwrap();
         assert_eq!(sample.name, "rg");
         assert_eq!(sample.tags, vec!["a".to_string()]);
-    }
-
-    #[test]
-    fn a_document_as_json_keeps_its_nesting_and_types() {
-        let doc = Document::parse(
-            "name = \"rg\"\njobs = 4\n[asset]\ninclude = [\"*.tar.gz\"]\n",
-            "sample",
-        )
-        .unwrap();
-        assert_eq!(
-            doc.into_json().unwrap(),
-            serde_json::json!({"name": "rg", "jobs": 4, "asset": {"include": ["*.tar.gz"]}})
-        );
-    }
-
-    #[test]
-    fn an_inline_list_lands_in_the_named_package_and_nothing_else_moves() {
-        let text = "# mine\n[[package]]\nname = \"a\"  # keep\nsource = \"o/a\"\n\n[[package]]\nname = \"b\"\nsource = \"o/b\"\n";
-        let values = ["x".to_string(), "y".to_string()];
-        let out = insert_inline_list(text, "m", |n| n == "b", "bin", "name", &values).unwrap();
-        assert_eq!(
-            out,
-            ListInsert::Inserted(format!(
-                "{text}bin = [{{ name = \"x\" }}, {{ name = \"y\" }}]\n"
-            ))
-        );
-    }
-
-    #[test]
-    fn an_inline_list_is_never_written_over_a_key_already_there() {
-        let text = "name = \"a\"\nbin = []\n";
-        let out =
-            insert_inline_list(text, "m", |_| true, "bin", "name", &["x".to_string()]).unwrap();
-        assert_eq!(out, ListInsert::AlreadySet);
-    }
-
-    #[test]
-    fn an_inline_list_for_a_package_the_file_lacks_reports_no_table() {
-        let text = "[[package]]\nname = \"a\"\n";
-        let out = insert_inline_list(text, "m", |n| n == "z", "bin", "name", &[]).unwrap();
-        assert_eq!(out, ListInsert::NoTable);
-    }
-
-    #[test]
-    fn a_document_says_which_keys_are_arrays() {
-        let doc = Document::parse("package = [1]\nname = \"a\"\n", "m").unwrap();
-        assert!(doc.is_array("package"));
-        assert!(!doc.is_array("name"));
-        assert!(!doc.is_array("missing"));
     }
 
     #[test]
@@ -360,61 +283,209 @@ mod tests {
     }
 
     #[test]
-    fn the_scan_finds_paths_and_imports_but_not_file_names_or_comments() {
-        for line in [
-            "    let v: toml::Value = toml::from_str(t)?;",
-            "use toml_edit::DocumentMut;",
-            "use toml;",
-            "    let doc = ::toml_edit::DocumentMut::new();",
-        ] {
-            assert!(names_toml_crate(line), "{line}");
-        }
-        for line in [
-            "    let path = root.join(\"ketch.toml\");",
-            "// toml::from_str would drop the comments",
-            "    /// Built by rendering a `toml::Value`.",
-            "    let tomlish = 1;",
-            "    crate::toml_file::parse(text, what)",
-        ] {
-            assert!(!names_toml_crate(line), "{line}");
-        }
+    fn a_document_tells_an_array_from_any_other_value() {
+        let doc = Document::parse("tags = [\"a\"]\nname = \"rg\"\n", "sample").unwrap();
+        assert!(doc.is_array("tags"));
+        assert!(!doc.is_array("name"));
+        assert!(!doc.is_array("missing"));
     }
 
     #[test]
-    fn no_module_but_this_one_names_the_toml_crates() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let mut dirs = vec![root.join("src")];
-        for entry in std::fs::read_dir(root.join("crates")).expect("read crates/") {
-            dirs.push(entry.expect("crate dir").path().join("src"));
+    fn an_edit_error_names_the_file() {
+        let err = EditDocument::parse("name = ", "/root/rg.toml")
+            .err()
+            .expect("unfinished key must not parse");
+        assert!(err.to_string().contains("/root/rg.toml"), "{err}");
+    }
+
+    #[test]
+    fn an_inserted_key_leaves_every_other_byte_as_it_was() {
+        let body = concat!(
+            "# kept\n",
+            "[[package]]\n",
+            "source = \"github:o/a\"  # before name, on purpose\n",
+            "name = \"a\"\n",
+            "\n",
+            "[[package]]\n",
+            "name   = \"b\"\n",
+            "source = \"github:o/b\"\n",
+        );
+        let mut doc = EditDocument::parse(body, "sample").unwrap();
+        let mut table = doc.package_table(|n| n == "b").unwrap();
+        assert!(!table.contains_key("bin"));
+        table.set_inline_tables("bin", "name", &["x".to_string(), "y".to_string()]);
+        assert!(table.contains_key("bin"));
+        let expected = format!("{body}bin = [{{ name = \"x\" }}, {{ name = \"y\" }}]\n");
+        assert_eq!(doc.render(), expected);
+    }
+
+    #[test]
+    fn a_single_manifest_is_its_own_package_table() {
+        let mut doc = EditDocument::parse("name = \"a\"\n", "sample").unwrap();
+        assert!(doc.package_table(|_| false).is_some());
+    }
+
+    #[test]
+    fn a_package_array_without_the_name_has_no_package_table() {
+        let mut doc = EditDocument::parse("[[package]]\nname = \"a\"\n", "sample").unwrap();
+        assert!(doc.package_table(|n| n == "b").is_none());
+    }
+
+    #[test]
+    fn toml_text_becomes_the_same_json_value() {
+        let json = to_json("name = \"rg\"\ntags = [\"a\", \"b\"]\n", "sample").unwrap();
+        assert_eq!(json, serde_json::json!({"name": "rg", "tags": ["a", "b"]}));
+    }
+
+    #[test]
+    fn invalid_toml_names_the_file_when_converted_to_json() {
+        let err = to_json("name = ", "/p/ketch.toml").unwrap_err();
+        assert!(err.to_string().contains("/p/ketch.toml"), "{err}");
+    }
+
+    #[test]
+    fn a_string_literal_keeps_quotes_and_backslashes_recoverable() {
+        // The writer may choose a literal string over an escaped one; what
+        // matters is that the reader gets the same text back.
+        for text in ["say \"hi\"", "C:\\bin", "both \" and \\ and '"] {
+            let doc = format!("v = {}", string_literal(text));
+            let parsed: toml::Table = parse(&doc, "sample").unwrap();
+            assert_eq!(parsed["v"].as_str(), Some(text), "{doc}");
         }
+        assert_eq!(string_literal("plain"), "\"plain\"");
+    }
+
+    #[test]
+    fn a_string_literal_escapes_control_bytes_on_one_line() {
+        let text = "a\u{1}b\u{7f}c\td";
+        let rendered = string_literal(text);
+        assert_eq!(rendered, "\"a\\u0001b\\u007Fc\\td\"");
+        assert!(!rendered.contains('\n'));
+    }
+
+    #[test]
+    fn a_string_literal_parses_back_to_the_same_text() {
+        let text = "q\" b\\ n\n t\t \u{0} é";
+        let doc = format!("v = {}", string_literal(text));
+        let parsed: toml::Table = parse(&doc, "sample").unwrap();
+        assert_eq!(parsed["v"].as_str(), Some(text));
+    }
+
+    #[test]
+    fn a_string_array_literal_renders_each_item_and_parses_back() {
+        assert_eq!(string_array_literal(&[]), "[]");
+        let items = vec!["a".to_string(), "b\"c".to_string(), "d\\e".to_string()];
+        let rendered = string_array_literal(&items);
+        let parsed: toml::Table = parse(&format!("v = {rendered}"), "sample").unwrap();
+        let back: Vec<&str> = parsed["v"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(toml::Value::as_str)
+            .collect();
+        assert_eq!(back, ["a", "b\"c", "d\\e"]);
+    }
+
+    /// Whether `line` names the `toml` or `toml_edit` crate. Whole identifiers
+    /// only: `toml_file`, `ketch.toml` and a test called `reads_toml` are not
+    /// the crate, and a substring search would fail on every one of them.
+    fn names_a_toml_crate(line: &str) -> bool {
+        let is_ident = |c: char| c.is_alphanumeric() || c == '_';
+        line.match_indices("toml").any(|(at, _)| {
+            let before = &line[..at];
+            let after = &line[at + "toml".len()..];
+            // A `.` before it is a file name such as `ketch.toml`.
+            if before.ends_with(|c: char| is_ident(c) || c == '.') {
+                return false;
+            }
+            if after.starts_with("::") {
+                return true;
+            }
+            if let Some(rest) = after.strip_prefix("_edit") {
+                return !rest.starts_with(is_ident);
+            }
+            let imports = before
+                .trim_end()
+                .strip_suffix("use")
+                .is_some_and(|b| !b.ends_with(is_ident));
+            imports && !after.starts_with(is_ident)
+        })
+    }
+
+    #[test]
+    fn the_scan_tells_the_crate_from_other_uses_of_the_word() {
+        for line in [
+            "    toml::from_str(text)",
+            "let t: toml::Table = x;",
+            "use toml;",
+            "pub use toml::Value;",
+            "use toml_edit::DocumentMut;",
+            "toml_edit::Item::None",
+        ] {
+            assert!(names_a_toml_crate(line), "{line}");
+        }
+        for line in [
+            "use crate::toml_file;",
+            "toml_file::parse(text, what)",
+            "let path = root.join(\"ketch.toml\");",
+            "fn reads_toml() {}",
+            "// a toml file",
+            "let registry_toml = 1;",
+            "use tomlish::x;",
+        ] {
+            assert!(!names_a_toml_crate(line), "{line}");
+        }
+    }
+
+    fn rust_files(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                rust_files(&path, out);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                out.push(path);
+            }
+        }
+    }
+
+    /// `tests/` and `fuzz/` are left out: they write fixtures and are separate
+    /// crates, not part of the code the guard protects.
+    #[test]
+    fn only_the_owner_module_names_the_toml_crates() {
+        // Canonical, so the owner is recognised however the paths were spelled.
+        let core = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .canonicalize()
+            .expect("crate directory");
+        let root = core.join("../..").canonicalize().expect("repository root");
+        let mut sources = Vec::new();
+        rust_files(&root.join("src"), &mut sources);
+        let crates = std::fs::read_dir(root.join("crates")).expect("list crates");
+        for krate in crates.flatten() {
+            rust_files(&krate.path().join("src"), &mut sources);
+        }
+        let owner = core.join("src/toml_file.rs");
+        assert!(
+            sources.iter().any(|p| p == &owner),
+            "the scan misses its own crate"
+        );
+
         let mut offenders = Vec::new();
-        for dir in dirs {
-            for entry in walkdir::WalkDir::new(&dir) {
-                let entry = entry.expect("walk sources");
-                if entry.path().extension().is_none_or(|e| e != "rs") {
-                    continue;
-                }
-                // Forward slashes, so the names match on Windows too.
-                let relative = entry
-                    .path()
-                    .strip_prefix(&root)
-                    .expect("under the repository")
-                    .components()
-                    .map(|c| c.as_os_str().to_string_lossy())
-                    .collect::<Vec<_>>()
-                    .join("/");
-                if relative == "crates/ketch-core/src/toml_file.rs" {
-                    continue;
-                }
-                let text = std::fs::read_to_string(entry.path()).expect("read source");
-                if text.lines().any(names_toml_crate) {
-                    offenders.push(relative);
+        for path in sources.iter().filter(|p| **p != owner) {
+            let text = std::fs::read_to_string(path).expect("read source");
+            for (n, line) in text.lines().enumerate() {
+                if names_a_toml_crate(line) {
+                    let shown = path.strip_prefix(&root).unwrap_or(path);
+                    offenders.push(format!("{}:{}: {}", shown.display(), n + 1, line.trim()));
                 }
             }
         }
         assert!(
             offenders.is_empty(),
-            "{offenders:?} name `toml` or `toml_edit`; go through crate::toml_file instead"
+            "only toml_file.rs may use the toml crates; go through it instead:\n{}",
+            offenders.join("\n")
         );
     }
 }

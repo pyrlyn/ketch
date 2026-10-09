@@ -1059,6 +1059,21 @@ pub fn unlink(cx: &Ctx<'_>, state: &mut State, name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Hold `name` at its installed version, or let it go again. A pinned package
+/// is never offered an update and `upgrade` leaves it alone. Changes only the
+/// record; the caller saves `state`.
+pub fn pin(state: &mut State, name: &str, pinned: bool) -> Result<InstalledPackage> {
+    let installed = state
+        .find(name)
+        .map(|p| p.name.clone())
+        .ok_or_else(|| Error::NotInstalled(name.to_string()))?;
+    let entry = state
+        .get_mut(&installed)
+        .ok_or_else(|| Error::NotInstalled(name.to_string()))?;
+    entry.pinned = pinned;
+    Ok(entry.clone())
+}
+
 /// Switch an installed package to a retained prefix already on disk.
 ///
 /// Never downloads. Preflights every destination (via `place`) before the
@@ -1416,14 +1431,21 @@ pub(crate) fn verify_checksum(
     let published = match &asset.digest {
         Some(digest) => Some(digest.hex.clone()),
         // Only worth the extra requests when the asset carries no digest.
-        None => source
-            .checksums(id, release, &asset.name)
-            .unwrap_or_else(|e| {
-                report.debug(&format!("could not read published checksums: {e}"));
-                Default::default()
-            })
-            .get(&asset.name)
-            .cloned(),
+        None => match source.checksums(id, release, &asset.name) {
+            Ok(published) => published.get(&asset.name).cloned(),
+            // `Ok(empty)` is the only "publishes no checksum" answer; an
+            // error means the lookup itself failed (network, rate limit)
+            // while a checksum may well exist. The install continues
+            // first-use below, but the user hears about it.
+            Err(e) => {
+                report.warn(&format!(
+                    "could not read published checksums for {}: {e}; \
+                     recording the downloaded hash on first use",
+                    asset.name
+                ));
+                None
+            }
+        },
     };
 
     match published {
@@ -2442,6 +2464,102 @@ mod tests {
         assert_eq!(candidates.len(), 2, "{candidates:?}");
         assert_eq!(pick.file, candidates[1]);
         assert_eq!(pick.how, Picked::Asked);
+    }
+
+    /// Records every `Warn` event so a test can assert what the user would
+    /// have seen on a quiet terminal.
+    #[derive(Clone)]
+    struct Warns(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
+
+    impl crate::report::Reporter for Warns {
+        fn event(&self, event: crate::report::Event) {
+            if let crate::report::Event::Warn { detail } = event {
+                self.0.lock().unwrap().push(detail);
+            }
+        }
+    }
+
+    /// A source whose `checksums` either fails (the fetch-broke case) or
+    /// answers cleanly empty (the publishes-none case); the rest of the
+    /// trait is never reached by `verify_checksum`.
+    struct StubSource {
+        fail: bool,
+    }
+
+    impl crate::source::Source for StubSource {
+        fn scheme(&self) -> &str {
+            "stub"
+        }
+        fn list_releases(
+            &self,
+            _id: &str,
+            _opts: &crate::source::ListOpts,
+        ) -> Result<Vec<Release>> {
+            Ok(Vec::new())
+        }
+        fn checksums(
+            &self,
+            _id: &str,
+            _release: &Release,
+            _wanted: &str,
+        ) -> Result<BTreeMap<String, String>> {
+            if self.fail {
+                Err(Error::msg("fetch failed"))
+            } else {
+                Ok(BTreeMap::new())
+            }
+        }
+        fn download(
+            &self,
+            _asset: &ReleaseAsset,
+            _dest: &Path,
+            _progress: &dyn crate::source::ProgressSink,
+            _cancel: &crate::cancel::Cancel,
+        ) -> Result<String> {
+            Err(Error::msg("verify_checksum never downloads"))
+        }
+    }
+
+    fn verify_with(source: &StubSource) -> (Result<bool>, Vec<String>) {
+        let warns = Warns(Default::default());
+        let report = Report::new(warns.clone());
+        let rel = release(&["ketch-aarch64-apple-darwin.tar.gz"]);
+        let asset = rel.assets[0].clone();
+        let verified = verify_checksum(
+            source,
+            "stub/example",
+            &rel,
+            &asset,
+            "deadbeef",
+            false,
+            &report,
+        );
+        let warned = warns.0.lock().unwrap().clone();
+        (verified, warned)
+    }
+
+    /// B66. A checksum sidecar that cannot be fetched (network, rate limit,
+    /// a proxy eating the request) is not the same as a release that
+    /// publishes no checksum: the install still fails open to first-use,
+    /// but with a user-visible warning instead of a debug line nobody sees.
+    #[test]
+    fn a_checksum_fetch_failure_warns_and_stays_first_use() {
+        let (verified, warns) = verify_with(&StubSource { fail: true });
+        assert!(!verified.expect("fail-open without --require-checksums"));
+        assert_eq!(warns.len(), 1, "exactly one warning: {warns:?}");
+        assert!(
+            warns[0].contains("could not read published checksums"),
+            "{warns:?}"
+        );
+    }
+
+    /// The clean case stays quiet: `Ok(empty)` is the source saying "there is
+    /// nothing published here", which needs no warning.
+    #[test]
+    fn a_clean_absence_of_checksums_stays_quiet() {
+        let (verified, warns) = verify_with(&StubSource { fail: false });
+        assert!(!verified.expect("first use either way"));
+        assert!(warns.is_empty(), "{warns:?}");
     }
 
     #[test]

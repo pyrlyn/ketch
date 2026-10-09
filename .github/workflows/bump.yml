@@ -1,7 +1,7 @@
 name: Bump and release
 
 # The only way to a release, and the only thing that creates a `v*` tag
-# (pyrlyn/infra bump.yml). `scripts/release.sh <level> --local` makes one
+# (pyrlyn/ci bump.yml). `scripts/release.sh <level> --local` makes one
 # `chore: release vX.Y.Z` commit (Cargo.toml, Cargo.lock, CHANGELOG.md); bump
 # pushes it to `release/bump-vX.Y.Z` and opens a pull request into main with
 # RELEASE_PLZ_TOKEN, so the pull request's own CI (ci.yml, pipeline.yml) runs
@@ -36,7 +36,7 @@ permissions:
 
 jobs:
   bump:
-    uses: pyrlyn/infra/.github/workflows/bump.yml@a4f93a2606a5dd8f697ad3d876440ab3e2eb4ae9 # main
+    uses: pyrlyn/ci/.github/workflows/bump.yml@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
     permissions:
       contents: write # the bump branch, the tag and the release
       pull-requests: write # merge or close the bump pull request
@@ -48,13 +48,19 @@ jobs:
       level: ${{ inputs.level }}
       dry-run: ${{ inputs.dry-run }}
       release-untagged-head: ${{ inputs.release-untagged-head }}
+      # Every release is a dev build (Cargo `dev` profile, see [profile.dist] in
+      # Cargo.toml), published as a prerelease. This repository's decision, not pyrlyn/ci's.
+      prerelease: true
+      release-title-suffix: " (dev build)"
+      release-notes-header: |-
+        > [!WARNING]
+        > Dev build: compiled with the Cargo `dev` profile (unoptimized, with debug info) and published as a prerelease.
       release-script: scripts/release.sh
-      # git-cliff and the Rust (scripts/release.sh runs cargo) at the mise.toml pins.
-      mise-install-args: rust git-cliff
-      # The workflows that report protect-main's required checks when dispatched.
-      ci-workflows: |
-        ci.yml
-        pipeline.yml
+      # Explicit although it is pyrlyn/ci's default: tests/release-workflows.sh asserts it.
       release-workflows: release.yml
+      # git-cliff and the Rust (scripts/release.sh runs cargo) at the mise.toml pins.
+      # ci-workflows: pyrlyn/ci's default (ci.yml and pipeline.yml, which report protect-main's
+      # required checks).
+      mise-install-args: rust git-cliff
     secrets:
       BUMP_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}

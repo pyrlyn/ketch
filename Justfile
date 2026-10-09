@@ -101,9 +101,6 @@ lint-shell:
     bash -n install.sh
     bash -n scripts/release.sh
     bash -n scripts/dist-generate.sh
-    bash -n scripts/desktop-version.sh
-    bash -n scripts/desktop-dmg.sh
-    bash -n scripts/desktop-appcast.sh
     bash -n scripts/xcframework.sh
     bash -n scripts/csharp.sh
     bash -n fuzz/seed.sh
@@ -112,6 +109,7 @@ lint-shell:
     sh tests/release-workflows.sh
     sh tests/ci-yml-triggers.sh
     sh tests/desktop-release.sh
+    sh tests/docs-i18n.sh
 
 package:
     #!/usr/bin/env bash
@@ -216,7 +214,7 @@ design-check:
 release level="patch" *flags:
     scripts/release.sh {{level}} {{flags}}
 
-check: fmt-check lint test lint-commits lint-shell lint-man dist-check design-check package lint-cask
+check: fmt-check lint fuzz-check test lint-commits lint-shell lint-man dist-check design-check package lint-cask
 
 # $CARGO_HOME sizes (no deletes) and the build output, wherever cargo puts it
 cache:
@@ -258,11 +256,6 @@ macos-app: macos-project
 macos-test: macos-project
     {{macos_build}} -destination 'platform=macOS' test
 
-# the release's disk image and Sparkle appcast, round-tripped with a throwaway
-# key: what desktop-release.yml runs, minus signing and notarisation
-macos-appcast: macos-app
-    sh tests/desktop-appcast.sh
-
 # Built into desktop/macos/KetchCore with the `ffi` profile the app ships.
 #
 # ketch-ffi's XCFramework (arm64 + x86_64) and its Swift bindings
@@ -285,6 +278,24 @@ csharp:
 csharp-test:
     scripts/csharp.sh --debug
     cd desktop/windows && dotnet test --project KetchCore.Tests
+
+# Needs valac, Meson, Ninja and json-glib; the ketch-capi CI job runs it.
+# ketch-capi as the Linux app links it: the library, then the Vala test.
+capi-test:
+    cargo build --locked -p ketch-capi
+    rm -rf target/capi-meson
+    meson setup target/capi-meson crates/ketch-capi -Dcapi_dir="$PWD/target/debug"
+    meson test -C target/capi-meson --print-errorlogs
+
+# The Windows app's fake core and store against the contract scenarios; runs on any OS.
+# The WinUI project itself (desktop/windows/Ketch.App) only builds on Windows: the ketch-win-app job.
+windows-app-test:
+    cd desktop/windows && dotnet test --project Ketch.AppCore.Tests
+
+# The library the fuzz targets link (src/lib.rs, cfg(fuzzing) only), checked on
+# stable: nothing else builds it, so `check` and CI would not notice it break.
+fuzz-check:
+    RUSTFLAGS="--cfg fuzzing" cargo check --locked -p ketch -p ketch-core
 
 # libFuzzer targets in fuzz/ (fuzz/README.md), on nightly and never part of `check`.
 # `just fuzz` lists them, `just fuzz <target> [secs]` runs one, `just fuzz all [secs]` each in turn.

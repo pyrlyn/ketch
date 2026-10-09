@@ -10,8 +10,15 @@
 use super::{safe_member_path, Extractor};
 use crate::error::{Error, Result};
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{self, BufReader, Read, Write};
 use std::path::{Component, Path, PathBuf};
+use std::sync::mpsc::{self, Receiver, SyncSender};
+use std::thread;
+
+/// Permission bits taken from an untrusted archive: never setuid/setgid/sticky.
+fn payload_mode(mode: u32) -> u32 {
+    mode & 0o777
+}
 
 fn set_unix_mode(path: &Path, mode: u32) -> Result<()> {
     #[cfg(unix)]
@@ -137,6 +144,12 @@ pub struct ZipExtractor;
 /// `.gz` wrapping a single file rather than a tar stream.
 pub struct GzFileExtractor;
 
+/// `.xz` wrapping a single file rather than a tar stream.
+pub struct XzFileExtractor;
+
+/// `.bz2` wrapping a single file rather than a tar stream.
+pub struct Bz2FileExtractor;
+
 /// A bare executable published with no container at all.
 ///
 /// Must be last in the extractor list: it accepts anything the others refused.
@@ -162,6 +175,111 @@ fn gzip_inner_head(path: &Path) -> Vec<u8> {
     };
     let mut decoder = flate2::read::GzDecoder::new(BufReader::new(file));
     read_head_of(&mut decoder, 512)
+}
+
+fn xz_inner_head(path: &Path) -> Vec<u8> {
+    let Ok(file) = File::open(path) else {
+        return Vec::new();
+    };
+    let mut reader = BufReader::new(file);
+    let mut out = CapWrite {
+        buf: Vec::new(),
+        cap: 512,
+    };
+    let _ = lzma_rs::xz_decompress(&mut reader, &mut out);
+    out.buf
+}
+
+fn bz2_inner_head(path: &Path) -> Vec<u8> {
+    let Ok(file) = File::open(path) else {
+        return Vec::new();
+    };
+    let mut decoder = bzip2::read::BzDecoder::new(BufReader::new(file));
+    read_head_of(&mut decoder, 512)
+}
+
+/// Collects a prefix of decompressed bytes, then errors so the decoder stops.
+struct CapWrite {
+    buf: Vec<u8>,
+    cap: usize,
+}
+
+impl Write for CapWrite {
+    fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+        if self.buf.len() >= self.cap {
+            return Err(io::Error::new(io::ErrorKind::WriteZero, "head filled"));
+        }
+        let take = (self.cap - self.buf.len()).min(data.len());
+        self.buf.extend_from_slice(&data[..take]);
+        Ok(take)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Stream xz plaintext as `Read` so unpacking never holds the whole file in RAM.
+fn xz_reader(file: File) -> impl Read {
+    let (tx, rx): (SyncSender<io::Result<Vec<u8>>>, Receiver<_>) = mpsc::sync_channel(2);
+    thread::spawn(move || {
+        let mut input = BufReader::new(file);
+        let mut output = ChannelWrite(tx.clone());
+        if let Err(e) = lzma_rs::xz_decompress(&mut input, &mut output) {
+            let _ = tx.send(Err(io::Error::new(io::ErrorKind::InvalidData, e)));
+        }
+    });
+    ChannelRead {
+        rx,
+        buf: Vec::new(),
+        at: 0,
+    }
+}
+
+struct ChannelWrite(SyncSender<io::Result<Vec<u8>>>);
+
+impl Write for ChannelWrite {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        if buf.is_empty() {
+            return Ok(0);
+        }
+        self.0
+            .send(Ok(buf.to_vec()))
+            .map_err(|e| io::Error::new(io::ErrorKind::BrokenPipe, e))?;
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+struct ChannelRead {
+    rx: Receiver<io::Result<Vec<u8>>>,
+    buf: Vec<u8>,
+    at: usize,
+}
+
+impl Read for ChannelRead {
+    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+        loop {
+            if self.at < self.buf.len() {
+                let n = (self.buf.len() - self.at).min(out.len());
+                out[..n].copy_from_slice(&self.buf[self.at..self.at + n]);
+                self.at += n;
+                return Ok(n);
+            }
+            match self.rx.recv() {
+                Ok(Ok(next)) => {
+                    self.buf = next;
+                    self.at = 0;
+                    if self.buf.is_empty() {
+                        continue;
+                    }
+                }
+                Ok(Err(e)) => return Err(e),
+                Err(_) => return Ok(0),
+            }
+        }
+    }
 }
 
 fn read_head_of<R: Read>(reader: &mut R, want: usize) -> Vec<u8> {
@@ -301,7 +419,7 @@ fn unpack_tar<R: Read>(reader: R, dest: &Path) -> Result<()> {
         match kind {
             EntryType::Directory => {
                 ensure_parent(dest, &out)?;
-                entry.unpack(&out).map_err(|e| Error::io(&out, e))?;
+                unpack_member(&mut entry, &out)?;
             }
             EntryType::Symlink => {
                 let target = entry
@@ -332,13 +450,22 @@ fn unpack_tar<R: Read>(reader: R, dest: &Path) -> Result<()> {
             }
             EntryType::Regular | EntryType::Continuous | EntryType::GNUSparse => {
                 ensure_parent(dest, &out)?;
-                entry.unpack(&out).map_err(|e| Error::io(&out, e))?;
+                unpack_member(&mut entry, &out)?;
             }
             // Character/block devices and fifos have no place in a release.
             _ => continue,
         }
     }
     finish_deferred_links(dest, deferred_hardlinks, deferred_symlinks)
+}
+
+fn unpack_member<R: Read>(entry: &mut tar::Entry<'_, R>, out: &Path) -> Result<()> {
+    let mode = entry.header().mode().ok();
+    entry.unpack(out).map_err(|e| Error::io(out, e))?;
+    if let Some(mode) = mode {
+        set_unix_mode(out, payload_mode(mode))?;
+    }
+    Ok(())
 }
 
 /// Create hard links then symlinks after the rest of the archive is on disk.
@@ -394,18 +521,12 @@ impl Extractor for TarXzExtractor {
     fn id(&self) -> &str {
         "tar.xz"
     }
-    fn detect(&self, _path: &Path, head: &[u8]) -> bool {
-        head.starts_with(XZ_MAGIC)
+    fn detect(&self, path: &Path, head: &[u8]) -> bool {
+        head.starts_with(XZ_MAGIC) && looks_like_tar(&xz_inner_head(path))
     }
     fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
         let file = File::open(src).map_err(|e| Error::io(src, e))?;
-        let mut reader = BufReader::new(file);
-        // ponytail: xz is decompressed to memory; release tarballs are tens of
-        // MiB. Stream it if ketch ever installs something genuinely large.
-        let mut plain = Vec::new();
-        lzma_rs::xz_decompress(&mut reader, &mut plain)
-            .map_err(|e| Error::parse(src.display().to_string(), e.to_string()))?;
-        unpack_tar(std::io::Cursor::new(plain), dest)
+        unpack_tar(xz_reader(file), dest)
     }
 }
 
@@ -413,8 +534,8 @@ impl Extractor for TarBz2Extractor {
     fn id(&self) -> &str {
         "tar.bz2"
     }
-    fn detect(&self, _path: &Path, head: &[u8]) -> bool {
-        head.starts_with(BZ2_MAGIC)
+    fn detect(&self, path: &Path, head: &[u8]) -> bool {
+        head.starts_with(BZ2_MAGIC) && looks_like_tar(&bz2_inner_head(path))
     }
     fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
         let file = File::open(src).map_err(|e| Error::io(src, e))?;
@@ -485,7 +606,7 @@ impl Extractor for ZipExtractor {
             drop(file);
             // Without this, every binary in a zip lands non-executable.
             if let Some(mode) = mode {
-                set_unix_mode(&out, mode & 0o7777)?;
+                set_unix_mode(&out, payload_mode(mode))?;
             }
             // A zip written on Windows — Java's `ZipOutputStream`, .NET, Gradle
             // distributions — marks every member 0644 or carries no unix mode
@@ -524,6 +645,50 @@ impl Extractor for GzFileExtractor {
         // A lone gzipped file in a release is a program; nothing else is
         // published this way.
         set_unix_mode(&out, 0o755)
+    }
+}
+
+fn extract_lone_file<D: Read>(mut decoder: D, src: &Path, dest: &Path, suffix: &str) -> Result<()> {
+    let stem = src
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "payload".to_string());
+    let stem = stem.strip_suffix(suffix).unwrap_or(&stem).to_string();
+    let out = dest.join(safe_member_path(Path::new(&stem))?);
+    let mut written = File::create(&out).map_err(|e| Error::io(&out, e))?;
+    std::io::copy(&mut decoder, &mut written).map_err(|e| Error::io(&out, e))?;
+    drop(written);
+    set_unix_mode(&out, 0o755)
+}
+
+impl Extractor for XzFileExtractor {
+    fn id(&self) -> &str {
+        "xz"
+    }
+    fn detect(&self, path: &Path, head: &[u8]) -> bool {
+        head.starts_with(XZ_MAGIC) && !looks_like_tar(&xz_inner_head(path))
+    }
+    fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
+        let file = File::open(src).map_err(|e| Error::io(src, e))?;
+        extract_lone_file(xz_reader(file), src, dest, ".xz")
+    }
+}
+
+impl Extractor for Bz2FileExtractor {
+    fn id(&self) -> &str {
+        "bz2"
+    }
+    fn detect(&self, path: &Path, head: &[u8]) -> bool {
+        head.starts_with(BZ2_MAGIC) && !looks_like_tar(&bz2_inner_head(path))
+    }
+    fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
+        let file = File::open(src).map_err(|e| Error::io(src, e))?;
+        extract_lone_file(
+            bzip2::read::BzDecoder::new(BufReader::new(file)),
+            src,
+            dest,
+            ".bz2",
+        )
     }
 }
 
@@ -827,6 +992,82 @@ mod tests {
         assert!(GzFileExtractor.detect(&plain, &head));
     }
 
+    fn xz_bytes(plain: &[u8]) -> Vec<u8> {
+        let mut out = Vec::new();
+        lzma_rs::xz_compress(&mut &plain[..], &mut out).unwrap();
+        out
+    }
+
+    fn tar_xz_with(entries: &[(&str, &[u8], u32)]) -> Vec<u8> {
+        let mut builder = tar::Builder::new(Vec::new());
+        for (name, body, mode) in entries {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(body.len() as u64);
+            header.set_mode(*mode);
+            header.set_cksum();
+            builder.append_data(&mut header, name, *body).unwrap();
+        }
+        xz_bytes(&builder.into_inner().unwrap())
+    }
+
+    #[test]
+    fn detection_separates_tar_xz_from_a_lone_xz() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let tarball = dir.path().join("a.xz");
+        std::fs::write(&tarball, tar_xz_with(&[("x", b"y", 0o644)])).unwrap();
+        let head = crate::extract::read_head(&tarball).unwrap();
+        assert!(TarXzExtractor.detect(&tarball, &head));
+        assert!(!XzFileExtractor.detect(&tarball, &head));
+
+        let plain = dir.path().join("jq.xz");
+        std::fs::write(&plain, xz_bytes(b"\x7fELF and then some payload")).unwrap();
+        let head = crate::extract::read_head(&plain).unwrap();
+        assert!(!TarXzExtractor.detect(&plain, &head));
+        assert!(XzFileExtractor.detect(&plain, &head));
+    }
+
+    #[test]
+    fn a_lone_xz_file_is_extracted_as_the_program() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("jq.xz");
+        std::fs::write(&src, xz_bytes(b"\x7fELF payload")).unwrap();
+        let dest = dir.path().join("out");
+        std::fs::create_dir_all(&dest).unwrap();
+        XzFileExtractor.extract(&src, &dest).unwrap();
+        assert_eq!(std::fs::read(dest.join("jq")).unwrap(), b"\x7fELF payload");
+    }
+
+    fn bz2_bytes(plain: &[u8]) -> Vec<u8> {
+        let mut encoder = bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::fast());
+        encoder.write_all(plain).unwrap();
+        encoder.finish().unwrap()
+    }
+
+    #[test]
+    fn detection_separates_tar_bz2_from_a_lone_bz2() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut builder = tar::Builder::new(Vec::new());
+        let mut header = tar::Header::new_gnu();
+        header.set_size(1);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, "x", b"y".as_slice())
+            .unwrap();
+        let tarball = dir.path().join("a.bz2");
+        std::fs::write(&tarball, bz2_bytes(&builder.into_inner().unwrap())).unwrap();
+        let head = crate::extract::read_head(&tarball).unwrap();
+        assert!(TarBz2Extractor.detect(&tarball, &head));
+        assert!(!Bz2FileExtractor.detect(&tarball, &head));
+
+        let plain = dir.path().join("jq.bz2");
+        std::fs::write(&plain, bz2_bytes(b"\x7fELF payload")).unwrap();
+        let head = crate::extract::read_head(&plain).unwrap();
+        assert!(!TarBz2Extractor.detect(&plain, &head));
+        assert!(Bz2FileExtractor.detect(&plain, &head));
+    }
+
     #[test]
     fn refuses_links_that_escape_the_payload() {
         assert!(check_link_target(Path::new("bin/tool"), Path::new("../lib/x.dylib")).is_ok());
@@ -914,6 +1155,23 @@ mod tests {
         assert!(private.is_dir());
         let mode = std::fs::metadata(&private).unwrap().permissions().mode() & 0o7777;
         assert_eq!(mode, 0o700);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn setuid_bits_from_an_archive_are_dropped() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("t.tar.gz");
+        std::fs::write(&src, tar_gz_with(&[("tool", b"#!/bin/sh\n", 0o4755)])).unwrap();
+        let dest = dir.path().join("out");
+        std::fs::create_dir_all(&dest).unwrap();
+        TarGzExtractor.extract(&src, &dest).unwrap();
+        let mode = std::fs::metadata(dest.join("tool"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o7777;
+        assert_eq!(mode, 0o755);
     }
 
     fn macho_match_32bit_only(head: &[u8]) -> bool {

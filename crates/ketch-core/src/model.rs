@@ -185,11 +185,18 @@ impl PackageRef {
                     .chars()
                     .all(|c| c.is_ascii_alphanumeric() || c == '-');
             if looks_like_scheme && !rest.is_empty() {
-                return Some(PackageRef::new(scheme.to_ascii_lowercase(), rest));
+                let scheme = scheme.to_ascii_lowercase();
+                if scheme == "github" {
+                    return Some(PackageRef::github(crate::config::current_repo(rest)));
+                }
+                return Some(PackageRef::new(scheme, rest));
             }
         }
+        // Every stored reference is read through here, so a state file,
+        // lockfile or manifest written before a repository moved resolves
+        // under its new name. See `config::RENAMED_REPOS`.
         if text.contains('/') {
-            return Some(PackageRef::github(text));
+            return Some(PackageRef::github(crate::config::current_repo(text)));
         }
         None
     }
@@ -319,8 +326,6 @@ impl fmt::Display for VersionSpec {
 /// `github:cli/cli`, `myplugin:some-id@2.0`.
 #[derive(Debug, Clone)]
 pub struct PackageSpec {
-    /// Part of the public surface, with no reader in the tree yet.
-    #[allow(dead_code)]
     pub raw: String,
     /// Set when the input names a source explicitly or looks like `owner/repo`.
     pub reference: Option<PackageRef>,
@@ -360,8 +365,6 @@ impl PackageSpec {
     }
 
     /// Best available human label before a manifest is resolved.
-    // Part of the public surface, with no caller in the tree yet.
-    #[allow(dead_code)]
     pub fn label(&self) -> String {
         match (&self.alias, &self.reference) {
             (Some(a), _) => a.clone(),
@@ -582,14 +585,6 @@ pub struct Release {
     pub notes: Option<String>,
     #[serde(default)]
     pub assets: Vec<ReleaseAsset>,
-}
-
-impl Release {
-    // Part of the public surface, with no caller in the tree yet.
-    #[allow(dead_code)]
-    pub fn asset(&self, name: &str) -> Option<&ReleaseAsset> {
-        self.assets.iter().find(|a| a.name == name)
-    }
 }
 
 /// Repository-level metadata, used by `info` and `search`.
@@ -1543,6 +1538,36 @@ pub fn glob_preferred<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::toml_file;
+
+    #[test]
+    fn a_reference_to_a_moved_repository_reads_as_its_new_name() {
+        for old in [
+            "listepo/ketch",
+            "github:listepo/ketch",
+            "GitHub:Listepo/Ketch",
+            "pyrlyn/ketch",
+            "github:pyrlyn/ketch",
+        ] {
+            assert_eq!(
+                PackageRef::parse(old).unwrap(),
+                PackageRef::github(crate::config::SELF_REPO),
+                "{old}"
+            );
+        }
+        assert_eq!(
+            PackageRef::parse("github:listepo/ketch-registry").unwrap(),
+            PackageRef::github(crate::config::REGISTRY_REPO)
+        );
+        // Only the repositories that moved: the rest of the account stays.
+        assert_eq!(
+            PackageRef::parse("listepo/swarfr").unwrap(),
+            PackageRef::github("listepo/swarfr")
+        );
+        // A stored state entry is read through the same path.
+        let stored: PackageRef = serde_json::from_str(r#""github:listepo/ketch""#).unwrap();
+        assert_eq!(stored.to_string(), "github:pyrlyn/ketch");
+    }
 
     #[test]
     fn validate_refuses_names_that_would_escape_their_directory() {
@@ -1752,37 +1777,37 @@ mod tests {
 
     #[test]
     fn hooks_parse_from_their_table_and_a_blank_one_is_refused() {
-        let manifest: Manifest = crate::toml_file::parse(
+        let manifest: Manifest = toml_file::parse(
             "name = \"tool\"\nsource = \"o/r\"\n[hooks]\nafter_install = \"./setup\"\n",
-            "test",
+            "ketch.toml",
         )
         .unwrap();
         assert_eq!(manifest.hooks.after_install.as_deref(), Some("./setup"));
         assert!(manifest.hooks.before_install.is_none());
         manifest.validate().unwrap();
         // Round-trips without writing the five unset keys.
-        let written = crate::toml_file::render(&manifest, "test").unwrap();
+        let written = toml_file::render(&manifest, "ketch.toml").unwrap();
         assert!(written.contains("after_install"), "{written}");
         assert!(!written.contains("before_install"), "{written}");
 
-        let blank: Manifest = crate::toml_file::parse(
+        let blank: Manifest = toml_file::parse(
             "name = \"tool\"\nsource = \"o/r\"\n[hooks]\nbefore_update = \" \"\n",
-            "test",
+            "ketch.toml",
         )
         .unwrap();
         let err = blank.validate().unwrap_err().to_string();
         assert!(err.contains("hooks.before_update"), "{err}");
 
-        let unknown = crate::toml_file::parse::<Manifest>(
+        let unknown = toml_file::parse::<Manifest>(
             "name = \"tool\"\nsource = \"o/r\"\n[hooks]\nafter_instal = \"x\"\n",
-            "test",
+            "ketch.toml",
         );
         assert!(unknown.is_err(), "a misspelt hook key must not be ignored");
     }
 
     #[test]
     fn committed_manifest_schema_matches_manifest() {
-        crate::toml_file::assert_schema_current::<Manifest>("docs/manifest.schema.json");
+        toml_file::assert_schema_current::<Manifest>("docs/manifest.schema.json");
     }
 
     /// The committed schema, as an editor would load it.
@@ -1795,15 +1820,13 @@ mod tests {
 
     /// Schema errors for one manifest written as TOML; empty when it is valid.
     fn schema_errors(schema: &jsonschema::Validator, toml_text: &str) -> Vec<String> {
-        let json = crate::toml_file::Document::parse(toml_text, "test")
-            .and_then(crate::toml_file::Document::into_json)
-            .expect("TOML as JSON");
+        let json = toml_file::to_json(toml_text, "manifest").expect("parse TOML");
         schema.iter_errors(&json).map(|e| e.to_string()).collect()
     }
 
     /// Whether ketch itself takes this manifest: serde, then `validate`.
     fn ketch_accepts(toml_text: &str) -> bool {
-        crate::toml_file::parse::<Manifest>(toml_text, "test").is_ok_and(|m| m.validate().is_ok())
+        toml_file::parse::<Manifest>(toml_text, "manifest").is_ok_and(|m| m.validate().is_ok())
     }
 
     #[test]
@@ -1815,9 +1838,8 @@ mod tests {
         let errors = schema_errors(&schema, &own);
         assert!(errors.is_empty(), "ketch.toml: {errors:?}");
 
-        let builtin = crate::toml_file::Document::parse(crate::manifest::BUILTIN_TOML, "builtin")
-            .and_then(crate::toml_file::Document::into_json)
-            .expect("parse");
+        let builtin =
+            toml_file::to_json(crate::manifest::BUILTIN_TOML, "builtin.toml").expect("parse");
         let packages = builtin["package"].as_array().expect("[[package]]");
         assert!(!packages.is_empty());
         for package in packages {
@@ -1849,9 +1871,7 @@ mod tests {
                 if file != "MANIFESTS.md" && !names_a_package_file {
                     continue;
                 }
-                let parsed = crate::toml_file::Document::parse(body, file)
-                    .and_then(crate::toml_file::Document::into_json)
-                    .expect("example parses");
+                let parsed = toml_file::to_json(body, file).expect("example parses");
                 let mut example = body.to_string();
                 if parsed.get("source").is_none() {
                     example = format!("source = \"github:o/r\"\n{example}");

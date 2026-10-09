@@ -10,12 +10,16 @@
 //! lets `ketch install owner/repo` work for a repository nobody has curated.
 //!
 //! It is also the one place a user manifest is edited: [`write_bins`] records
-//! the binaries a package links, through `toml_file`'s in-place edit.
+//! the binaries a package links. The TOML itself is read, rendered and edited
+//! by `toml_file`.
 
 use crate::config::Config;
 use crate::error::{Error, Result};
-use crate::model::{normalize_name, Manifest, ManifestOrigin, PackageRef, PackageSpec};
+use crate::model::{
+    normalize_name, InstalledPackage, Manifest, ManifestOrigin, PackageRef, PackageSpec,
+};
 use crate::report::{Ctx, Report};
+use crate::toml_file::{self, Document, EditDocument};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -35,7 +39,7 @@ struct Registry {
 }
 
 fn parse_registry(text: &str, what: &str) -> Result<Vec<Manifest>> {
-    let doc = crate::toml_file::Document::parse(text, what)?;
+    let doc = Document::parse(text, what)?;
     // One file may hold either a single manifest or a `[[package]]` array.
     // Which one is decided from the parsed shape, not from the source text: a
     // single manifest that merely mentions `[[package]]` — in a description, in
@@ -77,6 +81,28 @@ impl Resolver {
             registry: crate::registry::load(cx),
             builtin,
         })
+    }
+
+    /// Resolve a spec, or fall back to the manifest recorded when `installed`
+    /// was installed, so a package the registry has since dropped can still be
+    /// described. The origin is `None` for the recorded one.
+    pub fn resolve_or_recorded(
+        &self,
+        spec: &PackageSpec,
+        installed: Option<&InstalledPackage>,
+    ) -> Result<(Manifest, Option<ManifestOrigin>)> {
+        match self.resolve(spec) {
+            Ok((m, origin)) => Ok((m, Some(origin))),
+            Err(e) => match installed {
+                Some(pkg) => Ok((
+                    pkg.manifest
+                        .clone()
+                        .unwrap_or_else(|| Manifest::inferred(pkg.source.clone())),
+                    None,
+                )),
+                None => Err(e),
+            },
+        }
     }
 
     /// Resolve a spec, reporting where the manifest came from.
@@ -255,7 +281,7 @@ pub fn user_manifest_path(cfg: &Config, name: &str) -> PathBuf {
 
 /// Serialise a manifest for a user manifest file.
 pub fn to_toml(manifest: &Manifest) -> Result<String> {
-    crate::toml_file::render(manifest, "manifest")
+    toml_file::render(manifest, "manifest")
 }
 
 /// Write `bin = [{ name = "<a>" }, { name = "<b>" }, …]` for `package` into
@@ -264,8 +290,8 @@ pub fn to_toml(manifest: &Manifest) -> Result<String> {
 /// choice is only ever written where none was made.
 ///
 /// The file is the user's, so what they wrote — comments, order, spacing —
-/// survives: `toml_file` changes the one key and renders the rest back as it
-/// was read. The result is parsed as a manifest again before it replaces the
+/// survives: [`EditDocument`] changes the one key and renders the rest back as
+/// it was read. The result is parsed as a manifest again before it replaces the
 /// file, so a write that would leave it unloadable fails instead; and it
 /// replaces the file by renaming a finished copy over it, so an interrupted
 /// write leaves the old one whole.
@@ -275,23 +301,20 @@ pub fn write_bins(path: &Path, package: &str, bins: &[String]) -> Result<bool> {
     let target = std::fs::canonicalize(path).map_err(|e| Error::io(path, e))?;
     let label = target.display().to_string();
     let text = std::fs::read_to_string(&target).map_err(|e| Error::io(&target, e))?;
+    let mut doc = EditDocument::parse(&text, &label)?;
     let wanted = normalize_name(package);
-    let body = match crate::toml_file::insert_inline_list(
-        &text,
-        &label,
-        |name| normalize_name(name) == wanted,
-        "bin",
-        "name",
-        bins,
-    )? {
-        crate::toml_file::ListInsert::Inserted(body) => body,
-        crate::toml_file::ListInsert::AlreadySet => return Ok(false),
-        crate::toml_file::ListInsert::NoTable => {
-            return Err(Error::msg(format!(
+    let mut table = doc
+        .package_table(|name| normalize_name(name) == wanted)
+        .ok_or_else(|| {
+            Error::msg(format!(
                 "{label} has no `[[package]]` table named `{package}` to write `bin` into"
-            )))
-        }
-    };
+            ))
+        })?;
+    if table.contains_key("bin") {
+        return Ok(false);
+    }
+    table.set_inline_tables("bin", "name", bins);
+    let body = doc.render();
     parse_registry(&body, &label)?;
     replace_file(&target, &body)?;
     Ok(true)
@@ -332,7 +355,7 @@ fn replace_file(target: &Path, body: &str) -> Result<()> {
 
 /// `parse_registry` for the `manifest_toml` fuzz target (`src/lib.rs`).
 #[cfg(fuzzing)]
-pub(crate) fn fuzz_parse_registry(text: &str) -> Result<Vec<Manifest>> {
+pub fn fuzz_parse_registry(text: &str) -> Result<Vec<Manifest>> {
     parse_registry(text, "fuzz")
 }
 
@@ -541,6 +564,26 @@ mod tests {
         let parsed = parse_registry(&std::fs::read_to_string(&path).unwrap(), "t").unwrap();
         assert!(parsed[0].bin.is_empty());
         assert_eq!(parsed[1].bin[0].name.as_deref(), Some("rtok-cli"));
+    }
+
+    #[test]
+    fn write_bins_in_a_multi_package_file_keeps_every_other_byte() {
+        let body = concat!(
+            "# two of mine\n",
+            "[[package]]\n",
+            "source = \"github:me/other\"   # source first, on purpose\n",
+            "name = \"other\"\n",
+            "\n",
+            "# the fork\n",
+            "[[package]]\n",
+            "name = \"RTok\"\n",
+            "source = \"github:me/rtok\"\n",
+            "description = \"after source\"\n",
+        );
+        let (_dir, path) = user_file(body);
+        assert!(write_bins(&path, "rtok", &one("rtok-cli")).unwrap());
+        let expected = format!("{body}bin = [{{ name = \"rtok-cli\" }}]\n");
+        pretty_assertions::assert_eq!(std::fs::read_to_string(&path).unwrap(), expected);
     }
 
     #[cfg(unix)]

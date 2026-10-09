@@ -15,7 +15,7 @@ use crate::http::Http;
 use crate::model::{Checksum, Release, ReleaseAsset, SourceInfo, Version, VersionSpec};
 use crate::report::ProgressSink;
 use serde::Deserialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -295,6 +295,7 @@ fn sidecar_target(name: &str) -> Option<&str> {
 /// is kept — that is what the asset list is keyed by.
 pub(crate) fn parse_checksum_file(body: &str) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
+    let mut conflicts = BTreeSet::new();
     for line in body.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
@@ -308,10 +309,37 @@ pub(crate) fn parse_checksum_file(body: &str) -> BTreeMap<String, String> {
             continue;
         }
         let name = name.trim_start_matches('*').trim_start_matches("./");
-        let name = name.rsplit('/').next().unwrap_or(name);
-        out.insert(name.to_string(), hex.to_ascii_lowercase());
+        let name = name.rsplit('/').next().unwrap_or(name).to_string();
+        let hex = hex.to_ascii_lowercase();
+        if let Some(existing) = out.get(&name) {
+            if existing != &hex {
+                conflicts.insert(name);
+            }
+        } else {
+            out.insert(name, hex);
+        }
+    }
+    for name in conflicts {
+        out.remove(&name);
     }
     out
+}
+
+/// The hash a `.sha256` sidecar carries for `target`.
+///
+/// Prefer a line that names the asset. A one-entry file (or a lone hex) is
+/// the usual sidecar shape; several names with no match are ignored rather
+/// than picking an alphabetic first line.
+fn sidecar_hex(body: &str, target: &str) -> Option<String> {
+    let parsed = parse_checksum_file(body);
+    if let Some(hex) = parsed.get(target) {
+        return Some(hex.clone());
+    }
+    if parsed.len() == 1 {
+        return parsed.into_values().next();
+    }
+    let first = body.split_whitespace().next().unwrap_or("");
+    is_sha256(first).then(|| first.to_ascii_lowercase())
 }
 
 // ---------------------------------------------------------------------------
@@ -424,12 +452,7 @@ impl Source for GitHubSource {
             };
             match sidecar {
                 Some(target) => {
-                    if let Some(hex) =
-                        parse_checksum_file(&body).into_values().next().or_else(|| {
-                            let first = body.split_whitespace().next().unwrap_or("");
-                            is_sha256(first).then(|| first.to_ascii_lowercase())
-                        })
-                    {
+                    if let Some(hex) = sidecar_hex(&body, target) {
                         out.entry(target.to_string()).or_insert(hex);
                     }
                 }
@@ -525,8 +548,15 @@ fn urlencode_path_segment(raw: &str) -> String {
 
 /// `parse_digest` for the `checksum_file` fuzz target (`src/lib.rs`).
 #[cfg(fuzzing)]
-pub(crate) fn fuzz_parse_digest(raw: &str) -> Option<String> {
+pub fn fuzz_parse_digest(raw: &str) -> Option<String> {
     parse_digest(raw)
+}
+
+/// `parse_checksum_file` for the same target; the parser itself stays
+/// crate-private outside fuzzing.
+#[cfg(fuzzing)]
+pub fn fuzz_parse_checksum_file(body: &str) -> BTreeMap<String, String> {
+    parse_checksum_file(body)
 }
 
 #[cfg(test)]
@@ -554,6 +584,26 @@ not-a-hash                                                          junk.txt
         );
         // Directory prefixes and the binary-mode star are both stripped.
         assert!(map.contains_key("rg-14.zip"));
+    }
+
+    #[test]
+    fn an_ambiguous_basename_is_dropped_rather_than_overwritten() {
+        let a = "a".repeat(64);
+        let b = "b".repeat(64);
+        let body = format!("{a}  dir/tool.tar.gz\n{b}  other/tool.tar.gz\n");
+        let map = parse_checksum_file(&body);
+        assert!(!map.contains_key("tool.tar.gz"), "{map:?}");
+    }
+
+    #[test]
+    fn a_sidecar_prefers_the_named_asset_over_the_alphabetically_first_line() {
+        let wanted = "c".repeat(64);
+        let other = "a".repeat(64);
+        let body = format!("{other}  other.bin\n{wanted}  tool.tar.gz\n");
+        assert_eq!(
+            sidecar_hex(&body, "tool.tar.gz").as_deref(),
+            Some(wanted.as_str())
+        );
     }
 
     #[test]
