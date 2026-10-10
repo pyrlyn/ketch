@@ -3,12 +3,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
 
-# Build site/public: the Pages artifact of .github/workflows/pages.yml (pyrlyn/ci pages.yml
-# `build-command`). Needs hugo (scripts/site-install-hugo.sh), node/npm (mise.toml) and python3.
-# BASE_URL: the site's public URL (default https://pyrlyn.github.io/ketch).
+# Build site/public. Needs hugo (scripts/site-install-hugo.sh), node/npm (mise.toml) and python3.
+# BASE_URL: the site's public URL (default https://github.com/pyrlyn/ketch).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-BASE_URL="${BASE_URL:-https://pyrlyn.github.io/ketch}"
+BASE_URL="${BASE_URL:-https://github.com/pyrlyn/ketch}"
 
 python3 site/test_sync_docs.py
 

@@ -2,7 +2,6 @@
 title: ketch
 tagline: Catch releases straight from GitHub — a single-binary package manager for command-line tools and apps on macOS, Linux, and Windows.
 repo: https://github.com/pyrlyn/ketch
-homepage: https://pyrlyn.github.io/ketch/
 install: 'curl -fsSL https://raw.githubusercontent.com/pyrlyn/ketch/main/install.sh | bash'
 install_alternatives:
   - 'irm https://raw.githubusercontent.com/pyrlyn/ketch/main/install.ps1 | iex'
@@ -120,8 +119,6 @@ ketch self uninstall
 ## Links
 
 - Repository: <https://github.com/pyrlyn/ketch>
-- Website and documentation: <https://pyrlyn.github.io/ketch/>
-- Commands reference: <https://pyrlyn.github.io/ketch/docs/commands/>
 - Package registry: <https://github.com/pyrlyn/ketch-registry>
 - Releases: <https://github.com/pyrlyn/ketch/releases>
 - License: your choice of GNU GPLv3, a royalty-free license for proprietary desktop, mobile and web
