@@ -9,6 +9,7 @@ Project programs and direct packages from manifests.
 | mise | brew / curl, then `mise install` | Pinned tool versions | https://github.com/jdx/mise |
 | cargo-cache | mise | `just cache` / `just cache-autoclean`; the shared cargo home fills up | https://github.com/matthiaskrgr/cargo-cache |
 | cargo-nextest | global (cargo install) | Parallel test runner | https://github.com/nextest-rs/nextest |
+| cargo-hakari | mise (`cargo:cargo-hakari`) | Keeps the `workspace-hack` crate unified so shared dependencies build once; CI runs `cargo hakari verify` | https://github.com/guppy-rs/guppy |
 | node | mise | commitlint for `just lint-commits` and the commit-msg hook, and the macOS design-token generator and checks; node-based checks live in Just and CI only | https://github.com/nodejs/node |
 | rustc | mise (through rustup) | Rust compiler; `mise.toml` pins the one version local work, CI and release builds use | https://github.com/rust-lang/rust |
 | cargo | with rustc | Rust build and dependencies | https://github.com/rust-lang/cargo |

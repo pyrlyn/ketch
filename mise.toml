@@ -13,3 +13,4 @@ xcodegen = "2.46.0" # generates desktop/macos/Ketch.xcodeproj from project.yml (
 "cargo:cargo-fuzz" = "0.13.2" # `just fuzz`; runs with `cargo +nightly`, a rustup toolchain outside this pin (fuzz/README.md)
 "cargo:https://github.com/dennisameling/uniffi-bindgen-cs" = "rev:0fc022aa1d73fb1dda91a778b63f2824d7dca58b" # C# bindings for ketch-ffi (`just csharp`): PR #176 of NordSecurity/uniffi-bindgen-cs, the only generator for UniFFI 0.32 (D10)
 dotnet = "10.0.401" # builds and runs the C# binding's tests in desktop/windows (`just csharp-test`)
+"cargo:cargo-hakari" = "0.9.39" # workspace-hack unification; CI runs `cargo hakari verify`
