@@ -40,6 +40,7 @@ pub mod platform;
 pub mod process;
 pub mod push;
 pub mod registry;
+pub mod releases;
 pub mod report;
 pub mod resolve;
 pub mod self_update;

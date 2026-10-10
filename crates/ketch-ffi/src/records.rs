@@ -617,6 +617,7 @@ mod tests {
             pinned,
             retained: Vec::new(),
             prerelease: false,
+            channel: ketch_core::model::Channel::Stable,
         };
         let mut rows = ketch_core::listing::merge(vec![local], Vec::new());
         rows[0].latest = Latest::Found(Found {

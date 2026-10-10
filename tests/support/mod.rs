@@ -474,6 +474,8 @@ pub struct Release {
     assets: Vec<Asset>,
     notes: Option<String>,
     prerelease: bool,
+    tag: Option<String>,
+    published_at: Option<String>,
 }
 
 impl Release {
@@ -483,7 +485,22 @@ impl Release {
             assets,
             notes: None,
             prerelease: false,
+            tag: None,
+            published_at: None,
         }
+    }
+
+    /// A tag other than `v<version>`, for a release whose tag is not a
+    /// version (`nightly`).
+    pub fn with_tag(mut self, tag: &str) -> Release {
+        self.tag = Some(tag.to_string());
+        self
+    }
+
+    /// The publication stamp the source reports, as a forge would.
+    pub fn published(mut self, stamp: &str) -> Release {
+        self.published_at = Some(stamp.to_string());
+        self
     }
 
     /// Notes published alongside the release, the way a forge serves them.
@@ -504,9 +521,18 @@ impl Release {
             Some(text) => format!(r#","notes":"{}""#, json_escape(text)),
             None => String::new(),
         };
+        let tag = self
+            .tag
+            .clone()
+            .unwrap_or_else(|| format!("v{}", self.version));
+        let published = match &self.published_at {
+            Some(stamp) => format!(r#","published_at":"{}""#, json_escape(stamp)),
+            None => String::new(),
+        };
         format!(
-            r#"{{"version":"{v}","tag":"v{v}","prerelease":{pre},"draft":false{n},"assets":[{a}]}}"#,
+            r#"{{"version":"{v}","tag":"{tag}","prerelease":{pre},"draft":false{published}{n},"assets":[{a}]}}"#,
             v = self.version,
+            tag = json_escape(&tag),
             pre = if self.prerelease { "true" } else { "false" },
             n = notes,
             a = assets.join(",")

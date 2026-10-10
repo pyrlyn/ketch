@@ -62,7 +62,6 @@ Not added: the brand move is done (`brand/build.mjs` already uses `@pyrlyn/brand
 | M18 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | M19 | todo | P2 | 4 | 0% | |
 | M20 | todo | P2 | 4 | 0% | |
-| M21 | todo | P2 | 3 | 0% | |
 
 ### Ketch audit
 
@@ -485,7 +484,3 @@ Status: steps 1–7 done on branch `m18-release-channels-m18` (1099 tests green;
 ### M20. Dev builds: floating tags
 
 A release whose tag is not a version (`nightly`, `dev`, …) installed by name, `pkg@nightly`, records channel `dev` with the tag and the build it got (publication date and asset digest). `outdated`/`upgrade` report it outdated when the same tag now points at a different build, and reinstall it. `ketch.lock` pins the build's checksum so a lock cannot silently move with the tag (row in `docs/LOCKFILE.md`). Done means tests on build comparison and an end-to-end case where the fixture republishes the tag.
-
-### M21. Listing releases: `ketch releases`, `info --releases`, `list`
-
-`ketch releases <pkg>` lists a package's releases newest first with tag, date and a kind mark (`stable`, `pre`, `draft`, `dev`) and marks the installed one; `--pre`/`--draft` widen it, `--json` and `-n` as elsewhere. `ketch info <pkg> --releases` prints the same list under the details. `ketch list` shows the channel of non-stable installs and takes `--pre`/`--draft` for its `latest` column. Done means the commands, completions and man pages regenerated, docs in three languages, and `trycmd`/`assert_cmd` cases.

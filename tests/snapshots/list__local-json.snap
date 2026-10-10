@@ -4,6 +4,7 @@ expression: local
 ---
 [
   {
+    "channel": "stable",
     "installed": "1.0.0",
     "name": "alpha",
     "pinned": false,
@@ -11,6 +12,7 @@ expression: local
     "source": "test:alpha"
   },
   {
+    "channel": "stable",
     "installed": "1.0.0",
     "name": "bravo",
     "pinned": false,
@@ -18,6 +20,7 @@ expression: local
     "source": "test:bravo"
   },
   {
+    "channel": "stable",
     "installed": "1.0.0",
     "name": "charlie",
     "pinned": true,

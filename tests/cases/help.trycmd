@@ -12,6 +12,7 @@ Commands:
   list         Show installed and available packages [alias: ls]
   outdated     Show installed packages that have a newer release
   info         Show details about a package, installed or not [alias: show]
+  releases     List a package's releases, newest first, and mark the installed one
   why          Explain how a package would be resolved, without installing it
   changelog    Show what changed: the package's own changelog, or its release notes
   search       Search GitHub for installable repositories

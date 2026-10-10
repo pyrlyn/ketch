@@ -22,7 +22,7 @@ mod ui;
 // `cmd/`, `ui` and `tui` and the binary's own paths did not have to change.
 use ketch_core::{
     cancel, changelog, config, decide, diff, doctor, error, import, info, install, listing,
-    lockfile, log, manifest, model, platform, process, push, registry, report, resolve,
+    lockfile, log, manifest, model, platform, process, push, registry, releases, report, resolve,
     self_update, shell, source, state, stats, text, wizard,
 };
 
@@ -141,6 +141,7 @@ fn run(cli: Cli) -> Result<()> {
         Command::List(args) => cmd::query::list(&cfg, args),
         Command::Outdated(args) => cmd::query::outdated(&cfg, args),
         Command::Info(args) => cmd::query::info(&cfg, args),
+        Command::Releases(args) => cmd::query::releases(&cfg, args),
         Command::Why(args) => cmd::query::why(&cfg, args),
         Command::Changelog(args) => cmd::query::changelog(&cfg, args),
         Command::Search(args) => cmd::query::search(&cfg, args),
