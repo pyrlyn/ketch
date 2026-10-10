@@ -3,6 +3,7 @@
 # work, CI and release builds; bump it here and nowhere else. The MSRV
 # (rust-version = 1.86 in Cargo.toml) is a separate promise and does not follow it.
 [tools]
+sccache = { version = "0.18.0", os = ["linux", "macos"] } # compiler cache; mise [env] below makes it the rustc wrapper where it is installed
 rust = { version = "1.98.1", components = "rustfmt,clippy" } # mise installs the minimal profile otherwise
 "cargo:cargo-cache" = "0.8.3" # `just cache` / `just cache-autoclean`; the shared cargo home fills up
 node = "24.20.0"              # commitlint for `just lint-commits` and the commit-msg hook; node-based checks live in Just and CI only
@@ -14,3 +15,10 @@ xcodegen = "2.46.0" # generates desktop/macos/Ketch.xcodeproj from project.yml (
 "cargo:https://github.com/dennisameling/uniffi-bindgen-cs" = "rev:0fc022aa1d73fb1dda91a778b63f2824d7dca58b" # C# bindings for ketch-ffi (`just csharp`): PR #176 of NordSecurity/uniffi-bindgen-cs, the only generator for UniFFI 0.32 (D10)
 dotnet = "10.0.401" # builds and runs the C# binding's tests in desktop/windows (`just csharp-test`)
 "cargo:cargo-hakari" = "0.9.39" # workspace-hack unification; CI runs `cargo hakari verify`
+
+[env]
+# sccache as the rustc wrapper only where mise has it installed; empty means no wrapper (CI jobs
+# that install just Rust, Windows, machines without the tool). Not in .cargo/config.toml: there a
+# missing sccache would break every build. The probe variable stops `mise which` from recursing
+# into this same template. CI backend (R2): .github/actions/sccache, where the repo has its own jobs.
+RUSTC_WRAPPER = "{% if os() != 'windows' and get_env(name='MISE_SCCACHE_PROBE', default='') == '' %}{{ exec(command='MISE_SCCACHE_PROBE=1 \"' ~ mise_bin ~ '\" which sccache 2>/dev/null || true') }}{% endif %}"
