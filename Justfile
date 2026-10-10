@@ -310,3 +310,8 @@ fuzz target="" secs="60":
     for t in $targets; do
         cargo +nightly fuzz run "$t" -- -max_total_time={{secs}} -max_len=16384 -rss_limit_mb=4096
     done
+
+# Opt-in Cranelift dev build (nightly; dev profile only, never release). `just cranelift check` also works.
+cranelift *args='build':
+    rustup component add rustc-codegen-cranelift-preview --toolchain nightly
+    cargo +nightly --config .cargo/cranelift.toml {{args}}
