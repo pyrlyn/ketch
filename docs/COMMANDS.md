@@ -441,7 +441,7 @@ $ ketch releases fd -n 3
 
 Only stable releases are listed unless `--pre` is given, `prerelease = true` is
 set in `config.toml` or the package's manifest, or the package is installed on
-the `pre` channel; a repository that has never published a stable release lists
+the `pre` or `dev` channel (GitHub flags a nightly as a prerelease); a repository that has never published a stable release lists
 its prereleases anyway. `--draft` lists GitHub drafts too, and prereleases with
 them; a package installed with `--draft` lists them without it. As with
 `ketch install --draft`, that needs a token with push access to the repository

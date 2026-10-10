@@ -67,7 +67,14 @@ pub fn wants_prerelease(
     extra
         || cfg.prerelease
         || manifest.prerelease
-        || installed.is_some_and(|p| p.channel == crate::model::Channel::Pre)
+        // GitHub flags a nightly as a prerelease, so a dev install that did not
+        // count here would leave its own release out of `ketch releases`.
+        || installed.is_some_and(|p| {
+            matches!(
+                p.channel,
+                crate::model::Channel::Pre | crate::model::Channel::Dev
+            )
+        })
 }
 
 /// The manifest `query` names and the installed record it matches, without

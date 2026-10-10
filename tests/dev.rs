@@ -185,3 +185,42 @@ fn a_lockfile_holds_a_floating_tag_to_the_build_it_recorded() {
     assert!(err.contains("ketch lock"), "{err}");
     assert!(installed(&sandbox).is_null());
 }
+
+#[test]
+fn a_dev_install_lists_its_own_nightly_even_when_it_is_flagged_prerelease() {
+    let sandbox = sandbox();
+    let nightly = Release::new(
+        "nightly",
+        vec![sandbox.asset(
+            &native_name("devpkg", "nightly"),
+            Archive::TarGz(vec![Entry::program(
+                "devpkg-nightly/bin/devpkg",
+                "devpkg one",
+            )]),
+        )],
+    )
+    .with_tag("nightly")
+    .published(FIRST)
+    .into_prerelease();
+    // A stable release beside it, or the source lists prereleases anyway.
+    let stable = Release::new(
+        "1.0.0",
+        vec![sandbox.asset(
+            &native_name("devpkg", "1.0.0"),
+            Archive::TarGz(vec![Entry::program(
+                "devpkg-1.0.0/bin/devpkg",
+                "devpkg 1.0.0",
+            )]),
+        )],
+    );
+    sandbox.publish("devpkg", &[nightly, stable]);
+    sandbox.ok(&["install", "devpkg@nightly", "-y"]);
+
+    let listed = json(&sandbox.ok(&["releases", "devpkg", "--json"]));
+    let rows = listed.as_array().expect("releases array");
+    assert!(
+        rows.iter()
+            .any(|r| r["tag"] == "nightly" && r["installed"] == true && r["kind"] == "dev"),
+        "{listed}"
+    );
+}
