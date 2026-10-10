@@ -2,7 +2,6 @@
 title: ketch
 tagline: Ловіть релізи просто з GitHub — менеджер пакетів в одному бінарнику для консольних утиліт і застосунків на macOS, Linux і Windows.
 repo: https://github.com/pyrlyn/ketch
-homepage: https://pyrlyn.github.io/ketch/
 install: 'curl -fsSL https://raw.githubusercontent.com/pyrlyn/ketch/main/install.sh | bash'
 install_alternatives:
   - 'irm https://raw.githubusercontent.com/pyrlyn/ketch/main/install.ps1 | iex'
@@ -122,8 +121,6 @@ ketch self uninstall
 ## Посилання
 
 - Репозиторій: <https://github.com/pyrlyn/ketch>
-- Сайт і документація: <https://pyrlyn.github.io/ketch/>
-- Довідник команд: <https://pyrlyn.github.io/ketch/docs/commands/>
 - Реєстр пакетів: <https://github.com/pyrlyn/ketch-registry>
 - Релізи: <https://github.com/pyrlyn/ketch/releases>
 - Ліцензія: на ваш вибір GNU GPLv3, безкоштовна (royalty-free) ліцензія для пропрієтарних настільних, мобільних і

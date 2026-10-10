@@ -22,8 +22,7 @@ Install command-line tools and apps from GitHub releases on macOS, Linux, and Wi
 No taps, no formulae, no build step — ketch downloads what a project already
 ships, verifies it, and puts it on your `PATH`.
 
-[Website](https://pyrlyn.github.io/ketch/) ·
-[Documentation](https://pyrlyn.github.io/ketch/docs/) ·
+[Documentation](docs/) ·
 [Registry](https://github.com/pyrlyn/ketch-registry) ·
 [Roadmap](ROADMAP.md)
 
@@ -473,11 +472,6 @@ the package registry is [`pyrlyn/ketch-registry`](https://github.com/pyrlyn/ketc
 | [ROADMAP.md](ROADMAP.md) | What is missing, and what is deliberately out of scope |
 | [AGENTS.md](AGENTS.md) | The layout, the conventions and the trust boundaries |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Short contributor checklist |
-
-The same pages are published at
-**[pyrlyn.github.io/ketch/docs](https://pyrlyn.github.io/ketch/docs/)** — the
-site generates them from the Markdown in this repository, so the two cannot
-drift.
 
 ## Building from source
 
