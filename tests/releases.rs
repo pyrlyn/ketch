@@ -210,3 +210,16 @@ fn list_pre_looks_for_prereleases_in_the_latest_column() {
     // A floating tag is never "the newest": it has no version to compare.
     assert_eq!(latest(&["list", "--pre", "--json"]), "2.0.0-rc.1");
 }
+
+#[test]
+fn the_version_column_is_the_normalised_version_not_the_tag_again() {
+    let sandbox = sandbox();
+    // A GitHub release's version is read from its tag, `v` and all.
+    sandbox.publish("relpkg", &[release(&sandbox, "v3.0.0").with_tag("v3.0.0")]);
+    assert_eq!(
+        rows(&sandbox.ok(&["releases", "relpkg"])),
+        vec![vec!["v3.0.0", "3.0.0", "-", "stable"]]
+    );
+    let listed = json(&sandbox.ok(&["releases", "relpkg", "--json"]));
+    assert_eq!(listed[0]["version"], "3.0.0");
+}

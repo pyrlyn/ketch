@@ -423,12 +423,13 @@ returns them, and mark the one that is installed. Needs the network.
 ```text
 $ ketch releases fd -n 3
    tag      version  published   kind
-   v10.5.0  v10.5.0  2026-08-26  stable
-*  v10.4.2  v10.4.2  2026-03-10  stable
-   v10.4.1  v10.4.1  2026-03-08  stable
+   v10.5.0  10.5.0   2026-08-26  stable
+*  v10.4.2  10.4.2   2026-03-10  stable
+   v10.4.1  10.4.1   2026-03-08  stable
 ```
 
-- `tag` and `version` — the release's tag and the version read from it. A tag
+- `tag` and `version` — the release's tag and the version ketch reads from it
+  and compares, without the tag's spelling (`v10.4.2` reads `10.4.2`). A tag
   that is not a version at all (`nightly`) has `-` for the version.
 - `published` — the day the source says the release was published, or `-`.
 - `kind` — `stable`; `pre`, for a release the forge flags as a prerelease or

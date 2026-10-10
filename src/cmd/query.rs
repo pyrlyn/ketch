@@ -667,11 +667,12 @@ fn print_releases(entries: &[releases::Entry]) {
                 if e.installed { marker } else { "" }.to_string(),
                 e.tag.clone(),
                 // A tag that is not a version has no version to show.
-                if e.version.sem.is_some() {
-                    e.version.to_string()
-                } else {
-                    "-".to_string()
-                },
+                // The tag column already shows the raw spelling; the version
+                // is the semver ketch compares, so `v10.4.2` reads `10.4.2`.
+                e.version
+                    .sem
+                    .as_ref()
+                    .map_or_else(|| "-".to_string(), ToString::to_string),
                 e.date().unwrap_or("-").to_string(),
                 e.kind.as_str().to_string(),
             ]
@@ -686,7 +687,7 @@ fn releases_json(entries: &[releases::Entry]) -> Vec<serde_json::Value> {
         .map(|e| {
             serde_json::json!({
                 "tag": ui::printable(&e.tag),
-                "version": e.version.sem.is_some().then(|| ui::printable(&e.version.to_string())),
+                "version": e.version.sem.as_ref().map(ToString::to_string),
                 "published_at": json_prose(e.published_at.clone()),
                 "kind": e.kind.as_str(),
                 "installed": e.installed,
