@@ -60,7 +60,6 @@ Not added: the brand move is done (`brand/build.mjs` already uses `@pyrlyn/brand
 | B74 | todo | P3 | 3 | 0% | |
 | R12 | todo | P3 | 1 | 0% | |
 | M18 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
-| M21 | todo | P2 | 3 | 0% | |
 
 ### Ketch audit
 
@@ -476,6 +475,3 @@ Execution plan:
 
 Status: steps 1–7 done on branch `m18-release-channels-m18` (1099 tests green; `install sharkdp/fd --pre` in a scratch root records `pre`, `--force` without it returns to `stable`). `upgrade_request` lost its `prerelease` parameter: the tag is exact, so only the channel matters. Known gap: `install --pre` over the same tag already installed stops at "already installed" and does not switch the channel; `--force` does. Remaining: commit and PR.
 
-### M21. Listing releases: `ketch releases`, `info --releases`, `list`
-
-`ketch releases <pkg>` lists a package's releases newest first with tag, date and a kind mark (`stable`, `pre`, `draft`, `dev`) and marks the installed one; `--pre`/`--draft` widen it, `--json` and `-n` as elsewhere. `ketch info <pkg> --releases` prints the same list under the details. `ketch list` shows the channel of non-stable installs and takes `--pre`/`--draft` for its `latest` column. Done means the commands, completions and man pages regenerated, docs in three languages, and `trycmd`/`assert_cmd` cases.

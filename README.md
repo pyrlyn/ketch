@@ -204,6 +204,7 @@ ketch upgrade              # bring everything unpinned up to date
 ketch rollback <pkg>       # restore the previous retained version (`--to` for an older one)
 ketch prune [pkg]          # apply the retention policy; upgrade never deletes a prefix
 ketch info <pkg>           # details, including --assets and why each scored
+ketch releases <pkg>       # its releases, newest first, with stable, pre and dev marks
 ketch why <pkg>            # explain a resolution without installing
 ketch search <query>       # GitHub, and any source plugin that can search
 ketch changelog <pkg>      # what changed: the shipped file, or the release notes

@@ -128,7 +128,14 @@ fn json_of_each_mode_has_exactly_the_documented_fields() {
     for entry in json(&local).as_array().expect("an array") {
         assert_eq!(
             keys(entry),
-            ["installed", "name", "pinned", "retained", "source"]
+            [
+                "channel",
+                "installed",
+                "name",
+                "pinned",
+                "retained",
+                "source"
+            ]
         );
     }
     insta::assert_snapshot!("local-json", local);
@@ -146,6 +153,7 @@ fn json_of_each_mode_has_exactly_the_documented_fields() {
         assert_eq!(
             keys(entry),
             [
+                "channel",
                 "installed",
                 "latest",
                 "name",

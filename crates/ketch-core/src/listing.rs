@@ -18,7 +18,9 @@ use crate::config::Config;
 use crate::error::{Error, Result};
 use crate::install;
 use crate::manifest::same_source;
-use crate::model::{normalize_name, now_unix, InstalledPackage, Manifest, PackageRef, Version};
+use crate::model::{
+    normalize_name, now_unix, Channel, InstalledPackage, Manifest, PackageRef, Version,
+};
 use crate::report::{Ctx, Report};
 use crate::source::{ListOpts, SourceRegistry};
 use serde::{Deserialize, Serialize};
@@ -57,6 +59,8 @@ pub struct Local {
     pub retained: Vec<Version>,
     /// Whether `latest` may be a prerelease, decided as `ketch outdated` does.
     pub prerelease: bool,
+    /// The release channel the install follows.
+    pub channel: Channel,
 }
 
 impl Local {
@@ -69,13 +73,18 @@ impl Local {
             pinned: pkg.pinned,
             retained: pkg.retained.iter().map(|r| r.version.clone()).collect(),
             prerelease: install::installed_list_opts(pkg, cfg.prerelease).include_prerelease,
+            channel: pkg.channel,
         }
     }
 
     /// The `installed` cell: the version and the notes `ketch list local` has
-    /// always carried.
+    /// always carried. A channel other than stable follows the version, since
+    /// it says where the next version will come from.
     pub fn cell(&self) -> String {
         let mut cell = self.version.to_string();
+        if !self.channel.is_stable() {
+            cell.push_str(&format!(" ({})", self.channel.as_str()));
+        }
         if self.pinned {
             cell.push(' ');
             cell.push_str(PINNED);
@@ -219,6 +228,21 @@ impl Row {
         match &self.latest {
             Latest::Found(found) => Some(found.version.to_string()),
             _ => None,
+        }
+    }
+}
+
+/// Let every row's `latest` be a prerelease: `ketch list --pre`.
+///
+/// Applied to the rows rather than to the config because a row is what decides
+/// its lookup and its cache key, and the flag is part of both already.
+pub fn include_prereleases(rows: &mut [Row]) {
+    for row in rows {
+        if let Some(local) = &mut row.local {
+            local.prerelease = true;
+        }
+        if let Some(available) = &mut row.available {
+            available.prerelease = true;
         }
     }
 }
@@ -616,6 +640,7 @@ mod tests {
             pinned: false,
             retained: Vec::new(),
             prerelease: false,
+            channel: Channel::Stable,
         }
     }
 
@@ -798,6 +823,26 @@ mod tests {
             ..stable.clone()
         };
         assert_ne!(stable.key(), pre.key());
+    }
+
+    #[test]
+    fn the_installed_cell_names_a_channel_other_than_stable() {
+        let mut pkg = local("alpha", "1.0.0-rc.1");
+        assert_eq!(pkg.cell(), "1.0.0-rc.1");
+        pkg.channel = Channel::Pre;
+        pkg.pinned = true;
+        assert_eq!(pkg.cell(), "1.0.0-rc.1 (pre) (pinned)");
+    }
+
+    #[test]
+    fn asking_for_prereleases_widens_installed_and_offered_rows_alike() {
+        let mut rows = merge(vec![local("alpha", "1.0.0")], vec![offer("bravo")]);
+        include_prereleases(&mut rows);
+        assert!(rows
+            .iter()
+            .all(|r| r.lookup().is_some_and(|l| l.prerelease)));
+        rows[0].latest = Latest::Found(found("1.1.0-rc.1"));
+        assert!(rows[0].update_available());
     }
 
     #[test]

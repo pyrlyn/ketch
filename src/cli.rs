@@ -83,6 +83,9 @@ pub enum Command {
     #[command(visible_alias = "show")]
     Info(InfoArgs),
 
+    /// List a package's releases, newest first, and mark the installed one
+    Releases(ReleasesArgs),
+
     /// Explain how a package would be resolved, without installing it
     Why(WhyArgs),
 
@@ -246,6 +249,10 @@ pub struct ListArgs {
     #[arg(long, conflicts_with = "json")]
     pub names_only: bool,
 
+    /// Look for prereleases in the `latest` column
+    #[arg(long = "pre")]
+    pub prerelease: bool,
+
     /// Same as `ketch list local`. Bare `ketch list` used to mean installed
     /// only; this hidden alias gives scripts one release to move to `local`.
     #[arg(long, hide = true, conflicts_with = "mode")]
@@ -315,6 +322,29 @@ pub struct InfoArgs {
     /// List the release's assets and how each one scored
     #[arg(long)]
     pub assets: bool,
+
+    /// List the package's releases under the details (see `ketch releases`)
+    #[arg(long)]
+    pub releases: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct ReleasesArgs {
+    /// An installed name, an alias, or `owner/repo`
+    #[arg(value_name = "PKG")]
+    pub package: String,
+
+    /// Emit JSON instead of a table
+    #[arg(long)]
+    pub json: bool,
+
+    /// Include prereleases
+    #[arg(long = "pre")]
+    pub prerelease: bool,
+
+    /// How many releases to show at most
+    #[arg(long, short = 'n', default_value_t = 20, value_parser = clap::value_parser!(u32).range(1..))]
+    pub limit: u32,
 }
 
 #[derive(Args, Debug, Clone)]

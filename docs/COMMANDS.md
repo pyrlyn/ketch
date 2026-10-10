@@ -215,7 +215,7 @@ your GitHub token when one is set.
 
 ### `ketch list`
 
-`ketch list [local|remote] [--json] [--names-only]`, aliased as `ketch ls`.
+`ketch list [local|remote] [--json] [--names-only] [--pre]`, aliased as `ketch ls`.
 
 Show what is installed, what the registry offers, or both in one table with
 the newest version of each.
@@ -234,8 +234,10 @@ to see the registry they come from.
 **Columns.**
 
 - `package` — the name to install, upgrade or uninstall it by.
-- `installed` — the installed version. `(pinned)` means `ketch pin` holds it;
-  `(+N retained)` means N earlier versions are kept for `ketch rollback`.
+- `installed` — the installed version. `(pre)` means it follows prereleases
+  (it was installed with `--pre`, or from a prerelease tag); a package on the
+  default stable channel carries no mark. `(pinned)` means `ketch pin` holds
+  it; `(+N retained)` means N earlier versions are kept for `ketch rollback`.
   Empty for a package that is not installed.
 - `latest` — the newest release of the package's source. `(update available)`
   follows it when that is an update for the installed version. `?` means the
@@ -254,8 +256,9 @@ pipe; `--no-color` and `NO_COLOR` turn it off.
 
 **Update available** is decided the way `ketch outdated` decides it. `latest` is
 the newest release the package's source reports, from the same lookup
-`ketch outdated` makes: stable releases only, unless `prerelease = true` is set
-in `config.toml` or in the package's manifest. That version is compared with
+`ketch outdated` makes: stable releases only, unless `--pre` is given,
+`prerelease = true` is set in `config.toml` or in the package's manifest, or
+the package is installed on the `pre` channel. That version is compared with
 the installed one, and only a strictly newer version counts; a release with
 the installed tag never does. A pinned package is never offered an update.
 
@@ -287,15 +290,21 @@ answers are cached, never failures. Delete the file to ask again sooner;
 
 **`--json`** prints, for each mode:
 
-- `local` — an array of `{"name", "installed", "pinned", "retained", "source"}`,
-  with `retained` the list of versions kept for rollback.
+- `local` — an array of
+  `{"name", "installed", "channel", "pinned", "retained", "source"}`, with
+  `retained` the list of versions kept for rollback and `channel` the release
+  channel the install follows (`stable` or `pre`).
 - `remote` — an array of `{"name", "latest", "description", "source"}`, with
   `latest` `null` for a source that did not answer.
 - no mode — `{"packages": [...], "unreachable": [...]}`. Each package is
-  `{"name", "installed", "latest", "update_available", "pinned", "source"}`;
-  `installed` is `null` when it is not installed and `latest` is `null` when
-  it is unknown. `unreachable` names the packages whose `latest` is unknown.
+  `{"name", "installed", "channel", "latest", "update_available", "pinned",
+  "source"}`; `installed` and `channel` are `null` when it is not installed and
+  `latest` is `null` when it is unknown. `unreachable` names the packages whose `latest` is unknown.
   Offline, `packages` holds only installed packages.
+
+**`--pre`** looks for prereleases when filling the `latest` column, for every
+row, the way `ketch outdated --pre` does. It changes nothing in `ketch list
+local`, which asks no source.
 
 **`--names-only`** prints the names alone, one per line, for each mode; it never
 touches the network.
@@ -371,17 +380,61 @@ ketch outdated
 ketch outdated --json   # {"status","outdated","failed","unreachable"}
 ```
 
-### `ketch info <PKG> [--assets] [--json]`
+### `ketch info <PKG> [--assets] [--releases] [--json]`
 
 Show details about a package, installed or not: source, description, latest
 and installed versions, links, retention, verification.
 
 ```bash
 ketch info BurntSushi/ripgrep
-ketch info rg --assets   # every release asset with its score and why
+ketch info rg --assets     # every release asset with its score and why
+ketch info rg --releases   # the same table `ketch releases` prints, below
 ```
 
+`--releases` adds the package's releases under the details, newest 20, in the
+format of `ketch releases`; with
+`--json` they are the `releases` array. A source that cannot be reached is a
+warning and the section is left out (`null` in JSON).
+
 Aliased as `ketch show`.
+
+### `ketch releases <PKG> [--pre] [-n <LIMIT>] [--json]`
+
+List the releases a package's source has published, newest first as the source
+returns them, and mark the one that is installed. Needs the network.
+
+```text
+$ ketch releases fd -n 3
+   tag      version  published   kind
+   v10.5.0  v10.5.0  2026-08-26  stable
+*  v10.4.2  v10.4.2  2026-03-10  stable
+   v10.4.1  v10.4.1  2026-03-08  stable
+```
+
+- `tag` and `version` — the release's tag and the version read from it. A tag
+  that is not a version at all (`nightly`) has `-` for the version.
+- `published` — the day the source says the release was published, or `-`.
+- `kind` — `stable`; `pre`, for a release the forge flags as a prerelease or
+  whose version has a prerelease part (`2.0.0-rc.1`); `dev`, for a tag that is
+  not a version (a floating `nightly`, even when it is also flagged
+  prerelease); `draft`, for an unpublished release, if a source ever returns
+  one (the GitHub source does not yet).
+- A `*` in the first column (`●` on a colour terminal) marks the release the
+  package is installed from, when it is among those listed.
+
+Only stable releases are listed unless `--pre` is given, `prerelease = true` is
+set in `config.toml` or the package's manifest, or the package is installed on
+the `pre` channel; a repository that has never published a stable release lists
+its prereleases anyway. `-n` (default 20, at least 1) caps the list; a source
+may return fewer. An empty list prints `no releases`.
+
+`--json` prints an array of `{"tag", "version", "published_at", "kind",
+"installed"}`; `version` and `published_at` are `null` when unknown.
+
+```bash
+ketch releases ripgrep
+ketch releases sharkdp/fd --pre --json
+```
 
 ### `ketch why <PKG> [--json]`
 
@@ -580,8 +633,8 @@ ketch completions bash --install
 ```
 
 The bash and PowerShell scripts also complete package names: installed ones after
-`uninstall`, `upgrade`, `pin`, `unpin`, `link`, `unlink`, `info`, `why`,
-`changelog` and `rollback`, and names from the local registry copy after
+`uninstall`, `upgrade`, `pin`, `unpin`, `link`, `unlink`, `info`, `releases`,
+`why`, `changelog` and `rollback`, and names from the local registry copy after
 `install` and `search`. It asks the binary for them with the internal
 `ketch __complete <installed|registry> [PREFIX]`, which reads the state file and
 the registry already on disk and never touches the network. A `--root` earlier
