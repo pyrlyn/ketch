@@ -5,6 +5,7 @@
 [tools]
 rust = { version = "1.98.1", components = "rustfmt,clippy" } # mise installs the minimal profile otherwise
 "cargo:cargo-cache" = "0.8.3" # `just cache` / `just cache-autoclean`; the shared cargo home fills up
+"cargo:https://github.com/pyrlyn/tools" = "rev:d8658b36d8384c24696b183ee07c8f418502dceb" # `just cache`, `just swarfr` (ptools, pyrlyn/tools#1; repin to a v0.1.0 tag once merged)
 node = "24.20.0"              # commitlint for `just lint-commits` and the commit-msg hook; node-based checks live in Just and CI only
 ruby = "3.4.11"               # `just lint-shell` -> tests/release-workflows.sh parses the workflows with ruby
 cargo-dist = "0.32.0" # generates .github/workflows/release.yml and builds the release tarballs (`just dist-generate`, `just package`)

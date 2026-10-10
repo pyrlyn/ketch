@@ -4,7 +4,8 @@
 # cargo-cache is pinned in mise.toml, so `just cache` runs the same version
 # everywhere. Set CARGO_CACHE to a bare `cargo-cache` if mise is already
 # activated in your shell, or to skip mise entirely.
-cache := env("CARGO_CACHE", "mise exec -- cargo-cache")
+# ptools (pyrlyn/tools) is pinned in mise.toml; PTOOLS overrides it if mise is already activated.
+ptools := env("PTOOLS", "mise exec -- ptools")
 # cargo-dist is pinned in mise.toml too; DIST overrides it the same way.
 dist := env("DIST", "mise exec -- dist")
 
@@ -218,23 +219,19 @@ check: fmt-check lint fuzz-check test lint-commits lint-shell lint-man dist-chec
 
 # $CARGO_HOME sizes (no deletes) and the build output, wherever cargo puts it
 cache:
-    {{cache}}
-    du -sh "$(cargo metadata --no-deps --format-version 1 | tr ',' '\n' | grep target_directory | cut -d'"' -f4)" 2>/dev/null || echo "target: (missing)"
+    {{ptools}} cache
 
 # preview what cache-autoclean would remove; read this before running it
 cache-dry-run:
-    {{cache}} --autoclean --dry-run
+    {{ptools}} cache --dry-run
 
 # drop extracted crate/git checkouts; keep archives
 cache-autoclean:
-    {{cache}} --autoclean
+    {{ptools}} cache --autoclean
 
 # Lossless cleanup of this checkout's cargo target dir (compress + dedupe); never deletes.
 swarfr:
-    #!/usr/bin/env sh
-    command -v swarfr >/dev/null || { echo "swarfr not found; install it with: ketch install swarfr"; exit 0; }
-    [ -d target ] || exit 0
-    swarfr run target || test $? -eq 2
+    {{ptools}} swarfr
 
 # The macOS app (desktop/macos). XcodeGen writes Ketch.xcodeproj from
 # project.yml; the project file and build/ are gitignored. Builds are unsigned:
