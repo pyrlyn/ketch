@@ -13,7 +13,6 @@
 ![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)
 [![release](https://img.shields.io/github/v/release/pyrlyn/ketch?sort=semver)](https://github.com/pyrlyn/ketch/releases/latest)
 [![ci](https://github.com/pyrlyn/ketch/actions/workflows/ci.yml/badge.svg)](https://github.com/pyrlyn/ketch/actions/workflows/ci.yml)
-[![site](https://github.com/pyrlyn/ketch/actions/workflows/pages.yml/badge.svg)](https://github.com/pyrlyn/ketch/actions/workflows/pages.yml)
 <br>
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=listepo_ketch&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=listepo_ketch) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=listepo_ketch&metric=coverage)](https://sonarcloud.io/component_measures?id=listepo_ketch&metric=coverage) [![Tests](https://img.shields.io/sonar/tests/listepo_ketch?server=https%3A%2F%2Fsonarcloud.io&compact_message)](https://sonarcloud.io/component_measures?id=listepo_ketch&metric=tests)
 
