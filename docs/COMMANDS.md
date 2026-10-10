@@ -57,6 +57,12 @@ other. Other sources have no drafts and refuse `--draft`; `--no-link` unpacks wi
 since the platform check is skipped); `-j/--jobs <N>` and `-y/--yes` control
 parallelism and prompts. Aliased as `ketch i`.
 
+A tag that is not a version (`nightly`, `dev`, `canary`, `edge`) is a
+floating tag: the project republishes it under the same name. `pkg@nightly`
+installs it on `channel: dev`, recording the build it got — the asset's
+digest and when it was published. Installing the same tag again is `already
+installed` until the tag names another build, and then it takes the new one.
+
 When a release ships several binaries sharing the package's name and no
 manifest names one, only one of them is linked: the one `--bin <NAME>` names;
 failing that, the binary named exactly like the package; failing that, a choice
@@ -107,7 +113,10 @@ ketch upgrade --dry-run    # show the plan, change nothing
 Options: `--pre` considers prereleases; `--draft` considers GitHub draft
 releases too (a package installed with `--draft` does without it). A draft
 that was published is an upgrade to the release under its tag; a draft that
-was deleted is a warning. `--force` upgrades pinned packages
+was deleted is a warning. A package on a floating tag (`channel: dev`)
+follows that tag: the tag naming another build is the upgrade, decided by the
+asset's digest, or by when the release was published when the source gives
+no digest; a newer version under another tag is not. `--force` upgrades pinned packages
 too; `--bin <NAME>` (exactly one package) picks which binary to link when the
 new release ships several sharing the package's name, as on `install`;
 `-j/--jobs <N>`, `-y/--yes`. Pinned and `local:` packages are skipped unless
@@ -354,7 +363,8 @@ ketch list remote --json     # the registry with latest versions
 
 Show installed packages that have a newer release. A source that cannot be
 reached is a warning, not a failure — unless nothing could be checked at all.
-`--draft` compares against GitHub draft releases too, as on `upgrade`.
+`--draft` compares against GitHub draft releases too, as on `upgrade`. A
+package on a floating tag is outdated when its tag names another build.
 
 ```bash
 ketch outdated

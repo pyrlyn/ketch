@@ -375,6 +375,7 @@ mod tests {
             bin_choice: None,
             channel: Default::default(),
             draft: false,
+            published_at: None,
         }
     }
 

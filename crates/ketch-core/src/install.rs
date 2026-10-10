@@ -47,6 +47,10 @@ pub struct InstallRequest {
     /// SHA-256 this asset is already known to have, from a lockfile. Checked
     /// before anything is unpacked.
     pub expected_sha256: Option<String>,
+    /// When the build a lockfile recorded under a floating tag was
+    /// published. A tag that now names a build published at another time is
+    /// refused before anything is downloaded.
+    pub expected_published: Option<String>,
     /// Override the resolved package name (used by `ketch install --path --name`).
     pub name_override: Option<String>,
     /// `--bin`: which of several binaries sharing the package's name to
@@ -77,6 +81,7 @@ impl InstallRequest {
             require_checksum: false,
             asset_override: None,
             expected_sha256: None,
+            expected_published: None,
             name_override: None,
             bin: None,
             locked_bin: None,
@@ -275,6 +280,7 @@ pub fn prepare(
     let release = report
         .activity(&format!("resolving {}", manifest.name))
         .run(|| source.resolve(&manifest.source.id, &req.spec.version, &opts))?;
+    check_published(req, &manifest.name, &release)?;
 
     // Nothing is downloaded until we know the install is actually wanted.
     let existing = state.get(&manifest.name).cloned();
@@ -286,7 +292,10 @@ pub fn prepare(
             });
         }
         let unversioned = !matches!(req.spec.version, VersionSpec::Exact(_));
-        if old.tag == release.tag && !req.force {
+        // The same floating tag can name a new build, which is not "already
+        // installed" however equal the tags are.
+        let same_build = old.channel != Channel::Dev || !rebuilt(old, &release);
+        if old.tag == release.tag && same_build && !req.force {
             // `pkg@1.2.0` asked for that version and keeps the old message.
             return Err(if unversioned && req.offer_update {
                 Error::NoUpdate {
@@ -801,6 +810,11 @@ pub fn commit(cx: &Ctx<'_>, state: &mut State, prepared: Prepared) -> Result<Ins
         bin_choice,
         channel,
         draft: release.draft,
+        published_at: if channel == Channel::Dev {
+            release.published_at.clone()
+        } else {
+            None
+        },
     };
     state.insert(package.clone());
     orphan.keep();
@@ -1334,6 +1348,15 @@ pub fn latest_release(
     let mut opts = installed_list_opts(pkg, prerelease);
     opts.include_draft |= draft;
     opts.include_prerelease |= draft;
+    if pkg.channel == Channel::Dev {
+        // A floating tag has no successor to look for, only a newer build
+        // under the same name.
+        return sources.for_ref(&pkg.source)?.resolve(
+            &pkg.source.id,
+            &VersionSpec::Exact(pkg.tag.clone()),
+            &opts,
+        );
+    }
     latest_of(sources, &pkg.source, &opts)
 }
 
@@ -1349,6 +1372,9 @@ pub fn is_upgrade(report: &Report, pkg: &InstalledPackage, latest: &Release) -> 
     if pkg.draft && latest.tag == pkg.tag {
         return !latest.draft;
     }
+    if pkg.channel == Channel::Dev && latest.tag == pkg.tag {
+        return rebuilt(pkg, latest);
+    }
     if latest.tag != pkg.tag && latest.version > pkg.version {
         return true;
     }
@@ -1360,6 +1386,28 @@ pub fn is_upgrade(report: &Report, pkg: &InstalledPackage, latest: &Release) -> 
         ));
     }
     false
+}
+
+/// Whether `release`, under the tag `pkg` was installed from, is another
+/// build than the one installed.
+///
+/// The installed asset's digest decides when the source publishes one: it
+/// describes the bytes, which a republish changes even when the date does
+/// not. Without it the publication date is all there is, and a date that is
+/// missing on either side is no evidence of a new build.
+pub(crate) fn rebuilt(pkg: &InstalledPackage, release: &Release) -> bool {
+    let Some(asset) = release.assets.iter().find(|a| a.name == pkg.asset_name) else {
+        // Nightlies often stamp a date or commit into their file names, so a
+        // vanished asset is a new build rather than an incomplete release.
+        return true;
+    };
+    match &asset.digest {
+        Some(digest) if digest.algo == "sha256" => !digest.hex.eq_ignore_ascii_case(&pkg.sha256),
+        _ => matches!(
+            (&pkg.published_at, &release.published_at),
+            (Some(installed), Some(now)) if installed != now
+        ),
+    }
 }
 
 /// The request that moves installed `pkg` to the release tagged `tag`, as
@@ -1390,6 +1438,7 @@ pub fn upgrade_request(
         require_checksum: cfg.require_checksums,
         asset_override: None,
         expected_sha256: None,
+        expected_published: None,
         // The installed name, which `--name` may have chosen. Resolving the
         // source alone would infer another and install a second copy.
         name_override: Some(pkg.name.clone()),
@@ -1554,6 +1603,20 @@ fn payload_root(unpacked: &Path, strip: Option<usize>) -> Result<PathBuf> {
 /// locked — and a release that changed under a tag it already published is
 /// exactly what a lockfile exists to catch. Every payload path calls it before
 /// anything is placed, so no kind of package can skip the lock.
+/// Refuse a floating tag that a lockfile pinned to one build and that now
+/// names another, before anything is downloaded. A source that does not say
+/// when a release was published leaves nothing to compare.
+fn check_published(req: &InstallRequest, name: &str, release: &Release) -> Result<()> {
+    match (&req.expected_published, &release.published_at) {
+        (Some(locked), Some(now)) if locked != now => Err(Error::msg(format!(
+            "{name}: {} now names another build (published {now}, the lockfile \
+             recorded {locked}); run `ketch lock` again to accept it",
+            release.tag
+        ))),
+        _ => Ok(()),
+    }
+}
+
 fn check_locked(req: &InstallRequest, name: &str, asset: &str, sha256: &str) -> Result<()> {
     match &req.expected_sha256 {
         Some(expected) if !expected.eq_ignore_ascii_case(sha256) => Err(Error::msg(format!(
@@ -2233,6 +2296,7 @@ mod tests {
             bin_choice: None,
             channel: Default::default(),
             draft: false,
+            published_at: None,
         }
     }
 
@@ -2752,5 +2816,120 @@ mod tests {
         assert!(!upgrade);
         assert_eq!(said.len(), 1, "{said:?}");
         assert!(said[0].contains("draft release v2.0.0"), "{said:?}");
+    }
+
+    /// A `nightly` package as installed: its asset hashed to all zeros,
+    /// published at `published`.
+    fn nightly(published: Option<&str>) -> InstalledPackage {
+        let mut pkg = installed("tool", "1.0.0", PathBuf::from("/store/tool"));
+        pkg.version = Version::parse("nightly");
+        pkg.tag = "nightly".into();
+        pkg.channel = Channel::Dev;
+        pkg.published_at = published.map(str::to_string);
+        pkg
+    }
+
+    /// `nightly` as the source answers now: one asset named `name`, with
+    /// `digest` when the source publishes one.
+    fn rebuild(name: &str, digest: Option<&str>, published: Option<&str>) -> Release {
+        let mut release = tagged("nightly", false);
+        let mut file = asset(name);
+        file.digest = digest.map(crate::model::Checksum::sha256);
+        release.assets = vec![file];
+        release.published_at = published.map(str::to_string);
+        release
+    }
+
+    #[test]
+    fn a_tag_that_is_not_a_version_lands_on_dev_whatever_was_opted_into() {
+        let release = tagged("nightly", false);
+        assert_eq!(Channel::of(&release, false, false), Channel::Dev);
+        assert_eq!(Channel::of(&release, true, false), Channel::Dev);
+        assert_eq!(Channel::of(&release, false, true), Channel::Draft);
+        assert_eq!(
+            Channel::of(&tagged("v1.0.0", false), false, false),
+            Channel::Stable
+        );
+    }
+
+    #[test]
+    fn the_same_digest_under_the_tag_is_the_installed_build_whatever_its_date() {
+        let pkg = nightly(Some("2026-10-01T00:00:00Z"));
+        let same = rebuild(
+            "a.tar.gz",
+            Some(&"0".repeat(64)),
+            Some("2026-10-09T00:00:00Z"),
+        );
+        assert!(!rebuilt(&pkg, &same));
+        assert_eq!(upgrade_with(&pkg, &same), (false, vec![]));
+    }
+
+    #[test]
+    fn another_digest_under_the_tag_is_a_new_build_and_an_upgrade() {
+        let pkg = nightly(Some("2026-10-01T00:00:00Z"));
+        let moved = rebuild(
+            "a.tar.gz",
+            Some(&"1".repeat(64)),
+            Some("2026-10-01T00:00:00Z"),
+        );
+        assert!(rebuilt(&pkg, &moved));
+        assert_eq!(upgrade_with(&pkg, &moved), (true, vec![]));
+    }
+
+    #[test]
+    fn without_a_digest_the_publication_date_decides() {
+        let pkg = nightly(Some("2026-10-01T00:00:00Z"));
+        assert!(!rebuilt(
+            &pkg,
+            &rebuild("a.tar.gz", None, Some("2026-10-01T00:00:00Z"))
+        ));
+        assert!(rebuilt(
+            &pkg,
+            &rebuild("a.tar.gz", None, Some("2026-10-09T00:00:00Z"))
+        ));
+    }
+
+    #[test]
+    fn a_missing_date_on_either_side_is_no_evidence_of_a_new_build() {
+        let undated = nightly(None);
+        assert!(!rebuilt(
+            &undated,
+            &rebuild("a.tar.gz", None, Some("2026-10-09T00:00:00Z"))
+        ));
+        let dated = nightly(Some("2026-10-01T00:00:00Z"));
+        assert!(!rebuilt(&dated, &rebuild("a.tar.gz", None, None)));
+    }
+
+    #[test]
+    fn an_asset_renamed_under_the_tag_is_a_new_build() {
+        let pkg = nightly(Some("2026-10-01T00:00:00Z"));
+        assert!(rebuilt(
+            &pkg,
+            &rebuild("tool-20261009.tar.gz", None, Some("2026-10-01T00:00:00Z"))
+        ));
+    }
+
+    #[test]
+    fn a_stable_package_ignores_builds_under_its_own_tag() {
+        let pkg = installed("tool", "1.0.0", PathBuf::from("/store/tool"));
+        let mut retagged = tagged("v1.0.0", false);
+        let mut file = asset("a.tar.gz");
+        file.digest = Some(crate::model::Checksum::sha256("1".repeat(64)));
+        retagged.assets = vec![file];
+        assert_eq!(upgrade_with(&pkg, &retagged), (false, vec![]));
+    }
+
+    #[test]
+    fn a_tag_the_lockfile_pinned_to_another_build_is_refused() {
+        let mut req = InstallRequest::new(PackageSpec::parse("o/r@nightly"));
+        let now = rebuild("a.tar.gz", None, Some("2026-10-09T00:00:00Z"));
+        assert!(check_published(&req, "tool", &now).is_ok());
+        req.expected_published = Some("2026-10-09T00:00:00Z".into());
+        assert!(check_published(&req, "tool", &now).is_ok());
+        req.expected_published = Some("2026-10-01T00:00:00Z".into());
+        let err = check_published(&req, "tool", &now).unwrap_err().to_string();
+        assert!(err.contains("ketch lock"), "{err}");
+        let undated = rebuild("a.tar.gz", None, None);
+        assert!(check_published(&req, "tool", &undated).is_ok());
     }
 }

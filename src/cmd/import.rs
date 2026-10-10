@@ -154,6 +154,7 @@ fn request(cfg: &Config, name: &str, plan: &Apply) -> InstallRequest {
         require_checksum: cfg.require_checksums,
         asset_override: plan.asset.clone(),
         expected_sha256: plan.sha256.clone(),
+        expected_published: None,
         name_override: None,
         bin: None,
         locked_bin: None,

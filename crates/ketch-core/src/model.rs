@@ -1267,16 +1267,25 @@ pub enum Channel {
     /// Drafts as well as prereleases and stable releases. Only GitHub has
     /// drafts, and they need a token with push access to see.
     Draft,
+    /// One floating tag that is not a version (`nightly`, `dev`, `canary`),
+    /// republished under the same name. It is followed by its tag, and a new
+    /// build under that tag is the upgrade.
+    Dev,
 }
 
 impl Channel {
     /// The channel an install lands on: `draft` when the person opted into
-    /// drafts, `pre` when they opted into prereleases or picked one by tag,
-    /// `stable` otherwise. Opting in counts even when the newest release
-    /// happened to be stable, or the next upgrade would quietly drop them.
+    /// drafts, `dev` when the tag is not a version, `pre` when they opted into
+    /// prereleases or picked one by tag, `stable` otherwise. Opting in counts
+    /// even when the newest release happened to be stable, or the next upgrade
+    /// would quietly drop them.
     pub fn of(release: &Release, include_prerelease: bool, include_draft: bool) -> Channel {
         if include_draft || release.draft {
             Channel::Draft
+        } else if release.version.sem.is_none() {
+            // No version to compare against a later one: the tag itself is
+            // what the package follows, whatever else was opted into.
+            Channel::Dev
         } else if include_prerelease || release.prerelease || release.version.is_prerelease() {
             Channel::Pre
         } else {
@@ -1295,6 +1304,7 @@ impl Channel {
             Self::Stable => "stable",
             Self::Pre => "pre",
             Self::Draft => "draft",
+            Self::Dev => "dev",
         }
     }
 }
@@ -1372,6 +1382,11 @@ pub struct InstalledPackage {
     /// same. Absent on everything else.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub draft: bool,
+    /// When the installed build was published, for a package on `dev`: with
+    /// the asset's digest, it is how a tag that now names another build is
+    /// told apart from the one installed. Absent on every other channel.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub published_at: Option<String>,
 }
 
 impl InstalledPackage {

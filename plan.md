@@ -60,7 +60,6 @@ Not added: the brand move is done (`brand/build.mjs` already uses `@pyrlyn/brand
 | B74 | todo | P3 | 3 | 0% | |
 | R12 | todo | P3 | 1 | 0% | |
 | M18 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
-| M20 | todo | P2 | 4 | 0% | |
 | M21 | todo | P2 | 3 | 0% | |
 
 ### Ketch audit
@@ -476,10 +475,6 @@ Execution plan:
 7. Verify: `cargo nextest run --workspace`, `cargo clippy --workspace --all-targets`, `cargo fmt --check`, and the binary against a scratch `KETCH_ROOT`.
 
 Status: steps 1–7 done on branch `m18-release-channels-m18` (1099 tests green; `install sharkdp/fd --pre` in a scratch root records `pre`, `--force` without it returns to `stable`). `upgrade_request` lost its `prerelease` parameter: the tag is exact, so only the channel matters. Known gap: `install --pre` over the same tag already installed stops at "already installed" and does not switch the channel; `--force` does. Remaining: commit and PR.
-
-### M20. Dev builds: floating tags
-
-A release whose tag is not a version (`nightly`, `dev`, …) installed by name, `pkg@nightly`, records channel `dev` with the tag and the build it got (publication date and asset digest). `outdated`/`upgrade` report it outdated when the same tag now points at a different build, and reinstall it. `ketch.lock` pins the build's checksum so a lock cannot silently move with the tag (row in `docs/LOCKFILE.md`). Done means tests on build comparison and an end-to-end case where the fixture republishes the tag.
 
 ### M21. Listing releases: `ketch releases`, `info --releases`, `list`
 

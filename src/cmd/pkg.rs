@@ -83,6 +83,7 @@ pub fn install(cfg: &Config, args: InstallArgs) -> Result<()> {
             require_checksum: args.require_checksum || cfg.require_checksums,
             asset_override: args.asset.clone(),
             expected_sha256: None,
+            expected_published: None,
             // --name applies to the single package being installed.
             name_override: if i == 0 { name_override.clone() } else { None },
             bin: args.bin.clone(),
