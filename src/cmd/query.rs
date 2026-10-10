@@ -413,6 +413,7 @@ pub fn info(cfg: &Config, args: InfoArgs) -> Result<()> {
             "latest_tag": release.as_ref().map(|r| ui::printable(&r.tag)),
             "installed": installed.as_ref().map(|p| p.version.to_string()),
             "pinned": installed.as_ref().map(|p| p.pinned).unwrap_or(false),
+            "channel": installed.as_ref().map(|p| p.channel.as_str()),
             "publisher_trust": installed.as_ref().map(|p| p.publisher_trust()),
             "provenance": installed.as_ref().and_then(|p| p.provenance.as_ref()),
             "retained": installed.as_ref().map(|p| {
@@ -490,6 +491,9 @@ pub fn info(cfg: &Config, args: InfoArgs) -> Result<()> {
                     if pkg.pinned { " (pinned)" } else { "" }
                 ),
             );
+            if !pkg.channel.is_stable() {
+                field("channel", pkg.channel.as_str().into());
+            }
             field("prefix", pkg.prefix.display().to_string());
             field("verified", pkg.publisher_trust().into());
             if let Some(p) = &pkg.provenance {

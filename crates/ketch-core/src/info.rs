@@ -80,7 +80,11 @@ pub fn gather(cx: &Ctx<'_>, state: &State, query: &str) -> Result<Info> {
         })
     });
     let opts = ListOpts {
-        include_prerelease: cx.cfg.prerelease || manifest.prerelease,
+        include_prerelease: cx.cfg.prerelease
+            || manifest.prerelease
+            || installed
+                .as_ref()
+                .is_some_and(|p| p.channel == crate::model::Channel::Pre),
         ..Default::default()
     };
     let latest = source.as_ref().and_then(|s| {

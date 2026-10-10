@@ -354,14 +354,7 @@ pub fn upgrade(cfg: &Config, args: UpgradeArgs) -> Result<()> {
     let reqs: Vec<InstallRequest> = plan
         .iter()
         .map(|(pkg, release)| {
-            install::upgrade_request(
-                cfg,
-                pkg,
-                &release.tag,
-                prerelease,
-                args.bin.clone(),
-                Cancel::new(),
-            )
+            install::upgrade_request(cfg, pkg, &release.tag, args.bin.clone(), Cancel::new())
         })
         .collect();
 

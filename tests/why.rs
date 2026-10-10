@@ -11,29 +11,13 @@ mod support;
 
 use serde_json::Value;
 use std::path::Path;
-use support::{host_arch, Archive, Entry, Release, Sandbox};
+use support::{host_arch, native_name, Archive, Entry, Release, Sandbox};
 
 fn tool_archive(version: &str) -> Archive {
     Archive::TarGz(vec![Entry::program(
         &format!("whypkg-{version}/bin/whypkg"),
         &format!("whypkg {version}"),
     )])
-}
-
-fn native_name(pkg: &str, version: &str) -> String {
-    let arch = host_arch();
-    #[cfg(target_os = "macos")]
-    {
-        format!("{pkg}-{version}-{arch}-apple-darwin.tar.gz")
-    }
-    #[cfg(target_os = "linux")]
-    {
-        format!("{pkg}-{version}-{arch}-unknown-linux-gnu.tar.gz")
-    }
-    #[cfg(target_os = "windows")]
-    {
-        format!("{pkg}-{version}-{arch}-pc-windows-msvc.zip")
-    }
 }
 
 fn foreign_name(pkg: &str, version: &str) -> String {

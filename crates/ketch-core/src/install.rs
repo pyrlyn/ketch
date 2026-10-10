@@ -17,7 +17,7 @@ use crate::error::{Error, Result};
 use crate::hooks;
 use crate::manifest::Resolver;
 use crate::model::{
-    now_unix, AssetSelector, BinSpec, InstalledPackage, LinkRecord, LocalKind, PackageRef,
+    now_unix, AssetSelector, BinSpec, Channel, InstalledPackage, LinkRecord, LocalKind, PackageRef,
     PackageSpec, Release, ReleaseAsset, RetainedVersion, TrustResult, Version, VersionSpec,
 };
 use crate::platform::{AssetScore, Placement, Platform, TrustVerdict};
@@ -133,6 +133,8 @@ pub struct Prepared {
     local_path: Option<PathBuf>,
     /// Carried from the request so `commit` can stop before it places anything.
     cancel: Cancel,
+    /// Decided from the request's `--pre` and the release, recorded by `commit`.
+    channel: Channel,
 }
 
 /// Run the pipeline. Mutates `state` in memory; the caller saves it, so a batch
@@ -419,6 +421,10 @@ pub fn prepare(
     report.stage(&label, Stage::Trusting);
     let trust = check_trust(platform.as_ref(), cfg, &payload, &manifest.name, report);
 
+    // Only the request's own opt-in, not `config.toml` or the manifest: both
+    // are read again on every `upgrade`, so recording them here would keep a
+    // package on prereleases after the person switched them off.
+    let channel = Channel::of(&release, req.prerelease);
     Ok(Prepared {
         label,
         manifest,
@@ -438,6 +444,7 @@ pub fn prepare(
         local_kind,
         local_path,
         cancel: req.cancel.clone(),
+        channel,
     })
 }
 
@@ -634,6 +641,7 @@ pub fn commit(cx: &Ctx<'_>, state: &mut State, prepared: Prepared) -> Result<Ins
         local_kind,
         local_path,
         cancel,
+        channel,
     } = prepared;
     // Before the first hook or file: later steps are short and leave the tree
     // consistent on their own, so this is the last point a stop is free.
@@ -775,6 +783,7 @@ pub fn commit(cx: &Ctx<'_>, state: &mut State, prepared: Prepared) -> Result<Ins
         retained,
         provenance,
         bin_choice,
+        channel,
     };
     state.insert(package.clone());
     orphan.keep();
@@ -1312,7 +1321,6 @@ pub fn upgrade_request(
     cfg: &Config,
     pkg: &InstalledPackage,
     tag: &str,
-    prerelease: bool,
     bin: Option<String>,
     cancel: Cancel,
 ) -> InstallRequest {
@@ -1324,7 +1332,9 @@ pub fn upgrade_request(
             version: VersionSpec::Exact(tag.to_string()),
         },
         force: true,
-        prerelease,
+        // The tag is exact, so this only carries the channel forward: an
+        // upgrade that lands on a stable release must not end prereleases.
+        prerelease: pkg.channel == Channel::Pre,
         // A package installed with --no-link stays unlinked.
         link: !pkg.links.is_empty(),
         require_checksum: cfg.require_checksums,
@@ -1347,7 +1357,9 @@ pub fn installed_list_opts(pkg: &InstalledPackage, prerelease: bool) -> ListOpts
     // `latest` without it here would then report the package as up to date
     // forever, however many prereleases it has moved through since.
     ListOpts {
-        include_prerelease: prerelease || pkg.manifest.as_ref().is_some_and(|m| m.prerelease),
+        include_prerelease: prerelease
+            || pkg.channel == Channel::Pre
+            || pkg.manifest.as_ref().is_some_and(|m| m.prerelease),
         ..Default::default()
     }
 }
@@ -2166,6 +2178,7 @@ mod tests {
             retained: Vec::new(),
             provenance: None,
             bin_choice: None,
+            channel: Default::default(),
         }
     }
 
@@ -2582,6 +2595,33 @@ mod tests {
         assert!(
             err.contains("ships several binaries sharing its name"),
             "{err}"
+        );
+    }
+
+    #[test]
+    fn a_package_on_the_pre_channel_looks_for_prereleases_without_pre() {
+        let mut pkg = installed("tool", "1.0.0", PathBuf::from("/store/tool"));
+        assert!(!installed_list_opts(&pkg, false).include_prerelease);
+        pkg.channel = Channel::Pre;
+        assert!(installed_list_opts(&pkg, false).include_prerelease);
+    }
+
+    #[test]
+    fn an_upgrade_carries_the_channel_forward() {
+        let root = tempfile::tempdir().unwrap();
+        let cfg = Config::load(
+            Some(root.path().join("ketch")),
+            &crate::report::Report::silent(),
+        )
+        .unwrap();
+        let mut pkg = installed("tool", "1.0.0", PathBuf::from("/store/tool"));
+        let stable = upgrade_request(&cfg, &pkg, "v1.1.0", None, Cancel::new());
+        assert!(!stable.prerelease);
+        pkg.channel = Channel::Pre;
+        let pre = upgrade_request(&cfg, &pkg, "v1.1.0", None, Cancel::new());
+        assert!(
+            pre.prerelease,
+            "a stable tag must not take a pre package off pre"
         );
     }
 }

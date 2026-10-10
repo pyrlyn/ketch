@@ -1251,6 +1251,48 @@ impl LinkRole {
     }
 }
 
+/// Which stream of releases an installed package follows. `upgrade`,
+/// `outdated` and `list` look for its next release in the same stream, so a
+/// package someone opted into prereleases for keeps getting them without
+/// `--pre` on every run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Channel {
+    /// Published, non-prerelease releases. The default so state written
+    /// before channels existed still reads as stable.
+    #[default]
+    Stable,
+    /// Prereleases as well as stable releases.
+    Pre,
+}
+
+impl Channel {
+    /// The channel an install lands on: `pre` when the person opted into
+    /// prereleases or picked one by tag, `stable` otherwise. Opting in counts
+    /// even when the newest release happened to be stable, or the next
+    /// upgrade would quietly drop them.
+    pub fn of(release: &Release, include_prerelease: bool) -> Channel {
+        if include_prerelease || release.prerelease || release.version.is_prerelease() {
+            Channel::Pre
+        } else {
+            Channel::Stable
+        }
+    }
+
+    /// True for the default channel, used to keep old-looking JSON.
+    pub fn is_stable(&self) -> bool {
+        matches!(self, Self::Stable)
+    }
+
+    /// The lowercase name state and `--json` output use.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Stable => "stable",
+            Self::Pre => "pre",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkRecord {
     /// The path we created and are responsible for removing.
@@ -1315,6 +1357,10 @@ pub struct InstalledPackage {
     /// before it existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bin_choice: Option<String>,
+    /// The release stream this package follows. Absent on stable packages and
+    /// on state written before channels existed.
+    #[serde(default, skip_serializing_if = "Channel::is_stable")]
+    pub channel: Channel,
 }
 
 impl InstalledPackage {
@@ -1994,5 +2040,45 @@ mod tests {
                 }
             }
         }
+    }
+
+    fn release_tagged(tag: &str, prerelease: bool) -> Release {
+        Release {
+            version: Version::parse(tag),
+            tag: tag.into(),
+            prerelease,
+            draft: false,
+            published_at: None,
+            notes: None,
+            assets: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_stable_release_installed_without_pre_is_on_the_stable_channel() {
+        assert_eq!(
+            Channel::of(&release_tagged("v1.2.0", false), false),
+            Channel::Stable
+        );
+    }
+
+    #[test]
+    fn opting_into_prereleases_keeps_them_even_when_the_newest_is_stable() {
+        assert_eq!(
+            Channel::of(&release_tagged("v1.2.0", false), true),
+            Channel::Pre
+        );
+    }
+
+    #[test]
+    fn a_prerelease_by_flag_or_by_version_puts_the_package_on_pre() {
+        assert_eq!(
+            Channel::of(&release_tagged("v1.2.0", true), false),
+            Channel::Pre
+        );
+        assert_eq!(
+            Channel::of(&release_tagged("v2.0.0-rc.1", false), false),
+            Channel::Pre
+        );
     }
 }

@@ -717,3 +717,20 @@ fn shell_quote(path: &Path) -> String {
 pub fn host_arch() -> &'static str {
     std::env::consts::ARCH
 }
+
+/// A release asset name the host's platform picks for `pkg` at `version`.
+pub fn native_name(pkg: &str, version: &str) -> String {
+    let arch = host_arch();
+    #[cfg(target_os = "macos")]
+    {
+        format!("{pkg}-{version}-{arch}-apple-darwin.tar.gz")
+    }
+    #[cfg(target_os = "linux")]
+    {
+        format!("{pkg}-{version}-{arch}-unknown-linux-gnu.tar.gz")
+    }
+    #[cfg(target_os = "windows")]
+    {
+        format!("{pkg}-{version}-{arch}-pc-windows-msvc.zip")
+    }
+}

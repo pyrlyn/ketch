@@ -41,7 +41,10 @@ package behave as before.
 Options: `--path <PATH>` installs a local file (equivalent to
 `local:<PATH>`); `--name <NAME>` sets the installed name for a single
 package; `--force/-f` reinstalls the requested version even when present;
-`--pre` considers prereleases; `--no-link` unpacks without linking onto PATH;
+`--pre` considers prereleases and keeps the package on them: later
+`upgrade`, `outdated` and `list` look for prereleases without `--pre`, and
+`info` shows `channel: pre` (an exact prerelease tag, `pkg@v2.0.0-rc.1`, does
+the same; a plain install moves the package back to stable); `--no-link` unpacks without linking onto PATH;
 `--require-checksum` refuses releases with no published checksum;
 `--asset <NAME>` takes one release file by exact name (asks for confirmation,
 since the platform check is skipped); `-j/--jobs <N>` and `-y/--yes` control
