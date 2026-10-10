@@ -21,3 +21,7 @@
 - D19. Linux: packaging and release
 - B74. xz archives decompress entirely into memory
 - R12. Consolidate duplicated helpers
+- M18. Release channel recorded per installed package
+- M19. Draft releases: `--draft`
+- M20. Dev builds: floating tags
+- M21. Listing releases: `ketch releases`, `info --releases`, `list`

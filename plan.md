@@ -59,6 +59,10 @@ Not added: the brand move is done (`brand/build.mjs` already uses `@pyrlyn/brand
 | D19 | todo | P3 | 4 | 0% | |
 | B74 | todo | P3 | 3 | 0% | |
 | R12 | todo | P3 | 1 | 0% | |
+| M18 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
+| M19 | todo | P2 | 4 | 0% | |
+| M20 | todo | P2 | 4 | 0% | |
+| M21 | todo | P2 | 3 | 0% | |
 
 ### Ketch audit
 
@@ -446,3 +450,42 @@ Status: steps 1–6 landed in #215. `docs/ru` and `docs/uk` translate the user-f
 
 `platform/unix.rs:46-53` and `self_update.rs:180-187` carry identical `remove_any`; `platform/unix.rs:164-170` and `platform/macos.rs:89-93` duplicate `sibling`; `source/local.rs:263-281` re-declares the GZIP/XZ/BZ2/ZIP/ustar magic constants from `extract/archive.rs:145-153`; `http.rs:60-64` keeps `Http::has_token` behind `#[allow(dead_code)]`. Done means: one implementation of each, and `has_token` is either used or gone.
 
+## Plan 2026-10-10 — dev, prerelease and draft builds
+
+Install dev, prerelease and draft builds from GitHub releases, and show them in listings. Decided with the creator:
+
+- **dev** means a floating tag (`nightly`, `dev`, `canary`, `edge`, …) republished under the same name. Whether it moved is told by the build (publication date, asset digests), not by the version.
+- **prerelease** already works through `--pre`, `pkg@tag` and `prerelease = true` in a manifest; what is missing is remembering it.
+- **draft** is its own opt-in, `--draft`. Drafts are visible only to a token with push access, may have no tag yet, and their assets download only through the API with that token. Without such a token ketch says so instead of reporting "no releases".
+- **upgrade follows the channel** the package was installed from (stable, pre, draft, dev). A draft that was published is an upgrade to the published release; a draft that was deleted is a warning, not an error.
+- **Listings**: a new `ketch releases <pkg>`, `ketch info <pkg> --releases`, and `ketch list` marking what was installed from a non-stable channel, with `--pre`/`--draft` for its `latest` column.
+
+Out of scope until asked: source plugins (drafts and dev builds stay GitHub-only, so `PROTOCOL_VERSION` is unchanged) and the desktop apps' `ketch-ffi` surface.
+
+### M18. Release channel recorded per installed package
+
+The foundation the other three build on. An installed package remembers which channel it came from, and `upgrade`/`outdated`/`list` read it instead of only today's `--pre`/config/manifest union. Done means: `InstalledPackage` has a `channel` (`stable`, `pre`; `draft` and `dev` are added by M19 and M20), state written before it still reads as `stable`, `install --pre` or `pkg@<prerelease tag>` records `pre`, and `upgrade`/`outdated` of a `pre` package consider prereleases without `--pre`. A stable install over a `pre` one moves it back to `stable`.
+
+Execution plan:
+
+1. `crates/ketch-core/src/model.rs`: `Channel` enum (serde lowercase, default `stable`, skipped when `stable`) and the field on `InstalledPackage`.
+2. `crates/ketch-core/src/install.rs`: derive the channel from the selected `Release` (`prerelease` flag or semver prerelease) when recording state; `installed_list_opts` includes prereleases for a `pre` channel.
+3. `crates/ketch-core/src/listing.rs`: the same rule through `installed_list_opts`, so `ketch list` agrees with `outdated`.
+4. `src/cmd/query.rs` and `crates/ketch-core/src/info.rs`: `info` shows the channel and looks up `latest` by it. `list --json` waits for M21, which reworks the listing anyway.
+5. Tests: unit tests for the default, the derivation, `installed_list_opts` and `upgrade_request`; `tests/channel.rs` installs with `--pre`, checks `outdated` without `--pre` sees a newer prerelease, and that an upgrade landing on a stable release stays on `pre`.
+6. Docs: `--pre` in `docs/COMMANDS.md`, `docs/ru` and `docs/uk`.
+7. Verify: `cargo nextest run --workspace`, `cargo clippy --workspace --all-targets`, `cargo fmt --check`, and the binary against a scratch `KETCH_ROOT`.
+
+Status: steps 1–7 done on branch `m18-release-channels-m18` (1099 tests green; `install sharkdp/fd --pre` in a scratch root records `pre`, `--force` without it returns to `stable`). `upgrade_request` lost its `prerelease` parameter: the tag is exact, so only the channel matters. Known gap: `install --pre` over the same tag already installed stops at "already installed" and does not switch the channel; `--force` does. Remaining: commit and PR.
+
+### M19. Draft releases: `--draft`
+
+`ListOpts` gains `include_draft`; the GitHub source keeps drafts when it is set and downloads their assets from the API asset URL with `Accept: application/octet-stream` and the token. `install`, `upgrade`, `outdated` and `list` take `--draft`; `pkg@tag` finds a draft by its intended tag when `--draft` is given. Selection keeps refusing drafts unless asked (`drafts_are_never_selected` stays true for the default). No token, or a token without push access, gives an error naming the reason. Channel `draft`; a published draft upgrades to the release, a deleted one warns. Plugins never receive drafts. Done means the above with unit tests on selection and an end-to-end case through the fixture source.
+
+### M20. Dev builds: floating tags
+
+A release whose tag is not a version (`nightly`, `dev`, …) installed by name, `pkg@nightly`, records channel `dev` with the tag and the build it got (publication date and asset digest). `outdated`/`upgrade` report it outdated when the same tag now points at a different build, and reinstall it. `ketch.lock` pins the build's checksum so a lock cannot silently move with the tag (row in `docs/LOCKFILE.md`). Done means tests on build comparison and an end-to-end case where the fixture republishes the tag.
+
+### M21. Listing releases: `ketch releases`, `info --releases`, `list`
+
+`ketch releases <pkg>` lists a package's releases newest first with tag, date and a kind mark (`stable`, `pre`, `draft`, `dev`) and marks the installed one; `--pre`/`--draft` widen it, `--json` and `-n` as elsewhere. `ketch info <pkg> --releases` prints the same list under the details. `ketch list` shows the channel of non-stable installs and takes `--pre`/`--draft` for its `latest` column. Done means the commands, completions and man pages regenerated, docs in three languages, and `trycmd`/`assert_cmd` cases.
