@@ -34,6 +34,24 @@ pub struct ListOpts {
     pub limit: usize,
 }
 
+impl ListOpts {
+    /// Widen these options for `--draft`: drafts, and prereleases with them,
+    /// since a draft is often marked prerelease too and asking without them
+    /// would hide exactly the build that was asked for. A source without
+    /// drafts is refused by name rather than quietly answered with published
+    /// releases; `scheme` names it.
+    pub fn ask_for_drafts(&mut self, source: &dyn Source, scheme: &str) -> Result<()> {
+        if !source.supports_drafts() {
+            return Err(Error::msg(format!(
+                "{scheme}: packages have no draft releases; --draft works for GitHub packages"
+            )));
+        }
+        self.include_draft = true;
+        self.include_prerelease = true;
+        Ok(())
+    }
+}
+
 impl Default for ListOpts {
     fn default() -> Self {
         ListOpts {

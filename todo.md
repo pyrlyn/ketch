@@ -21,4 +21,3 @@
 - D19. Linux: packaging and release
 - B74. xz archives decompress entirely into memory
 - R12. Consolidate duplicated helpers
-- M18. Release channel recorded per installed package

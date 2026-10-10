@@ -253,6 +253,11 @@ pub struct ListArgs {
     #[arg(long = "pre")]
     pub prerelease: bool,
 
+    /// Look for drafts too in the `latest` column of installed GitHub
+    /// packages (needs a token with push access)
+    #[arg(long)]
+    pub draft: bool,
+
     /// Same as `ketch list local`. Bare `ketch list` used to mean installed
     /// only; this hidden alias gives scripts one release to move to `local`.
     #[arg(long, hide = true, conflicts_with = "mode")]
@@ -326,6 +331,10 @@ pub struct InfoArgs {
     /// List the package's releases under the details (see `ketch releases`)
     #[arg(long)]
     pub releases: bool,
+
+    /// List draft releases too (GitHub, needs a token with push access)
+    #[arg(long, requires = "releases")]
+    pub draft: bool,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -341,6 +350,11 @@ pub struct ReleasesArgs {
     /// Include prereleases
     #[arg(long = "pre")]
     pub prerelease: bool,
+
+    /// Include draft releases, and prereleases with them (GitHub, needs a
+    /// token with push access)
+    #[arg(long)]
+    pub draft: bool,
 
     /// How many releases to show at most
     #[arg(long, short = 'n', default_value_t = 20, value_parser = clap::value_parser!(u32).range(1..))]

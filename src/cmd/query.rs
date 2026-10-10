@@ -74,8 +74,8 @@ fn list_local(cfg: &Config, args: &ListArgs) -> Result<()> {
             .map(|l| {
                 serde_json::json!({
                     "name": ui::printable(&l.name),
-                    "installed": l.version.to_string(),
-                    "channel": l.channel.as_str(),
+                    "installed": l.build.version.to_string(),
+                    "channel": l.build.channel.as_str(),
                     "pinned": l.pinned,
                     "retained": l.retained.iter().map(ToString::to_string).collect::<Vec<_>>(),
                     "source": l.source.to_string(),
@@ -133,6 +133,9 @@ fn list_remote(cfg: &Config, args: &ListArgs) -> Result<()> {
 
     if args.prerelease {
         listing::include_prereleases(&mut rows);
+    }
+    if args.draft {
+        listing::include_drafts(&mut rows);
     }
     let sources = SourceRegistry::load(&crate::ui::ctx(cfg));
     if listing::fill_latest(&crate::ui::ctx(cfg), &sources, &mut rows).offline() {
@@ -194,6 +197,9 @@ fn list_all(cfg: &Config, args: &ListArgs) -> Result<()> {
     if args.prerelease {
         listing::include_prereleases(&mut rows);
     }
+    if args.draft {
+        listing::include_drafts(&mut rows);
+    }
     let sources = SourceRegistry::load(&crate::ui::ctx(cfg));
     let offline = listing::fill_latest(&crate::ui::ctx(cfg), &sources, &mut rows).offline();
     // No source answered: the network is missing, not one package. What is
@@ -208,8 +214,8 @@ fn list_all(cfg: &Config, args: &ListArgs) -> Result<()> {
                 let local = row.local.as_ref();
                 serde_json::json!({
                     "name": ui::printable(&row.name),
-                    "installed": local.map(|l| l.version.to_string()),
-                    "channel": local.map(|l| l.channel.as_str()),
+                    "installed": local.map(|l| l.build.version.to_string()),
+                    "channel": local.map(|l| l.build.channel.as_str()),
                     "latest": row.latest_version(),
                     "update_available": row.update_available(),
                     "pinned": local.is_some_and(|l| l.pinned),
@@ -330,7 +336,12 @@ pub fn outdated(cfg: &Config, args: OutdatedArgs) -> Result<()> {
             }
         };
         checked += 1;
-        if !install::is_upgrade(crate::ui::report(), pkg, &release) {
+        if !install::is_upgrade(
+            crate::ui::report(),
+            &install::InstalledBuild::of(pkg),
+            &release,
+            &install::upgrade_opts(pkg, prerelease, args.draft),
+        ) {
             continue;
         }
         rows.push(vec![
@@ -398,9 +409,16 @@ pub fn info(cfg: &Config, args: InfoArgs) -> Result<()> {
     } = found;
 
     let listed = if args.releases {
-        list_releases(cfg, &manifest, installed.as_ref(), false, DEFAULT_RELEASES)
-            .map_err(|e| ui::warn(&format!("{}: {e}", manifest.name)))
-            .ok()
+        list_releases(
+            cfg,
+            &manifest,
+            installed.as_ref(),
+            false,
+            args.draft,
+            DEFAULT_RELEASES,
+        )
+        .map_err(|e| ui::warn(&format!("{}: {e}", manifest.name)))
+        .ok()
     } else {
         None
     };
@@ -603,11 +621,12 @@ fn list_releases(
     manifest: &crate::model::Manifest,
     installed: Option<&InstalledPackage>,
     prerelease: bool,
+    draft: bool,
     limit: usize,
 ) -> Result<Vec<releases::Entry>> {
     let cx = crate::ui::ctx(cfg);
     let sources = SourceRegistry::load(&cx);
-    releases::list(&cx, &sources, manifest, installed, prerelease, limit)
+    releases::list(&cx, &sources, manifest, installed, prerelease, draft, limit)
 }
 
 /// `ketch releases <PKG>`: what the package's source has published, newest
@@ -624,6 +643,7 @@ pub fn releases(cfg: &Config, args: ReleasesArgs) -> Result<()> {
         &manifest,
         installed.as_ref(),
         args.prerelease,
+        args.draft,
         args.limit as usize,
     )?;
     if args.json {

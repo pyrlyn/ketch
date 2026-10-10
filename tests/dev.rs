@@ -73,6 +73,20 @@ fn outdated(sandbox: &Sandbox) -> Vec<Value> {
         .clone()
 }
 
+/// Whether `ketch list` offers devpkg an update, asked afresh: the latest
+/// cache would otherwise answer from the previous listing.
+fn listed_as_update(sandbox: &Sandbox) -> bool {
+    let _ = std::fs::remove_file(sandbox.root().join("cache").join("latest.json"));
+    let all = json(&sandbox.ok(&["list", "--json"]));
+    let row = all["packages"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|r| r["name"] == "devpkg"))
+        .cloned()
+        .unwrap_or_else(|| panic!("devpkg is listed: {all}"));
+    assert_eq!(row["latest"], "nightly", "{row}");
+    row["update_available"] == true
+}
+
 #[test]
 fn a_republished_floating_tag_is_an_upgrade_and_a_stable_release_is_not() {
     let sandbox = sandbox();
@@ -87,11 +101,13 @@ fn a_republished_floating_tag_is_an_upgrade_and_a_stable_release_is_not() {
     // `v1.0.0` is newer by any version comparison, but the package follows
     // its tag, not versions.
     assert_eq!(outdated(&sandbox), Vec::<Value>::new());
+    assert!(!listed_as_update(&sandbox));
 
     publish_nightly(&sandbox, "two", SECOND);
     let rows = outdated(&sandbox);
     assert_eq!(rows.len(), 1, "{rows:?}");
     assert_eq!(rows[0]["name"], "devpkg");
+    assert!(listed_as_update(&sandbox), "list agrees with outdated");
 
     sandbox.ok(&["upgrade", "-y"]);
     let second = installed(&sandbox);
@@ -100,6 +116,15 @@ fn a_republished_floating_tag_is_an_upgrade_and_a_stable_release_is_not() {
     assert_eq!(second["published_at"], SECOND);
     assert_ne!(second["sha256"], first["sha256"], "the new build is placed");
     assert_eq!(outdated(&sandbox), Vec::<Value>::new());
+    assert!(!listed_as_update(&sandbox));
+}
+
+#[test]
+fn a_source_without_drafts_refuses_to_list_them() {
+    let sandbox = sandbox();
+    publish_nightly(&sandbox, "one", FIRST);
+    let err = sandbox.fails(&["releases", "devpkg", "--draft"]);
+    assert!(err.contains("no draft releases"), "{err}");
 }
 
 #[test]

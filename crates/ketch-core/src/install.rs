@@ -262,16 +262,7 @@ pub fn prepare(
 
     let mut opts = crate::resolve::list_opts(cfg, &manifest, req.prerelease);
     if req.draft {
-        if !source.supports_drafts() {
-            return Err(Error::msg(format!(
-                "{}: packages have no draft releases; --draft works for GitHub packages",
-                manifest.source.scheme
-            )));
-        }
-        // A draft is often marked prerelease too; asking for drafts without
-        // them would hide exactly the build that was asked for.
-        opts.include_draft = true;
-        opts.include_prerelease = true;
+        opts.ask_for_drafts(source.as_ref(), &manifest.source.scheme)?;
     }
     report.step(
         "resolving",
@@ -294,7 +285,8 @@ pub fn prepare(
         let unversioned = !matches!(req.spec.version, VersionSpec::Exact(_));
         // The same floating tag can name a new build, which is not "already
         // installed" however equal the tags are.
-        let same_build = old.channel != Channel::Dev || !rebuilt(old, &release);
+        let same_build =
+            old.channel != Channel::Dev || !rebuilt(&InstalledBuild::of(old), &release);
         if old.tag == release.tag && same_build && !req.force {
             // `pkg@1.2.0` asked for that version and keeps the old message.
             return Err(if unversioned && req.offer_update {
@@ -1345,44 +1337,113 @@ pub fn latest_release(
     prerelease: bool,
     draft: bool,
 ) -> Result<Release> {
+    let build = InstalledBuild::of(pkg);
+    release_of(
+        sources,
+        &pkg.source,
+        build.followed_tag(),
+        &upgrade_opts(pkg, prerelease, draft),
+    )
+}
+
+/// The options `latest_release` looks with, which `is_upgrade` needs too: what
+/// the lookup allowed decides what may count as an upgrade.
+pub fn upgrade_opts(pkg: &InstalledPackage, prerelease: bool, draft: bool) -> ListOpts {
     let mut opts = installed_list_opts(pkg, prerelease);
     opts.include_draft |= draft;
     opts.include_prerelease |= draft;
-    if pkg.channel == Channel::Dev {
-        // A floating tag has no successor to look for, only a newer build
-        // under the same name.
-        return sources.for_ref(&pkg.source)?.resolve(
-            &pkg.source.id,
-            &VersionSpec::Exact(pkg.tag.clone()),
-            &opts,
-        );
-    }
-    latest_of(sources, &pkg.source, &opts)
+    opts
 }
 
-/// Whether `latest`, the newest release on `pkg`'s channel, should replace
-/// what is installed. The one rule behind `ketch upgrade` and `ketch outdated`.
+/// The release an installed package is compared against: the newest under
+/// `opts`, or for a package on a floating tag that tag again, since it has no
+/// successor to look for, only a newer build under the same name. Drafts are
+/// not asked of a source that has none: across many packages, one without
+/// drafts is simply answered without them.
+pub fn release_of(
+    sources: &SourceRegistry,
+    source: &PackageRef,
+    tag: Option<&str>,
+    opts: &ListOpts,
+) -> Result<Release> {
+    let found = sources.for_ref(source)?;
+    let mut opts = opts.clone();
+    opts.include_draft &= found.supports_drafts();
+    let version = match tag {
+        Some(tag) => VersionSpec::Exact(tag.to_string()),
+        None => VersionSpec::Latest,
+    };
+    found.resolve(&source.id, &version, &opts)
+}
+
+/// What an upgrade decision needs to know of an installed package, apart from
+/// the rest of its record, so `ketch list` can carry it for every row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstalledBuild {
+    pub name: String,
+    pub version: Version,
+    pub tag: String,
+    pub channel: Channel,
+    /// The installed release was a draft.
+    pub draft: bool,
+    pub asset_name: String,
+    pub sha256: String,
+    pub published_at: Option<String>,
+}
+
+impl InstalledBuild {
+    pub fn of(pkg: &InstalledPackage) -> InstalledBuild {
+        InstalledBuild {
+            name: pkg.name.clone(),
+            version: pkg.version.clone(),
+            tag: pkg.tag.clone(),
+            channel: pkg.channel,
+            draft: pkg.draft,
+            asset_name: pkg.asset_name.clone(),
+            sha256: pkg.sha256.clone(),
+            published_at: pkg.published_at.clone(),
+        }
+    }
+
+    /// The tag a package on a floating tag keeps resolving; `None` for every
+    /// other channel, which looks for the newest release instead.
+    pub fn followed_tag(&self) -> Option<&str> {
+        (self.channel == Channel::Dev).then_some(self.tag.as_str())
+    }
+}
+
+/// Whether `latest`, found for `have` with `opts`, should replace what is
+/// installed. The one rule behind `ketch upgrade`, `ketch outdated` and
+/// `ketch list`.
 ///
 /// Versions are compared, not tags: a retagged release is not an upgrade, and
-/// neither is a source that briefly reports an older one. A draft is the
-/// exception: once published, the release under its tag is what the draft was
-/// a preview of. A draft that is no longer listed was deleted or published
-/// under another tag; that is said, and is not an error.
-pub fn is_upgrade(report: &Report, pkg: &InstalledPackage, latest: &Release) -> bool {
-    if pkg.draft && latest.tag == pkg.tag {
+/// neither is a source that briefly reports an older one, or a prerelease
+/// `opts` did not ask for — GitHub's `latest` can be an unflagged `-rc` tag.
+/// A draft is the exception: once published, the release under its tag is
+/// what the draft was a preview of. A draft that is no longer listed was
+/// deleted or published under another tag; that is said, and is not an error.
+/// A package on a floating tag is upgraded by a new build under that tag.
+pub fn is_upgrade(
+    report: &Report,
+    have: &InstalledBuild,
+    latest: &Release,
+    opts: &ListOpts,
+) -> bool {
+    if have.draft && latest.tag == have.tag {
         return !latest.draft;
     }
-    if pkg.channel == Channel::Dev && latest.tag == pkg.tag {
-        return rebuilt(pkg, latest);
+    if have.channel == Channel::Dev && latest.tag == have.tag {
+        return rebuilt(have, latest);
     }
-    if latest.tag != pkg.tag && latest.version > pkg.version {
+    let unasked = !opts.include_prerelease && (latest.prerelease || latest.version.is_prerelease());
+    if latest.tag != have.tag && latest.version > have.version && !unasked {
         return true;
     }
-    if pkg.draft {
+    if have.draft {
         report.warn(&format!(
             "{}: the draft release {} it was installed from is gone; \
              it was deleted or published under another tag",
-            pkg.name, pkg.tag
+            have.name, have.tag
         ));
     }
     false
@@ -1395,7 +1456,7 @@ pub fn is_upgrade(report: &Report, pkg: &InstalledPackage, latest: &Release) -> 
 /// describes the bytes, which a republish changes even when the date does
 /// not. Without it the publication date is all there is, and a date that is
 /// missing on either side is no evidence of a new build.
-pub(crate) fn rebuilt(pkg: &InstalledPackage, release: &Release) -> bool {
+pub(crate) fn rebuilt(pkg: &InstalledBuild, release: &Release) -> bool {
     let Some(asset) = release.assets.iter().find(|a| a.name == pkg.asset_name) else {
         // Nightlies often stamp a date or commit into their file names, so a
         // vanished asset is a new build rather than an incomplete release.
@@ -1464,18 +1525,6 @@ pub fn installed_list_opts(pkg: &InstalledPackage, prerelease: bool) -> ListOpts
         include_draft: draft,
         ..Default::default()
     }
-}
-
-/// The newest release of `source` under `opts`: the one lookup behind
-/// `ketch outdated`, `ketch upgrade` and `ketch list`.
-pub fn latest_of(
-    sources: &SourceRegistry,
-    source: &PackageRef,
-    opts: &ListOpts,
-) -> Result<Release> {
-    sources
-        .for_ref(source)?
-        .resolve(&source.id, &VersionSpec::Latest, opts)
 }
 
 /// Rank a release's assets for this platform, best first. Assets the platform
@@ -2778,7 +2827,12 @@ mod tests {
     fn upgrade_with(pkg: &InstalledPackage, latest: &Release) -> (bool, Vec<String>) {
         let warns = Warns(Default::default());
         let report = Report::new(warns.clone());
-        let upgrade = is_upgrade(&report, pkg, latest);
+        let upgrade = is_upgrade(
+            &report,
+            &InstalledBuild::of(pkg),
+            latest,
+            &upgrade_opts(pkg, false, false),
+        );
         let said = warns.0.lock().unwrap().clone();
         (upgrade, said)
     }
@@ -2860,7 +2914,7 @@ mod tests {
             Some(&"0".repeat(64)),
             Some("2026-10-09T00:00:00Z"),
         );
-        assert!(!rebuilt(&pkg, &same));
+        assert!(!rebuilt(&InstalledBuild::of(&pkg), &same));
         assert_eq!(upgrade_with(&pkg, &same), (false, vec![]));
     }
 
@@ -2872,7 +2926,7 @@ mod tests {
             Some(&"1".repeat(64)),
             Some("2026-10-01T00:00:00Z"),
         );
-        assert!(rebuilt(&pkg, &moved));
+        assert!(rebuilt(&InstalledBuild::of(&pkg), &moved));
         assert_eq!(upgrade_with(&pkg, &moved), (true, vec![]));
     }
 
@@ -2880,11 +2934,11 @@ mod tests {
     fn without_a_digest_the_publication_date_decides() {
         let pkg = nightly(Some("2026-10-01T00:00:00Z"));
         assert!(!rebuilt(
-            &pkg,
+            &InstalledBuild::of(&pkg),
             &rebuild("a.tar.gz", None, Some("2026-10-01T00:00:00Z"))
         ));
         assert!(rebuilt(
-            &pkg,
+            &InstalledBuild::of(&pkg),
             &rebuild("a.tar.gz", None, Some("2026-10-09T00:00:00Z"))
         ));
     }
@@ -2893,18 +2947,21 @@ mod tests {
     fn a_missing_date_on_either_side_is_no_evidence_of_a_new_build() {
         let undated = nightly(None);
         assert!(!rebuilt(
-            &undated,
+            &InstalledBuild::of(&undated),
             &rebuild("a.tar.gz", None, Some("2026-10-09T00:00:00Z"))
         ));
         let dated = nightly(Some("2026-10-01T00:00:00Z"));
-        assert!(!rebuilt(&dated, &rebuild("a.tar.gz", None, None)));
+        assert!(!rebuilt(
+            &InstalledBuild::of(&dated),
+            &rebuild("a.tar.gz", None, None)
+        ));
     }
 
     #[test]
     fn an_asset_renamed_under_the_tag_is_a_new_build() {
         let pkg = nightly(Some("2026-10-01T00:00:00Z"));
         assert!(rebuilt(
-            &pkg,
+            &InstalledBuild::of(&pkg),
             &rebuild("tool-20261009.tar.gz", None, Some("2026-10-01T00:00:00Z"))
         ));
     }

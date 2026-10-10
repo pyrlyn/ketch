@@ -555,7 +555,7 @@ impl Checksum {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReleaseAsset {
     pub name: String,
     pub url: String,
@@ -571,7 +571,7 @@ pub struct ReleaseAsset {
     pub headers: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Release {
     pub version: Version,
     pub tag: String,

@@ -13,7 +13,7 @@
 
 use crate::error::Result;
 use crate::manifest::same_source;
-use crate::model::{InstalledPackage, Manifest, Release, Version};
+use crate::model::{Channel, InstalledPackage, Manifest, Release, Version};
 use crate::report::Ctx;
 use crate::source::{ListOpts, SourceRegistry};
 
@@ -24,7 +24,8 @@ pub enum ReleaseKind {
     Stable,
     /// The forge's prerelease flag, or a semver prerelease in the tag.
     Pre,
-    /// Not published: `Release.draft`. Sources do not return these yet.
+    /// Not published: `Release.draft`. Only GitHub returns these, and only
+    /// when drafts are asked for.
     Draft,
     /// A tag that is not a version at all (`nightly`), republished in place.
     Dev,
@@ -102,25 +103,31 @@ impl Entry {
 ///
 /// `prerelease` is the caller's own `--pre`; the package's usual rules widen it
 /// (`config.toml`, the manifest, a `pre` install) the way `info` and
-/// `outdated` already do. An installed package is marked only when it came
-/// from this source, since a tag means nothing in another one.
+/// `outdated` already do. `draft` is the caller's `--draft`, and a `draft`
+/// install of this source asks for drafts without it, as `outdated` does; a
+/// source without drafts refuses, and GitHub names a missing token or push
+/// access. An installed package is marked only when it came from this source,
+/// since a tag means nothing in another one.
 pub fn list(
     cx: &Ctx<'_>,
     sources: &SourceRegistry,
     manifest: &Manifest,
     installed: Option<&InstalledPackage>,
     prerelease: bool,
+    draft: bool,
     limit: usize,
 ) -> Result<Vec<Entry>> {
-    let opts = ListOpts {
+    let installed = installed.filter(|p| same_source(&p.source, &manifest.source));
+    let source = sources.for_ref(&manifest.source)?;
+    let mut opts = ListOpts {
         include_prerelease: crate::info::wants_prerelease(cx.cfg, manifest, installed, prerelease),
         include_draft: false,
         limit,
     };
-    let releases = sources
-        .for_ref(&manifest.source)?
-        .list_releases(&manifest.source.id, &opts)?;
-    let installed = installed.filter(|p| same_source(&p.source, &manifest.source));
+    if draft || installed.is_some_and(|p| p.channel == Channel::Draft) {
+        opts.ask_for_drafts(source.as_ref(), &manifest.source.scheme)?;
+    }
+    let releases = source.list_releases(&manifest.source.id, &opts)?;
     Ok(releases
         .into_iter()
         .take(limit)

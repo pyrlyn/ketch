@@ -84,10 +84,13 @@ impl Fixture {
     /// What the release listing returns, newest first. The newest published
     /// one is also `latest`, as GitHub answers it.
     fn list(&self, releases: &[Value]) {
-        self.remote.serve(
-            &format!("/gh/repos/{REPO}/releases?per_page=30&page=1"),
-            Value::Array(releases.to_vec()).to_string(),
-        );
+        // 30 is a resolve's page, 20 a listing's.
+        for per_page in [30, 20] {
+            self.remote.serve(
+                &format!("/gh/repos/{REPO}/releases?per_page={per_page}&page=1"),
+                Value::Array(releases.to_vec()).to_string(),
+            );
+        }
         match releases.iter().find(|r| r["draft"] == false) {
             Some(latest) => self.remote.serve(
                 &format!("/gh/repos/{REPO}/releases/latest"),
@@ -130,6 +133,34 @@ impl Fixture {
             args.join(" ")
         );
         String::from_utf8_lossy(&out.stderr).to_string()
+    }
+
+    /// `ketch list --json`'s row for the package, asked afresh: the latest
+    /// cache would otherwise answer from the previous listing.
+    fn listed(&self, args: &[&str]) -> Value {
+        let _ = std::fs::remove_file(self.sandbox.root().join("cache").join("latest.json"));
+        let mut all = vec!["list", "--json"];
+        all.extend_from_slice(args);
+        let out: Value = serde_json::from_str(&self.ok(&all, true).0).expect("list json");
+        out["packages"]
+            .as_array()
+            .and_then(|rows| rows.iter().find(|r| r["name"] == "demo"))
+            .cloned()
+            .unwrap_or_else(|| panic!("demo is listed: {out}"))
+    }
+
+    fn tags(&self, args: &[&str], token: bool) -> Vec<String> {
+        let out: Value = serde_json::from_str(&self.ok(args, token).0).expect("releases json");
+        let rows = out.as_array().cloned().unwrap_or_default();
+        rows.iter()
+            .map(|r| {
+                format!(
+                    "{} {}",
+                    r["tag"].as_str().unwrap_or("?"),
+                    r["kind"].as_str().unwrap_or("?")
+                )
+            })
+            .collect()
     }
 
     fn info(&self) -> Value {
@@ -220,4 +251,60 @@ fn a_deleted_draft_is_a_warning_not_an_error() {
     assert_eq!(report["outdated"], json!([]), "{report}");
     assert!(err.contains("draft release v2.0.0"), "{err}");
     assert!(err.contains("is gone"), "{err}");
+}
+
+#[test]
+fn releases_lists_drafts_only_when_asked_and_allowed() {
+    let fx = Fixture::new(true);
+    let stable = fx.release("1.0.0", 1, false);
+    let draft = fx.release("2.0.0", 2, true);
+    fx.list(&[draft, stable]);
+
+    assert_eq!(
+        fx.tags(&["releases", REPO, "--json"], true),
+        vec!["v1.0.0 stable"]
+    );
+    let err = fx.fails(&["releases", REPO, "--draft"], false);
+    assert!(err.contains("GITHUB_TOKEN"), "{err}");
+    assert_eq!(
+        fx.tags(&["releases", REPO, "--draft", "--json"], true),
+        vec!["v2.0.0 draft", "v1.0.0 stable"]
+    );
+    let (out, _) = fx.ok(&["info", REPO, "--releases", "--draft"], true);
+    assert!(out.contains("v2.0.0"), "{out}");
+
+    // A draft install asks for drafts by itself.
+    fx.ok(&["install", REPO, "--draft", "-y"], true);
+    assert_eq!(
+        fx.tags(&["releases", "demo", "--json"], true),
+        vec!["v2.0.0 draft", "v1.0.0 stable"]
+    );
+    let err = fx.fails(&["releases", "demo"], false);
+    assert!(err.contains("GITHUB_TOKEN"), "{err}");
+}
+
+#[test]
+fn list_agrees_with_outdated_about_drafts() {
+    let fx = Fixture::new(true);
+    let stable = fx.release("1.0.0", 1, false);
+    let draft = fx.release("2.0.0", 2, true);
+    fx.list(&[draft, stable.clone()]);
+    fx.ok(&["install", REPO, "-y"], true);
+
+    let row = fx.listed(&[]);
+    assert_eq!(row["latest"], "v1.0.0", "{row}");
+    assert_eq!(row["update_available"], false, "{row}");
+    let row = fx.listed(&["--draft"]);
+    assert_eq!(row["latest"], "v2.0.0", "{row}");
+    assert_eq!(row["update_available"], true, "{row}");
+
+    // On the draft channel, the draft's own publication is the update.
+    fx.ok(&["install", REPO, "--draft", "-y"], true);
+    assert_eq!(fx.listed(&[])["update_available"], false);
+    fx.list(&[fx.release("2.0.0", 2, false), stable]);
+    let row = fx.listed(&[]);
+    assert_eq!(row["update_available"], true, "{row}");
+    let (out, _) = fx.ok(&["outdated", "--json"], true);
+    let report: Value = serde_json::from_str(&out).expect("outdated json");
+    assert_eq!(report["outdated"][0]["name"], "demo", "{report}");
 }

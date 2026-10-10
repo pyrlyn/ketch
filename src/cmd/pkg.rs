@@ -292,7 +292,12 @@ pub fn upgrade(cfg: &Config, args: UpgradeArgs) -> Result<()> {
             }
         };
         checked += 1;
-        if !install::is_upgrade(crate::ui::report(), &pkg, &release) {
+        if !install::is_upgrade(
+            crate::ui::report(),
+            &install::InstalledBuild::of(&pkg),
+            &release,
+            &install::upgrade_opts(&pkg, prerelease, args.draft),
+        ) {
             progress.inc(1);
             continue;
         }
