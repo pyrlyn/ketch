@@ -1264,15 +1264,20 @@ pub enum Channel {
     Stable,
     /// Prereleases as well as stable releases.
     Pre,
+    /// Drafts as well as prereleases and stable releases. Only GitHub has
+    /// drafts, and they need a token with push access to see.
+    Draft,
 }
 
 impl Channel {
-    /// The channel an install lands on: `pre` when the person opted into
-    /// prereleases or picked one by tag, `stable` otherwise. Opting in counts
-    /// even when the newest release happened to be stable, or the next
-    /// upgrade would quietly drop them.
-    pub fn of(release: &Release, include_prerelease: bool) -> Channel {
-        if include_prerelease || release.prerelease || release.version.is_prerelease() {
+    /// The channel an install lands on: `draft` when the person opted into
+    /// drafts, `pre` when they opted into prereleases or picked one by tag,
+    /// `stable` otherwise. Opting in counts even when the newest release
+    /// happened to be stable, or the next upgrade would quietly drop them.
+    pub fn of(release: &Release, include_prerelease: bool, include_draft: bool) -> Channel {
+        if include_draft || release.draft {
+            Channel::Draft
+        } else if include_prerelease || release.prerelease || release.version.is_prerelease() {
             Channel::Pre
         } else {
             Channel::Stable
@@ -1289,6 +1294,7 @@ impl Channel {
         match self {
             Self::Stable => "stable",
             Self::Pre => "pre",
+            Self::Draft => "draft",
         }
     }
 }
@@ -1361,6 +1367,11 @@ pub struct InstalledPackage {
     /// on state written before channels existed.
     #[serde(default, skip_serializing_if = "Channel::is_stable")]
     pub channel: Channel,
+    /// The installed release was a draft. Its tag can later name the
+    /// published release, which is then an upgrade although the tag is the
+    /// same. Absent on everything else.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub draft: bool,
 }
 
 impl InstalledPackage {
@@ -2057,7 +2068,7 @@ mod tests {
     #[test]
     fn a_stable_release_installed_without_pre_is_on_the_stable_channel() {
         assert_eq!(
-            Channel::of(&release_tagged("v1.2.0", false), false),
+            Channel::of(&release_tagged("v1.2.0", false), false, false),
             Channel::Stable
         );
     }
@@ -2065,7 +2076,7 @@ mod tests {
     #[test]
     fn opting_into_prereleases_keeps_them_even_when_the_newest_is_stable() {
         assert_eq!(
-            Channel::of(&release_tagged("v1.2.0", false), true),
+            Channel::of(&release_tagged("v1.2.0", false), true, false),
             Channel::Pre
         );
     }
@@ -2073,12 +2084,24 @@ mod tests {
     #[test]
     fn a_prerelease_by_flag_or_by_version_puts_the_package_on_pre() {
         assert_eq!(
-            Channel::of(&release_tagged("v1.2.0", true), false),
+            Channel::of(&release_tagged("v1.2.0", true), false, false),
             Channel::Pre
         );
         assert_eq!(
-            Channel::of(&release_tagged("v2.0.0-rc.1", false), false),
+            Channel::of(&release_tagged("v2.0.0-rc.1", false), false, false),
             Channel::Pre
         );
+    }
+
+    #[test]
+    fn opting_into_drafts_puts_the_package_on_draft_whatever_it_landed_on() {
+        assert_eq!(
+            Channel::of(&release_tagged("v1.2.0", false), false, true),
+            Channel::Draft
+        );
+        let mut draft = release_tagged("v2.0.0", false);
+        draft.draft = true;
+        assert_eq!(Channel::of(&draft, true, false), Channel::Draft);
+        assert_eq!(Channel::Draft.as_str(), "draft");
     }
 }

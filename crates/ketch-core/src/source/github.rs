@@ -4,8 +4,8 @@
 
 //! The GitHub releases source.
 //!
-//! Works unauthenticated; a token only raises the rate limit and unlocks
-//! private repositories.
+//! Works unauthenticated; a token raises the rate limit and unlocks private
+//! repositories and, with push access, draft releases.
 
 use super::{ListOpts, Source};
 use crate::cancel::Cancel;
@@ -83,7 +83,7 @@ impl GitHubSource {
         for page in 1..=MAX_RELEASE_PAGES {
             let raw = self.fetch_releases_page(id, opts, page)?;
             let last = raw.len() < per_page;
-            match super::pick(id, published_releases(raw, opts), want, opts) {
+            match super::pick(id, published_releases(raw, opts, &self.api), want, opts) {
                 Ok(release) => return Ok(release),
                 Err(err) if last => return Err(err),
                 Err(_) => {}
@@ -92,6 +92,33 @@ impl GitHubSource {
         match want {
             VersionSpec::Exact(tag) => Err(Error::NoRelease(format!("{id}@{tag}"))),
             VersionSpec::Latest => Err(Error::NoRelease(id.to_string())),
+        }
+    }
+
+    /// Refuse a request for drafts that GitHub would answer without them.
+    ///
+    /// GitHub shows a draft only to a token with push access and simply leaves
+    /// it out of the listing for anyone else, so without this check `--draft`
+    /// would end in "no release" for a reason nobody could see.
+    fn require_draft_access(&self, id: &str) -> Result<()> {
+        if !self.http.has_token() {
+            return Err(Error::msg(format!(
+                "draft releases of {id} are visible only to a GitHub token with push access, \
+                 and none is set: put one in KETCH_GITHUB_TOKEN, GITHUB_TOKEN or GH_TOKEN, \
+                 or github_token in config.toml"
+            )));
+        }
+        let repo: Option<GhRepo> = self.http.get_json_opt(&self.repo_url(id, "")?, true)?;
+        match repo {
+            None => Err(Error::msg(format!(
+                "{id} is not visible to the GitHub token that is set; \
+                 draft releases need a token with push access to it"
+            ))),
+            Some(repo) if repo.permissions.as_ref().is_some_and(|p| p.push) => Ok(()),
+            Some(_) => Err(Error::msg(format!(
+                "the GitHub token that is set has no push access to {id}, \
+                 and GitHub shows draft releases only to tokens that have it"
+            ))),
         }
     }
 }
@@ -121,6 +148,9 @@ struct GhRelease {
 struct GhAsset {
     name: String,
     browser_download_url: String,
+    /// The API URL of the asset: the only way to download one of a draft.
+    #[serde(default)]
+    url: Option<String>,
     #[serde(default)]
     size: u64,
     #[serde(default)]
@@ -143,6 +173,15 @@ struct GhRepo {
     archived: bool,
     #[serde(default)]
     license: Option<GhLicense>,
+    /// Present only on an authenticated request: what the token may do.
+    #[serde(default)]
+    permissions: Option<GhPermissions>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GhPermissions {
+    #[serde(default)]
+    push: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -178,20 +217,46 @@ impl From<GhAsset> for ReleaseAsset {
     }
 }
 
-impl From<GhRelease> for Release {
-    fn from(release: GhRelease) -> Self {
-        // The tag is the authority; `name` is often decorative ("July build").
-        let version = Version::parse(&release.tag_name);
-        Release {
-            version,
-            tag: release.tag_name,
-            prerelease: release.prerelease,
-            draft: release.draft,
-            published_at: release.published_at,
-            notes: release.body.or(release.name),
-            assets: release.assets.into_iter().map(ReleaseAsset::from).collect(),
-        }
+/// A listed release as ketch models it, `api` being the API base it came from.
+fn release_from(release: GhRelease, api: &str) -> Release {
+    // The tag is the authority; `name` is often decorative ("July build").
+    let version = Version::parse(&release.tag_name);
+    let draft = release.draft;
+    Release {
+        version,
+        tag: release.tag_name,
+        prerelease: release.prerelease,
+        draft,
+        published_at: release.published_at,
+        notes: release.body.or(release.name),
+        assets: release
+            .assets
+            .into_iter()
+            .filter_map(|asset| {
+                if draft {
+                    draft_asset(asset, api)
+                } else {
+                    Some(ReleaseAsset::from(asset))
+                }
+            })
+            .collect(),
     }
+}
+
+/// A draft's asset, downloadable through the API.
+///
+/// Its public URL answers 404 until the draft is published, so the bytes come
+/// from the API asset URL with the token. That URL comes from the response,
+/// though, and the token goes wherever it points: an asset whose URL is not
+/// on the API host is dropped, not fetched.
+fn draft_asset(asset: GhAsset, api: &str) -> Option<ReleaseAsset> {
+    let url = asset
+        .url
+        .clone()
+        .filter(|url| url.starts_with(&format!("{api}/")))?;
+    let mut out = ReleaseAsset::from(asset);
+    out.url = url;
+    Some(out)
 }
 
 impl From<GhRepo> for SourceInfo {
@@ -213,13 +278,15 @@ impl From<GhRepo> for SourceInfo {
     }
 }
 
-/// Drafts never appear; prereleases stay only when asked, or when they are
-/// all the repository has published.
-fn published_releases(raw: Vec<GhRelease>, opts: &ListOpts) -> Vec<Release> {
+/// Drafts appear only when asked for; prereleases stay only when asked, or
+/// when they are all the repository has published.
+fn published_releases(raw: Vec<GhRelease>, opts: &ListOpts, api: &str) -> Vec<Release> {
     let mut releases: Vec<Release> = raw
         .into_iter()
-        .filter(|r| !r.draft)
-        .map(Release::from)
+        // A draft without a tag name has nothing to be asked for by, or
+        // recorded under.
+        .filter(|r| !r.draft || (opts.include_draft && !r.tag_name.trim().is_empty()))
+        .map(|r| release_from(r, api))
         .collect();
     // Prereleases are dropped only when there is something stable to drop
     // them in favour of; plenty of projects have never cut a stable tag,
@@ -355,11 +422,26 @@ impl Source for GitHubSource {
     }
 
     fn list_releases(&self, id: &str, opts: &ListOpts) -> Result<Vec<Release>> {
+        if opts.include_draft {
+            self.require_draft_access(id)?;
+        }
         let raw = self.fetch_releases_page(id, opts, 1)?;
-        Ok(published_releases(raw, opts))
+        Ok(published_releases(raw, opts, &self.api))
     }
 
     fn resolve(&self, id: &str, want: &VersionSpec, opts: &ListOpts) -> Result<Release> {
+        // Neither fast path below ever returns a draft: GitHub's `latest` and
+        // tag endpoints only know published releases. Drafts are found in the
+        // listing, which shows them to a token with push access.
+        if opts.include_draft {
+            self.require_draft_access(id)?;
+            let opts = &super::opts_for(want, opts);
+            if matches!(want, VersionSpec::Exact(_)) {
+                return self.resolve_from_listing(id, want, opts);
+            }
+            let raw = self.fetch_releases_page(id, opts, 1)?;
+            return super::pick(id, published_releases(raw, opts, &self.api), want, opts);
+        }
         // Both fast paths are a single request against an endpoint that does
         // the selection server-side; the listing walk is the fallback.
         let direct = match want {
@@ -373,7 +455,7 @@ impl Source for GitHubSource {
             let found: Option<GhRelease> =
                 self.http.get_json_opt(&self.repo_url(id, &suffix)?, true)?;
             if let Some(release) = found.filter(|r| !r.draft) {
-                return Ok(Release::from(release));
+                return Ok(release_from(release, &self.api));
             }
         }
         // `@1.2.3` for a repository that tags `v1.2.3` is the common spelling of
@@ -384,7 +466,7 @@ impl Source for GitHubSource {
                 let found: Option<GhRelease> =
                     self.http.get_json_opt(&self.repo_url(id, &suffix)?, true)?;
                 if let Some(release) = found.filter(|r| !r.draft) {
-                    return Ok(Release::from(release));
+                    return Ok(release_from(release, &self.api));
                 }
             }
         }
@@ -436,8 +518,14 @@ impl Source for GitHubSource {
             }
             fetches += 1;
             // Authenticated like the assets themselves: a private repository
-            // publishes its sidecars privately too.
-            let body = match self.http.get_text(&asset.url, true) {
+            // publishes its sidecars privately too. A draft's are API asset
+            // URLs, which answer with the asset's JSON unless asked for bytes.
+            let fetched = if release.draft {
+                self.http.get_asset_text(&asset.url, true)
+            } else {
+                self.http.get_text(&asset.url, true)
+            };
+            let body = match fetched {
                 Ok(body) => body,
                 // A missing checksum file is ordinary; a dead network or a 403
                 // is not, and must not be reported as "no published checksum".
@@ -510,6 +598,10 @@ impl Source for GitHubSource {
             .map(|rest| format!("https://{rest}"))
             .unwrap_or_else(|| self.api.trim_end_matches("/api/v3").to_string());
         Some(format!("{host}/{repo}"))
+    }
+
+    fn supports_drafts(&self) -> bool {
+        true
     }
 }
 
@@ -706,6 +798,107 @@ not-a-hash                                                          junk.txt
             !err.contains("does not exist"),
             "fetch failure looked like a missing file: {err}"
         );
+    }
+
+    fn gh_release(json: &str) -> GhRelease {
+        serde_json::from_str(json).expect("release json")
+    }
+
+    #[test]
+    fn a_draft_downloads_from_its_api_url_and_only_from_the_api_host() {
+        let api = "https://api.github.com";
+        let draft = gh_release(
+            r#"{"tag_name":"v2.0.0","draft":true,"assets":[
+                {"name":"ok.tar.gz","browser_download_url":"https://github.com/o/r/releases/download/untagged-1/ok.tar.gz",
+                 "url":"https://api.github.com/repos/o/r/releases/assets/1"},
+                {"name":"elsewhere.tar.gz","browser_download_url":"https://github.com/x",
+                 "url":"https://api.github.com.attacker.invalid/repos/o/r/releases/assets/2"},
+                {"name":"no-api-url.tar.gz","browser_download_url":"https://github.com/y"}]}"#,
+        );
+        let release = release_from(draft, api);
+        assert!(release.draft);
+        let urls: Vec<(&str, &str)> = release
+            .assets
+            .iter()
+            .map(|a| (a.name.as_str(), a.url.as_str()))
+            .collect();
+        assert_eq!(
+            urls,
+            [(
+                "ok.tar.gz",
+                "https://api.github.com/repos/o/r/releases/assets/1"
+            )]
+        );
+    }
+
+    #[test]
+    fn a_published_release_keeps_its_public_download_url() {
+        let published = gh_release(
+            r#"{"tag_name":"v1.0.0","assets":[{"name":"ok.tar.gz",
+                "browser_download_url":"https://github.com/o/r/releases/download/v1.0.0/ok.tar.gz",
+                "url":"https://api.github.com/repos/o/r/releases/assets/1"}]}"#,
+        );
+        let release = release_from(published, DEFAULT_API);
+        assert_eq!(
+            release.assets[0].url,
+            "https://github.com/o/r/releases/download/v1.0.0/ok.tar.gz"
+        );
+    }
+
+    #[test]
+    fn drafts_are_listed_only_when_asked_and_only_with_a_tag() {
+        let raw = || {
+            vec![
+                gh_release(r#"{"tag_name":"v2.0.0","draft":true}"#),
+                gh_release(r#"{"tag_name":" ","draft":true}"#),
+                gh_release(r#"{"tag_name":"v1.0.0"}"#),
+            ]
+        };
+        let tags = |opts: &ListOpts| -> Vec<String> {
+            published_releases(raw(), opts, DEFAULT_API)
+                .into_iter()
+                .map(|r| r.tag)
+                .collect()
+        };
+        assert_eq!(tags(&ListOpts::default()), ["v1.0.0"]);
+        let drafts = ListOpts {
+            include_draft: true,
+            ..Default::default()
+        };
+        assert_eq!(tags(&drafts), ["v2.0.0", "v1.0.0"]);
+    }
+
+    #[test]
+    fn asking_for_drafts_without_a_token_names_the_token_instead_of_finding_nothing() {
+        let source = GitHubSource {
+            http: Arc::new(Http::anonymous(&crate::report::Report::silent())),
+            // Unreachable: the refusal has to come before any request.
+            api: "http://127.0.0.1:1".to_string(),
+        };
+        let opts = ListOpts {
+            include_draft: true,
+            ..Default::default()
+        };
+        for err in [
+            source.list_releases("o/r", &opts).unwrap_err(),
+            source
+                .resolve("o/r", &VersionSpec::Latest, &opts)
+                .unwrap_err(),
+        ] {
+            let err = err.to_string();
+            assert!(err.contains("GITHUB_TOKEN"), "{err}");
+            assert!(err.contains("push access"), "{err}");
+        }
+    }
+
+    #[test]
+    fn only_github_has_drafts() {
+        let source = GitHubSource {
+            http: Arc::new(Http::anonymous(&crate::report::Report::silent())),
+            api: DEFAULT_API.to_string(),
+        };
+        assert!(source.supports_drafts());
+        assert!(!crate::source::local::LocalSource::new().supports_drafts());
     }
 
     #[test]

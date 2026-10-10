@@ -1624,6 +1624,7 @@ mod tests {
             provenance: None,
             bin_choice: None,
             channel: Default::default(),
+            draft: false,
         }
     }
 

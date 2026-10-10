@@ -196,6 +196,10 @@ pub struct InstallArgs {
     #[arg(long = "pre")]
     pub prerelease: bool,
 
+    /// Consider draft releases too (GitHub, with a token that has push access)
+    #[arg(long)]
+    pub draft: bool,
+
     /// Unpack and record the package without putting it on PATH
     #[arg(long)]
     pub no_link: bool,
@@ -266,6 +270,10 @@ pub struct OutdatedArgs {
     /// Compare against prereleases too
     #[arg(long = "pre")]
     pub prerelease: bool,
+
+    /// Compare against draft releases too (GitHub, with a token that has push access)
+    #[arg(long)]
+    pub draft: bool,
 
     /// Packages to check at once (default: 4, or `jobs` in config.toml)
     #[arg(long, short = 'j', value_name = "N")]
@@ -362,6 +370,10 @@ pub struct UpgradeArgs {
     /// Consider prereleases
     #[arg(long = "pre")]
     pub prerelease: bool,
+
+    /// Consider draft releases too (GitHub, with a token that has push access)
+    #[arg(long)]
+    pub draft: bool,
 
     /// Upgrade pinned packages too
     #[arg(long)]

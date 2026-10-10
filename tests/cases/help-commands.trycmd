@@ -16,6 +16,7 @@ Options:
                           package)
   -f, --force             Reinstall even when the requested version is already present
       --pre               Consider prereleases when resolving `latest`
+      --draft             Consider draft releases too (GitHub, with a token that has push access)
       --no-link           Unpack and record the package without putting it on PATH
       --require-checksum  Refuse to install unless the release publishes a checksum
       --asset <NAME>      Use this release asset by exact file name instead of auto-selecting
@@ -43,6 +44,7 @@ Arguments:
 Options:
       --dry-run     Report what would change without touching anything
       --pre         Consider prereleases
+      --draft       Consider draft releases too (GitHub, with a token that has push access)
       --force       Upgrade pinned packages too
       --bin <NAME>  Which binary to link when several share the package's name (single package)
   -j, --jobs <N>    Packages to work on at once (default: 4, or `jobs` in config.toml)

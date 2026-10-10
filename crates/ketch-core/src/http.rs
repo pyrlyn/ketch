@@ -92,6 +92,17 @@ impl Http {
         self.get_string(url, "text/plain, */*", authed)
     }
 
+    /// GET a text asset from an API asset URL, which answers with the asset's
+    /// metadata unless the request asks for its bytes.
+    pub fn get_asset_text(&self, url: &str, authed: bool) -> Result<String> {
+        self.get_string(url, "application/octet-stream", authed)
+    }
+
+    /// Whether requests made with `authed` carry a token at all.
+    pub fn has_token(&self) -> bool {
+        self.token.is_some()
+    }
+
     fn get_string(&self, url: &str, accept: &str, authed: bool) -> Result<String> {
         self.report.debug(&format!("GET {url}"));
         let response = self

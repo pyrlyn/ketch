@@ -60,7 +60,6 @@ Not added: the brand move is done (`brand/build.mjs` already uses `@pyrlyn/brand
 | B74 | todo | P3 | 3 | 0% | |
 | R12 | todo | P3 | 1 | 0% | |
 | M18 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
-| M19 | todo | P2 | 4 | 0% | |
 | M20 | todo | P2 | 4 | 0% | |
 | M21 | todo | P2 | 3 | 0% | |
 
@@ -477,10 +476,6 @@ Execution plan:
 7. Verify: `cargo nextest run --workspace`, `cargo clippy --workspace --all-targets`, `cargo fmt --check`, and the binary against a scratch `KETCH_ROOT`.
 
 Status: steps 1–7 done on branch `m18-release-channels-m18` (1099 tests green; `install sharkdp/fd --pre` in a scratch root records `pre`, `--force` without it returns to `stable`). `upgrade_request` lost its `prerelease` parameter: the tag is exact, so only the channel matters. Known gap: `install --pre` over the same tag already installed stops at "already installed" and does not switch the channel; `--force` does. Remaining: commit and PR.
-
-### M19. Draft releases: `--draft`
-
-`ListOpts` gains `include_draft`; the GitHub source keeps drafts when it is set and downloads their assets from the API asset URL with `Accept: application/octet-stream` and the token. `install`, `upgrade`, `outdated` and `list` take `--draft`; `pkg@tag` finds a draft by its intended tag when `--draft` is given. Selection keeps refusing drafts unless asked (`drafts_are_never_selected` stays true for the default). No token, or a token without push access, gives an error naming the reason. Channel `draft`; a published draft upgrades to the release, a deleted one warns. Plugins never receive drafts. Done means the above with unit tests on selection and an end-to-end case through the fixture source.
 
 ### M20. Dev builds: floating tags
 

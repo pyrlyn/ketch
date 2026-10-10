@@ -35,6 +35,9 @@ pub struct InstallRequest {
     /// Reinstall even when the resolved version is already present.
     pub force: bool,
     pub prerelease: bool,
+    /// `--draft`: consider draft releases too, and prereleases with them.
+    /// Refused for a source that has no drafts.
+    pub draft: bool,
     /// Create links in the bin dir (and copy `.app`s) after unpacking.
     pub link: bool,
     /// Fail rather than record a first-seen hash when no checksum is published.
@@ -69,6 +72,7 @@ impl InstallRequest {
             spec,
             force: false,
             prerelease: false,
+            draft: false,
             link: true,
             require_checksum: false,
             asset_override: None,
@@ -251,7 +255,19 @@ pub fn prepare(
 
     let source = sources.for_ref(&manifest.source)?;
 
-    let opts = crate::resolve::list_opts(cfg, &manifest, req.prerelease);
+    let mut opts = crate::resolve::list_opts(cfg, &manifest, req.prerelease);
+    if req.draft {
+        if !source.supports_drafts() {
+            return Err(Error::msg(format!(
+                "{}: packages have no draft releases; --draft works for GitHub packages",
+                manifest.source.scheme
+            )));
+        }
+        // A draft is often marked prerelease too; asking for drafts without
+        // them would hide exactly the build that was asked for.
+        opts.include_draft = true;
+        opts.include_prerelease = true;
+    }
     report.step(
         "resolving",
         &format!("{} ({})", manifest.name, manifest.source),
@@ -424,7 +440,7 @@ pub fn prepare(
     // Only the request's own opt-in, not `config.toml` or the manifest: both
     // are read again on every `upgrade`, so recording them here would keep a
     // package on prereleases after the person switched them off.
-    let channel = Channel::of(&release, req.prerelease);
+    let channel = Channel::of(&release, req.prerelease, req.draft);
     Ok(Prepared {
         label,
         manifest,
@@ -784,6 +800,7 @@ pub fn commit(cx: &Ctx<'_>, state: &mut State, prepared: Prepared) -> Result<Ins
         provenance,
         bin_choice,
         channel,
+        draft: release.draft,
     };
     state.insert(package.clone());
     orphan.keep();
@@ -1306,12 +1323,43 @@ pub fn prune(cx: &Ctx<'_>, state: &mut State, name: &str, keep: u32) -> Result<V
 }
 
 /// Newest release available for an installed package, for `outdated`/`upgrade`.
+/// `draft` widens the lookup to drafts for this run, as `prerelease` does to
+/// prereleases.
 pub fn latest_release(
     sources: &SourceRegistry,
     pkg: &InstalledPackage,
     prerelease: bool,
+    draft: bool,
 ) -> Result<Release> {
-    latest_of(sources, &pkg.source, &installed_list_opts(pkg, prerelease))
+    let mut opts = installed_list_opts(pkg, prerelease);
+    opts.include_draft |= draft;
+    opts.include_prerelease |= draft;
+    latest_of(sources, &pkg.source, &opts)
+}
+
+/// Whether `latest`, the newest release on `pkg`'s channel, should replace
+/// what is installed. The one rule behind `ketch upgrade` and `ketch outdated`.
+///
+/// Versions are compared, not tags: a retagged release is not an upgrade, and
+/// neither is a source that briefly reports an older one. A draft is the
+/// exception: once published, the release under its tag is what the draft was
+/// a preview of. A draft that is no longer listed was deleted or published
+/// under another tag; that is said, and is not an error.
+pub fn is_upgrade(report: &Report, pkg: &InstalledPackage, latest: &Release) -> bool {
+    if pkg.draft && latest.tag == pkg.tag {
+        return !latest.draft;
+    }
+    if latest.tag != pkg.tag && latest.version > pkg.version {
+        return true;
+    }
+    if pkg.draft {
+        report.warn(&format!(
+            "{}: the draft release {} it was installed from is gone; \
+             it was deleted or published under another tag",
+            pkg.name, pkg.tag
+        ));
+    }
+    false
 }
 
 /// The request that moves installed `pkg` to the release tagged `tag`, as
@@ -1332,9 +1380,11 @@ pub fn upgrade_request(
             version: VersionSpec::Exact(tag.to_string()),
         },
         force: true,
-        // The tag is exact, so this only carries the channel forward: an
-        // upgrade that lands on a stable release must not end prereleases.
+        // The tag is exact, so these only carry the channel forward: an
+        // upgrade that lands on a stable release must not end prereleases, or
+        // drafts.
         prerelease: pkg.channel == Channel::Pre,
+        draft: pkg.channel == Channel::Draft,
         // A package installed with --no-link stays unlinked.
         link: !pkg.links.is_empty(),
         require_checksum: cfg.require_checksums,
@@ -1356,10 +1406,13 @@ pub fn installed_list_opts(pkg: &InstalledPackage, prerelease: bool) -> ListOpts
     // A manifest that asks for prereleases got one at install time; asking for
     // `latest` without it here would then report the package as up to date
     // forever, however many prereleases it has moved through since.
+    let draft = pkg.channel == Channel::Draft;
     ListOpts {
         include_prerelease: prerelease
+            || draft
             || pkg.channel == Channel::Pre
             || pkg.manifest.as_ref().is_some_and(|m| m.prerelease),
+        include_draft: draft,
         ..Default::default()
     }
 }
@@ -2179,6 +2232,7 @@ mod tests {
             provenance: None,
             bin_choice: None,
             channel: Default::default(),
+            draft: false,
         }
     }
 
@@ -2623,5 +2677,80 @@ mod tests {
             pre.prerelease,
             "a stable tag must not take a pre package off pre"
         );
+    }
+
+    #[test]
+    fn a_package_on_the_draft_channel_looks_for_drafts_and_prereleases() {
+        let mut pkg = installed("tool", "1.0.0", PathBuf::from("/store/tool"));
+        assert!(!installed_list_opts(&pkg, false).include_draft);
+        pkg.channel = Channel::Draft;
+        let opts = installed_list_opts(&pkg, false);
+        assert!(opts.include_draft && opts.include_prerelease);
+    }
+
+    #[test]
+    fn an_upgrade_keeps_a_draft_package_on_drafts() {
+        let root = tempfile::tempdir().unwrap();
+        let cfg = Config::load(
+            Some(root.path().join("ketch")),
+            &crate::report::Report::silent(),
+        )
+        .unwrap();
+        let mut pkg = installed("tool", "1.0.0", PathBuf::from("/store/tool"));
+        assert!(!upgrade_request(&cfg, &pkg, "v1.1.0", None, Cancel::new()).draft);
+        pkg.channel = Channel::Draft;
+        assert!(upgrade_request(&cfg, &pkg, "v1.1.0", None, Cancel::new()).draft);
+    }
+
+    fn tagged(tag: &str, draft: bool) -> Release {
+        Release {
+            version: Version::parse(tag),
+            tag: tag.into(),
+            draft,
+            ..release(&[])
+        }
+    }
+
+    fn upgrade_with(pkg: &InstalledPackage, latest: &Release) -> (bool, Vec<String>) {
+        let warns = Warns(Default::default());
+        let report = Report::new(warns.clone());
+        let upgrade = is_upgrade(&report, pkg, latest);
+        let said = warns.0.lock().unwrap().clone();
+        (upgrade, said)
+    }
+
+    #[test]
+    fn only_a_higher_version_under_another_tag_is_an_upgrade() {
+        let pkg = installed("tool", "1.0.0", PathBuf::from("/store/tool"));
+        assert_eq!(upgrade_with(&pkg, &tagged("v1.1.0", false)), (true, vec![]));
+        assert_eq!(
+            upgrade_with(&pkg, &tagged("v1.0.0", false)),
+            (false, vec![])
+        );
+        assert_eq!(
+            upgrade_with(&pkg, &tagged("v0.9.0", false)),
+            (false, vec![])
+        );
+    }
+
+    #[test]
+    fn a_published_draft_is_an_upgrade_under_the_same_tag() {
+        let mut pkg = installed("tool", "2.0.0", PathBuf::from("/store/tool"));
+        pkg.channel = Channel::Draft;
+        pkg.draft = true;
+        assert_eq!(upgrade_with(&pkg, &tagged("v2.0.0", true)), (false, vec![]));
+        assert_eq!(upgrade_with(&pkg, &tagged("v2.0.0", false)), (true, vec![]));
+        assert_eq!(upgrade_with(&pkg, &tagged("v2.1.0", true)), (true, vec![]));
+    }
+
+    #[test]
+    fn a_deleted_draft_is_a_warning_and_not_an_upgrade() {
+        let mut pkg = installed("tool", "2.0.0", PathBuf::from("/store/tool"));
+        pkg.channel = Channel::Draft;
+        pkg.draft = true;
+        let (upgrade, said) = upgrade_with(&pkg, &tagged("v1.0.0", false));
+        assert!(!upgrade);
+        assert_eq!(said.len(), 1, "{said:?}");
+        assert!(said[0].contains("draft release v2.0.0"), "{said:?}");
     }
 }

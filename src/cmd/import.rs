@@ -149,6 +149,7 @@ fn request(cfg: &Config, name: &str, plan: &Apply) -> InstallRequest {
         spec,
         force: plan.force,
         prerelease: false,
+        draft: false,
         link: true,
         require_checksum: cfg.require_checksums,
         asset_override: plan.asset.clone(),

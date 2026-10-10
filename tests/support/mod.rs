@@ -13,6 +13,8 @@
 //! network, no fixtures checked into the tree, and no test that depends on
 //! somebody else's tag still existing.
 
+pub mod remote;
+
 use assert_fs::prelude::*;
 use assert_fs::TempDir;
 use std::io::Write;

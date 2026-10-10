@@ -27,6 +27,9 @@ use std::sync::Arc;
 #[derive(Debug, Clone)]
 pub struct ListOpts {
     pub include_prerelease: bool,
+    /// Keep draft releases. Only a source whose `supports_drafts` is true has
+    /// any; the rest drop them whatever this says.
+    pub include_draft: bool,
     /// Upper bound on releases fetched. Sources may return fewer.
     pub limit: usize,
 }
@@ -35,6 +38,7 @@ impl Default for ListOpts {
     fn default() -> Self {
         ListOpts {
             include_prerelease: false,
+            include_draft: false,
             limit: 30,
         }
     }
@@ -55,8 +59,9 @@ pub trait Source: Send + Sync {
         Ok(None)
     }
 
-    /// Releases, newest first. Drafts must be excluded; prereleases are
-    /// included only when `opts.include_prerelease` is set.
+    /// Releases, newest first. Drafts are excluded unless the source supports
+    /// them and `opts.include_draft` is set; prereleases are included only
+    /// when `opts.include_prerelease` is set.
     fn list_releases(&self, id: &str, opts: &ListOpts) -> Result<Vec<Release>>;
 
     /// Resolve a version request to one release.
@@ -104,6 +109,13 @@ pub trait Source: Send + Sync {
     /// A browsable URL for humans, when one exists.
     fn web_url(&self, _id: &str) -> Option<String> {
         None
+    }
+
+    /// Whether this source can list draft releases at all. A request for
+    /// drafts from one that cannot is refused rather than quietly answered
+    /// with published releases.
+    fn supports_drafts(&self) -> bool {
+        false
     }
 }
 
@@ -157,7 +169,7 @@ pub fn select_release(
     let mut rejected = Vec::new();
     let mut considered = Vec::with_capacity(releases.len());
     for release in releases {
-        if release.draft {
+        if release.draft && !opts.include_draft {
             rejected.push(RejectedRelease {
                 tag: release.tag,
                 version: release.version.to_string(),
@@ -440,6 +452,38 @@ mod tests {
         let releases = vec![draft, release("v1.0.0", false)];
         let got = pick("x", releases, &VersionSpec::Latest, &ListOpts::default()).unwrap();
         assert_eq!(got.tag, "v1.0.0");
+    }
+
+    #[test]
+    fn a_draft_is_selected_when_drafts_are_asked_for() {
+        let mut draft = release("v3.0.0", false);
+        draft.draft = true;
+        let opts = ListOpts {
+            include_draft: true,
+            ..Default::default()
+        };
+        let got = pick(
+            "x",
+            vec![draft, release("v1.0.0", false)],
+            &VersionSpec::Latest,
+            &opts,
+        )
+        .unwrap();
+        assert_eq!(got.tag, "v3.0.0");
+        assert!(got.draft);
+    }
+
+    #[test]
+    fn an_exact_tag_names_a_draft_only_when_drafts_are_asked_for() {
+        let mut draft = release("v3.0.0", false);
+        draft.draft = true;
+        let want = VersionSpec::Exact("v3.0.0".into());
+        assert!(pick("x", vec![draft.clone()], &want, &ListOpts::default()).is_err());
+        let opts = ListOpts {
+            include_draft: true,
+            ..Default::default()
+        };
+        assert_eq!(pick("x", vec![draft], &want, &opts).unwrap().tag, "v3.0.0");
     }
 
     #[test]

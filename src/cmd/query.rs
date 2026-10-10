@@ -290,7 +290,7 @@ pub fn outdated(cfg: &Config, args: OutdatedArgs) -> Result<()> {
                 let i = next.fetch_add(1, Ordering::Relaxed);
                 let Some(pkg) = pkgs.get(i) else { return };
                 ui::step("checking", &pkg.name);
-                let result = install::latest_release(&sources, pkg, prerelease);
+                let result = install::latest_release(&sources, pkg, prerelease, args.draft);
                 done.lock()
                     .unwrap_or_else(|e| e.into_inner())
                     .push((i, result));
@@ -321,10 +321,7 @@ pub fn outdated(cfg: &Config, args: OutdatedArgs) -> Result<()> {
             }
         };
         checked += 1;
-        // Match `upgrade`: a retagged release is not newer, and a source that
-        // still reports the installed tag is current even if its version
-        // string somehow parses differently.
-        if release.tag == pkg.tag || release.version <= pkg.version {
+        if !install::is_upgrade(crate::ui::report(), pkg, &release) {
             continue;
         }
         rows.push(vec![

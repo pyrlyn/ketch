@@ -44,7 +44,14 @@ package; `--force/-f` reinstalls the requested version even when present;
 `--pre` considers prereleases and keeps the package on them: later
 `upgrade`, `outdated` and `list` look for prereleases without `--pre`, and
 `info` shows `channel: pre` (an exact prerelease tag, `pkg@v2.0.0-rc.1`, does
-the same; a plain install moves the package back to stable); `--no-link` unpacks without linking onto PATH;
+the same; a plain install moves the package back to stable); `--draft`
+considers GitHub draft releases too, prereleases with them, and keeps the
+package on drafts (`channel: draft`); `pkg@<tag> --draft` finds a draft by
+the tag it will get. GitHub shows drafts only to a token with push access to
+the repository (`KETCH_GITHUB_TOKEN`, `GITHUB_TOKEN`, `GH_TOKEN` or
+`github_token`), so without one `--draft` stops with that reason; a draft's
+files download through the API with the token, and are checked like any
+other. Other sources have no drafts and refuse `--draft`; `--no-link` unpacks without linking onto PATH;
 `--require-checksum` refuses releases with no published checksum;
 `--asset <NAME>` takes one release file by exact name (asks for confirmation,
 since the platform check is skipped); `-j/--jobs <N>` and `-y/--yes` control
@@ -97,7 +104,10 @@ ketch upgrade ripgrep fd   # just these
 ketch upgrade --dry-run    # show the plan, change nothing
 ```
 
-Options: `--pre` considers prereleases; `--force` upgrades pinned packages
+Options: `--pre` considers prereleases; `--draft` considers GitHub draft
+releases too (a package installed with `--draft` does without it). A draft
+that was published is an upgrade to the release under its tag; a draft that
+was deleted is a warning. `--force` upgrades pinned packages
 too; `--bin <NAME>` (exactly one package) picks which binary to link when the
 new release ships several sharing the package's name, as on `install`;
 `-j/--jobs <N>`, `-y/--yes`. Pinned and `local:` packages are skipped unless
@@ -340,10 +350,11 @@ ketch list --names-only      # every package name, one per line
 ketch list remote --json     # the registry with latest versions
 ```
 
-### `ketch outdated [--json] [--pre]`
+### `ketch outdated [--json] [--pre] [--draft]`
 
 Show installed packages that have a newer release. A source that cannot be
 reached is a warning, not a failure — unless nothing could be checked at all.
+`--draft` compares against GitHub draft releases too, as on `upgrade`.
 
 ```bash
 ketch outdated
