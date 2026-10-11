@@ -25,10 +25,22 @@ namespace KetchApp {
         public string source { get; construct; }
         public string prefix { get; construct; }
         public bool pinned { get; construct; }
+        /* The links on PATH. */
+        public string[] binaries { get; construct; }
 
         public Package (Json.Object o) {
+            string[] links = {};
+            var list = o.get_member ("binaries");
+            if (list != null && list.get_node_type () == Json.NodeType.ARRAY) {
+                list.get_array ().foreach_element ((_, __, node) => {
+                    if (node.get_value_type () == typeof (string)) {
+                        links += node.get_string ();
+                    }
+                });
+            }
             Object (name: text_of (o, "name"), version: text_of (o, "version"), source: text_of (o, "source"),
-                    prefix: text_of (o, "prefix"), pinned: o.get_boolean_member_with_default ("pinned", false));
+                    prefix: text_of (o, "prefix"), pinned: o.get_boolean_member_with_default ("pinned", false),
+                    binaries: links);
         }
     }
 

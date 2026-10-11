@@ -11,6 +11,7 @@
 <gresources>
   <gresource prefix="/io/github/pyrlyn/Ketch">
     <file>window.ui</file>
+    <file>package-page.ui</file>
     <file>style.css</file>
     <file>tokens.css</file>
   </gresource>

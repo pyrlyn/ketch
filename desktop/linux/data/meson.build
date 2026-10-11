@@ -9,8 +9,8 @@ blueprint_compiler = find_program('blueprint-compiler', version: '==0.22.2')
 
 blueprints = custom_target(
   'blueprints',
-  input: files('ui/window.blp'),
-  output: ['window.ui'],
+  input: files('ui/window.blp', 'ui/package-page.blp'),
+  output: ['window.ui', 'package-page.ui'],
   command: [blueprint_compiler, 'batch-compile', '@OUTDIR@', meson.current_source_dir() / 'ui', '@INPUT@'],
   # 0.22's wrapper, as a subproject, is written into the build directory away
   # from its Python package and cannot import it; an installed one ignores this.

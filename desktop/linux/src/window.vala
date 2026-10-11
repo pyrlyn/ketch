@@ -47,7 +47,10 @@ namespace KetchApp {
         construct {
             bind (installed_list, store.installed, installed_state, (item) => {
                 var package = (Package) item;
-                return new Adw.ActionRow () { title = package.name, subtitle = package.version };
+                var row = new Adw.ActionRow () { title = package.name, subtitle = package.version, activatable = true };
+                row.add_suffix (new Gtk.Image.from_icon_name ("go-next-symbolic"));
+                row.activated.connect (() => nav.push (new PackagePage (this, package)));
+                return row;
             });
             bind (discover_list, store.search_results, discover_state, (item) => {
                 var found = (RegistryPackage) item;
@@ -174,6 +177,13 @@ namespace KetchApp {
             alert.add_response ("close", _("_Close"));
             alert.response.connect (() => store.error_message = null);
             alert.present (this);
+        }
+
+        /* Leaves `page` if it is still the one showing; the user may have gone back already. */
+        public void pop_page (Adw.NavigationPage page) {
+            if (nav.visible_page == page) {
+                nav.pop ();
+            }
         }
 
         /* Asks before `then`; the cancel response is the default way out. */

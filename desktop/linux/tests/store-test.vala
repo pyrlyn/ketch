@@ -77,6 +77,7 @@ void refresh_splits_updates_from_held_packages () {
     var store = new_store ();
     refresh (store);
     assert (store.installed.get_n_items () == 2);
+    assert (string.joinv (",", ((Package) store.installed.get_item (0)).binaries) == "/Users/me/.ketch/bin/fd");
     assert (store.updates.get_n_items () == 1 && ((Upgrade) store.updates.get_item (0)).name == "ripgrep");
     var held = (Upgrade) store.held.get_item (0);
     assert (store.held.get_n_items () == 1 && held.name == "fd" && held.held_by == "/work/app/ketch.lock");

@@ -51,6 +51,7 @@ if gtk_dep.found() and adw_dep.found()
     'src/application.vala',
     'src/window.vala',
     'src/preferences.vala',
+    'src/package-page.vala',
     resources,
     dependencies: [app_core_dep, gtk_dep, adw_dep],
     c_args: ['-DKETCH_SCENARIOS_DIR="@0@"'.format(scenarios), '-DGETTEXT_PACKAGE="ketch"'],
