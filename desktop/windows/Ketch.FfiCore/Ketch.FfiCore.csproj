@@ -1,0 +1,25 @@
+<!--
+  Copyright (c) 2026 Ivan Tugay
+  SPDX-License-Identifier: GPL-3.0-or-later
+
+  The Windows app's IKetchCore on the real core: FfiKetchCore over the
+  generated binding in KetchCore. Apart from Ketch.AppCore so that project and
+  its tests stay free of the native library and run on any OS; this one needs
+  `just csharp` (scripts/csharp.sh) first, as KetchCore does.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ketch.FfiCore.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Ketch.AppCore/Ketch.AppCore.csproj" />
+    <ProjectReference Include="../KetchCore/KetchCore.csproj" />
+  </ItemGroup>
+</Project>

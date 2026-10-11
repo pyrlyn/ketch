@@ -292,6 +292,11 @@ capi-test:
 windows-app-test:
     cd desktop/windows && dotnet test --project Ketch.AppCore.Tests
 
+# The Windows app's adapter onto ketch-ffi (FfiKetchCore) against the real core, on a debug build; runs on any OS.
+windows-ffi-test:
+    scripts/csharp.sh --debug
+    cd desktop/windows && dotnet test --project Ketch.FfiCore.Tests
+
 # The library the fuzz targets link (src/lib.rs, cfg(fuzzing) only), checked on
 # stable: nothing else builds it, so `check` and CI would not notice it break.
 fuzz-check:

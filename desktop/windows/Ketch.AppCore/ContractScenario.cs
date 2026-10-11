@@ -9,8 +9,9 @@
 // records, event streams and errors the real core does. This file only
 // decodes them and maps the wire shape onto the app's own types; the replay
 // itself lives in `FakeKetchCore`. It mirrors `ContractScenario.swift`, and
-// the mapping is the same one the live adapter will make: stages are coarser,
-// progress is keyed by task id, a missing lock holder has no pid.
+// the live adapter, `FfiKetchCore`, maps the binding's records, events and
+// errors through these same classes: stages are coarser, progress is keyed by
+// task id, a missing lock holder has no pid.
 
 using System.Text.Json;
 
