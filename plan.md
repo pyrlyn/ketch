@@ -50,7 +50,7 @@ Not added: the brand move is done (`brand/build.mjs` already uses `@pyrlyn/brand
 | F14 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | F18 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
 | D11 | in progress | P3 | 5 | 10% | Claude Code / sonnet-5.5 |
-| D12 | todo | P3 | 4 | 0% | |
+| D12 | in progress | P3 | 4 | 5% | Claude Code / opus-5.5 |
 | D13 | todo | P3 | 3 | 0% | |
 | D14 | todo | P3 | 4 | 0% | |
 | D16 | todo | P3 | 5 | 0% | |
@@ -364,6 +364,16 @@ Swap the Windows app's fake core for the binding. Depends on D10, D11, D1 and D2
 Done when the app runs every screen on `ketch-ffi` through D10's binding, work runs off the UI thread with events marshalled to the `DispatcherQueue`, cancel and `Busy` behave as in the contract, and a manual pass against a scratch root is recorded.
 
 The app ships both as an MSIX and unpackaged (D14), and an unpackaged app has no `ApplicationData`, so settings go in a file under `%LOCALAPPDATA%\ketch` that works in both.
+
+Execution plan:
+
+1. `desktop/windows/Ketch.FfiCore` (net10.0, references `Ketch.AppCore` and `KetchCore`): `FfiKetchCore : IKetchCore` over the generated `Ketch.Ffi.KetchCore`. A sibling project, not part of `Ketch.AppCore`, so `Ketch.AppCore` and its tests stay binding-free and run on any OS without the native library. It converts the FFI records, events and `KetchError` into the app's types through the wire classes and `ContractEventMapper` in `ContractScenario.cs`, so the fake and the live adapter share one mapping; wraps the app's `IReporter`/`IDecider` in the foreign `Reporter`/`Decider` per call; forwards `CancelToken.OnCancel` to a per-call FFI token; turns a declined binary choice into a cancel, and any failure after a cancel into `Cancelled`, as the fake does. Threading stays where it is: `KetchStore` already runs every call on its own thread and posts events and questions through `post`, which the app points at the `DispatcherQueue`.
+2. `Ketch.AppCore/AppSettings.cs`: the app's own preferences (theme) as JSON (System.Text.Json) in `%LOCALAPPDATA%\ketch\app-settings.json`, never `ApplicationData`; an MSIX's writes there are redirected into its package data by Windows, so one path works packaged and unpackaged. A missing or unreadable file is the defaults.
+3. `Ketch.App`: `CoreFactory` is the one place that picks the core: `FfiKetchCore` on the ketch root (`KETCH_ROOT` or `~/.ketch`, as the CLI), the fake when `KETCH_APP_FAKE_CORE=1`. Settings shows the scenario picker only on the fake, and saves the theme; Discover searches on submit, not per keystroke, because each search may query GitHub.
+4. CI: `ketch-win-app` sets up Rust and the pinned generator, runs `scripts/csharp.sh --debug`, the adapter tests, and builds the app, then checks `ketch_ffi.dll` is in its output. `just windows-ffi-test` runs the adapter tests locally.
+5. Tests: `Ketch.FfiCore.Tests` (MSTest) against a scratch root through the debug library: reads, install/uninstall of a `local:` payload with mapped events, a pre-cancelled install, `Busy` while another call holds the lock, `NotFound`; mapping tests for errors, events and the decider wrapper. `AppSettings` tests in `Ketch.AppCore.Tests`.
+6. Docs: `toolchain.md`, the `AGENTS.md` Layout row for `desktop/windows/`, `desktop/contract/README.md`.
+7. Verify: `dotnet test` for `Ketch.AppCore.Tests`, `Ketch.FfiCore.Tests` and `KetchCore.Tests` on macOS; the WinUI build only in CI. Left for a manual pass on Windows: launch the app with `KETCH_ROOT` set to a scratch root and go through Installed, Discover (search, install a package with several binaries to see the choice dialog), Updates (upgrade one, upgrade all), package detail (changelog, uninstall), Activity (cancel a running install), Doctor, Settings (theme survives a restart, `app-settings.json` written), and `Busy` (run `ketch install` in a terminal against the same root during an app install, then Retry).
 
 ### D13. Windows: tray icon, notifications, start at login, links
 
