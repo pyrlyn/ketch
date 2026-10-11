@@ -23,13 +23,15 @@ app_core = static_library(
   'src/core.vala',
   'src/scenario.vala',
   'src/fake-core.vala',
+  'src/models.vala',
+  'src/store.vala',
   dependencies: core_deps,
 )
 app_core_dep = declare_dependency(link_with: app_core, dependencies: core_deps)
 
 scenarios = meson.current_source_dir() / '..' / 'contract' / 'scenarios'
 
-foreach name : ['fake-core']
+foreach name : ['fake-core', 'store']
   test(
     name,
     executable(name + '-test', 'tests' / name + '-test.vala', dependencies: app_core_dep),
