@@ -10,10 +10,8 @@
 use super::{safe_member_path, Extractor};
 use crate::error::{Error, Result};
 use std::fs::File;
-use std::io::{self, BufReader, Read, Write};
+use std::io::{BufReader, Read};
 use std::path::{Component, Path, PathBuf};
-use std::sync::mpsc::{self, Receiver, SyncSender};
-use std::thread;
 
 /// Permission bits taken from an untrusted archive: never setuid/setgid/sticky.
 fn payload_mode(mode: u32) -> u32 {
@@ -181,13 +179,7 @@ fn xz_inner_head(path: &Path) -> Vec<u8> {
     let Ok(file) = File::open(path) else {
         return Vec::new();
     };
-    let mut reader = BufReader::new(file);
-    let mut out = CapWrite {
-        buf: Vec::new(),
-        cap: 512,
-    };
-    let _ = lzma_rs::xz_decompress(&mut reader, &mut out);
-    out.buf
+    read_head_of(&mut xz_reader(file), 512)
 }
 
 fn bz2_inner_head(path: &Path) -> Vec<u8> {
@@ -198,88 +190,21 @@ fn bz2_inner_head(path: &Path) -> Vec<u8> {
     read_head_of(&mut decoder, 512)
 }
 
-/// Collects a prefix of decompressed bytes, then errors so the decoder stops.
-struct CapWrite {
-    buf: Vec<u8>,
-    cap: usize,
-}
-
-impl Write for CapWrite {
-    fn write(&mut self, data: &[u8]) -> io::Result<usize> {
-        if self.buf.len() >= self.cap {
-            return Err(io::Error::new(io::ErrorKind::WriteZero, "head filled"));
-        }
-        let take = (self.cap - self.buf.len()).min(data.len());
-        self.buf.extend_from_slice(&data[..take]);
-        Ok(take)
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
+/// Most memory, in KiB, an xz stream may ask its decoder for (about its
+/// dictionary size). `xz -9` needs 64 MiB, so this passes every real release
+/// and refuses a header that claims gigabytes before anything is allocated.
+const XZ_MEM_LIMIT_KIB: u32 = 256 * 1024;
 
 /// Stream xz plaintext as `Read` so unpacking never holds the whole file in RAM.
+///
+/// `lzma-rs` decodes a whole xz block into one buffer, and `xz` writes a
+/// single block by default, so it cannot stream the archive it is given.
 fn xz_reader(file: File) -> impl Read {
-    let (tx, rx): (SyncSender<io::Result<Vec<u8>>>, Receiver<_>) = mpsc::sync_channel(2);
-    thread::spawn(move || {
-        let mut input = BufReader::new(file);
-        let mut output = ChannelWrite(tx.clone());
-        if let Err(e) = lzma_rs::xz_decompress(&mut input, &mut output) {
-            let _ = tx.send(Err(io::Error::new(io::ErrorKind::InvalidData, e)));
-        }
-    });
-    ChannelRead {
-        rx,
-        buf: Vec::new(),
-        at: 0,
-    }
+    xz_reader_limited(file, XZ_MEM_LIMIT_KIB)
 }
 
-struct ChannelWrite(SyncSender<io::Result<Vec<u8>>>);
-
-impl Write for ChannelWrite {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if buf.is_empty() {
-            return Ok(0);
-        }
-        self.0
-            .send(Ok(buf.to_vec()))
-            .map_err(|e| io::Error::new(io::ErrorKind::BrokenPipe, e))?;
-        Ok(buf.len())
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-struct ChannelRead {
-    rx: Receiver<io::Result<Vec<u8>>>,
-    buf: Vec<u8>,
-    at: usize,
-}
-
-impl Read for ChannelRead {
-    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
-        loop {
-            if self.at < self.buf.len() {
-                let n = (self.buf.len() - self.at).min(out.len());
-                out[..n].copy_from_slice(&self.buf[self.at..self.at + n]);
-                self.at += n;
-                return Ok(n);
-            }
-            match self.rx.recv() {
-                Ok(Ok(next)) => {
-                    self.buf = next;
-                    self.at = 0;
-                    if self.buf.is_empty() {
-                        continue;
-                    }
-                }
-                Ok(Err(e)) => return Err(e),
-                Err(_) => return Ok(0),
-            }
-        }
-    }
+fn xz_reader_limited(file: File, mem_limit_kib: u32) -> impl Read {
+    lzma_rust2::XzReader::new_mem_limit(BufReader::new(file), true, mem_limit_kib)
 }
 
 fn read_head_of<R: Read>(reader: &mut R, want: usize) -> Vec<u8> {
@@ -993,9 +918,33 @@ mod tests {
     }
 
     fn xz_bytes(plain: &[u8]) -> Vec<u8> {
-        let mut out = Vec::new();
-        lzma_rs::xz_compress(&mut &plain[..], &mut out).unwrap();
-        out
+        xz_bytes_with(plain, lzma_rust2::XzOptions::with_preset(0))
+    }
+
+    fn xz_bytes_with(plain: &[u8], options: lzma_rust2::XzOptions) -> Vec<u8> {
+        let mut writer = lzma_rust2::XzWriter::new(Vec::new(), options).unwrap();
+        writer.write_all(plain).unwrap();
+        writer.finish().unwrap()
+    }
+
+    /// Incompressible and deterministic, so a truncated stream still carries
+    /// plaintext for the first chunks.
+    fn noise(len: usize) -> Vec<u8> {
+        let mut state = 0x9E37_79B9_7F4A_7C15u64;
+        (0..len)
+            .map(|_| {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                (state >> 24) as u8
+            })
+            .collect()
+    }
+
+    fn xz_file(dir: &Path, bytes: &[u8]) -> File {
+        let path = dir.join("a.xz");
+        std::fs::write(&path, bytes).unwrap();
+        File::open(path).unwrap()
     }
 
     fn tar_xz_with(entries: &[(&str, &[u8], u32)]) -> Vec<u8> {
@@ -1025,6 +974,67 @@ mod tests {
         let head = crate::extract::read_head(&plain).unwrap();
         assert!(!TarXzExtractor.detect(&plain, &head));
         assert!(XzFileExtractor.detect(&plain, &head));
+    }
+
+    #[test]
+    fn xz_plaintext_arrives_before_the_stream_ends() {
+        let plain = noise(2 << 20);
+        let packed = xz_bytes(&plain);
+        let dir = tempfile::tempdir().unwrap();
+        // Half a block: a decoder that fills one buffer per block, as lzma-rs
+        // does, hands back nothing here, which is the memory a hostile
+        // archive would be allowed to take.
+        let file = xz_file(dir.path(), &packed[..packed.len() / 2]);
+
+        let mut got = Vec::new();
+        let result = xz_reader(file).read_to_end(&mut got);
+
+        assert!(result.is_err(), "a truncated stream must not look complete");
+        assert!(got.len() >= 256 << 10, "only {} bytes streamed", got.len());
+        assert_eq!(got, plain[..got.len()]);
+    }
+
+    #[test]
+    fn a_multi_block_xz_stream_round_trips() {
+        let plain: Vec<u8> = (0..(1u32 << 20)).map(|i| (i / 7) as u8).collect();
+        let mut options = lzma_rust2::XzOptions::with_preset(0);
+        options.set_block_size(std::num::NonZeroU64::new(300 << 10));
+        let dir = tempfile::tempdir().unwrap();
+        let file = xz_file(dir.path(), &xz_bytes_with(&plain, options));
+
+        let mut got = Vec::new();
+        xz_reader(file).read_to_end(&mut got).unwrap();
+
+        assert_eq!(got, plain);
+    }
+
+    #[test]
+    fn an_xz_stream_asking_for_more_memory_than_allowed_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        // Preset 0 uses a 256 KiB dictionary, far above this 1 KiB limit.
+        let file = xz_file(dir.path(), &xz_bytes(b"payload"));
+
+        let mut got = Vec::new();
+        let result = xz_reader_limited(file, 1).read_to_end(&mut got);
+
+        assert!(result.is_err());
+        assert!(got.is_empty());
+    }
+
+    #[test]
+    fn a_tar_xz_is_unpacked_through_the_streaming_reader() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("pkg.tar.xz");
+        std::fs::write(&src, tar_xz_with(&[("bin/tool", b"#!/bin/sh\n", 0o755)])).unwrap();
+        let dest = dir.path().join("out");
+        std::fs::create_dir(&dest).unwrap();
+
+        TarXzExtractor.extract(&src, &dest).unwrap();
+
+        assert_eq!(
+            std::fs::read(dest.join("bin/tool")).unwrap(),
+            b"#!/bin/sh\n"
+        );
     }
 
     #[test]

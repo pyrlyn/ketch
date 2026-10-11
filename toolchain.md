@@ -58,7 +58,7 @@ Project programs and direct packages from manifests.
 | libc | local (`crates/ketch-capi`) | https://github.com/rust-lang/libc | `malloc`/`free` for the strings `ketch-capi` returns, so GLib's `g_free` can release them |
 | libsqlite3-sys | local | https://crates.io/crates/libsqlite3-sys | `bundled` compiles SQLite into the binary. Linking the system one would make ketch's single-binary promise depend on what the host happens to ship, and the release builds both macOS architectures where that answer differs. |
 | libfuzzer-sys | local (`fuzz/`) | https://crates.io/crates/libfuzzer-sys | libFuzzer targets |
-| lzma-rs | local | https://crates.io/crates/lzma-rs | Rust dependency |
+| lzma-rust2 | local | https://crates.io/crates/lzma-rust2 | Streaming xz decoder (and the xz test encoder) |
 | octocrab | local | https://crates.io/crates/octocrab | `ketch registry push` talks to GitHub through octocrab rather than the ureq client the sources use: it needs forks, refs, contents and pull requests, which octocrab already types and paginates. It is async, hence tokio for a runtime to block on; everything else in ketch stays synchronous. |
 | pathdiff | local | https://crates.io/crates/pathdiff | Relative path between two paths |
 | predicates | local | https://crates.io/crates/predicates | Rust dependency |

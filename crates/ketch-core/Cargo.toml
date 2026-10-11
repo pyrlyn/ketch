@@ -34,7 +34,8 @@ flate2 = "1"
 bzip2 = "0.6"
 tar = "0.4"
 zip = { version = "8", default-features = false, features = ["deflate"] }
-lzma-rs = "0.3"
+# Pure-Rust xz decoder that streams; `lzma-rs` buffers a whole block.
+lzma-rust2 = { version = "0.22", default-features = false, features = ["std", "xz"] }
 walkdir = "2"
 semver = "1"
 tempfile = "3"
@@ -70,6 +71,8 @@ insta = "1.48"
 pretty_assertions = "1.4.1"
 proptest = "1.11"
 rstest = "0.26"
+# The encoder builds the .xz fixtures; the shipped binary only decodes.
+lzma-rust2 = { version = "0.22", default-features = false, features = ["std", "xz", "encoder"] }
 # Only the schema drift tests use it; the derives are `cfg_attr(test, ...)`.
 schemars = "1.2"
 # Checks that the files ketch ships validate against the schemas it publishes.
