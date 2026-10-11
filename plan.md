@@ -57,7 +57,6 @@ Not added: the brand move is done (`brand/build.mjs` already uses `@pyrlyn/brand
 | D17 | todo | P3 | 4 | 0% | |
 | D18 | todo | P3 | 3 | 0% | |
 | D19 | todo | P3 | 4 | 0% | |
-| B74 | in progress | P3 | 3 | 0% | Claude Code / sonnet-5.5 |
 | R12 | todo | P3 | 1 | 0% | |
 
 ### Ketch audit
@@ -437,18 +436,6 @@ Rules decided here:
 - Bin paths and asset patterns have the version replaced by `*`, so the manifest keeps matching after the next release.
 
 Status: steps 1–6 landed in #215. `docs/ru` and `docs/uk` translate the user-facing docs, including `ketch import`. Still open for the creator: `serde-saphyr`'s MSRV is 1.89, above the declared 1.86. A cask `binary` whose source starts with `$APPDIR` stays inside the app bundle; `kind = "app"` places the bundle and links nothing.
-
-### B74. xz archives decompress entirely into memory
-
-`crates/ketch-core/src/extract/archive.rs:400-409`: `TarXzExtractor` does `xz_decompress` into a `Vec` before tar parsing; a hostile multi-GB `.tar.xz` (checksum-valid, same publisher) is a memory-exhaustion DoS during extraction. The gz/bz2 paths already stream via `lzma-rs` readers. Done means: the xz path streams like the others. Related doc note: the plugin protocol v1 has no checksum channel at all (`source/plugin.rs:125-191` never overrides `Source::checksums`) — state the TOFU limitation in `docs/PLUGINS.md` if not already there.
-
-Execution plan:
-
-1. Finding: `xz_reader` already hands tar a `Read`, but `lzma_rs::xz_decompress` decodes each xz block into one `Vec` before writing it (`decode/xz.rs`, `read_block`), and a default `xz` file is one block, so the whole archive is still held in memory. The channel thread only hides that.
-2. Replace `xz_reader`, `ChannelRead`/`ChannelWrite` and `xz_inner_head`'s `CapWrite` with `lzma_rust2::XzReader` (pure Rust, true streaming), with `new_mem_limit` so a hostile dictionary size is refused before it is allocated. Add `lzma-rust2` to `crates/ketch-core/Cargo.toml`; keep `lzma-rs` only if the tests still need its encoder. Rows in `toolchain.md` and the shared `rust.md`.
-3. Tests in `archive.rs`: tar.xz and lone .xz round trips through the new reader, a multi-block stream, a dictionary over the limit is rejected, and the head sniff reads only a prefix.
-4. `docs/PLUGINS.md`, `docs/ru/PLUGINS.md`, `docs/uk/PLUGINS.md`: state that protocol v1 has no checksum channel; run `bash tests/docs-i18n.sh`.
-5. Gate: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo nextest run --workspace --locked`, commitlint.
 
 ### R12. Consolidate duplicated helpers
 

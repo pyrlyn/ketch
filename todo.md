@@ -19,5 +19,4 @@
 - D17. Linux: the app on the real core
 - D18. Linux: notifications, background and autostart
 - D19. Linux: packaging and release
-- B74. xz archives decompress entirely into memory
 - R12. Consolidate duplicated helpers
