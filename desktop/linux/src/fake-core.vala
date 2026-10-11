@@ -48,6 +48,12 @@ namespace KetchApp {
             return all.steal ();
         }
 
+        /* The operation `scenario` answers, or null for a name that is not one. */
+        public string? operation_of (string scenario) {
+            var found = scenarios[scenario];
+            return found == null ? null : found.operation;
+        }
+
         /* Answers every later call of `scenario`'s operation from it; null goes back to the default. */
         public void play (string operation, string? scenario) {
             lock (playing) {

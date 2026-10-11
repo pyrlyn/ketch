@@ -20,6 +20,11 @@ namespace KetchApp {
                     resource_base_path: "/io/github/pyrlyn/Ketch");
         }
 
+        public override void startup () {
+            base.startup ();
+            set_accels_for_action ("win.preferences", { "<Control>comma" });
+        }
+
         public override void activate () {
             if (active_window != null) {
                 active_window.present ();

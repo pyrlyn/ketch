@@ -229,6 +229,7 @@ void playing_a_scenario_replaces_what_the_fake_answers_until_cleared () {
     core.play ("upgrade", null);
     assert (ok (core.upgrade ({}, null, null, null, null)).get_array ().get_length () == 1);
     assert ("install-ok" in core.names ());
+    assert (core.operation_of ("upgrade-stops-processes") == "upgrade" && core.operation_of ("nope") == null);
 }
 
 void uninstall_removes_the_names_asked_for () {

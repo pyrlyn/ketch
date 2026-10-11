@@ -9,14 +9,17 @@
  */
 namespace KetchApp {
     delegate Gtk.Widget RowFunc (Object item);
-    delegate void Clicked ();
+    public delegate void Clicked ();
+    delegate void Answer (string response);
 
     [GtkTemplate (ui = "/io/github/pyrlyn/Ketch/window.ui")]
     public class Window : Adw.ApplicationWindow {
+        [GtkChild] unowned Adw.ToastOverlay toasts;
         [GtkChild] unowned Adw.NavigationSplitView split_view;
         [GtkChild] unowned Adw.NavigationPage content_page;
         [GtkChild] unowned Adw.NavigationView nav;
         [GtkChild] unowned Adw.NavigationPage section_page;
+        [GtkChild] unowned Adw.Banner banner;
         [GtkChild] unowned Gtk.Stack sections;
         [GtkChild] unowned Gtk.Label updates_badge;
         [GtkChild] unowned Gtk.Stack installed_state;
@@ -33,6 +36,9 @@ namespace KetchApp {
         [GtkChild] unowned Gtk.ListBox findings_list;
 
         public Store store { get; construct; }
+        /* The question the core is waiting on, closed if the store stops waiting first. */
+        Adw.AlertDialog? question;
+        Preferences? preferences;
 
         public Window (Adw.Application app, Store store) {
             Object (application: app, store: store);
@@ -87,6 +93,28 @@ namespace KetchApp {
                 updates_badge.visible = n > 0;
             });
             store.notify["activity"].connect (follow_activity);
+            store.notify["activity"].connect (update_banner);
+            store.notify["busy"].connect (update_banner);
+            store.notify["error-message"].connect (show_error);
+            store.notify["pending-choice"].connect (ask_choice);
+            store.notify["pending-stop"].connect (ask_stop);
+            store.finished.connect ((title) => toasts.add_toast (new Adw.Toast (_("%s: done").printf (title))));
+            banner.button_clicked.connect (() => {
+                if (store.busy != null) {
+                    store.retry_busy ();
+                } else {
+                    store.cancel ();
+                }
+            });
+            var show_preferences = new SimpleAction ("preferences", null);
+            show_preferences.activate.connect (() => {
+                // Kept, so the scenario pickers still show what the fake is playing.
+                if (preferences == null) {
+                    preferences = new Preferences (store.core);
+                }
+                preferences.present (this);
+            });
+            add_action (show_preferences);
 
             store.search.begin ("");
             store.run_doctor.begin ();
@@ -125,6 +153,96 @@ namespace KetchApp {
             });
         }
 
+        /* The held lock wins the banner over the running operation: Retry is the only way on. */
+        void update_banner () {
+            if (store.busy != null) {
+                banner.title = store.busy.message;
+                banner.button_label = _("_Retry");
+            } else if (store.activity != null) {
+                banner.title = store.activity.title;
+                banner.button_label = _("_Cancel");
+            }
+            banner.revealed = store.busy != null || store.activity != null;
+        }
+
+        void show_error () {
+            var message = store.error_message;
+            if (message == null) {
+                return;
+            }
+            var alert = new Adw.AlertDialog (_("Something Went Wrong"), message);
+            alert.add_response ("close", _("_Close"));
+            alert.response.connect (() => store.error_message = null);
+            alert.present (this);
+        }
+
+        /* Asks before `then`; the cancel response is the default way out. */
+        public void confirm (string heading, string body, string label, Adw.ResponseAppearance look, owned Clicked then) {
+            var alert = new Adw.AlertDialog (heading, body);
+            alert.add_response ("cancel", _("_Cancel"));
+            alert.add_response ("go", label);
+            alert.set_response_appearance ("go", look);
+            alert.close_response = "cancel";
+            alert.response.connect ((response) => {
+                if (response == "go") {
+                    then ();
+                }
+            });
+            alert.present (this);
+        }
+
+        void ask_choice () {
+            var choice = store.pending_choice;
+            if (choice == null) {
+                close_question ();
+                return;
+            }
+            var alert = new Adw.AlertDialog (_("Which Binary?"),
+                                             _("%s ships several binaries. Choose the one to link onto PATH.").printf (choice.package));
+            for (var i = 0; i < choice.candidates.length; i++) {
+                alert.add_response (i.to_string (), choice.candidates[i]);
+            }
+            // Declining is not cancelling: ketch goes on and links by its own rules.
+            alert.add_response ("decline", _("_Let ketch Decide"));
+            alert.close_response = "decline";
+            ask (alert, (response) => store.answer_choice (response == "decline" ? -1 : int64.parse (response)));
+        }
+
+        void ask_stop () {
+            var stop = store.pending_stop;
+            if (stop == null) {
+                close_question ();
+                return;
+            }
+            var alert = new Adw.AlertDialog (_("Stop Running Processes?"),
+                                             _("These are using files the update replaces:\n%s").printf (string.joinv ("\n", stop.holders)));
+            alert.add_response ("keep", _("_Keep Running"));
+            alert.add_response ("stop", _("_Stop Them"));
+            alert.set_response_appearance ("stop", Adw.ResponseAppearance.DESTRUCTIVE);
+            alert.close_response = "keep";
+            ask (alert, (response) => store.answer_stop (response == "stop"));
+        }
+
+        void ask (Adw.AlertDialog alert, owned Answer answer) {
+            close_question ();
+            question = alert;
+            alert.response.connect ((response) => {
+                if (question == alert) {
+                    question = null;
+                    answer (response);
+                }
+            });
+            alert.present (this);
+        }
+
+        void close_question () {
+            var open = question;
+            question = null;
+            if (open != null) {
+                open.force_close ();
+            }
+        }
+
         static string level_icon (LogLevel level) {
             switch (level) {
             case LogLevel.SUCCESS: return "emblem-ok-symbolic";
@@ -156,12 +274,8 @@ namespace KetchApp {
 
         [GtkCallback]
         void on_update_all () {
-            store.upgrade.begin ({});
-        }
-
-        [GtkCallback]
-        void on_cancel () {
-            store.cancel ();
+            confirm (_("Update All Packages?"), _("Every package with a newer release is upgraded; held packages stay."),
+                     _("_Update All"), Adw.ResponseAppearance.SUGGESTED, () => store.upgrade.begin ({}));
         }
 
         [GtkCallback]

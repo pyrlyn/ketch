@@ -44,11 +44,13 @@ gtk_dep = dependency('gtk4', version: '>= 4.20', required: get_option('gui'))
 adw_dep = dependency('libadwaita-1', version: '>= 1.8', required: get_option('gui'))
 if gtk_dep.found() and adw_dep.found()
   gnome = import('gnome')
+  fs = import('fs')
   subdir('data')
   executable(
     'ketch-app',
     'src/application.vala',
     'src/window.vala',
+    'src/preferences.vala',
     resources,
     dependencies: [app_core_dep, gtk_dep, adw_dep],
     c_args: ['-DKETCH_SCENARIOS_DIR="@0@"'.format(scenarios), '-DGETTEXT_PACKAGE="ketch"'],

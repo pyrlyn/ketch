@@ -17,10 +17,13 @@ blueprints = custom_target(
   env: {'PYTHONPATH': meson.project_source_root() / 'subprojects' / 'blueprint-compiler'},
 )
 
+# A copy, not a second source: desktop/design/build.mjs owns the tokens.
+tokens_css = fs.copyfile('..' / '..' / 'design' / 'generated' / 'ketch-tokens.css', 'tokens.css')
+
 resources = gnome.compile_resources(
   'ketch-resources',
   'ketch.gresource.xml',
-  source_dir: meson.current_build_dir(),
-  dependencies: blueprints,
+  source_dir: [meson.current_build_dir(), meson.current_source_dir()],
+  dependencies: [blueprints, tokens_css],
   c_name: 'ketch',
 )
