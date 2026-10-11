@@ -58,6 +58,7 @@ choice was made.
 | `sha256` | of that file |
 | `pinned` | whether the package was held at this version |
 | `bin` | the binary chosen when the release ships several sharing the package's name, as a file name (`rtok-cli`); `ketch sync` repeats that choice without asking — see the `bin` section of [MANIFESTS.md](MANIFESTS.md) |
+| `published` | for a package on a floating tag that is not a version (`nightly`), when the locked build was published; written only for such packages |
 
 ## What is reproducible, and what is not
 
@@ -76,6 +77,13 @@ machine cannot run. So:
   it against the checksum the source publishes, as a normal install does.
   Pretending the recorded hash still applied would be a guarantee that quietly
   is not one.
+- A floating tag (`nightly`, `dev`) is republished under the same name, so the
+  tag alone does not hold a build still. On the recording target the hash
+  already pins it. On any other machine `sync` compares `published` with when
+  the build the tag names now was published, and refuses a later one before
+  anything is downloaded; run `ketch lock` again to accept it. A source that
+  does not say when a release was published leaves only the hash, on the
+  recording target.
 
 **A `local:` package is reproducible only where its path is.** The lock records
 the absolute path it was installed from and the hash of what was there — the
@@ -135,6 +143,7 @@ lands*.
 | a `sha256` that is not 64 hex characters | it is compared against a real digest |
 | a `bin` that is empty or not usable verbatim as one file name | it names a file in the release; a value with a path separator, `..` or control characters cannot |
 | an empty `tag` | there is nothing to resolve |
+| a `published` that is blank or holds anything but printable ASCII | it is printed in the error that names a moved tag |
 | a `target` ketch does not recognise | it silently turns the entry into a cross-target one, so the recorded asset and hash stop applying and a hash that drifted under the tag reads as clean |
 | an unknown key | a misspelt key that is silently ignored locks something other than what you wrote |
 | a `version` newer than this ketch understands | upgrade with `ketch self upgrade` |

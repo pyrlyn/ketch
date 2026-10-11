@@ -9,16 +9,17 @@
 //! rather than a failed command, one release lookup serves every row that
 //! shares a source — and those rules want unit tests with no binary in the way.
 //!
-//! The lookup itself is not new: it is `install::latest_of`, the call behind
-//! `ketch outdated`, with the prerelease rules `install` and `resolve` already
-//! apply. What this module adds is running it for many packages at once,
-//! remembering the answers for a few minutes, and deciding what a row says.
+//! The lookup itself is not new: it is `install::release_of`, the call behind
+//! `ketch outdated`, and whether its answer is an update is
+//! `install::is_upgrade`, the rule `outdated` applies. What this module adds is
+//! running the lookup for many packages at once, remembering the answers for a
+//! few minutes, and deciding what a row says.
 
 use crate::config::Config;
 use crate::error::{Error, Result};
-use crate::install;
+use crate::install::{self, InstalledBuild};
 use crate::manifest::same_source;
-use crate::model::{normalize_name, now_unix, InstalledPackage, Manifest, PackageRef, Version};
+use crate::model::{normalize_name, now_unix, InstalledPackage, Manifest, PackageRef, Release};
 use crate::report::{Ctx, Report};
 use crate::source::{ListOpts, SourceRegistry};
 use serde::{Deserialize, Serialize};
@@ -37,6 +38,11 @@ pub const CACHE_TTL_SECS: u64 = 10 * 60;
 /// The cache file, under the ketch cache directory.
 const CACHE_FILE: &str = "latest.json";
 
+/// The shape of the cache file. A file without it, or with another number, is
+/// from a ketch that keyed or recorded its answers differently, and is read as
+/// empty rather than misread.
+const CACHE_FORMAT: u32 = 2;
+
 /// What the `installed` column says after the version when the update is held.
 pub const PINNED: &str = "(pinned)";
 
@@ -51,31 +57,48 @@ pub const UNKNOWN: &str = "?";
 pub struct Local {
     pub name: String,
     pub source: PackageRef,
-    pub version: Version,
-    pub tag: String,
+    /// What is installed, as the update rule compares it: version, tag,
+    /// channel and build.
+    pub build: InstalledBuild,
     pub pinned: bool,
-    pub retained: Vec<Version>,
+    pub retained: Vec<crate::model::Version>,
     /// Whether `latest` may be a prerelease, decided as `ketch outdated` does.
     pub prerelease: bool,
+    /// Whether `latest` may be a draft: a `draft` install, or `list --draft`.
+    pub draft: bool,
 }
 
 impl Local {
     pub fn from_installed(cfg: &Config, pkg: &InstalledPackage) -> Local {
+        let opts = install::upgrade_opts(pkg, cfg.prerelease, false);
         Local {
             name: pkg.name.clone(),
             source: pkg.source.clone(),
-            version: pkg.version.clone(),
-            tag: pkg.tag.clone(),
+            build: InstalledBuild::of(pkg),
             pinned: pkg.pinned,
             retained: pkg.retained.iter().map(|r| r.version.clone()).collect(),
-            prerelease: install::installed_list_opts(pkg, cfg.prerelease).include_prerelease,
+            prerelease: opts.include_prerelease,
+            draft: opts.include_draft,
+        }
+    }
+
+    /// The options this package's `latest` is looked up with.
+    fn list_opts(&self) -> ListOpts {
+        ListOpts {
+            include_prerelease: self.prerelease,
+            include_draft: self.draft,
+            ..Default::default()
         }
     }
 
     /// The `installed` cell: the version and the notes `ketch list local` has
-    /// always carried.
+    /// always carried. A channel other than stable follows the version, since
+    /// it says where the next version will come from.
     pub fn cell(&self) -> String {
-        let mut cell = self.version.to_string();
+        let mut cell = self.build.version.to_string();
+        if !self.build.channel.is_stable() {
+            cell.push_str(&format!(" ({})", self.build.channel.as_str()));
+        }
         if self.pinned {
             cell.push(' ');
             cell.push_str(PINNED);
@@ -108,11 +131,28 @@ impl Available {
     }
 }
 
-/// The newest release a lookup found.
+/// The release a lookup found, kept to what the update rule reads: notes are
+/// dropped, and assets are kept, as names and digests, only for a floating
+/// tag, where they are how a new build is told from the installed one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Found {
-    pub version: Version,
-    pub tag: String,
+    pub release: Release,
+}
+
+impl Found {
+    pub fn new(mut release: Release, keep_assets: bool) -> Found {
+        release.notes = None;
+        if keep_assets {
+            for asset in &mut release.assets {
+                asset.url.clear();
+                asset.headers.clear();
+                asset.content_type = None;
+            }
+        } else {
+            release.assets.clear();
+        }
+        Found { release }
+    }
 }
 
 /// The `latest` of one row.
@@ -126,19 +166,41 @@ pub enum Latest {
     Unreachable,
 }
 
-/// One source asked for its newest release, with or without prereleases.
+/// One source asked for its newest release — with or without prereleases and
+/// drafts — or, for a package on a floating tag, for that tag again.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Lookup {
     pub source: PackageRef,
     pub prerelease: bool,
+    pub draft: bool,
+    /// The floating tag a `dev` install follows.
+    pub tag: Option<String>,
 }
 
 impl Lookup {
-    /// The cache key. The prerelease flag is part of it: the same repository
-    /// has a different `latest` for someone who opted into prereleases.
+    /// The cache key. Everything that changes the answer is part of it: the
+    /// same repository has a different `latest` for someone who opted into
+    /// prereleases or drafts, and a floating tag is a question of its own.
     fn key(&self) -> String {
-        let channel = if self.prerelease { "pre" } else { "stable" };
+        if let Some(tag) = &self.tag {
+            return format!("{}@{tag}#dev", self.source);
+        }
+        let channel = if self.draft {
+            "draft"
+        } else if self.prerelease {
+            "pre"
+        } else {
+            "stable"
+        };
         format!("{}#{channel}", self.source)
+    }
+
+    fn opts(&self) -> ListOpts {
+        ListOpts {
+            include_prerelease: self.prerelease,
+            include_draft: self.draft,
+            ..Default::default()
+        }
     }
 }
 
@@ -181,9 +243,14 @@ impl Row {
 
     /// The lookup that answers this row's `latest`, if it has one.
     pub fn lookup(&self) -> Option<Lookup> {
-        let (source, prerelease) = match (&self.local, &self.available) {
-            (Some(l), _) => (&l.source, l.prerelease),
-            (None, Some(a)) => (&a.source, a.prerelease),
+        let (source, prerelease, draft, tag) = match (&self.local, &self.available) {
+            (Some(l), _) => (
+                &l.source,
+                l.prerelease,
+                l.draft,
+                l.build.followed_tag().map(str::to_string),
+            ),
+            (None, Some(a)) => (&a.source, a.prerelease, false, None),
             (None, None) => return None,
         };
         // A local path has no release stream, and its synthetic tag is not an
@@ -192,14 +259,27 @@ impl Row {
         (source.scheme != "local").then(|| Lookup {
             source: source.clone(),
             prerelease,
+            draft,
+            tag,
         })
     }
 
-    pub fn update_available(&self) -> bool {
+    /// Whether `latest` should replace what is installed, the pin aside:
+    /// `install::is_upgrade`, the rule `ketch outdated` applies, so the two
+    /// never disagree. `report` hears a draft that is gone.
+    pub fn newer(&self, report: &Report) -> bool {
         match (&self.local, &self.latest) {
-            (Some(local), Latest::Found(found)) => update_available(local, found),
+            (Some(local), Latest::Found(found)) => {
+                install::is_upgrade(report, &local.build, &found.release, &local.list_opts())
+            }
             _ => false,
         }
+    }
+
+    /// Whether the row offers an update: a newer release, and no pin holding
+    /// it back.
+    pub fn update_available(&self) -> bool {
+        self.local.as_ref().is_some_and(|l| !l.pinned) && self.newer(&Report::silent())
     }
 
     /// The `latest` cell: a version, a version marked as an update, `?`, or
@@ -207,9 +287,9 @@ impl Row {
     pub fn latest_cell(&self) -> String {
         match &self.latest {
             Latest::Found(found) if self.update_available() => {
-                format!("{} {UPDATE}", found.version)
+                format!("{} {UPDATE}", found.release.version)
             }
-            Latest::Found(found) => found.version.to_string(),
+            Latest::Found(found) => found.release.version.to_string(),
             Latest::Unreachable => UNKNOWN.to_string(),
             Latest::NotChecked => String::new(),
         }
@@ -217,28 +297,37 @@ impl Row {
 
     pub fn latest_version(&self) -> Option<String> {
         match &self.latest {
-            Latest::Found(found) => Some(found.version.to_string()),
+            Latest::Found(found) => Some(found.release.version.to_string()),
             _ => None,
         }
     }
 }
 
-/// Whether `found` is an update to offer for `local`.
+/// Let every row's `latest` be a prerelease: `ketch list --pre`.
 ///
-/// The rules `ketch outdated` and `ketch upgrade` use: a pinned package is
-/// never offered one, a source still reporting the installed tag is current
-/// however its version string parses, and only a strictly newer version
-/// counts. A prerelease counts only when the package's lookup allowed
-/// prereleases — a source or plugin that returns one it was not asked for
-/// must not talk a stable install into it.
-pub fn update_available(local: &Local, found: &Found) -> bool {
-    if local.pinned || found.tag == local.tag {
-        return false;
+/// Applied to the rows rather than to the config because a row is what decides
+/// its lookup and its cache key, and the flag is part of both already.
+pub fn include_prereleases(rows: &mut [Row]) {
+    for row in rows {
+        if let Some(local) = &mut row.local {
+            local.prerelease = true;
+        }
+        if let Some(available) = &mut row.available {
+            available.prerelease = true;
+        }
     }
-    if found.version.is_prerelease() && !local.prerelease {
-        return false;
+}
+
+/// Let installed rows' `latest` be a draft: `ketch list --draft`.
+///
+/// Installed rows only: a draft is visible only with push access to the
+/// repository, which a registry listing of other people's packages would
+/// nearly always lack, turning every row into a `?`.
+pub fn include_drafts(rows: &mut [Row]) {
+    for local in rows.iter_mut().filter_map(|row| row.local.as_mut()) {
+        local.draft = true;
+        local.prerelease = true;
     }
-    found.version > local.version
 }
 
 /// Installed and available packages as one list, one row per package, sorted
@@ -361,6 +450,9 @@ pub fn fill_latest(cx: &Ctx<'_>, sources: &SourceRegistry, rows: &mut [Row]) -> 
                 Some(found) => Latest::Found(found.clone()),
                 None => Latest::Unreachable,
             };
+            // Decided once here so that a draft that is gone is said once,
+            // however many times the row is rendered afterwards.
+            row.newer(cx.report);
         }
     }
     Outcome {
@@ -412,14 +504,13 @@ fn ask_all(
                 let Some((key, lookup)) = stale.get(i) else {
                     return;
                 };
-                let opts = ListOpts {
-                    include_prerelease: lookup.prerelease,
-                    ..Default::default()
-                };
-                let result = install::latest_of(sources, &lookup.source, &opts).map(|r| Found {
-                    version: r.version,
-                    tag: r.tag,
-                });
+                let result = install::release_of(
+                    sources,
+                    &lookup.source,
+                    lookup.tag.as_deref(),
+                    &lookup.opts(),
+                )
+                .map(|r| Found::new(r, lookup.tag.is_some()));
                 counter.inc();
                 done.lock()
                     .unwrap_or_else(|e| e.into_inner())
@@ -437,31 +528,29 @@ fn cache_path(cfg: &Config) -> PathBuf {
 /// Answers from earlier listings, keyed by [`Lookup::key`].
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct Cache {
+    /// [`CACHE_FORMAT`] when written; absent from files that predate it.
+    #[serde(default)]
+    format: u32,
     #[serde(default)]
     entries: BTreeMap<String, CacheEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CacheEntry {
-    version: Version,
-    tag: String,
+    found: Found,
     checked_at: u64,
 }
 
 impl CacheEntry {
     fn new(found: &Found, now: u64) -> CacheEntry {
         CacheEntry {
-            version: found.version.clone(),
-            tag: found.tag.clone(),
+            found: found.clone(),
             checked_at: now,
         }
     }
 
     fn found(&self) -> Found {
-        Found {
-            version: self.version.clone(),
-            tag: self.tag.clone(),
-        }
+        self.found.clone()
     }
 
     /// Fresh for [`CACHE_TTL_SECS`]. A timestamp from the future — a clock
@@ -478,10 +567,25 @@ impl Cache {
         let Ok(text) = std::fs::read_to_string(path) else {
             return Cache::default();
         };
-        serde_json::from_str(&text).unwrap_or_else(|e| {
-            report.debug(&format!("ignoring {}: {e}", path.display()));
+        Cache::parse(&text).unwrap_or_else(|why| {
+            report.debug(&format!("ignoring {}: {why}", path.display()));
             Cache::default()
         })
+    }
+
+    fn parse(text: &str) -> std::result::Result<Cache, String> {
+        // The format is read on its own first: an older file's entries need
+        // not parse as today's for the file to be recognised and set aside.
+        #[derive(Deserialize)]
+        struct Format {
+            #[serde(default)]
+            format: u32,
+        }
+        let Format { format } = serde_json::from_str(text).map_err(|e| e.to_string())?;
+        if format != CACHE_FORMAT {
+            return Err(format!("cache format {format}, not {CACHE_FORMAT}"));
+        }
+        serde_json::from_str(text).map_err(|e| e.to_string())
     }
 
     fn expire(&mut self, now: u64) {
@@ -501,8 +605,11 @@ impl Cache {
             .parent()
             .ok_or_else(|| Error::msg("cache path has no parent"))?;
         std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
-        let text =
-            serde_json::to_string(self).map_err(|e| Error::parse("latest cache", e.to_string()))?;
+        let text = serde_json::to_string(&Cache {
+            format: CACHE_FORMAT,
+            entries: self.entries.clone(),
+        })
+        .map_err(|e| Error::parse("latest cache", e.to_string()))?;
         let staged = tempfile::NamedTempFile::new_in(dir).map_err(|e| Error::io(dir, e))?;
         std::fs::write(staged.path(), text).map_err(|e| Error::io(staged.path(), e))?;
         staged.persist(path).map_err(|e| Error::io(path, e.error))?;
@@ -605,17 +712,27 @@ pub fn remote_cells(rows: &[Row], width: Option<usize>) -> Vec<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::{Channel, Version};
     use pretty_assertions::assert_eq;
 
     fn local(name: &str, version: &str) -> Local {
         Local {
             name: name.to_string(),
             source: PackageRef::new("test", name),
-            version: Version::parse(version),
-            tag: format!("v{version}"),
+            build: InstalledBuild {
+                name: name.to_string(),
+                version: Version::parse(version),
+                tag: format!("v{version}"),
+                channel: Channel::Stable,
+                draft: false,
+                asset_name: "a.tar.gz".into(),
+                sha256: "0".repeat(64),
+                published_at: None,
+            },
             pinned: false,
             retained: Vec::new(),
             prerelease: false,
+            draft: false,
         }
     }
 
@@ -628,11 +745,33 @@ mod tests {
         }
     }
 
-    fn found(version: &str) -> Found {
-        Found {
-            version: Version::parse(version),
-            tag: format!("v{version}"),
+    fn release(tag: &str) -> Release {
+        Release {
+            version: Version::parse(tag),
+            tag: tag.to_string(),
+            prerelease: false,
+            draft: false,
+            published_at: None,
+            notes: None,
+            assets: Vec::new(),
         }
+    }
+
+    fn found(version: &str) -> Found {
+        Found::new(
+            Release {
+                version: Version::parse(version),
+                ..release(&format!("v{version}"))
+            },
+            false,
+        )
+    }
+
+    /// Whether a row for `local` offers `found` as an update.
+    fn update_available(local: &Local, found: &Found) -> bool {
+        let mut rows = merge(vec![local.clone()], vec![]);
+        rows[0].latest = Latest::Found(found.clone());
+        rows[0].update_available()
     }
 
     fn names(rows: &[Row]) -> Vec<&str> {
@@ -695,7 +834,9 @@ mod tests {
             gamma.lookup(),
             Some(Lookup {
                 source: PackageRef::github("owner/gamma"),
-                prerelease: false
+                prerelease: false,
+                draft: false,
+                tag: None,
             })
         );
     }
@@ -734,7 +875,9 @@ mod tests {
             rows[0].lookup(),
             Some(Lookup {
                 source: PackageRef::new("test", "alpha-fork"),
-                prerelease: true
+                prerelease: true,
+                draft: false,
+                tag: None,
             })
         );
     }
@@ -752,7 +895,7 @@ mod tests {
     #[test]
     fn the_installed_tag_is_not_an_update_however_its_version_parses() {
         let mut odd = found("1.0.1");
-        odd.tag = "v1.0.0".into();
+        odd.release.tag = "v1.0.0".into();
         assert!(!update_available(&local("alpha", "1.0.0"), &odd));
     }
 
@@ -792,12 +935,34 @@ mod tests {
         let stable = Lookup {
             source: PackageRef::new("test", "alpha"),
             prerelease: false,
+            draft: false,
+            tag: None,
         };
         let pre = Lookup {
             prerelease: true,
             ..stable.clone()
         };
         assert_ne!(stable.key(), pre.key());
+    }
+
+    #[test]
+    fn the_installed_cell_names_a_channel_other_than_stable() {
+        let mut pkg = local("alpha", "1.0.0-rc.1");
+        assert_eq!(pkg.cell(), "1.0.0-rc.1");
+        pkg.build.channel = Channel::Pre;
+        pkg.pinned = true;
+        assert_eq!(pkg.cell(), "1.0.0-rc.1 (pre) (pinned)");
+    }
+
+    #[test]
+    fn asking_for_prereleases_widens_installed_and_offered_rows_alike() {
+        let mut rows = merge(vec![local("alpha", "1.0.0")], vec![offer("bravo")]);
+        include_prereleases(&mut rows);
+        assert!(rows
+            .iter()
+            .all(|r| r.lookup().is_some_and(|l| l.prerelease)));
+        rows[0].latest = Latest::Found(found("1.1.0-rc.1"));
+        assert!(rows[0].update_available());
     }
 
     #[test]
@@ -915,5 +1080,126 @@ mod tests {
         assert!(!cells[0][2].contains('\n'));
         let whole = remote_cells(&rows, None);
         assert_eq!(whole[0][2], "a very long [31mdescription that goes on");
+    }
+
+    fn nightly(published_at: &str, digest: Option<&str>) -> Found {
+        Found::new(
+            Release {
+                published_at: Some(published_at.into()),
+                assets: vec![crate::model::ReleaseAsset {
+                    name: "a.tar.gz".into(),
+                    url: "https://example.invalid/a.tar.gz".into(),
+                    size: 1,
+                    content_type: None,
+                    digest: digest.map(|hex| crate::model::Checksum {
+                        algo: "sha256".into(),
+                        hex: hex.into(),
+                    }),
+                    headers: Default::default(),
+                }],
+                ..release("nightly")
+            },
+            true,
+        )
+    }
+
+    fn dev(published_at: &str) -> Local {
+        let mut dev = local("nvim", "0.12.0-dev");
+        dev.build.tag = "nightly".into();
+        dev.build.channel = Channel::Dev;
+        dev.build.published_at = Some(published_at.into());
+        dev
+    }
+
+    #[test]
+    fn a_dev_build_republished_under_its_tag_is_an_update() {
+        let dev = dev("2026-01-01T00:00:00Z");
+        assert!(update_available(
+            &dev,
+            &nightly("2026-02-01T00:00:00Z", None)
+        ));
+        assert!(!update_available(
+            &dev,
+            &nightly("2026-01-01T00:00:00Z", None)
+        ));
+        assert!(update_available(
+            &dev,
+            &nightly("2026-01-01T00:00:00Z", Some(&"1".repeat(64)))
+        ));
+        assert!(!update_available(
+            &dev,
+            &nightly("2026-02-01T00:00:00Z", Some(&"0".repeat(64)))
+        ));
+    }
+
+    #[test]
+    fn a_dev_lookup_follows_its_own_tag_and_keeps_the_assets_it_compares() {
+        let rows = merge(vec![dev("2026-01-01T00:00:00Z")], vec![]);
+        let lookup = rows[0].lookup().expect("a lookup");
+        assert_eq!(lookup.tag.as_deref(), Some("nightly"));
+        assert_eq!(lookup.key(), "test:nvim@nightly#dev");
+        let kept = nightly("2026-01-01T00:00:00Z", None);
+        assert_eq!(kept.release.assets[0].url, "");
+        assert_eq!(kept.release.assets[0].name, "a.tar.gz");
+        assert!(found("1.0.0").release.assets.is_empty());
+    }
+
+    #[test]
+    fn drafts_pre_and_stable_lookups_are_cached_apart() {
+        let mut rows = merge(vec![local("alpha", "1.0.0")], vec![offer("beta")]);
+        let keys = |rows: &[Row]| -> Vec<String> {
+            rows.iter()
+                .map(|r| r.lookup().expect("a lookup").key())
+                .collect()
+        };
+        assert_eq!(keys(&rows), vec!["test:alpha#stable", "test:beta#stable"]);
+        include_prereleases(&mut rows);
+        assert_eq!(keys(&rows), vec!["test:alpha#pre", "test:beta#pre"]);
+        include_drafts(&mut rows);
+        assert_eq!(keys(&rows), vec!["test:alpha#draft", "test:beta#pre"]);
+    }
+
+    #[test]
+    fn a_draft_install_is_offered_its_release_once_published() {
+        let mut held = local("alpha", "2.0.0");
+        held.build.channel = Channel::Draft;
+        held.build.draft = true;
+        held.draft = true;
+        held.prerelease = true;
+        let same_tag_published = found("2.0.0");
+        assert!(update_available(&held, &same_tag_published));
+        let still_a_draft = Found::new(
+            Release {
+                draft: true,
+                ..same_tag_published.release.clone()
+            },
+            false,
+        );
+        assert!(!update_available(&held, &still_a_draft));
+        assert!(!update_available(&held, &found("1.0.0")));
+    }
+
+    #[test]
+    fn an_unasked_prerelease_is_not_an_update() {
+        let pre = Found::new(
+            Release {
+                prerelease: true,
+                ..found("2.0.0").release
+            },
+            false,
+        );
+        let mut alpha = local("alpha", "1.0.0");
+        assert!(!update_available(&alpha, &pre));
+        alpha.prerelease = true;
+        assert!(update_available(&alpha, &pre));
+    }
+
+    #[test]
+    fn a_cache_file_of_an_older_format_is_set_aside() {
+        let entry = r#"{"found":{"version":"9.9.9","tag":"v9.9.9"},"checked_at":5}"#;
+        let old = format!(r#"{{"entries":{{"test:alpha#stable":{entry}}}}}"#);
+        assert!(Cache::parse(&old).is_err());
+        let current = format!(r#"{{"format":{CACHE_FORMAT},"entries":{{}}}}"#);
+        assert!(Cache::parse(&current).is_ok());
     }
 }

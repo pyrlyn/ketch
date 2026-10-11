@@ -373,6 +373,9 @@ mod tests {
             retained: Vec::new(),
             provenance: None,
             bin_choice: None,
+            channel: Default::default(),
+            draft: false,
+            published_at: None,
         }
     }
 
@@ -507,6 +510,7 @@ mod tests {
         assert!(pkg.trust.is_not_applicable());
         assert!(pkg.provenance.is_none());
         assert!(pkg.bin_choice.is_none());
+        assert_eq!(pkg.channel, crate::model::Channel::Stable);
         assert_eq!(pkg.publisher_trust(), "first use");
         assert_eq!(pkg.version.to_string(), "14.1.0");
     }
@@ -660,5 +664,30 @@ mod tests {
         .join()
         .unwrap();
         assert!(matches!(other, Err(Error::Busy { .. })));
+    }
+
+    #[test]
+    fn a_pre_channel_round_trips_and_stable_stays_out_of_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.json");
+        let mut state = State::default();
+        state.insert(InstalledPackage {
+            channel: crate::model::Channel::Pre,
+            ..pkg("beta")
+        });
+        state.insert(pkg("plain"));
+        state.save_path(&path).unwrap();
+
+        let written = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(written.matches("\"channel\"").count(), 1, "{written}");
+        let loaded = State::load_path(&path).unwrap();
+        assert_eq!(
+            loaded.get("beta").unwrap().channel,
+            crate::model::Channel::Pre
+        );
+        assert_eq!(
+            loaded.get("plain").unwrap().channel,
+            crate::model::Channel::Stable
+        );
     }
 }

@@ -445,4 +445,3 @@ Status: steps 1–6 landed in #215. `docs/ru` and `docs/uk` translate the user-f
 ### R12. Consolidate duplicated helpers
 
 `platform/unix.rs:46-53` and `self_update.rs:180-187` carry identical `remove_any`; `platform/unix.rs:164-170` and `platform/macos.rs:89-93` duplicate `sibling`; `source/local.rs:263-281` re-declares the GZIP/XZ/BZ2/ZIP/ustar magic constants from `extract/archive.rs:145-153`; `http.rs:60-64` keeps `Http::has_token` behind `#[allow(dead_code)]`. Done means: one implementation of each, and `has_token` is either used or gone.
-

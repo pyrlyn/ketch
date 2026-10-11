@@ -54,8 +54,8 @@ impl Kind {
 }
 
 /// Subcommands whose positional argument is a package name, and which names
-/// fit it. `why` and `info` also take names that are not installed, but the
-/// installed ones are what a user reaches for most.
+/// fit it. `why`, `info` and `releases` also take names that are not
+/// installed, but the installed ones are what a user reaches for most.
 const DYNAMIC: &[(&str, Kind)] = &[
     ("uninstall", Kind::Installed),
     ("upgrade", Kind::Installed),
@@ -64,6 +64,7 @@ const DYNAMIC: &[(&str, Kind)] = &[
     ("link", Kind::Installed),
     ("unlink", Kind::Installed),
     ("info", Kind::Installed),
+    ("releases", Kind::Installed),
     ("why", Kind::Installed),
     ("changelog", Kind::Installed),
     ("rollback", Kind::Installed),

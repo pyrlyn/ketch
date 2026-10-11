@@ -80,6 +80,12 @@ pub struct LockedPackage {
     /// same one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bin: Option<String>,
+    /// When the build was published, for a package on a floating tag
+    /// (`nightly`): the tag can be republished, and on another target, where
+    /// `sha256` names a file it never downloads, this is what still tells
+    /// the locked build from a new one. Absent for every other package.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub published: Option<String>,
 }
 
 impl LockedPackage {
@@ -94,6 +100,7 @@ impl LockedPackage {
             sha256: pkg.sha256.clone(),
             pinned: pkg.pinned,
             bin: pkg.bin_choice.clone(),
+            published: pkg.published_at.clone(),
         }
     }
 
@@ -116,7 +123,11 @@ impl LockedPackage {
             return false;
         }
         if !self.matches_target(&installed.target.to_string()) {
-            return true;
+            // A floating tag holds still only as long as its build does.
+            return match (&self.published, &installed.published_at) {
+                (Some(locked), Some(installed)) => locked == installed,
+                _ => true,
+            };
         }
         installed.sha256.eq_ignore_ascii_case(&self.sha256)
     }
@@ -211,6 +222,18 @@ impl Lockfile {
             // A binary's file name: one path component, as written. It is only
             // ever matched against files the release ships, but a value that
             // would need rewriting to be a file name cannot name one.
+            // Only ever compared, but also printed in the error that names a
+            // moved tag, so it cannot carry anything a terminal would act on.
+            if let Some(published) = &pkg.published {
+                if published.trim().is_empty()
+                    || !published.chars().all(|c| c == ' ' || c.is_ascii_graphic())
+                {
+                    return Err(Error::msg(format!(
+                        "{named} has `{}` where a publication time belongs",
+                        published.escape_debug()
+                    )));
+                }
+            }
             if let Some(bin) = &pkg.bin {
                 if bin.trim().is_empty() || sanitize_component(bin) != *bin {
                     return Err(Error::msg(format!(
@@ -360,6 +383,9 @@ mod tests {
             retained: Vec::new(),
             provenance: None,
             bin_choice: None,
+            channel: Default::default(),
+            draft: false,
+            published_at: None,
         }
     }
 
@@ -621,6 +647,54 @@ bin = \"fd\"
         assert!(parse_checked(&entry("bin = \"rtok-cli.exe\"\n")).is_ok());
     }
 
+    fn nightly(published: &str) -> InstalledPackage {
+        let mut pkg = installed("tool", "acme/tool", "nightly");
+        pkg.published_at = Some(published.to_string());
+        pkg
+    }
+
+    #[test]
+    fn a_floating_tag_records_its_build_and_nothing_else_does() {
+        let state = state_with(vec![
+            nightly("2026-10-01T00:00:00Z"),
+            installed("fd", "sharkdp/fd", "v10.2.0"),
+        ]);
+        let text = lock_of(&state).to_toml().expect("render");
+        assert_eq!(text.matches("published = ").count(), 1, "{text}");
+        let parsed = parse_checked(&text).expect("parse");
+        assert_eq!(parsed.packages, lock_of(&state).packages);
+    }
+
+    #[test]
+    fn a_floating_tag_republished_on_another_target_is_drift() {
+        let lock = lock_of(&state_with(vec![nightly("2026-10-01T00:00:00Z")]));
+        let elsewhere = |published: &str| {
+            let mut pkg = nightly(published);
+            pkg.sha256 = "b".repeat(64);
+            pkg.target.arch = match pkg.target.arch {
+                Arch::Aarch64 => Arch::X86_64,
+                Arch::X86_64 | Arch::Universal => Arch::Aarch64,
+            };
+            pkg
+        };
+        let same = plan(&lock, &state_with(vec![elsewhere("2026-10-01T00:00:00Z")]));
+        assert!(same.is_clean(false));
+        let moved = plan(&lock, &state_with(vec![elsewhere("2026-10-09T00:00:00Z")]));
+        assert_eq!(moved.changed.len(), 1);
+    }
+
+    #[test]
+    fn a_publication_time_a_terminal_could_act_on_is_refused() {
+        for bad in ["", " ", "\u{1b}[2J", "2026\u{202e}", "2026\n"] {
+            let text = entry(&format!(
+                "published = {}\n",
+                crate::toml_file::string_literal(bad)
+            ));
+            assert!(parse_checked(&text).is_err(), "{bad:?} was accepted");
+        }
+        assert!(parse_checked(&entry("published = \"2026-10-01T00:00:00Z\"\n")).is_ok());
+    }
+
     #[test]
     fn an_unknown_key_is_refused_rather_than_ignored() {
         assert!(parse_checked(&entry("surprise = true\n")).is_err());
@@ -662,6 +736,7 @@ bin = \"fd\"
                     sha256: "a".repeat(64),
                     pinned: false,
                     bin: None,
+                    published: None,
                 },
                 LockedPackage {
                     name: "ripgrep".to_string(),
@@ -673,6 +748,7 @@ bin = \"fd\"
                     sha256: "b".repeat(64),
                     pinned: true,
                     bin: None,
+                    published: None,
                 },
             ],
         };
@@ -718,6 +794,7 @@ bin = \"fd\"
                     sha256,
                     pinned,
                     bin: None,
+                    published: None,
                 });
             }
             let mut packages: Vec<LockedPackage> = by_name.into_values().collect();

@@ -13,6 +13,8 @@
 //! network, no fixtures checked into the tree, and no test that depends on
 //! somebody else's tag still existing.
 
+pub mod remote;
+
 use assert_fs::prelude::*;
 use assert_fs::TempDir;
 use std::io::Write;
@@ -474,6 +476,8 @@ pub struct Release {
     assets: Vec<Asset>,
     notes: Option<String>,
     prerelease: bool,
+    tag: Option<String>,
+    published_at: Option<String>,
 }
 
 impl Release {
@@ -483,7 +487,22 @@ impl Release {
             assets,
             notes: None,
             prerelease: false,
+            tag: None,
+            published_at: None,
         }
+    }
+
+    /// Publish under `tag` instead of `v<version>`: a floating tag such as
+    /// `nightly`, which a later publish can point at another build.
+    pub fn with_tag(mut self, tag: &str) -> Release {
+        self.tag = Some(tag.to_string());
+        self
+    }
+
+    /// When the release was published, as the forge reports it.
+    pub fn published(mut self, at: &str) -> Release {
+        self.published_at = Some(at.to_string());
+        self
     }
 
     /// Notes published alongside the release, the way a forge serves them.
@@ -504,9 +523,19 @@ impl Release {
             Some(text) => format!(r#","notes":"{}""#, json_escape(text)),
             None => String::new(),
         };
+        let tag = match &self.tag {
+            Some(tag) => tag.clone(),
+            None => format!("v{}", self.version),
+        };
+        let published = match &self.published_at {
+            Some(at) => format!(r#","published_at":"{}""#, json_escape(at)),
+            None => String::new(),
+        };
         format!(
-            r#"{{"version":"{v}","tag":"v{v}","prerelease":{pre},"draft":false{n},"assets":[{a}]}}"#,
+            r#"{{"version":"{v}","tag":"{t}","prerelease":{pre},"draft":false{p}{n},"assets":[{a}]}}"#,
             v = self.version,
+            t = json_escape(&tag),
+            p = published,
             pre = if self.prerelease { "true" } else { "false" },
             n = notes,
             a = assets.join(",")
@@ -716,4 +745,21 @@ fn shell_quote(path: &Path) -> String {
 /// The architecture token naming an asset this machine runs natively.
 pub fn host_arch() -> &'static str {
     std::env::consts::ARCH
+}
+
+/// A release asset name the host's platform picks for `pkg` at `version`.
+pub fn native_name(pkg: &str, version: &str) -> String {
+    let arch = host_arch();
+    #[cfg(target_os = "macos")]
+    {
+        format!("{pkg}-{version}-{arch}-apple-darwin.tar.gz")
+    }
+    #[cfg(target_os = "linux")]
+    {
+        format!("{pkg}-{version}-{arch}-unknown-linux-gnu.tar.gz")
+    }
+    #[cfg(target_os = "windows")]
+    {
+        format!("{pkg}-{version}-{arch}-pc-windows-msvc.zip")
+    }
 }

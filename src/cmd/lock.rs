@@ -187,6 +187,9 @@ fn request_for(cfg: &Config, entry: &LockedPackage, target: &str) -> Result<Inst
             "{}: locked on {}, re-selecting the asset for {target}",
             entry.name, entry.target
         ));
+        // Without a hash that applies here, a floating tag republished since
+        // the lock was written would install its new build unnoticed.
+        req.expected_published = entry.published.clone();
     }
     Ok(req)
 }

@@ -321,7 +321,6 @@ impl KetchCore {
                 &op.cfg,
                 pkg,
                 &upgrade.tag,
-                op.cfg.prerelease,
                 None,
                 cancel.clone(),
             ));

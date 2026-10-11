@@ -78,10 +78,12 @@ pub fn install(cfg: &Config, args: InstallArgs) -> Result<()> {
             spec: PackageSpec::parse(raw),
             force: args.force,
             prerelease: args.prerelease,
+            draft: args.draft,
             link: !args.no_link,
             require_checksum: args.require_checksum || cfg.require_checksums,
             asset_override: args.asset.clone(),
             expected_sha256: None,
+            expected_published: None,
             // --name applies to the single package being installed.
             name_override: if i == 0 { name_override.clone() } else { None },
             bin: args.bin.clone(),
@@ -279,7 +281,7 @@ pub fn upgrade(cfg: &Config, args: UpgradeArgs) -> Result<()> {
             continue;
         }
         ui::step("checking", &pkg.name);
-        let release = match install::latest_release(&sources, &pkg, prerelease) {
+        let release = match install::latest_release(&sources, &pkg, prerelease, args.draft) {
             Ok(r) => r,
             // An unreachable source for one package must not abandon the rest.
             Err(e) => {
@@ -290,9 +292,12 @@ pub fn upgrade(cfg: &Config, args: UpgradeArgs) -> Result<()> {
             }
         };
         checked += 1;
-        // Compare versions, not tags: a retagged release is not an upgrade,
-        // and neither is a source that briefly reports an older one.
-        if release.tag == pkg.tag || release.version <= pkg.version {
+        if !install::is_upgrade(
+            crate::ui::report(),
+            &install::InstalledBuild::of(&pkg),
+            &release,
+            &install::upgrade_opts(&pkg, prerelease, args.draft),
+        ) {
             progress.inc(1);
             continue;
         }
@@ -354,14 +359,7 @@ pub fn upgrade(cfg: &Config, args: UpgradeArgs) -> Result<()> {
     let reqs: Vec<InstallRequest> = plan
         .iter()
         .map(|(pkg, release)| {
-            install::upgrade_request(
-                cfg,
-                pkg,
-                &release.tag,
-                prerelease,
-                args.bin.clone(),
-                Cancel::new(),
-            )
+            install::upgrade_request(cfg, pkg, &release.tag, args.bin.clone(), Cancel::new())
         })
         .collect();
 

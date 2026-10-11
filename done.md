@@ -1380,3 +1380,92 @@ Check: `grep -rn "both checksums|five targets" AGENTS.md .github/workflows/tap.y
 Long steps used to sit silent until the download bar. `ui::activity` now draws a progress bar when the total is known and a spinner otherwise, in rtok's form (`{spinner:.cyan} {msg}` on stderr, 120ms tick, nothing when stderr is not a terminal). Resolve, extract, registry fetch and self-update hold one for the length of the work. `ketch list` counts packages with `counter` while `latest` is looked up. Quiet mode, a pipe and the full-screen renderer draw nothing.
 Model: Cursor / grok 4.7 · Status: done 2026-10-09 · Priority: P2 · Complexity: 3 · Files: `src/ui.rs`, `crates/ketch-core/src/install.rs`, `crates/ketch-core/src/listing.rs`
 Check: `a_known_total_is_a_bar` and `an_unknown_total_is_a_spinner` in `src/ui.rs`.
+
+## Plan 2026-10-10 — dev, prerelease and draft builds
+
+Install dev, prerelease and draft builds from GitHub releases, and show them in listings. Decided with the creator:
+
+- **dev** means a floating tag (`nightly`, `dev`, `canary`, `edge`, …) republished under the same name. Whether it moved is told by the build (publication date, asset digests), not by the version.
+- **prerelease** already works through `--pre`, `pkg@tag` and `prerelease = true` in a manifest; what is missing is remembering it.
+- **draft** is its own opt-in, `--draft`. Drafts are visible only to a token with push access, may have no tag yet, and their assets download only through the API with that token. Without such a token ketch says so instead of reporting "no releases".
+- **upgrade follows the channel** the package was installed from (stable, pre, draft, dev). A draft that was published is an upgrade to the published release; a draft that was deleted is a warning, not an error.
+- **Listings**: a new `ketch releases <pkg>`, `ketch info <pkg> --releases`, and `ketch list` marking what was installed from a non-stable channel, with `--pre`/`--draft` for its `latest` column.
+
+Out of scope until asked: source plugins (drafts and dev builds stay GitHub-only, so `PROTOCOL_VERSION` is unchanged) and the desktop apps' `ketch-ffi` surface.
+
+### M18. Release channel recorded per installed package
+
+The foundation the other three build on. An installed package remembers which channel it came from, and `upgrade`/`outdated`/`list` read it instead of only today's `--pre`/config/manifest union. Done means: `InstalledPackage` has a `channel` (`stable`, `pre`; `draft` and `dev` are added by M19 and M20), state written before it still reads as `stable`, `install --pre` or `pkg@<prerelease tag>` records `pre`, and `upgrade`/`outdated` of a `pre` package consider prereleases without `--pre`. A stable install over a `pre` one moves it back to `stable`.
+
+Execution plan:
+
+1. `crates/ketch-core/src/model.rs`: `Channel` enum (serde lowercase, default `stable`, skipped when `stable`) and the field on `InstalledPackage`.
+2. `crates/ketch-core/src/install.rs`: derive the channel from the selected `Release` (`prerelease` flag or semver prerelease) when recording state; `installed_list_opts` includes prereleases for a `pre` channel.
+3. `crates/ketch-core/src/listing.rs`: the same rule through `installed_list_opts`, so `ketch list` agrees with `outdated`.
+4. `src/cmd/query.rs` and `crates/ketch-core/src/info.rs`: `info` shows the channel and looks up `latest` by it. `list --json` waits for M21, which reworks the listing anyway.
+5. Tests: unit tests for the default, the derivation, `installed_list_opts` and `upgrade_request`; `tests/channel.rs` installs with `--pre`, checks `outdated` without `--pre` sees a newer prerelease, and that an upgrade landing on a stable release stays on `pre`.
+6. Docs: `--pre` in `docs/COMMANDS.md`, `docs/ru` and `docs/uk`.
+7. Verify: `cargo nextest run --workspace`, `cargo clippy --workspace --all-targets`, `cargo fmt --check`, and the binary against a scratch `KETCH_ROOT`.
+
+Status: done (Claude Code / opus-5.5), commits 64ba2a6 and 549c274. 1099 tests green; `install sharkdp/fd --pre` in a scratch root records `pre`, `--force` without it returns to `stable`. `upgrade_request` lost its `prerelease` parameter: the tag is exact, so only the channel matters. Known gap: `install --pre` over the same tag already installed stops at "already installed" and does not switch the channel; `--force` does.
+
+### M19. Draft releases: `--draft`
+
+`ListOpts` gains `include_draft`; the GitHub source keeps drafts when it is set and downloads their assets from the API asset URL with `Accept: application/octet-stream` and the token. `install`, `upgrade`, `outdated` and `list` take `--draft`; `pkg@tag` finds a draft by its intended tag when `--draft` is given. Selection keeps refusing drafts unless asked (`drafts_are_never_selected` stays true for the default). No token, or a token without push access, gives an error naming the reason. Channel `draft`; a published draft upgrades to the release, a deleted one warns. Plugins never receive drafts. Done means the above with unit tests on selection and an end-to-end case through the fixture source.
+
+Execution plan:
+
+1. `crates/ketch-core/src/source/mod.rs`: `ListOpts::include_draft`; `select_release` keeps refusing drafts unless it is set; `Source::supports_drafts`, false by default.
+2. `crates/ketch-core/src/source/github.rs`: with `include_draft`, check the token first (none: error naming the token variables; `permissions.push` false on the repository: error naming push access), skip the `/releases/latest` and `/releases/tags/` fast paths (neither returns drafts) and walk the listing with drafts kept. A draft's assets download from their API URL, kept only when it is on the API host, so the token never leaves it; its checksum sidecars are read the same way.
+3. `crates/ketch-core/src/model.rs`: `Channel::Draft`; `InstalledPackage::draft` records that the installed release was a draft.
+4. `crates/ketch-core/src/install.rs`: `InstallRequest::draft` (implies prereleases), refused for a source without drafts; the channel and the draft flag recorded by `commit`; `installed_list_opts` and `upgrade_request` follow `draft`; one `is_upgrade` for `upgrade` and `outdated`: a published draft under the same tag is an upgrade, a vanished draft is a warning.
+5. `src/cli.rs`, `src/cmd/pkg.rs`, `src/cmd/query.rs`: `--draft` on `install`, `upgrade` and `outdated`. `list --draft` comes with M21, which adds `--pre` to `list` and reworks its lookup; until then `list` looks up draft-channel packages without drafts.
+6. Tests: selection unit tests (default still refuses drafts), GitHub conversion and access tests, channel tests; `tests/draft.rs` through a stand-in GitHub API (the `import.rs` server moved into `tests/support`): no token, no push access, a draft install with the token only on API requests, published and deleted drafts.
+7. Docs: `docs/COMMANDS.md` in English, `docs/ru` and `docs/uk`; `bash tests/docs-i18n.sh`.
+8. Verify: fmt, clippy `-D warnings`, nextest, and the binary against a scratch root (a real draft needs a push token; reported if none is available).
+
+Status: done (Claude Code / opus-5.5). `select_release` still refuses drafts unless `ListOpts::include_draft` is set, so `drafts_are_never_selected` holds for every default path. `--draft` implies prereleases. `install::is_upgrade` is now the one rule behind `upgrade` and `outdated`. `list` keeps looking up `latest` without drafts until M21 adds `--pre`/`--draft` to it. Not done: a real draft install, since no repository the available token can push to has a draft, and creating one was not approved; the access check was run for real (no token: refused by name; token without push to `sharkdp/fd`: refused by name; token with push to `pyrlyn/ketch`: installed `v0.10.0` on channel `draft`, `outdated` checks it with the token and warns without one).
+
+Tests: `source::tests` (a draft only when asked, by latest and by exact tag), `source::github::tests` (draft assets from the API host only, published assets keep the public URL, drafts listed only when asked and with a tag, no token named before any request), `model::tests` and `install::tests` (channel, list options, upgrade request, published and deleted drafts), and `tests/draft.rs` through `tests/support/remote.rs`, the stand-in server moved out of `tests/import.rs`. 1116 tests pass; clippy `-D warnings` and fmt clean.
+
+### M20. Dev builds: floating tags
+
+A release whose tag is not a version (`nightly`, `dev`, …) installed by name, `pkg@nightly`, records channel `dev` with the tag and the build it got (publication date and asset digest). `outdated`/`upgrade` report it outdated when the same tag now points at a different build, and reinstall it. `ketch.lock` pins the build's checksum so a lock cannot silently move with the tag (row in `docs/LOCKFILE.md`). Done means tests on build comparison and an end-to-end case where the fixture republishes the tag.
+
+Execution plan:
+
+1. `crates/ketch-core/src/model.rs`: `Channel::Dev`, chosen by `Channel::of` for a release whose tag is not a version (after `draft`); `InstalledPackage::published_at`, recorded for `dev` packages only.
+2. `crates/ketch-core/src/install.rs`: `rebuilt` compares the build the tag names now with the installed one — the installed asset's digest when the source publishes one, the publication time otherwise, and an asset gone from the release is a new build. `latest_release` resolves a `dev` package's own tag; `is_upgrade` calls a new build under it an upgrade; `prepare` lets a new build under the same tag past "already installed".
+3. `crates/ketch-core/src/lockfile.rs`, `src/cmd/lock.rs`: `published` on a `dev` entry, validated; `lock --check` compares it on another target; `sync` on another target, where the hash does not apply, refuses a tag published since (`InstallRequest::expected_published`). The same target keeps the hash pin. `docs/lock.schema.json` regenerated.
+4. Tests: build comparison and lock-pin unit tests in `install.rs` and `lockfile.rs`; `tests/dev.rs` through the fixture plugin, which can now publish under a floating tag with a publication time: a republish is outdated and upgraded, a stable release is not, reinstalling the tag takes a new build, and a lock refuses the moved tag on both targets.
+5. Docs: `docs/COMMANDS.md` and `docs/LOCKFILE.md` in English, `docs/ru` and `docs/uk`.
+6. Verify: fmt, clippy `-D warnings`, nextest, and the binary against a scratch root.
+
+Status: done (Claude Code / opus-5.5). A tag that is not a version lands on `dev` whatever else was opted into, except `--draft`. `dev` packages follow their own tag, so a newer version under another tag is not an upgrade. The lock's same-target `sha256` already pinned the build; `published` covers other targets, where only the publication time is left to compare, so a tag republished in place with the same date is not caught there. Source plugins keep the protocol unchanged; a plugin release whose tag is not a version is on `dev` too, compared by the digest and date it already reports. `list` still looks up `latest` for a `dev` package (its version ordering keeps it from offering a version release as an update); M21 reworks that lookup. Checked with the real binary on `neovim/neovim@nightly` in a scratch root: installed on `dev` with its publication time, up to date, `already installed` on reinstall, `published` in `ketch.lock`, outdated and upgraded after the recorded build was rewound in the scratch state, and a cross-target `sync` refused with a lock recording an older publication time.
+
+Tests: `install::tests` (channel of a tag that is not a version, digest, date, missing date, renamed asset, a stable package ignoring builds under its tag, the lock's publication pin), `lockfile::tests` (`published` written for floating tags only, drift on another target, unprintable values refused), and `tests/dev.rs` through the fixture plugin, which can now publish under a floating tag with a publication time. 1130 tests pass; clippy `-D warnings` and fmt clean.
+
+### M21. Listing releases: `ketch releases`, `info --releases`, `list`
+
+`ketch releases <pkg>` lists a package's releases newest first with tag, version, publication day and a kind mark (`stable`, `pre`, `dev`, `draft`), and marks the installed one; `--pre` widens it to prereleases, `-n/--limit` and `--json` as elsewhere. `ketch info <pkg> --releases` prints the same table under the details and adds a `releases` array to `--json`; both go through `releases::list` and one renderer in `cmd/query.rs`. `ketch list` shows a non-stable channel after the installed version (`(pre)`), adds `channel` to `list --json`, and takes `--pre` for its `latest` column. `releases` completes installed names like `info`. `ReleaseKind::of` in `crates/ketch-core/src/releases.rs` is the one place a kind is decided: draft, then dev (a tag that does not parse as a version), then pre, then stable.
+Follow-up for M19/M20: `--draft` on `releases` and `list` waits for `ListOpts.include_draft`; the `draft` mark already renders if a source returns one, and `Channel::Draft`/`Channel::Dev` only need an arm in the channel mark and in `ReleaseKind`.
+Model: Claude Code / sonnet-5.5 · Status: done 2026-10-11 · Priority: P2 · Complexity: 3 · Files: `crates/ketch-core/src/releases.rs`, `crates/ketch-core/src/info.rs`, `crates/ketch-core/src/listing.rs`, `src/cli.rs`, `src/cmd/query.rs`, `src/complete.rs`
+Check: `cargo nextest run --workspace` (1116 passed, including `tests/releases.rs`); `ketch releases fd` against GitHub in a scratch root marks the installed tag.
+
+### M22. Drafts and dev builds in listings
+
+`ketch releases` and `info --releases` take `--draft` (drafts and prereleases, the same token and push-access errors as `install --draft`; a `draft` install lists drafts without it). `ketch list` takes `--draft` for its `latest` column, and its update decision is the one `outdated` makes for every channel: a `draft` package is offered the published release and warned about when the draft is gone, a `dev` package shows a new build under its own tag. `install::is_upgrade` is the single rule; the listing cache keys and file format change so old entries are not misread. Done means the above with unit tests on the shared rule and the cache key, end-to-end cases, and the stale M21 docs fixed in all three languages.
+
+Execution plan:
+
+1. `crates/ketch-core/src/source/mod.rs`: one `ask_for_drafts` that widens `ListOpts` for `--draft` and refuses a source without drafts by name; `install::prepare` and `releases::list` both call it, and GitHub's access check stays in `list_releases`/`resolve`.
+2. `crates/ketch-core/src/install.rs`: `InstalledBuild`, what an upgrade decision needs of an installed package; `is_upgrade` takes it and the lookup's `ListOpts`, and gains the listing's guard against a prerelease nobody asked for; `upgrade_opts` and `release_of` (latest, or a `dev` package's own tag; drafts dropped for a source without them) shared by `outdated`, `upgrade` and `list`.
+3. `crates/ketch-core/src/listing.rs`: `Local` carries the `InstalledBuild`; `Lookup` adds drafts and a `dev` tag to its key; `Found` keeps the trimmed release the rule needs (asset digests only for `dev`); the cache file carries a format number and an older one is ignored; `listing::update_available` goes, `Row::newer` calls `is_upgrade`, and `fill_latest` lets it warn once for a gone draft. `include_drafts` for `list --draft`, installed rows only.
+4. `src/cli.rs`, `src/cmd/query.rs`: `--draft` on `releases`, `info` (with `--releases`) and `list`; `crates/ketch-ffi/src/records.rs` uses `Row::newer`.
+5. Tests: the shared rule and cache key in `install.rs`/`listing.rs`; `tests/draft.rs` (`releases --draft` and `list` through the stand-in API), `tests/dev.rs` (a republish shows as an update in `list`).
+6. Docs: `docs/COMMANDS.md` (`releases`, `info`, `list`, drafts returned by GitHub, the `channel` values) in English, `docs/ru` and `docs/uk`; `bash tests/docs-i18n.sh`.
+7. Verify: fmt, clippy `-D warnings`, nextest, and the binary against a scratch root.
+
+Status: done (Claude Code / opus-5.5). `install::is_upgrade` is the one rule: it takes an `InstalledBuild` and the lookup's `ListOpts`, so `outdated`, `upgrade`, `list` and the FFI `Upgrade` record agree on every channel, including the guard against a prerelease nobody asked for, which moved there from `listing::update_available` (removed). The listing cache is format 2, keyed `source#stable|pre|draft` or `source@tag#dev`; a file without that format number is ignored and rewritten. `list --draft` widens installed rows only: a registry row would almost never have push access and would turn into `?`. A pinned package still shows no update in `list`; that stays a display rule.
+
+Tests: `listing::tests` (a dev rebuild by date and by digest, the dev lookup key and kept assets, draft/pre/stable cache keys, a draft install offered its publication, an unasked prerelease, an older cache format set aside); `tests/draft.rs` (`releases --draft` with and without a token, `info --releases --draft`, a draft install listing drafts by itself, `list` and `list --draft` agreeing with `outdated`); `tests/dev.rs` (a republish shows as an update in `list`, a plugin source refuses `releases --draft`). 1156 tests green. Binary in a scratch root: `neovim/neovim@nightly` lists as `nightly (dev)` with `latest` `nightly`, and as `(update available)` once its recorded build was made older; `releases neovim --draft` without a token stops naming the token variables; `info --releases --draft` warns with the same message and still prints the details. Not checked: a real draft (no repository with a draft and a push token at hand), and `outdated` against GitHub in that run (anonymous rate limit, HTTP 403).

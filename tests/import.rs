@@ -16,117 +16,21 @@
 mod support;
 
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
-use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
+use support::remote::Remote;
 use support::{Archive, Entry, Sandbox};
 
-type Routes = Arc<Mutex<HashMap<String, Vec<u8>>>>;
-
-/// Answers each request target (path and query) from a table the test can
-/// change between runs; anything else is a 404, which every catalogue
-/// client reads as "no such package".
-struct Remote {
-    base: String,
-    addr: SocketAddr,
-    routes: Routes,
-    stop: Arc<AtomicBool>,
-    handle: Option<JoinHandle<()>>,
-}
-
-impl Remote {
-    fn start() -> Remote {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock remote");
-        let addr = listener.local_addr().expect("addr");
-        let routes: Routes = Arc::default();
-        let stop = Arc::new(AtomicBool::new(false));
-        let (table, flag) = (Arc::clone(&routes), Arc::clone(&stop));
-        let handle = thread::spawn(move || {
-            for stream in listener.incoming() {
-                if flag.load(Ordering::Relaxed) {
-                    break;
-                }
-                if let Ok(stream) = stream {
-                    answer(stream, &table);
-                }
-            }
-        });
-        Remote {
-            base: format!("http://{addr}"),
-            addr,
-            routes,
-            stop,
-            handle: Some(handle),
-        }
-    }
-
-    fn serve(&self, target: &str, body: impl Into<Vec<u8>>) {
-        self.routes
-            .lock()
-            .expect("routes")
-            .insert(target.to_string(), body.into());
-    }
-
-    fn clear(&self) {
-        self.routes.lock().expect("routes").clear();
-    }
-
-    /// The variables that point every remote at this server.
-    fn env(&self) -> Vec<(&'static str, String)> {
-        vec![
-            ("KETCH_IMPORT_BREW", format!("{}/brew", self.base)),
-            ("KETCH_IMPORT_ARCH", format!("{}/arch", self.base)),
-            ("KETCH_IMPORT_ARCH_GITLAB", format!("{}/gitlab", self.base)),
-            ("KETCH_IMPORT_AUR", format!("{}/aur", self.base)),
-            (
-                "KETCH_IMPORT_WINGET_API",
-                format!("{}/winget-api", self.base),
-            ),
-            (
-                "KETCH_IMPORT_WINGET_RAW",
-                format!("{}/winget-raw", self.base),
-            ),
-            ("KETCH_GITHUB_API", format!("{}/gh", self.base)),
-        ]
-    }
-}
-
-impl Drop for Remote {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
-        // Unblock the accept so the join cannot hang.
-        let _ = TcpStream::connect_timeout(&self.addr, std::time::Duration::from_millis(200));
-        if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
-        }
-    }
-}
-
-fn answer(mut stream: TcpStream, routes: &Routes) {
-    let mut head = Vec::new();
-    let mut byte = [0u8; 1];
-    while !head.ends_with(b"\r\n\r\n") {
-        match stream.read(&mut byte) {
-            Ok(1) => head.push(byte[0]),
-            _ => return,
-        }
-    }
-    let head = String::from_utf8_lossy(&head);
-    let target = head.split_whitespace().nth(1).unwrap_or("/").to_string();
-    let body = routes.lock().expect("routes").get(&target).cloned();
-    let (status, body) = match body {
-        Some(body) => ("200 OK", body),
-        None => ("404 Not Found", b"{\"message\":\"Not Found\"}".to_vec()),
-    };
-    let _ = write!(
-        stream,
-        "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len()
-    );
-    let _ = stream.write_all(&body);
+/// The variables that point every remote at the one server.
+fn remote_env(remote: &Remote) -> Vec<(&'static str, String)> {
+    let base = &remote.base;
+    vec![
+        ("KETCH_IMPORT_BREW", format!("{base}/brew")),
+        ("KETCH_IMPORT_ARCH", format!("{base}/arch")),
+        ("KETCH_IMPORT_ARCH_GITLAB", format!("{base}/gitlab")),
+        ("KETCH_IMPORT_AUR", format!("{base}/aur")),
+        ("KETCH_IMPORT_WINGET_API", format!("{base}/winget-api")),
+        ("KETCH_IMPORT_WINGET_RAW", format!("{base}/winget-raw")),
+        ("KETCH_GITHUB_API", remote.github_api()),
+    ]
 }
 
 const REPO: &str = "acme/demo";
@@ -216,7 +120,7 @@ fn source() -> &'static str {
 fn run(sandbox: &Sandbox, remote: &Remote, extra: &[&str]) -> std::process::Output {
     let mut args = vec!["import", source(), "demo"];
     args.extend_from_slice(extra);
-    let env = remote.env();
+    let env = remote_env(remote);
     let env: Vec<(&str, &str)> = env.iter().map(|(k, v)| (*k, v.as_str())).collect();
     sandbox.ketch_overrides(&args, &env)
 }
@@ -312,14 +216,7 @@ fn a_package_off_github_releases_is_refused_and_nothing_is_written() {
     let (file, sha) = publish(&sandbox, &remote, "1.0.0");
     catalogue(&remote, "1.0.0", &file, Some(&sha));
     // The same catalogue entry, but downloading from a vendor's own host.
-    let routes: Vec<(String, Vec<u8>)> = remote
-        .routes
-        .lock()
-        .unwrap()
-        .iter()
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
-    for (target, body) in routes {
+    for (target, body) in remote.routes() {
         let text = String::from_utf8_lossy(&body).replace(
             &format!("https://github.com/{REPO}/releases/download/v1.0.0/"),
             "https://downloads.acme.example/",
