@@ -91,6 +91,13 @@ it whenever the source knows it. Only `sha256` is compared directly against the
 download; other `algo` values are ignored and ketch falls back to checksum
 sidecars or aggregate files on the release.
 
+Protocol v1 has no way for a plugin to hand over those sidecar or aggregate
+files, so for a plugin source that fallback does not exist. An asset reported
+without a `sha256` `digest` is installed trust-on-first-use: ketch hashes what
+it downloaded and records the hash, with nothing to compare it against. Users
+who want such installs refused set `require_checksums = true` in `config.toml`
+or `KETCH_REQUIRE_CHECKSUMS=1`.
+
 ### `describe` and `search`
 
 Both return `SourceInfo`:
