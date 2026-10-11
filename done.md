@@ -1469,3 +1469,38 @@ Execution plan:
 Status: done (Claude Code / opus-5.5). `install::is_upgrade` is the one rule: it takes an `InstalledBuild` and the lookup's `ListOpts`, so `outdated`, `upgrade`, `list` and the FFI `Upgrade` record agree on every channel, including the guard against a prerelease nobody asked for, which moved there from `listing::update_available` (removed). The listing cache is format 2, keyed `source#stable|pre|draft` or `source@tag#dev`; a file without that format number is ignored and rewritten. `list --draft` widens installed rows only: a registry row would almost never have push access and would turn into `?`. A pinned package still shows no update in `list`; that stays a display rule.
 
 Tests: `listing::tests` (a dev rebuild by date and by digest, the dev lookup key and kept assets, draft/pre/stable cache keys, a draft install offered its publication, an unasked prerelease, an older cache format set aside); `tests/draft.rs` (`releases --draft` with and without a token, `info --releases --draft`, a draft install listing drafts by itself, `list` and `list --draft` agreeing with `outdated`); `tests/dev.rs` (a republish shows as an update in `list`, a plugin source refuses `releases --draft`). 1156 tests green. Binary in a scratch root: `neovim/neovim@nightly` lists as `nightly (dev)` with `latest` `nightly`, and as `(update available)` once its recorded build was made older; `releases neovim --draft` without a token stops naming the token variables; `info --releases --draft` warns with the same message and still prints the details. Not checked: a real draft (no repository with a draft and a push token at hand), and `outdated` against GitHub in that run (anonymous rate limit, HTTP 403).
+
+### D16.1. Linux: Meson project, contract scenarios and fake core
+
+D16 (the Linux app's screens in Vala with GTK 4 and libadwaita, following the GNOME HIG, built before the C ABI is ready) was split at claim time to fit the task size rule: D16.1 to D16.4, and D16.5 out of D16.3 later. GTK 4 + libadwaita over KDE and Blueprint for the markup were decided by the creator (2026-10-01, open decisions 1 and 2). Research: `docs/research-desktop-platforms.md`, sections 3b, 3c and 5. D16 as a whole is done when a Meson project builds a libadwaita app with the common screens in an `AdwNavigationSplitView` that adapts to narrow windows, Blueprint files (pinned as a Meson subproject) for the UI, `AdwAlertDialog`, `AdwBanner` and toasts for decisions, busy and finished work, dark and high-contrast styles, all on a fake core reading D4's fixtures, with a Linux CI job that builds and runs its tests.
+
+This part: the Meson project under `desktop/linux/`, the core contract in Vala, the fake core that replays `desktop/contract/scenarios`, its tests, and the Linux CI job.
+
+Execution plan:
+
+1. `desktop/linux/meson.build`: a Vala library `ketch-app-core` (glib, gobject, gio, json-glib; no GTK, so it builds and tests without a display) and its tests under `meson test`, the scenarios directory passed in the test environment.
+2. `src/core.vala`: the `Core` interface with the operation names, JSON envelopes (`{"ok": …}` / `{"error": …}`), event strings and callback signatures of `crates/ketch-capi/vapi/ketch.vapi`, and `GLib.Cancellable` for the cancel flag, so D17 swaps in an adapter over `Ketch.Core` without touching the store.
+3. `src/scenario.vala` (json-glib over the scenario files) and `src/fake-core.vala`: reads answer the scenario's value, install, upgrade and uninstall replay its events and questions (the callbacks answer, not the file) and its outcome, a cancel between steps ends with `cancelled`, `play` picks the scenario for the next calls, and installed state follows what the calls placed and removed. It mirrors `FakeKetchCore.cs` / `.swift`.
+4. `tests/fake-core-test.vala` (GLib.Test): every scenario decodes, reads answer their values, scripted replay (events, binary choice, stop processes, refusals, cancel, busy with and without a pid, errors), uninstall of an unknown name.
+5. CI: a `ketch-linux-app` job on `ubuntu-latest`, SHA-pinned actions, the toolchain from apt as in `ketch-capi`, `meson setup`, `meson compile`, `meson test`.
+6. `mise.toml` pins for local work (Meson, Ninja, and Vala and json-glib from conda-forge through mise's conda backend), a `just linux-app-test` recipe, `toolchain.md` rows, `AGENTS.md` Layout row, `desktop/contract/README.md` line.
+7. Verify: `meson test` locally on macOS with the mise-pinned toolchain; CI on Linux.
+
+Status: done (Claude Code / opus-5.5). The fake follows the real core where the C# fake does not: a declined question goes on, and only cancel stops. An install picks a scenario only when exactly one scenario's specs match, so `ripgrep` (named by many) plays `install-ok`. D16.3 later moved the CI job into an `ubuntu:26.04` container for GTK 4.20 and libadwaita 1.8.
+
+Tests: `tests/fake-core-test.vala`, 14 cases, green under `just linux-app-test` on macOS arm64 with the mise-pinned Meson, Ninja and conda-forge Vala, GLib and json-glib, stable over `--repeat 10`. The `ketch-linux-app` CI job had not run when this was closed (the branch was not pushed).
+
+### D16.2. Linux: the store
+
+What every screen binds to, on GLib only: installed packages, updates and held packages, search results, doctor findings, the log, the running operation and its progress, the busy state with Retry, error alerts and the questions the core waits on. It ports `KetchStore.cs`.
+
+Execution plan:
+
+1. `desktop/linux/src/models.vala`: GObject records parsed from the JSON envelopes (`Package`, `Upgrade`, `RegistryPackage`, `Finding`, `LogEntry`, `Activity`, `BinaryChoice`, `StopQuestion`, `BusyState`), held in `GLib.ListStore`s so GTK list views bind to them directly.
+2. `src/store.vala`: each core call on its own thread, events and questions handed back to the main context in order; a decider that blocks the core's thread until the dialog answers; `Busy` keeps a Retry, `Cancelled` is logged and not alerted, other errors become the alert text; a `finished` signal for toasts; one operation at a time.
+3. `tests/store-test.vala`: the C# `KetchStoreTests` cases on the fake core.
+4. Verify: `meson test` locally and in CI.
+
+Status: done (Claude Code / opus-5.5). Core calls run on their own thread, and events and questions return through `Idle.add` in order. A question blocks the core's thread on an `AsyncQueue` until the dialog answers or cancel declines it.
+
+Tests: `tests/store-test.vala`, 14 cases (the C# `KetchStoreTests` cases plus the changelog and the download's share of the bar), green locally like D16.1; CI not yet run.

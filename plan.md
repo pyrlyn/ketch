@@ -53,11 +53,9 @@ Not added: the brand move is done (`brand/build.mjs` already uses `@pyrlyn/brand
 | D12 | todo | P3 | 4 | 0% | |
 | D13 | todo | P3 | 3 | 0% | |
 | D14 | todo | P3 | 4 | 0% | |
-| D16.1 | in progress | P3 | 3 | 0% | Claude Code / opus-5.5 |
-| D16.2 | in progress | P3 | 3 | 0% | Claude Code / opus-5.5 |
-| D16.3 | in progress | P3 | 4 | 0% | Claude Code / opus-5.5 |
-| D16.4 | in progress | P3 | 3 | 0% | Claude Code / opus-5.5 |
-| D16.5 | in progress | P3 | 2 | 0% | Claude Code / opus-5.5 |
+| D16.3 | in progress | P3 | 4 | 90% | Claude Code / opus-5.5 |
+| D16.4 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
+| D16.5 | in progress | P3 | 2 | 90% | Claude Code / opus-5.5 |
 | D17 | todo | P3 | 4 | 0% | |
 | D18 | todo | P3 | 3 | 0% | |
 | D19 | todo | P3 | 4 | 0% | |
@@ -383,34 +381,9 @@ Done when CI builds, on `desktop-windows-v*` tags and without touching `/release
 
 Settings persistence differs between the two: an MSIX has `ApplicationData`, an unpackaged app has none (D12 stores settings in a way that works in both).
 
-### D16.1. Linux: Meson project, contract scenarios and fake core
-
-D16 (the Linux app's screens in Vala with GTK 4 and libadwaita, following the GNOME HIG, built before the C ABI is ready) was split at claim time to fit the task size rule: D16.1 to D16.4. GTK 4 + libadwaita over KDE and Blueprint for the markup were decided by the creator (2026-10-01, open decisions 1 and 2). Research: `docs/research-desktop-platforms.md`, sections 3b, 3c and 5. D16 as a whole is done when a Meson project builds a libadwaita app with the common screens in an `AdwNavigationSplitView` that adapts to narrow windows, Blueprint files (pinned as a Meson subproject) for the UI, `AdwAlertDialog`, `AdwBanner` and toasts for decisions, busy and finished work, dark and high-contrast styles, all on a fake core reading D4's fixtures, with a Linux CI job that builds and runs its tests.
-
-This part: the Meson project under `desktop/linux/`, the core contract in Vala, the fake core that replays `desktop/contract/scenarios`, its tests, and the Linux CI job.
-
-Execution plan:
-
-1. `desktop/linux/meson.build`: a Vala library `ketch-app-core` (glib, gobject, gio, json-glib; no GTK, so it builds and tests without a display) and its tests under `meson test`, the scenarios directory passed in the test environment.
-2. `src/core.vala`: the `Core` interface with the operation names, JSON envelopes (`{"ok": …}` / `{"error": …}`), event strings and callback signatures of `crates/ketch-capi/vapi/ketch.vapi`, and `GLib.Cancellable` for the cancel flag, so D17 swaps in an adapter over `Ketch.Core` without touching the store.
-3. `src/scenario.vala` (json-glib over the scenario files) and `src/fake-core.vala`: reads answer the scenario's value, install, upgrade and uninstall replay its events and questions (the callbacks answer, not the file) and its outcome, a cancel between steps ends with `cancelled`, `play` picks the scenario for the next calls, and installed state follows what the calls placed and removed. It mirrors `FakeKetchCore.cs` / `.swift`.
-4. `tests/fake-core-test.vala` (GLib.Test): every scenario decodes, reads answer their values, scripted replay (events, binary choice, stop processes, refusals, cancel, busy with and without a pid, errors), uninstall of an unknown name.
-5. CI: a `ketch-linux-app` job on `ubuntu-latest`, SHA-pinned actions, the toolchain from apt as in `ketch-capi`, `meson setup`, `meson compile`, `meson test`.
-6. `mise.toml` pins for local work (Meson, Ninja, and Vala and json-glib from conda-forge through mise's conda backend), a `just linux-app-test` recipe, `toolchain.md` rows, `AGENTS.md` Layout row, `desktop/contract/README.md` line.
-7. Verify: `meson test` locally on macOS with the mise-pinned toolchain; CI on Linux.
-
-### D16.2. Linux: the store
-
-What every screen binds to, on GLib only: installed packages, updates and held packages, search results, doctor findings, the log, the running operation and its progress, the busy state with Retry, error alerts and the questions the core waits on. It ports `KetchStore.cs`.
-
-Execution plan:
-
-1. `desktop/linux/src/models.vala`: GObject records parsed from the JSON envelopes (`Package`, `Upgrade`, `RegistryPackage`, `Finding`, `LogEntry`, `Activity`, `BinaryChoice`, `StopQuestion`, `BusyState`), held in `GLib.ListStore`s so GTK list views bind to them directly.
-2. `src/store.vala`: each core call on its own thread, events and questions handed back to the main context in order; a decider that blocks the core's thread until the dialog answers; `Busy` keeps a Retry, `Cancelled` is logged and not alerted, other errors become the alert text; a `finished` signal for toasts; one operation at a time.
-3. `tests/store-test.vala`: the C# `KetchStoreTests` cases on the fake core.
-4. Verify: `meson test` locally and in CI.
-
 ### D16.3. Linux: window, split view and screens
+
+D16 (the Linux app's screens in Vala with GTK 4 and libadwaita, following the GNOME HIG, built before the C ABI is ready) was split at claim time to fit the task size rule: D16.1 to D16.4, and D16.5 out of D16.3 later. GTK 4 + libadwaita over KDE and Blueprint for the markup were decided by the creator (2026-10-01, open decisions 1 and 2). Research: `docs/research-desktop-platforms.md`, sections 3b, 3c and 5. D16 as a whole is done when a Meson project builds a libadwaita app with the common screens in an `AdwNavigationSplitView` that adapts to narrow windows, Blueprint files (pinned as a Meson subproject) for the UI, `AdwAlertDialog`, `AdwBanner` and toasts for decisions, busy and finished work, dark and high-contrast styles, all on a fake core reading D4's fixtures, with a Linux CI job that builds and runs its tests. D16.1 and D16.2 are in `done.md`.
 
 Execution plan:
 
@@ -420,14 +393,18 @@ Execution plan:
 4. CI: the `ketch-linux-app` job runs in an `ubuntu:26.04` container, because the runner's 24.04 has GTK 4.14 and libadwaita 1.5, and builds with `-Dgui=enabled`.
 5. Verify: CI builds the app on Linux; locally as far as the mise-pinned toolchain allows (said exactly in the report).
 
+Left: the `ketch-linux-app` CI run on this branch. Built and launched locally on macOS with an unpinned conda-forge GTK 4.24 and libadwaita 1.9 and a vapi generated by hand: lists fill from the fake, the split view collapses below 600sp, and the sidebar navigates in the collapsed layout.
+
 ### D16.4. Linux: dialogs, banner, toasts, settings and styles
 
 Execution plan:
 
-1. `AdwAlertDialog` for uninstall, upgrade all, binary choice and stopping processes; `AdwBanner` for busy with Retry and for the running operation with Cancel; `AdwToast` for finished work; alerts for errors.
+1. `AdwAlertDialog` for upgrade all, binary choice and stopping processes, and `Window.confirm` for the uninstall question D16.5 asks; `AdwBanner` for busy with Retry and for the running operation with Cancel; `AdwToast` for finished work; alerts for errors.
 2. `AdwPreferencesDialog`: light, dark or system through `AdwStyleManager`, and the scenario the fake plays next.
 3. The stylesheet from `desktop/design/generated/ketch-tokens.css` in the GResource, with a high-contrast variant that defers to Adwaita's own high-contrast colours.
 4. Verify: CI on Linux; locally as far as the toolchain allows.
+
+Left: the `ketch-linux-app` CI run on this branch, and a pass through the dialogs by hand. Built locally the same way as D16.3; light, dark and high-contrast dark were rendered (through `ADW_DEBUG_COLOR_SCHEME` and `ADW_DEBUG_HIGH_CONTRAST`), but no dialog, banner or toast was opened.
 
 ### D16.5. Linux: the package detail page
 
@@ -438,6 +415,8 @@ Execution plan:
 1. `desktop/linux/data/ui/package-page.blp`: an `AdwBreakpointBin` holding an `AdwViewStack` with an `AdwViewSwitcher` in the header and an `AdwViewSwitcherBar` revealed below 550sp.
 2. `src/package-page.vala`: fills the rows from the `Package`, loads the changelog through the store, and asks before uninstalling; `src/window.vala` pushes it from an Installed row.
 3. Verify: CI builds it on Linux; locally as far as the toolchain allows.
+
+Left: the `ketch-linux-app` CI run on this branch, and opening the page by hand. It compiles against its template locally.
 
 ### D17. Linux: the app on the real core
 
