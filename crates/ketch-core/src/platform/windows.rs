@@ -166,6 +166,29 @@ fn restore_retired_store(store: &Path) {
     }
 }
 
+/// `recorded` with targets under `store` pointed at its retired copy.
+///
+/// A copy is ours only while its bytes match its target. Reinstalling into the
+/// same store path — a new build under a dev package's floating tag — has just
+/// moved the bytes those copies were made from to `.old`, so comparing against
+/// the new store would call every one of our own copies someone else's.
+fn retired_targets(recorded: &[LinkRecord], store: &Path) -> Vec<LinkRecord> {
+    let retired = sibling(store, ".old");
+    if retired.symlink_metadata().is_err() {
+        return recorded.to_vec();
+    }
+    recorded
+        .iter()
+        .map(|record| {
+            let mut record = record.clone();
+            if let Ok(rel) = record.target.strip_prefix(store) {
+                record.target = retired.join(rel);
+            }
+            record
+        })
+        .collect()
+}
+
 fn writable(dir: &Path) -> std::result::Result<(), String> {
     if !dir.exists() {
         return Err("does not exist".to_string());
@@ -519,15 +542,16 @@ impl Platform for WindowsPlatform {
             finalize_store_swap(plan.store_dir);
             return Ok(Vec::new());
         }
+        let replacing = retired_targets(plan.replacing, plan.store_dir);
         let mut links = Vec::new();
         let result = (|| -> Result<Vec<LinkRecord>> {
             for (target, name) in cli_targets(self, plan.store_dir, plan)? {
-                links.push(copy_binary(&target, plan.bin_dir, &name, plan.replacing)?);
+                links.push(copy_binary(&target, plan.bin_dir, &name, &replacing)?);
             }
             links.extend(link_planned_extras(
                 plan.extras,
                 plan.store_dir,
-                plan.replacing,
+                &replacing,
             )?);
             if links.is_empty() {
                 return Err(Error::EmptyPayload(plan.store_dir.to_path_buf()));
@@ -687,6 +711,34 @@ mod tests {
         assert_eq!(links[0].link, bin.join("tool.cmd"));
         assert!(bin.join("tool.cmd").is_file());
         assert!(!bin.join("tool.cmd").is_symlink());
+    }
+
+    #[test]
+    fn placing_a_new_build_into_the_same_store_path_replaces_our_copy() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = tmp.path().join("store/tool/nightly");
+        let bin = tmp.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let platform = WindowsPlatform::new();
+
+        let first = tmp.path().join("first");
+        std::fs::create_dir_all(first.join("bin")).unwrap();
+        std::fs::write(first.join("bin/tool.cmd"), cmd_body("build 1")).unwrap();
+        let placed = platform
+            .place(&placement(&first, &store, &bin, tmp.path()))
+            .unwrap();
+
+        let second = tmp.path().join("second");
+        std::fs::create_dir_all(second.join("bin")).unwrap();
+        std::fs::write(second.join("bin/tool.cmd"), cmd_body("build 2")).unwrap();
+        let mut plan = placement(&second, &store, &bin, tmp.path());
+        plan.replacing = placed.as_slice();
+        platform.place(&plan).unwrap();
+
+        assert_eq!(
+            std::fs::read(bin.join("tool.cmd")).unwrap(),
+            cmd_body("build 2")
+        );
     }
 
     #[test]
