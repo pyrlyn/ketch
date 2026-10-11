@@ -6,7 +6,7 @@
 # below the screens: the core contract, the fake core over the contract
 # scenarios and the store. It needs GLib and json-glib only, so its tests run
 # without GTK or a display. `just linux-app-test`; the ketch-linux-app CI job.
-project('ketch-linux', 'vala', 'c', meson_version: '>= 1.0')
+project('ketch-linux', 'vala', 'c', meson_version: '>= 1.1')
 
 # The C is valac's output, not ours: its unused temporaries are not worth a warning.
 add_project_arguments('-w', language: 'c')
@@ -39,3 +39,23 @@ foreach name : ['fake-core', 'store']
     protocol: 'tap',
   )
 endforeach
+
+gtk_dep = dependency('gtk4', version: '>= 4.20', required: get_option('gui'))
+adw_dep = dependency('libadwaita-1', version: '>= 1.8', required: get_option('gui'))
+if gtk_dep.found() and adw_dep.found()
+  gnome = import('gnome')
+  subdir('data')
+  executable(
+    'ketch-app',
+    'src/application.vala',
+    'src/window.vala',
+    resources,
+    dependencies: [app_core_dep, gtk_dep, adw_dep],
+    c_args: ['-DKETCH_SCENARIOS_DIR="@0@"'.format(scenarios), '-DGETTEXT_PACKAGE="ketch"'],
+    install: true,
+  )
+  # `meson devenv` then runs the app on the scenarios in the source tree.
+  devenv = environment()
+  devenv.set('KETCH_SCENARIOS', scenarios)
+  meson.add_devenv(devenv)
+endif

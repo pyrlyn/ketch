@@ -34,6 +34,9 @@ Project programs and direct packages from manifests.
 | Meson | mise | Builds the Linux app in `desktop/linux` (`just linux-app-test`); the distribution's in Linux CI (`ketch-linux-app`) | https://github.com/mesonbuild/meson |
 | Ninja | mise | Meson's build backend | https://github.com/ninja-build/ninja |
 | valac | mise (conda-forge, `conda:vala`) | Compiles the Linux app; the distribution's `valac` in Linux CI | https://gitlab.gnome.org/GNOME/vala |
+| GTK 4 (4.20 or newer) | the distribution's `libgtk-4-dev` (Ubuntu 26.04 in the `ketch-linux-app` container) | The Linux app's toolkit; without it `-Dgui=auto` builds only the core library and its tests | https://gitlab.gnome.org/GNOME/gtk |
+| libadwaita (1.8 or newer) | the distribution's `libadwaita-1-dev` | The Linux app's GNOME widgets: split view, breakpoints, banners, toasts, dialogs | https://gitlab.gnome.org/GNOME/libadwaita |
+| blueprint-compiler 0.22.2 | Meson subproject (`desktop/linux/subprojects/blueprint-compiler.wrap`, pinned to the v0.22.2 commit); needs `python3-gi` and the GTK and libadwaita typelibs | Compiles the Linux app's `.blp` files to GtkBuilder XML | https://gitlab.gnome.org/GNOME/blueprint-compiler |
 
 ## conda-forge (through mise)
 

@@ -269,17 +269,25 @@ jobs:
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
+    # The runner's Ubuntu 24.04 has GTK 4.14 and libadwaita 1.5; the app needs
+    # GTK 4.20 and libadwaita 1.8, which 26.04 ships. Pinned by digest like the
+    # actions; a newer one is a reviewed change.
+    container: ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Vala toolchain
+      # git fetches the pinned blueprint-compiler subproject; python3-gi and
+      # the typelibs are what it reads GTK and libadwaita's types from.
+      - name: Vala and GTK toolchain
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends valac meson ninja-build libjson-glib-dev
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git valac meson ninja-build \
+            pkg-config libjson-glib-dev libgtk-4-dev libadwaita-1-dev \
+            python3-gi gir1.2-girepository-3.0 gir1.2-gtk-4.0 gir1.2-adw-1
 
       - name: Build
         run: |
-          meson setup target/linux-app-meson desktop/linux
+          meson setup target/linux-app-meson desktop/linux -Dgui=enabled
           meson compile -C target/linux-app-meson
 
       - name: Test

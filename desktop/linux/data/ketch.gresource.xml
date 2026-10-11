@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Copyright (c) 2026 Ivan Tugay
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
+  The .ui files are blueprint-compiler's output in the build directory, not
+  files in this one; data/meson.build passes that directory as source_dir.
+-->
+<gresources>
+  <gresource prefix="/io/github/pyrlyn/Ketch">
+    <file>window.ui</file>
+  </gresource>
+</gresources>
