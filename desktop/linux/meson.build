@@ -54,6 +54,9 @@ if gtk_dep.found() and adw_dep.found()
     c_args: ['-DKETCH_SCENARIOS_DIR="@0@"'.format(scenarios), '-DGETTEXT_PACKAGE="ketch"'],
     install: true,
   )
+  # The blueprint-compiler subproject brings its own test suite, which tests
+  # blueprint against this machine's GTK, not ketch; a plain `meson test` skips it.
+  add_test_setup('ketch', exclude_suites: ['blueprint-compiler'], is_default: true)
   # `meson devenv` then runs the app on the scenarios in the source tree.
   devenv = environment()
   devenv.set('KETCH_SCENARIOS', scenarios)
