@@ -19,6 +19,7 @@
 - D16.2. Linux: the store
 - D16.3. Linux: window, split view and screens
 - D16.4. Linux: dialogs, banner, toasts, settings and styles
+- D16.5. Linux: the package detail page
 - D17. Linux: the app on the real core
 - D18. Linux: notifications, background and autostart
 - D19. Linux: packaging and release

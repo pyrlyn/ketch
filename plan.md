@@ -57,6 +57,7 @@ Not added: the brand move is done (`brand/build.mjs` already uses `@pyrlyn/brand
 | D16.2 | in progress | P3 | 3 | 0% | Claude Code / opus-5.5 |
 | D16.3 | in progress | P3 | 4 | 0% | Claude Code / opus-5.5 |
 | D16.4 | in progress | P3 | 3 | 0% | Claude Code / opus-5.5 |
+| D16.5 | in progress | P3 | 2 | 0% | Claude Code / opus-5.5 |
 | D17 | todo | P3 | 4 | 0% | |
 | D18 | todo | P3 | 3 | 0% | |
 | D19 | todo | P3 | 4 | 0% | |
@@ -414,9 +415,10 @@ Execution plan:
 Execution plan:
 
 1. Blueprint pinned as a Meson subproject (`subprojects/blueprint-compiler.wrap`, a release tag), compiling `desktop/linux/data/ui/*.blp` into a GResource.
-2. `src/application.vala` (`Adw.Application`), `src/window.vala` with an `AdwNavigationSplitView` (Installed, Discover, Updates, Activity, Doctor) that collapses through an `AdwBreakpoint` on narrow windows, a package detail page (Overview, Changelog, Files), `AdwStatusPage` for empty states, `AdwActionRow`s in boxed lists.
+2. `src/application.vala` (`Adw.Application`), `src/window.vala` with an `AdwNavigationSplitView` (Installed, Discover, Updates, Activity, Doctor) that collapses through an `AdwBreakpoint` on narrow windows, `AdwStatusPage` for empty states, `AdwActionRow`s in boxed lists. The package detail page moved to D16.5 to keep this part under the task size limit.
 3. A Meson option so the library and its tests still build where GTK is missing.
-4. Verify: CI builds the app on Linux; locally as far as the mise-pinned toolchain allows (said exactly in the report).
+4. CI: the `ketch-linux-app` job runs in an `ubuntu:26.04` container, because the runner's 24.04 has GTK 4.14 and libadwaita 1.5, and builds with `-Dgui=enabled`.
+5. Verify: CI builds the app on Linux; locally as far as the mise-pinned toolchain allows (said exactly in the report).
 
 ### D16.4. Linux: dialogs, banner, toasts, settings and styles
 
@@ -427,9 +429,19 @@ Execution plan:
 3. The stylesheet from `desktop/design/generated/ketch-tokens.css` in the GResource, with a high-contrast variant that defers to Adwaita's own high-contrast colours.
 4. Verify: CI on Linux; locally as far as the toolchain allows.
 
+### D16.5. Linux: the package detail page
+
+Split from D16.3 at its size limit. An installed package opens a page pushed onto the window's navigation view: Overview (version, source, pin, Uninstall behind D16.4's confirmation), Changelog (the store's Markdown) and Files (the store prefix and linked binaries), switched in the header bar on wide windows and from a bottom bar on narrow ones.
+
+Execution plan:
+
+1. `desktop/linux/data/ui/package-page.blp`: an `AdwBreakpointBin` holding an `AdwViewStack` with an `AdwViewSwitcher` in the header and an `AdwViewSwitcherBar` revealed below 550sp.
+2. `src/package-page.vala`: fills the rows from the `Package`, loads the changelog through the store, and asks before uninstalling; `src/window.vala` pushes it from an Installed row.
+3. Verify: CI builds it on Linux; locally as far as the toolchain allows.
+
 ### D17. Linux: the app on the real core
 
-Swap the Linux app's fake core for `ketch-capi`. Depends on D15 and D16.1–D16.4.
+Swap the Linux app's fake core for `ketch-capi`. Depends on D15 and D16.1–D16.5.
 
 Done when every screen runs on the C ABI, calls run off the main loop with events returned through the `GLib.MainContext`, cancel and `Busy` behave as in the contract, and a manual pass against a scratch root is recorded.
 
