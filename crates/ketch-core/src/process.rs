@@ -87,7 +87,7 @@ fn unique_keys(paths: &[PathBuf]) -> Vec<(PathBuf, String)> {
 }
 
 fn path_key(p: &Path) -> String {
-    let p = dunce::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let p = fs_kit::path::canon(p);
     if cfg!(windows) {
         crate::shell::windows_path_key(&p)
     } else {

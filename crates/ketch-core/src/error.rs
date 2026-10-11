@@ -156,6 +156,18 @@ impl Error {
         }
     }
 
+    /// An error from `fs-kit`. Its message already starts with the path it
+    /// names, so wrapping it in [`Error::io`] as is would print the path twice.
+    pub fn fs_kit(path: impl AsRef<Path>, err: std::io::Error) -> Self {
+        let path = path.as_ref();
+        let text = err.to_string();
+        let bare = text
+            .strip_prefix(&format!("{}: ", path.display()))
+            .unwrap_or(&text);
+        let source = std::io::Error::new(err.kind(), bare.to_string());
+        Error::io(path, source)
+    }
+
     pub fn parse(what: impl Into<String>, detail: impl Into<String>) -> Self {
         Error::Parse {
             what: what.into(),

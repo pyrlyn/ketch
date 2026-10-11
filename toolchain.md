@@ -49,8 +49,8 @@ Project programs and direct packages from manifests.
 | diesel | local | https://crates.io/crates/diesel | SQLite ORM |
 | diesel_migrations | local | https://crates.io/crates/diesel_migrations | SQLite migrations |
 | dirs | local | https://crates.io/crates/dirs | Rust dependency |
-| dunce | local | https://crates.io/crates/dunce | Canonicalize without Windows UNC prefixes |
 | flate2 | local | https://crates.io/crates/flate2 | Rust dependency |
+| fs-kit | local | https://github.com/pyrlyn/crates-packages/tree/main/fs-kit | Path identity without Windows UNC prefixes, atomic writes, tree copy and removal, backups (path dependency until published) |
 | hex | local | https://crates.io/crates/hex | Rust dependency |
 | indicatif | local | https://crates.io/crates/indicatif | Rust dependency |
 | insta | local | https://crates.io/crates/insta | Reviewed snapshots |

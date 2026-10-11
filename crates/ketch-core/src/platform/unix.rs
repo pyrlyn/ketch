@@ -10,6 +10,7 @@ use super::Platform;
 use crate::error::{Error, Result};
 use crate::extra::ExtraPlacement;
 use crate::model::{glob_match, glob_preferred, BinSpec, LinkKind, LinkRecord, LinkRole};
+use fs_kit::tree::remove_any;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
@@ -40,17 +41,6 @@ pub(crate) const NOISE_DIRS: &[&str] = &[
     "resources",
     "plugins",
 ];
-
-/// Remove whatever is at `path` — file, symlink or directory — treating "it
-/// was not there" as success.
-pub(crate) fn remove_any(path: &Path) -> std::io::Result<()> {
-    match std::fs::symlink_metadata(path) {
-        Ok(meta) if meta.is_dir() => std::fs::remove_dir_all(path),
-        Ok(_) => std::fs::remove_file(path),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e),
-    }
-}
 
 /// Add the bits a program needs to run, leaving every other bit alone.
 ///
@@ -130,7 +120,7 @@ pub(crate) fn is_ours(link: &Path, owned: &Path, recorded: &[LinkRecord]) -> boo
 /// Clear a destination, or explain who already has it.
 pub(crate) fn clear_destination(link: &Path, owned: &Path, recorded: &[LinkRecord]) -> Result<()> {
     destination_available(link, owned, recorded)?;
-    remove_any(link).map_err(|e| Error::io(link, e))
+    remove_any(link).map_err(|e| Error::fs_kit(link, e))
 }
 
 pub(crate) fn destination_available(
@@ -490,7 +480,7 @@ pub(crate) fn unplace(links: &[LinkRecord], report: &crate::report::Report) -> R
             ));
             continue;
         }
-        remove_any(&record.link).map_err(|e| Error::io(&record.link, e))?;
+        remove_any(&record.link).map_err(|e| Error::fs_kit(&record.link, e))?;
     }
     Ok(())
 }
