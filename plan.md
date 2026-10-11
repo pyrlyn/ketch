@@ -50,7 +50,7 @@ Not added: the brand move is done (`brand/build.mjs` already uses `@pyrlyn/brand
 | F14 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | F18 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
 | D11 | in progress | P3 | 5 | 10% | Claude Code / sonnet-5.5 |
-| D12 | in progress | P3 | 4 | 5% | Claude Code / opus-5.5 |
+| D12 | in progress | P3 | 4 | 85% | Claude Code / opus-5.5 |
 | D13 | todo | P3 | 3 | 0% | |
 | D14 | todo | P3 | 4 | 0% | |
 | D16 | todo | P3 | 5 | 0% | |
@@ -374,6 +374,8 @@ Execution plan:
 5. Tests: `Ketch.FfiCore.Tests` (MSTest) against a scratch root through the debug library: reads, install/uninstall of a `local:` payload with mapped events, a pre-cancelled install, `Busy` while another call holds the lock, `NotFound`; mapping tests for errors, events and the decider wrapper. `AppSettings` tests in `Ketch.AppCore.Tests`.
 6. Docs: `toolchain.md`, the `AGENTS.md` Layout row for `desktop/windows/`, `desktop/contract/README.md`.
 7. Verify: `dotnet test` for `Ketch.AppCore.Tests`, `Ketch.FfiCore.Tests` and `KetchCore.Tests` on macOS; the WinUI build only in CI. Left for a manual pass on Windows: launch the app with `KETCH_ROOT` set to a scratch root and go through Installed, Discover (search, install a package with several binaries to see the choice dialog), Updates (upgrade one, upgrade all), package detail (changelog, uninstall), Activity (cancel a running install), Doctor, Settings (theme survives a restart, `app-settings.json` written), and `Busy` (run `ketch install` in a terminal against the same root during an app install, then Retry).
+
+Status: steps 1–6 are done on branch `d12-d12-win-real-core`. Verified on macOS: `Ketch.AppCore.Tests` (46), `Ketch.FfiCore.Tests` (8, against the debug library on a scratch root) and `KetchCore.Tests` (5) pass. Left: the `ketch-win-app` CI run, the first to build the WinUI project with the `Ketch.FfiCore` reference and check `ketch_ffi.dll` beside `Ketch.exe`; and the manual pass on Windows in step 7, to be recorded here before the task closes.
 
 ### D13. Windows: tray icon, notifications, start at login, links
 
