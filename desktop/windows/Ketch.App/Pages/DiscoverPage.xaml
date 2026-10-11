@@ -23,8 +23,7 @@
             HorizontalAlignment="Left"
             PlaceholderText="Search the registry"
             QueryIcon="Find"
-            QuerySubmitted="OnQuerySubmitted"
-            TextChanged="OnTextChanged" />
+            QuerySubmitted="OnQuerySubmitted" />
 
         <ListView x:Name="Results" Grid.Row="2" SelectionMode="None">
             <ListView.ItemTemplate>

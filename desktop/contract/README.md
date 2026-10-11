@@ -58,6 +58,11 @@ The macOS app's fake is `desktop/macos/Ketch/Core/FakeKetchCore.swift`
 
 The Windows app's fake is `desktop/windows/Ketch.AppCore/FakeKetchCore.cs`
 (decoding in `ContractScenario.cs`), tested by
-`desktop/windows/Ketch.AppCore.Tests`. The app copies the scenarios beside its
-binary, and Settings can play one for the next install, upgrade or uninstall.
+`desktop/windows/Ketch.AppCore.Tests`. The app runs on the real core through
+`desktop/windows/Ketch.FfiCore/FfiKetchCore.cs`, which maps the binding's
+records, events and errors through the same `ContractScenario.cs` classes, so
+the fake and the live core show the same things. Under
+`KETCH_APP_FAKE_CORE=1` it runs on the fake instead: the scenarios ship beside
+its binary, and Settings can play one for the next install, upgrade or
+uninstall.
 The Linux fake reads the same directory when that app exists.

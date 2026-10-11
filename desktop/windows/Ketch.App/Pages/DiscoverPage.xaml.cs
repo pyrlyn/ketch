@@ -33,14 +33,8 @@ public sealed partial class DiscoverPage : Page
         }
     }
 
-    private async void OnTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
-    {
-        if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
-        {
-            await App.Store.SearchAsync(sender.Text);
-        }
-    }
-
+    // On submit, not per keystroke: a search can reach GitHub's search API,
+    // which allows a handful of unauthenticated requests a minute.
     private async void OnQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args) =>
         await App.Store.SearchAsync(args.QueryText);
 
@@ -50,7 +44,8 @@ public sealed partial class DiscoverPage : Page
         Results.ItemsSource = results;
         Results.Visibility = Fmt.ShowWhenAny(results.Count);
         Empty.Visibility = Fmt.ShowWhenEmpty(results.Count);
-        EmptyText.Text = $"No package matches \"{Query.Text.Trim()}\"";
+        var query = Query.Text.Trim();
+        EmptyText.Text = query.Length == 0 ? "Search the registry and GitHub" : $"No package matches \"{query}\"";
     }
 
     private async void OnInstall(object sender, RoutedEventArgs e)

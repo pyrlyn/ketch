@@ -4,8 +4,9 @@
 
   The Windows app: WinUI 3 on the Windows App SDK, built with the .NET SDK
   alone (`dotnet build -p:Platform=x64`), no Visual Studio. Unpackaged and
-  self-contained, so the output folder runs by itself. The core is
-  Ketch.AppCore's fake until the binding is wired (D12).
+  self-contained, so the output folder runs by itself. The core is ketch-ffi
+  through Ketch.FfiCore, whose KetchCore reference copies ketch_ffi.dll beside
+  the app: run `just csharp` (or scripts/csharp.sh) before building.
 -->
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -29,6 +30,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
     <ProjectReference Include="../Ketch.AppCore/Ketch.AppCore.csproj" />
+    <ProjectReference Include="../Ketch.FfiCore/Ketch.FfiCore.csproj" />
   </ItemGroup>
 
   <ItemGroup>

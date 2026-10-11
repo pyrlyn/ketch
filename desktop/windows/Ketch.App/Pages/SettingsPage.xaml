@@ -40,7 +40,8 @@
                     TextWrapping="Wrap" />
             </StackPanel>
 
-            <StackPanel Spacing="4">
+            <!-- Shown only on the fake core (KETCH_APP_FAKE_CORE=1). -->
+            <StackPanel x:Name="FakeCore" Spacing="4">
                 <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Fake core (development)" />
                 <TextBlock
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"

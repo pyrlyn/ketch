@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
 
-// The fake core the app runs on until the binding is wired: the contract
+// The fake core the app runs on under KETCH_APP_FAKE_CORE=1: the contract
 // scenarios decide what the reads return, and Settings can script an install,
 // upgrade or uninstall from one to reach a state (busy, a failed download, a
 // question) that the simulated pipeline never produces.

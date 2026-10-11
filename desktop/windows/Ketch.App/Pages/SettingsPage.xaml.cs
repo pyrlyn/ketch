@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
 
-// Settings: the theme, where ketch lives, and the fake core's scenario picker.
-// Nothing is saved yet: unpackaged apps have no ApplicationData settings, and
-// the real settings arrive with the live core (D12).
+// Settings: the theme, saved in AppSettings' file; where ketch lives; and,
+// only when the app runs on the fake core, its scenario picker.
 
 using Ketch.AppCore;
 using Microsoft.UI.Xaml;
@@ -29,6 +28,7 @@ public sealed partial class SettingsPage : Page
             ? current switch { ElementTheme.Light => 1, ElementTheme.Dark => 2, _ => 0 }
             : 0;
 
+        FakeCore.Visibility = App.Core is FakeKetchCore ? Visibility.Visible : Visibility.Collapsed;
         Scenario.Items.Add(Simulated);
         foreach (var scenario in scenarios)
         {
@@ -44,21 +44,23 @@ public sealed partial class SettingsPage : Page
         if (!loading && Theme.SelectedItem is ComboBoxItem { Tag: string tag } && Enum.TryParse<ElementTheme>(tag, out var theme))
         {
             App.Main?.SetTheme(theme);
+            App.Settings.Theme = tag;
+            App.Settings.Save(AppSettings.DefaultPath);
         }
     }
 
     private void OnScenarioChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (loading)
+        if (loading || App.Core is not FakeKetchCore fake)
         {
             return;
         }
 
-        App.Core.ClearScripted();
+        fake.ClearScripted();
         if (Scenario.SelectedIndex > 0)
         {
             var scenario = scenarios[Scenario.SelectedIndex - 1];
-            App.Core.Script(scenario);
+            fake.Script(scenario);
             ScenarioText.Text = scenario.Description;
         }
         else
