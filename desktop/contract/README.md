@@ -60,4 +60,7 @@ The Windows app's fake is `desktop/windows/Ketch.AppCore/FakeKetchCore.cs`
 (decoding in `ContractScenario.cs`), tested by
 `desktop/windows/Ketch.AppCore.Tests`. The app copies the scenarios beside its
 binary, and Settings can play one for the next install, upgrade or uninstall.
-The Linux fake reads the same directory when that app exists.
+The Linux app's fake is `desktop/linux/src/fake-core.vala` (decoding in
+`scenario.vala`), tested by `desktop/linux/tests/fake-core-test.vala`. It keeps
+the scenarios as JSON and answers in ketch-capi's envelopes, and a declined
+question goes on as the core does rather than cancelling.

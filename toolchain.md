@@ -30,7 +30,17 @@ Project programs and direct packages from manifests.
 | mandoc | ships with macOS; `apt install mandoc` on Linux | `just lint-man` checks the generated man pages | https://mandoc.bsd.lv |
 | uniffi-bindgen-cs | mise (`cargo:` from git, PR #176's commit) | C# bindings for `ketch-ffi` (`just csharp`); no release supports UniFFI 0.32 yet | https://github.com/NordSecurity/uniffi-bindgen-cs |
 | .NET SDK | mise | Builds and runs the C# binding's test (`just csharp-test`), the Windows app's tests (`just windows-app-test`) and, on Windows, the WinUI app (`ketch-win-app` CI job) | https://github.com/dotnet/sdk |
-| valac, Meson, Ninja, json-glib | the distribution's packages (`apt install valac meson ninja-build libjson-glib-dev`); mise has no valac | `just capi-test`: builds and runs `ketch-capi`'s Vala test; Linux CI only | https://vala.dev |
+| valac, Meson, Ninja, json-glib | the distribution's packages (`apt install valac meson ninja-build libjson-glib-dev`) | `just capi-test`: builds and runs `ketch-capi`'s Vala test; Linux CI only | https://vala.dev |
+| Meson | mise | Builds the Linux app in `desktop/linux` (`just linux-app-test`); the distribution's in Linux CI (`ketch-linux-app`) | https://github.com/mesonbuild/meson |
+| Ninja | mise | Meson's build backend | https://github.com/ninja-build/ninja |
+| valac | mise (conda-forge, `conda:vala`) | Compiles the Linux app; the distribution's `valac` in Linux CI | https://gitlab.gnome.org/GNOME/vala |
+
+## conda-forge (through mise)
+
+| Package | Where | Source | Why here |
+| --- | --- | --- | --- |
+| glib | global (mise) | https://github.com/conda-forge/glib-feedstock | GLib, GObject and GIO with headers and pkg-config files, for the Linux app's core library and tests |
+| json-glib | global (mise) | https://github.com/conda-forge/json-glib-feedstock | Parses the contract scenarios and the core's JSON answers in the Linux app |
 
 ## cargo
 

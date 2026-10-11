@@ -292,6 +292,17 @@ capi-test:
 windows-app-test:
     cd desktop/windows && dotnet test --project Ketch.AppCore.Tests
 
+# The Linux app's fake core and store against the contract scenarios; runs on any OS.
+# Vala, GLib and json-glib are the mise.toml pins (conda-forge, one prefix each),
+# found through PKG_CONFIG_PATH. The ketch-linux-app job runs it on Linux.
+linux-app-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export PKG_CONFIG_PATH="$(mise where conda:glib)/lib/pkgconfig:$(mise where conda:json-glib)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+    rm -rf target/linux-app-meson
+    meson setup target/linux-app-meson desktop/linux
+    meson test -C target/linux-app-meson --print-errorlogs
+
 # The library the fuzz targets link (src/lib.rs, cfg(fuzzing) only), checked on
 # stable: nothing else builds it, so `check` and CI would not notice it break.
 fuzz-check:

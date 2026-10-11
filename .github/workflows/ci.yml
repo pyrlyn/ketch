@@ -259,6 +259,32 @@ jobs:
       - name: Build the WinUI app
         run: dotnet build Ketch.App/Ketch.App.csproj -c Release -p:Platform=x64
 
+  # The Linux app (desktop/linux): Meson builds it, and its tests run the fake
+  # core and store against the contract scenarios. What `just linux-app-test`
+  # runs. The toolchain is the distribution's, as in ketch-capi; the mise.toml
+  # pins (conda-forge builds) serve local work on any OS.
+  ketch-linux-app:
+    needs: config
+    if: >-
+      !cancelled() && github.event.pull_request.draft != true
+      && needs.config.outputs.docs-only != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Vala toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends valac meson ninja-build libjson-glib-dev
+
+      - name: Build
+        run: |
+          meson setup target/linux-app-meson desktop/linux
+          meson compile -C target/linux-app-meson
+
+      - name: Test
+        run: meson test -C target/linux-app-meson --print-errorlogs
+
   # The design tokens: every generated copy (Swift, XAML, GTK CSS, DESIGN.md,
   # preview.html) is what desktop/design/build.mjs writes from tokens.json, DESIGN.md passes
   # the DESIGN.md linter, and text meets WCAG AA on its glass backgrounds.
