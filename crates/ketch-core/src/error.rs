@@ -156,16 +156,12 @@ impl Error {
         }
     }
 
-    /// An error from `fs-kit`. Its message already starts with the path it
-    /// names, so wrapping it in [`Error::io`] as is would print the path twice.
+    /// An error from `fs-kit`. It already names the exact path that failed
+    /// (a file deep inside a copied tree), which wins over `path`; the
+    /// original error goes in as the source, so the path prints once.
     pub fn fs_kit(path: impl AsRef<Path>, err: std::io::Error) -> Self {
-        let path = path.as_ref();
-        let text = err.to_string();
-        let bare = text
-            .strip_prefix(&format!("{}: ", path.display()))
-            .unwrap_or(&text);
-        let source = std::io::Error::new(err.kind(), bare.to_string());
-        Error::io(path, source)
+        let (at, source) = fs_kit::split(err);
+        Error::io(at.as_deref().unwrap_or(path.as_ref()), source)
     }
 
     pub fn parse(what: impl Into<String>, detail: impl Into<String>) -> Self {
@@ -242,5 +238,21 @@ impl Error {
             Error::Cancelled => 130,
             _ => 1,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_fs_kit_error_names_the_path_that_failed_once() {
+        let dir = tempfile::tempdir().unwrap();
+        // Reading a directory as text fails on every platform.
+        let err = fs_kit::read::text_or_empty(dir.path()).unwrap_err();
+        let text = Error::fs_kit("caller-path", err).to_string();
+        let path = dir.path().display().to_string();
+        assert_eq!(text.matches(&path).count(), 1, "{text}");
+        assert!(!text.contains("caller-path"), "{text}");
     }
 }
