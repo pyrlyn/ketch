@@ -2651,6 +2651,10 @@ mod tests {
         fn stop_processes(&self, _occupants: &[crate::process::Occupant]) -> bool {
             false
         }
+
+        fn confirm_remove_leftover(&self, _path: &Path) -> bool {
+            false
+        }
     }
 
     /// A payload with two executables that share the package name and none

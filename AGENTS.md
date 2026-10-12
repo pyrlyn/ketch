@@ -328,8 +328,8 @@ These are observed throughout; match them rather than introducing your own.
   typed `report::Event`s: `stage`, `step`, `success`, `warn`, `note`, `debug`,
   and `activity`/`download`/`batch`/`counter` handles for long work. The core
   never reads stdin: a question goes to the `decide::Decider` in `Ctx`
-  (`choose_binary`, `stop_processes`), and `NoDecider`, the default, answers
-  like a script. The binary asks through `ui::ctx_asking`, which puts
+  (`choose_binary`, `stop_processes`, `confirm_remove_leftover`), and
+  `NoDecider`, the default, answers like a script. The binary asks through `ui::ctx_asking`, which puts
   `ui::TerminalDecider` there unless `--yes` has already answered. A
   confirmation a command makes before calling the core stays in `cmd/`: it is
   the front end's own dialog, and a GUI makes its own.
