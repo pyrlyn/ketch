@@ -157,6 +157,10 @@ impl KetchCore {
     /// manifests know first, then repositories the sources find, `limit` in
     /// all. A source that cannot be reached is a warning to `reporter`; only
     /// when every one failed and nothing was found is it an error.
+    ///
+    /// An empty `query` browses: every package the registry, the built-ins
+    /// and the person's own manifests know, up to `limit`, and no source is
+    /// asked, since none can rank a repository against nothing.
     pub fn search(
         &self,
         query: String,
@@ -164,11 +168,6 @@ impl KetchCore {
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<SearchResults> {
         let query = query.trim();
-        if query.is_empty() {
-            return Err(KetchError::Other {
-                message: "nothing to search for".into(),
-            });
-        }
         let limit = usize::try_from(limit).unwrap_or(usize::MAX);
         let op = self.operation(reporter, None)?;
         let cx = op.ctx();
@@ -189,7 +188,7 @@ impl KetchCore {
 
         let rest = limit.saturating_sub(known.len());
         let mut repositories = Vec::new();
-        if rest > 0 {
+        if rest > 0 && !query.is_empty() {
             let mut unreachable = 0usize;
             for source in SourceRegistry::load(&cx).all() {
                 match source.search(query, rest) {
@@ -939,7 +938,25 @@ mod tests {
         assert!(core
             .install(Vec::new(), InstallOptions::default(), None, None, None)
             .is_err());
-        assert!(core.search("  ".into(), 10, None).is_err());
+    }
+
+    #[test]
+    fn an_empty_search_browses_what_is_known_and_asks_no_source() {
+        let (_dir, core) = scratch();
+        let cfg = core.operation(None, None).unwrap().cfg;
+        std::fs::create_dir_all(&cfg.manifest_dir).unwrap();
+        std::fs::write(
+            cfg.manifest_dir.join("alpha.toml"),
+            "name = \"alpha\"\nsource = \"github:example/alpha\"\n",
+        )
+        .unwrap();
+        let everything = core.search("  ".into(), 1000, None).unwrap();
+        assert_eq!(everything.known[0].name, "alpha", "{everything:?}");
+        assert!(everything.known.len() > 1, "the built-ins are known too");
+        assert!(everything.repositories.is_empty(), "{everything:?}");
+
+        let first = core.search(String::new(), 1, None).unwrap();
+        assert_eq!(first.known.len(), 1);
     }
 
     #[test]

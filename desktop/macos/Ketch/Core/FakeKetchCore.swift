@@ -97,7 +97,7 @@ final class FakeKetchCore: KetchCoreProtocol {
 
     func search(query: String) throws -> [RegistryPackage] {
         pause()
-        let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return state.withLock { state in
             state.calls.append("search \(needle)")
             guard !needle.isEmpty else { return state.registry }
