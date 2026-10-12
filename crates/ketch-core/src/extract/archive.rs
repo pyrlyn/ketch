@@ -1302,8 +1302,12 @@ mod tests {
             let dest = outer.path().join("dest");
             std::fs::create_dir_all(&dest).unwrap();
 
-            unpack_tar(&tar_with_read_only_dir(dir_first)[..], &dest)
-                .unwrap_or_else(|e| panic!("dir_first={dir_first}: {e}"));
+            unpack_tar(
+                &tar_with_read_only_dir(dir_first)[..],
+                &dest,
+                &mut unlimited(),
+            )
+            .unwrap_or_else(|e| panic!("dir_first={dir_first}: {e}"));
             assert_eq!(std::fs::read(dest.join("ro/file")).unwrap(), b"hi");
             let mode = std::fs::metadata(dest.join("ro"))
                 .unwrap()
