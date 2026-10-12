@@ -75,6 +75,18 @@ fn materialize_symlink_as_copy(target: &Path, link: &Path) -> Result<()> {
         return Ok(());
     }
     if resolved.is_dir() {
+        // `d -> .` or `sub/d -> ..` passes the lexical target check, yet
+        // copying it would copy the link's own directory into itself.
+        let parent = link.parent().unwrap_or_else(|| Path::new("."));
+        let source = std::fs::canonicalize(&resolved).map_err(|e| Error::io(&resolved, e))?;
+        let home = std::fs::canonicalize(parent).map_err(|e| Error::io(parent, e))?;
+        if home.starts_with(&source) {
+            return Err(Error::msg(format!(
+                "cannot materialise archive symlink {} → {}: the target is an ancestor of the link",
+                link.display(),
+                target.display()
+            )));
+        }
         copy_dir_contents(&resolved, link)?;
         return Ok(());
     }
@@ -92,9 +104,14 @@ fn materialize_symlink_as_copy(target: &Path, link: &Path) -> Result<()> {
 /// outer materialisation already flattened what the archive could express.
 #[cfg_attr(unix, allow(dead_code))]
 fn copy_dir_contents(src: &Path, dest: &Path) -> Result<()> {
+    // Listed in full before anything is written, so nothing the copy creates
+    // can be walked again.
+    let entries = walkdir::WalkDir::new(src)
+        .into_iter()
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| Error::msg(format!("walking {}: {e}", src.display())))?;
     std::fs::create_dir_all(dest).map_err(|e| Error::io(dest, e))?;
-    for entry in walkdir::WalkDir::new(src) {
-        let entry = entry.map_err(|e| Error::msg(format!("walking {}: {e}", src.display())))?;
+    for entry in entries {
         let rel = pathdiff::diff_paths(entry.path(), src)
             .filter(|r| !r.components().any(|c| matches!(c, Component::ParentDir)))
             .ok_or_else(|| {
@@ -813,6 +830,30 @@ mod tests {
         let err = materialize_symlink_as_copy(Path::new("missing"), &link).unwrap_err();
         assert!(err.to_string().contains("cannot materialise"), "{err}");
         assert!(std::fs::symlink_metadata(&link).is_err());
+    }
+
+    /// A directory link to its own ancestor would be copied into itself while
+    /// the copy walks it: endless recursion, or a full disk.
+    #[test]
+    fn materialize_symlink_as_copy_refuses_a_link_to_its_own_ancestor() {
+        let dest = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dest.path().join("sub")).unwrap();
+        std::fs::write(dest.path().join("sub/file"), b"x").unwrap();
+
+        for (link, target) in [
+            ("d", "."),
+            ("sub/d", ".."),
+            ("sub/d", "."),
+            ("sub/d", "../sub"),
+        ] {
+            let link = dest.path().join(link);
+            let err = materialize_symlink_as_copy(Path::new(target), &link).unwrap_err();
+            assert!(err.to_string().contains("ancestor"), "{target}: {err}");
+            assert!(
+                std::fs::symlink_metadata(&link).is_err(),
+                "{target}: nothing written"
+            );
+        }
     }
 
     #[test]
