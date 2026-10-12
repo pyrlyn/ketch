@@ -408,9 +408,27 @@ pub fn current_exe() -> Result<PathBuf> {
     Ok(fs_kit::path::canon(&exe))
 }
 
+/// How `update` lists ketch's own releases. Without `pre` it asks for
+/// GitHub's latest release, as it always has; with it, the newest release
+/// including prereleases, chosen by the same `select_release` every package
+/// goes through, which also passes over the macOS app's `desktop-v*` tags.
+pub fn release_opts(pre: bool) -> ListOpts {
+    ListOpts {
+        include_prerelease: pre,
+        ..ListOpts::default()
+    }
+}
+
 /// Fetch the latest ketch release and install it: as an upgrade of the `ketch`
 /// package when there is one, otherwise by replacing this binary in place.
-pub fn update(cx: &Ctx<'_>, force: bool, dry_run: bool, docs: SelfDocs) -> Result<SelfUpdate> {
+/// `pre` widens "latest" to prereleases.
+pub fn update(
+    cx: &Ctx<'_>,
+    force: bool,
+    dry_run: bool,
+    pre: bool,
+    docs: SelfDocs,
+) -> Result<SelfUpdate> {
     let (cfg, report) = (cx.cfg, cx.report);
     let _lock = Lock::acquire(cx)?;
     let mut state = State::load(cfg)?;
@@ -442,7 +460,7 @@ pub fn update(cx: &Ctx<'_>, force: bool, dry_run: bool, docs: SelfDocs) -> Resul
     report.step("checking", &cfg.self_repo);
     let release = report
         .activity("checking for updates")
-        .run(|| source.resolve(&cfg.self_repo, &VersionSpec::Latest, &ListOpts::default()))?;
+        .run(|| source.resolve(&cfg.self_repo, &VersionSpec::Latest, &release_opts(pre)))?;
     let to = release.version.clone();
 
     if to <= from && !force {
@@ -1408,6 +1426,37 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn pre_widens_the_self_release_to_the_newest_cli_prerelease_only() {
+        let release = |tag: &str, prerelease: bool| crate::model::Release {
+            version: crate::model::Version::parse(tag),
+            tag: tag.to_string(),
+            prerelease,
+            draft: false,
+            published_at: None,
+            notes: None,
+            assets: Vec::new(),
+        };
+        let listing = vec![
+            release("desktop-v9999.0.0", false),
+            release("desktop-appcast", true),
+            release("v2.0.0-rc.1", true),
+            release("v1.0.0", false),
+        ];
+        let pick = |pre: bool| {
+            crate::source::pick(
+                "o/ketch",
+                listing.clone(),
+                &VersionSpec::Latest,
+                &release_opts(pre),
+            )
+            .map(|r| r.tag)
+            .ok()
+        };
+        assert_eq!(pick(false).as_deref(), Some("v1.0.0"));
+        assert_eq!(pick(true).as_deref(), Some("v2.0.0-rc.1"));
+    }
 
     #[test]
     fn a_caskroom_directory_is_what_says_brew_installed_ketch() {

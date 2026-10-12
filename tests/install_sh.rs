@@ -126,7 +126,8 @@ esac
 exit 0
 "#;
 
-    /// Serves the three URLs the script asks for, and nothing else.
+    /// Serves the URLs the script asks for, and nothing else. `FAKE_LATEST`
+    /// stands in for GitHub's latest release, `FAKE_LISTING` for the listing.
     const STUB_CURL: &str = "#!/bin/bash\n\
         out=''\n\
         url=''\n\
@@ -139,7 +140,8 @@ exit 0
         \x20 shift\n\
         done\n\
         case \"${url}\" in\n\
-        \x20 */releases/latest) printf '{\"tag_name\": \"v9.9.9\"}\\n' ;;\n\
+        \x20 */releases/latest) printf '{\"tag_name\": \"%s\"}\\n' \"${FAKE_LATEST:-v9.9.9}\" ;;\n\
+        \x20 */releases\\?per_page=*) printf '%s\\n' \"${FAKE_LISTING:-[]}\" ;;\n\
         \x20 */releases/download/v9.9.9/SHA256SUMS) cp \"${FAKE_RELEASE_DIR}/SHA256SUMS\" \"${out}\" ;;\n\
         \x20 */releases/download/v9.9.9/*) cp \"${FAKE_RELEASE_DIR}/payload.tar.gz\" \"${out}\" ;;\n\
         \x20 *) echo \"unexpected url: ${url}\" >&2; exit 1 ;;\n\
@@ -255,6 +257,46 @@ exit 0
             installed.path(),
             "the link must point at the binary ketch updates"
         );
+    }
+
+    /// The listing as the ketch repository has it: the macOS app's releases
+    /// newest, then a CLI prerelease that `/releases/latest` never returns.
+    const LISTING_WITH_A_PRERELEASE: &str = r#"[{"tag_name":"desktop-appcast","prerelease":true},{"tag_name":"desktop-v99.0.0","prerelease":false},{"tag_name":"v9.9.9","prerelease":true,"body":"a, b"},{"tag_name":"v1.0.0","prerelease":false}]"#;
+
+    /// `--pre` installs the newest CLI release, prerelease or not, from the
+    /// listing, past the macOS app's `desktop-v*` tags. Without it the script
+    /// still asks for the latest release, which this stub serves as `v1.0.0`
+    /// with nothing to download.
+    #[test]
+    fn pre_installs_the_newest_cli_prerelease_and_skips_desktop_tags() {
+        let release = StubRelease::new();
+        let work = TempDir::new().unwrap();
+        let root = work.child("root");
+        let with = |pre: bool| {
+            let mut cmd = Command::new("/bin/bash");
+            cmd.arg(concat!(env!("CARGO_MANIFEST_DIR"), "/install.sh"))
+                .args(["--no-modify-path", "--root"])
+                .arg(root.path())
+                .current_dir(work.path())
+                .env("PATH", release.path())
+                .env("FAKE_RELEASE_DIR", release.dir.path())
+                .env("FAKE_LATEST", "v1.0.0")
+                .env("FAKE_LISTING", LISTING_WITH_A_PRERELEASE)
+                .env("HOME", work.path());
+            if pre {
+                cmd.arg("--pre");
+            }
+            cmd.assert()
+        };
+
+        with(false)
+            .failure()
+            .stderr(predicate::str::contains("unexpected url"))
+            .stderr(predicate::str::contains("/v1.0.0/"));
+        with(true)
+            .success()
+            .stdout(predicate::str::contains("Installing ketch version v9.9.9"));
+        root.child("bin/ketch").assert(predicate::path::is_file());
     }
 
     /// Only a root the script created is marked as ketch's to empty on
