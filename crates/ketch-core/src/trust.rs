@@ -20,25 +20,37 @@
 //! log — minisign comments, OpenPGP user IDs, certificate fields and the
 //! verifiers' own error detail are all chosen by whoever made the file. What
 //! is reported is what the manifest pinned.
+//!
+//! The verifiers are the `trust` feature. A build without it still validates
+//! what it can of a policy and still runs `verify`, which then fails every
+//! policy the way a verifier that could not finish does: `require` refuses
+//! the install, `warn` installs on the checksum and says so.
 
 use crate::error::{Error, Result};
 use crate::model::{Provenance, Release, ReleaseAsset, TrustMode, TrustPolicy, Verifier};
-use crate::report::{Report, SilentProgress};
+use crate::report::Report;
 use crate::source::Source;
-use pgp::composed::{Deserializable, DetachedSignature, SignedPublicKey};
-use pgp::packet::{Signature, SignatureType};
-use pgp::types::KeyDetails;
-use std::io::{BufReader, Read};
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(feature = "trust")]
+use {
+    crate::report::SilentProgress,
+    pgp::composed::{Deserializable, DetachedSignature, SignedPublicKey},
+    pgp::packet::{Signature, SignatureType},
+    pgp::types::KeyDetails,
+    std::io::{BufReader, Read},
+    std::path::PathBuf,
+};
 
 /// Largest sidecar or signed checksum list ketch reads. Real ones are a few
 /// KiB; a bundle with a full certificate chain is still far below this.
+#[cfg(feature = "trust")]
 const MAX_SIDECAR: u64 = 1 << 20;
 
 /// Sigstore's public-good trusted root, as sigstore-rs 0.14 ships it.
 // ponytail: embedded, never refreshed over TUF. Fulcio and Rekor keys rotate
 // rarely and a rotation fails verification rather than passing it; replace
 // this file from sigstore/root-signing when that happens.
+#[cfg(feature = "trust")]
 const SIGSTORE_TRUSTED_ROOT: &str = include_str!("sigstore-trusted-root.json");
 
 /// Check what serde cannot about a `trust` table. Called from
@@ -67,8 +79,14 @@ pub fn check_policy(policy: &TrustPolicy) -> Result<()> {
     }
     match policy.verifier {
         Verifier::Sigstore => sigstore_policy(policy),
+        #[cfg(feature = "trust")]
         Verifier::Minisign => minisign_key(policy).map(|_| ()),
+        #[cfg(feature = "trust")]
         Verifier::Gpg => gpg_key(policy).map(|_| ()),
+        // Parsing the key takes the verifier's own crate. A key left unparsed
+        // here still installs nothing: `verify` cannot satisfy the policy.
+        #[cfg(not(feature = "trust"))]
+        Verifier::Minisign | Verifier::Gpg => Ok(()),
     }
 }
 
@@ -133,6 +151,7 @@ pub fn refuse(
     }
 }
 
+#[cfg(feature = "trust")]
 fn check(
     policy: &TrustPolicy,
     source: &dyn Source,
@@ -204,8 +223,25 @@ fn check(
     })
 }
 
+/// Built without the verifiers, no policy can be satisfied.
+#[cfg(not(feature = "trust"))]
+fn check(
+    _policy: &TrustPolicy,
+    _source: &dyn Source,
+    _release: &Release,
+    _asset: &ReleaseAsset,
+    _download: &Path,
+    _sha256: &str,
+    _staging: &Path,
+) -> Result<Provenance> {
+    Err(Error::msg(
+        "this ketch was built without signature verification",
+    ))
+}
+
 /// The one release asset `wanted` picks. Two would leave the choice of which
 /// file to trust to the release, so that is refused too.
+#[cfg(feature = "trust")]
 fn only_asset<'a>(
     release: &'a Release,
     wanted: impl Fn(&ReleaseAsset) -> bool,
@@ -226,6 +262,7 @@ fn only_asset<'a>(
 }
 
 /// Download a small release asset into `dir`; returns its path and SHA-256.
+#[cfg(feature = "trust")]
 fn fetch(source: &dyn Source, asset: &ReleaseAsset, dir: &Path) -> Result<(PathBuf, String)> {
     if asset.size > MAX_SIDECAR {
         return Err(Error::msg(format!(
@@ -238,6 +275,7 @@ fn fetch(source: &dyn Source, asset: &ReleaseAsset, dir: &Path) -> Result<(PathB
     Ok((path, sha256))
 }
 
+#[cfg(feature = "trust")]
 fn read_capped(path: &Path) -> Result<Vec<u8>> {
     let file = std::fs::File::open(path).map_err(|e| Error::io(path, e))?;
     let mut bytes = Vec::new();
@@ -253,6 +291,7 @@ fn read_capped(path: &Path) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+#[cfg(feature = "trust")]
 fn open(path: &Path) -> Result<BufReader<std::fs::File>> {
     std::fs::File::open(path)
         .map(BufReader::new)
@@ -299,6 +338,7 @@ fn sigstore_policy(policy: &TrustPolicy) -> Result<()> {
 
 /// Verify a Sigstore bundle over the file at `signed`. Returns who signed,
 /// as pinned, and the Rekor log index.
+#[cfg(feature = "trust")]
 fn sigstore_check(
     policy: &TrustPolicy,
     sidecar: &[u8],
@@ -348,6 +388,7 @@ fn sigstore_check(
 
 /// Say why a bundle failed without repeating anything it contains: policy
 /// errors quote the certificate's own values, bundle errors its media type.
+#[cfg(feature = "trust")]
 fn sigstore_reason(error: sigstore::bundle::verify::VerificationError) -> Error {
     use sigstore::bundle::verify::VerificationError as E;
     Error::msg(match error {
@@ -371,6 +412,7 @@ fn sigstore_reason(error: sigstore::bundle::verify::VerificationError) -> Error 
 // ponytail: the SET only, not the Merkle inclusion proof. The SET is Rekor's
 // promise to include the entry; checking the proof needs a checkpoint and is
 // the upgrade if a bundle ever arrives with a proof and no promise.
+#[cfg(feature = "trust")]
 fn check_signed_entry_timestamp(
     bundle: &sigstore::bundle::Bundle,
     root: &TrustedRoot,
@@ -426,6 +468,7 @@ fn check_signed_entry_timestamp(
 }
 
 /// The key material from the embedded trusted root.
+#[cfg(feature = "trust")]
 struct TrustedRoot {
     /// Every Fulcio certificate, roots and intermediates alike.
     fulcio: Vec<Vec<u8>>,
@@ -435,6 +478,7 @@ struct TrustedRoot {
     ctfe: Vec<Vec<u8>>,
 }
 
+#[cfg(feature = "trust")]
 impl TrustedRoot {
     fn embedded() -> Result<TrustedRoot> {
         TrustedRoot::parse(SIGSTORE_TRUSTED_ROOT).map_err(|what| {
@@ -493,6 +537,7 @@ impl TrustedRoot {
     }
 }
 
+#[cfg(feature = "trust")]
 fn base64(value: &serde_json::Value) -> std::result::Result<Vec<u8>, &'static str> {
     let text = value.as_str().ok_or("key material is missing")?;
     let mut out = Vec::new();
@@ -507,6 +552,7 @@ fn base64(value: &serde_json::Value) -> std::result::Result<Vec<u8>, &'static st
 // ---------------------------------------------------------------------------
 
 /// The pinned key: the bare key line, or the whole `minisign.pub`.
+#[cfg(feature = "trust")]
 fn minisign_key(policy: &TrustPolicy) -> Result<minisign_verify::PublicKey> {
     let text = policy
         .public_key
@@ -517,6 +563,7 @@ fn minisign_key(policy: &TrustPolicy) -> Result<minisign_verify::PublicKey> {
 }
 
 /// The key line of a `minisign.pub`; its comment line says nothing ketch uses.
+#[cfg(feature = "trust")]
 fn minisign_key_line(text: &str) -> &str {
     text.lines()
         .map(str::trim)
@@ -524,6 +571,7 @@ fn minisign_key_line(text: &str) -> &str {
         .unwrap_or_default()
 }
 
+#[cfg(feature = "trust")]
 fn minisign_check(policy: &TrustPolicy, sidecar: &[u8], signed: &Path) -> Result<String> {
     let key = minisign_key(policy)?;
     let signature = std::str::from_utf8(sidecar)
@@ -558,6 +606,7 @@ fn minisign_check(policy: &TrustPolicy, sidecar: &[u8], signed: &Path) -> Result
 // ---------------------------------------------------------------------------
 
 /// Parse the inline key and hold it to the pinned fingerprint.
+#[cfg(feature = "trust")]
 fn gpg_key(policy: &TrustPolicy) -> Result<(SignedPublicKey, String)> {
     let armored = policy.public_key.as_deref().ok_or_else(|| {
         Error::msg("the gpg verifier needs `trust.public_key`, an armored key block")
@@ -595,6 +644,7 @@ fn gpg_key(policy: &TrustPolicy) -> Result<(SignedPublicKey, String)> {
     Ok((key, actual))
 }
 
+#[cfg(feature = "trust")]
 fn gpg_check(policy: &TrustPolicy, sidecar: &[u8], signed: &Path, now: u64) -> Result<String> {
     let (key, fingerprint) = gpg_key(policy)?;
     let parsed = if sidecar.starts_with(b"-----BEGIN") {
@@ -678,6 +728,7 @@ fn gpg_check(policy: &TrustPolicy, sidecar: &[u8], signed: &Path, now: u64) -> R
 
 /// When a key made at `created` stops being valid, from the most recent of
 /// its self-signatures. `None`: it does not expire.
+#[cfg(feature = "trust")]
 fn expiry<'a>(created: u32, signatures: impl Iterator<Item = &'a Signature>) -> Option<u64> {
     let latest = signatures.max_by_key(|sig| sig.created().map(|t| t.as_secs()))?;
     latest
@@ -689,6 +740,7 @@ fn expiry<'a>(created: u32, signatures: impl Iterator<Item = &'a Signature>) -> 
 
 /// Whether `sig` was issued by `key` itself, rather than a third party
 /// certifying one of its user IDs.
+#[cfg(feature = "trust")]
 fn issued_by(sig: &Signature, key: &impl KeyDetails) -> bool {
     let fingerprint = key.fingerprint();
     sig.issuer_fingerprint().iter().any(|f| **f == fingerprint)
@@ -699,7 +751,7 @@ fn issued_by(sig: &Signature, key: &impl KeyDetails) -> bool {
                 .any(|id| **id == key.legacy_key_id()))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "trust"))]
 mod tests {
     use super::*;
 
@@ -995,5 +1047,88 @@ mod tests {
         assert!(root.fulcio.len() >= 2);
         assert!(!root.rekor.is_empty());
         assert!(!root.ctfe.is_empty());
+    }
+}
+
+/// A build without the verifiers treats every policy as one a verifier could
+/// not finish. Only `scripts/core-features.sh` builds this way and runs these.
+#[cfg(all(test, not(feature = "trust")))]
+mod without_verifiers {
+    use super::*;
+    use crate::model::Version;
+    use std::collections::BTreeMap;
+
+    fn policy(verifier: Verifier, mode: TrustMode) -> TrustPolicy {
+        TrustPolicy {
+            verifier,
+            mode,
+            signature: None,
+            signed: None,
+            issuer: None,
+            identity: None,
+            repository: None,
+            public_key: Some("RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3".into()),
+            fingerprint: None,
+        }
+    }
+
+    fn asset(name: &str) -> ReleaseAsset {
+        ReleaseAsset {
+            name: name.into(),
+            url: format!("https://example.invalid/{name}"),
+            size: 1,
+            content_type: None,
+            digest: None,
+            headers: BTreeMap::new(),
+        }
+    }
+
+    fn verify_minisign(mode: TrustMode) -> Result<Option<Provenance>> {
+        let dir = tempfile::tempdir().unwrap();
+        let download = dir.path().join("tool.tar.gz");
+        std::fs::write(&download, b"payload").unwrap();
+        let release = Release {
+            version: Version::parse("1.0.0"),
+            tag: "v1.0.0".into(),
+            prerelease: false,
+            draft: false,
+            published_at: None,
+            notes: None,
+            assets: vec![asset("tool.tar.gz"), asset("tool.tar.gz.minisig")],
+        };
+        verify(
+            Some(&policy(Verifier::Minisign, mode)),
+            &crate::source::local::LocalSource::new(),
+            &release,
+            &release.assets[0],
+            &download,
+            &"0".repeat(64),
+            dir.path(),
+            &Report::silent(),
+        )
+    }
+
+    #[test]
+    fn a_required_signature_refuses_the_install() {
+        let refused = verify_minisign(TrustMode::Require).unwrap_err().to_string();
+        assert!(refused.contains("requires"), "{refused}");
+        assert!(
+            refused.contains("without signature verification"),
+            "{refused}"
+        );
+    }
+
+    #[test]
+    fn a_warn_policy_installs_on_the_checksum_alone() {
+        assert!(verify_minisign(TrustMode::Warn).unwrap().is_none());
+    }
+
+    #[test]
+    fn keys_a_verifier_ignores_are_still_refused() {
+        let policy = TrustPolicy {
+            issuer: Some("https://token.actions.githubusercontent.com".into()),
+            ..policy(Verifier::Minisign, TrustMode::Require)
+        };
+        assert!(check_policy(&policy).is_err());
     }
 }

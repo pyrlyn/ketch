@@ -40,5 +40,13 @@ for feature in $features; do
     lint --features "$feature"
 done
 
+# The paths a feature leaves behind when it is off (a policy refused, an
+# event not recorded) only exist in this build, so its unit tests run here.
+# One thread: some tests set process environment (KETCH_LOG_FORMAT, ...),
+# which nextest isolates per process and cargo test does not; nextest is not
+# installed everywhere this runs.
+echo "==> ketch-core tests, no features" >&2
+cargo test --locked -p ketch-core --lib --no-default-features -q -- --test-threads=1
+
 echo "==> ketch-ffi alone" >&2
 cargo clippy --locked -p ketch-ffi --lib -- -D warnings
