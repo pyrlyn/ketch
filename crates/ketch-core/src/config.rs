@@ -39,6 +39,13 @@ pub fn current_repo(repo: &str) -> &str {
 }
 pub const USER_AGENT: &str = concat!("ketch/", env!("CARGO_PKG_VERSION"));
 
+/// The marker file's name inside the root. `install.sh` and `install.ps1`
+/// write the same name when they create the root themselves.
+pub const ROOT_MARKER: &str = ".ketch-root";
+
+const ROOT_MARKER_BODY: &str =
+    "ketch created this directory; `ketch self uninstall` removes it with everything inside.\n";
+
 /// On-disk settings. Every field optional so a partial file is valid.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
@@ -291,7 +298,12 @@ impl Config {
     }
 
     /// Create the directory layout. Safe to call repeatedly.
+    ///
+    /// A root this call creates is marked as ketch's; one that already
+    /// existed is not, because it may be a shared prefix like `/usr/local`
+    /// whose `bin/` holds other programs.
     pub fn ensure_dirs(&self) -> Result<()> {
+        let fresh = !self.root.exists();
         for dir in [
             &self.root,
             &self.bin_dir,
@@ -302,7 +314,23 @@ impl Config {
         ] {
             std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
         }
+        if fresh {
+            self.mark_root()?;
+        }
         Ok(())
+    }
+
+    /// The file that says ketch created the root, and so may empty it.
+    pub fn root_marker(&self) -> PathBuf {
+        self.root.join(ROOT_MARKER)
+    }
+
+    /// Record that the root is ketch's own. `ketch self uninstall` empties
+    /// the named children of a marked root; any other root keeps whatever
+    /// ketch did not record.
+    pub fn mark_root(&self) -> Result<()> {
+        let marker = self.root_marker();
+        std::fs::write(&marker, ROOT_MARKER_BODY).map_err(|e| Error::io(&marker, e))
     }
 
     /// Where a specific version of a package is unpacked.
@@ -918,5 +946,29 @@ mod tests {
     fn ketch_emoji_0_turns_them_off_over_the_file() {
         assert!(!emoji_with("emoji = true\n", Some("0")));
         assert!(emoji_with("emoji = false\n", Some("1")));
+    }
+
+    #[test]
+    fn ensure_dirs_marks_a_root_it_creates() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = Config::load(
+            Some(tmp.path().join("fresh")),
+            &crate::report::Report::silent(),
+        )
+        .unwrap();
+        cfg.ensure_dirs().unwrap();
+        assert!(cfg.root_marker().is_file());
+    }
+
+    #[test]
+    fn ensure_dirs_does_not_mark_a_root_that_already_existed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = Config::load(
+            Some(tmp.path().to_path_buf()),
+            &crate::report::Report::silent(),
+        )
+        .unwrap();
+        cfg.ensure_dirs().unwrap();
+        assert!(!cfg.root_marker().exists());
     }
 }
