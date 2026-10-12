@@ -289,11 +289,19 @@ else
   fi
 fi
 
-# Create the root bin dir the installed binary will live in.
+# Create the root bin dir the installed binary will live in. A root this
+# script creates is marked as ketch's, so `ketch self uninstall` may empty it;
+# one that already existed (`~/.local`, `/usr/local`) may hold other programs.
+NEW_ROOT=""
+[ -e "${ROOT}" ] || NEW_ROOT=1
 mkdir -p "${ROOT}/bin" || {
   echo "${RED}Error: Failed to create install directory: ${ROOT}/bin${NC}" >&2
   exit 1
 }
+if [ -n "${NEW_ROOT}" ]; then
+  echo "ketch created this directory; \`ketch self uninstall\` removes it with everything inside." \
+    >"${ROOT}/.ketch-root" || true
+fi
 
 # Check if this is an upgrade
 INSTALL_PATH="${ROOT}/bin/${BINARY_NAME}"

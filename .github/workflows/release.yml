@@ -114,10 +114,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.container && matrix.container.image || null }}
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
-      CODESIGN_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-      CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+      # CODESIGN_CERTIFICATE(+_PASSWORD): only on the macOS `Build artifacts` step
       # CODESIGN_IDENTITY: set on macOS by .github/build-setup.yml (not a secret)
     steps:
       - name: enable windows longpaths
@@ -211,6 +209,9 @@ jobs:
         run: |
           ${{ matrix.packages_install }}
       - name: Build artifacts
+        env:
+          CODESIGN_CERTIFICATE: ${{ runner.os == 'macOS' && secrets.MACOS_CERTIFICATE || '' }}
+          CODESIGN_CERTIFICATE_PASSWORD: ${{ runner.os == 'macOS' && secrets.MACOS_CERTIFICATE_PWD || '' }}
         run: |
           # Actually do builds and make zips and whatnot
           dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
