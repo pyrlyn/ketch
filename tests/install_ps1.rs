@@ -100,10 +100,16 @@ fn the_script_prefers_system32_tar_over_git_bash_tar() {
     );
 }
 
+/// `GetEnvironmentVariable('Path','User')` expands `%VAR%`, and writing that
+/// back freezes every such entry; `setx` also truncates. The registry, read
+/// unexpanded and written with the value's kind, does neither.
 #[test]
-fn the_script_writes_path_through_dotnet_not_setx() {
+fn the_script_edits_path_unexpanded_through_the_registry_not_setx() {
     let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1"));
-    assert!(src.contains("SetEnvironmentVariable('Path'"), "{src}");
+    assert!(src.contains("'DoNotExpandEnvironmentNames'"), "{src}");
+    assert!(src.contains("$key.SetValue('Path', $next, $kind)"), "{src}");
+    assert!(!src.contains("GetEnvironmentVariable('Path'"), "{src}");
+    assert!(!src.contains("SetEnvironmentVariable('Path'"), "{src}");
     assert!(!src.contains("setx"), "{src}");
 }
 
