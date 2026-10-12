@@ -93,30 +93,51 @@ function Test-UserPathHas {
         if (-not $entry) {
             continue
         }
-        if ((Normalize-PathKey $entry) -eq $dirKey) {
+        # The value is read unexpanded, so `%USERPROFILE%\.ketch\bin` is
+        # compared as Windows would use it.
+        $expanded = [Environment]::ExpandEnvironmentVariables($entry)
+        if ((Normalize-PathKey $expanded) -eq $dirKey) {
             return $true
         }
     }
     return $false
 }
 
+# The user Path is read and written through the registry, unexpanded and with
+# its value kind: `[Environment]::GetEnvironmentVariable` expands `%VAR%`, and
+# writing that back as `REG_SZ` freezes every such entry for good.
 function Add-UserPathEntry {
     param([string]$Dir)
-    $current = [Environment]::GetEnvironmentVariable('Path', 'User')
-    if ($null -eq $current) {
+    $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+    try {
         $current = ''
+        $kind = [Microsoft.Win32.RegistryValueKind]::ExpandString
+        if ($key.GetValueNames() -contains 'Path') {
+            $current = [string]$key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+            $existing = $key.GetValueKind('Path')
+            if ($existing -eq [Microsoft.Win32.RegistryValueKind]::String) {
+                $kind = $existing
+            }
+        }
+        if (Test-UserPathHas $current $Dir) {
+            return $false
+        }
+        $trimmed = $Dir.TrimEnd('\')
+        if ($current -eq '') {
+            $next = $trimmed
+        }
+        else {
+            $next = "$trimmed;$current"
+        }
+        $key.SetValue('Path', $next, $kind)
     }
-    if (Test-UserPathHas $current $Dir) {
-        return $false
+    finally {
+        $key.Close()
     }
-    $trimmed = $Dir.TrimEnd('\')
-    if ($current -eq '') {
-        $next = $trimmed
-    }
-    else {
-        $next = "$trimmed;$current"
-    }
-    [Environment]::SetEnvironmentVariable('Path', $next, 'User')
+    # A registry write notifies nobody; this broadcasts WM_SETTINGCHANGE so
+    # a new terminal sees the PATH without a logoff.
+    [Environment]::SetEnvironmentVariable('KETCH_ENV_REFRESH', '1', 'User')
+    [Environment]::SetEnvironmentVariable('KETCH_ENV_REFRESH', $null, 'User')
     return $true
 }
 
