@@ -191,6 +191,10 @@ pub trait Decider: Send + Sync {
     /// Whether to stop `holders` so their files can be replaced. A decline
     /// leaves them running.
     fn stop_processes(&self, holders: Vec<Holder>) -> bool;
+
+    /// Whether to remove `path`, a package folder an earlier uninstall left
+    /// behind with nothing recorded in it. A decline keeps it.
+    fn confirm_remove_leftover(&self, path: String) -> bool;
 }
 
 /// The foreign reporter, as the core's.
@@ -224,6 +228,10 @@ impl decide::Decider for ForeignDecider {
             })
             .collect();
         self.0.stop_processes(holders)
+    }
+
+    fn confirm_remove_leftover(&self, path: &std::path::Path) -> bool {
+        self.0.confirm_remove_leftover(path.display().to_string())
     }
 }
 
@@ -333,6 +341,9 @@ mod tests {
         fn stop_processes(&self, holders: Vec<Holder>) -> bool {
             self.1 && holders.iter().all(|h| h.path == "/k/bin/rg")
         }
+        fn confirm_remove_leftover(&self, path: String) -> bool {
+            self.1 && path == "/k/store/ghost"
+        }
     }
 
     #[test]
@@ -354,6 +365,13 @@ mod tests {
         }];
         assert!(ForeignDecider(Arc::new(Scripted(None, true))).stop_processes(&occupants));
         assert!(!ForeignDecider(Arc::new(Scripted(None, false))).stop_processes(&occupants));
+    }
+
+    #[test]
+    fn the_decider_sees_the_leftover_it_is_asked_about() {
+        let leftover = std::path::Path::new("/k/store/ghost");
+        assert!(ForeignDecider(Arc::new(Scripted(None, true))).confirm_remove_leftover(leftover));
+        assert!(!ForeignDecider(Arc::new(Scripted(None, false))).confirm_remove_leftover(leftover));
     }
 
     #[test]

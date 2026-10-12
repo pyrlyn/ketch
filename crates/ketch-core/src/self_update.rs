@@ -174,16 +174,7 @@ fn canonical_dir(path: &Path) -> Result<PathBuf> {
         }
         std::fs::create_dir_all(path).map_err(|e| Error::io(path, e))?;
     }
-    dunce::canonicalize(path).map_err(|e| Error::io(path, e))
-}
-
-fn remove_any(path: &Path) -> std::io::Result<()> {
-    match std::fs::symlink_metadata(path) {
-        Ok(meta) if meta.is_dir() => std::fs::remove_dir_all(path),
-        Ok(_) => std::fs::remove_file(path),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e),
-    }
+    fs_kit::path::canonicalize(path).map_err(|e| Error::io(path, e))
 }
 
 /// Record a bootstrap link or copy outside `<root>/bin`, for install.sh.
@@ -249,7 +240,7 @@ fn clear_bootstrap_destination(link: &Path, recorded: &[LinkRecord]) -> Result<(
     match std::fs::symlink_metadata(link) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Ok(_) if recorded.iter().any(|record| record.link == link) => {
-            remove_any(link).map_err(|e| Error::io(link, e))
+            fs_kit::tree::remove_any(link).map_err(|e| Error::fs_kit(link, e))
         }
         Ok(_) => Err(Error::msg(format!(
             "{} already exists and was not installed by ketch for this package; move it aside first",
@@ -414,12 +405,30 @@ pub fn install_completion_script(
 /// real file rather than the link pointing at it.
 pub fn current_exe() -> Result<PathBuf> {
     let exe = std::env::current_exe()?;
-    Ok(dunce::canonicalize(&exe).unwrap_or(exe))
+    Ok(fs_kit::path::canon(&exe))
+}
+
+/// How `update` lists ketch's own releases. Without `pre` it asks for
+/// GitHub's latest release, as it always has; with it, the newest release
+/// including prereleases, chosen by the same `select_release` every package
+/// goes through, which also passes over the macOS app's `desktop-v*` tags.
+pub fn release_opts(pre: bool) -> ListOpts {
+    ListOpts {
+        include_prerelease: pre,
+        ..ListOpts::default()
+    }
 }
 
 /// Fetch the latest ketch release and install it: as an upgrade of the `ketch`
 /// package when there is one, otherwise by replacing this binary in place.
-pub fn update(cx: &Ctx<'_>, force: bool, dry_run: bool, docs: SelfDocs) -> Result<SelfUpdate> {
+/// `pre` widens "latest" to prereleases.
+pub fn update(
+    cx: &Ctx<'_>,
+    force: bool,
+    dry_run: bool,
+    pre: bool,
+    docs: SelfDocs,
+) -> Result<SelfUpdate> {
     let (cfg, report) = (cx.cfg, cx.report);
     let _lock = Lock::acquire(cx)?;
     let mut state = State::load(cfg)?;
@@ -451,7 +460,7 @@ pub fn update(cx: &Ctx<'_>, force: bool, dry_run: bool, docs: SelfDocs) -> Resul
     report.step("checking", &cfg.self_repo);
     let release = report
         .activity("checking for updates")
-        .run(|| source.resolve(&cfg.self_repo, &VersionSpec::Latest, &ListOpts::default()))?;
+        .run(|| source.resolve(&cfg.self_repo, &VersionSpec::Latest, &release_opts(pre)))?;
     let to = release.version.clone();
 
     if to <= from && !force {
@@ -834,8 +843,8 @@ pub fn uninstall_plan(cfg: &Config, keep_packages: bool, no_brew: bool) -> Resul
         powershell_profiles: crate::shell::powershell_profiles_with_block(),
         cask: (!no_brew).then(cask_dir).flatten(),
         exe: current_exe().ok().filter(|exe| {
-            let root = dunce::canonicalize(&cfg.root).unwrap_or_else(|_| cfg.root.clone());
-            let exe = dunce::canonicalize(exe).unwrap_or_else(|_| exe.clone());
+            let root = fs_kit::path::canon(&cfg.root);
+            let exe = fs_kit::path::canon(exe);
             // Windows Path::starts_with is case-sensitive; a root typed with
             // different ASCII case than the running image must still count.
             crate::platform::path_is_within(&exe, &root)
@@ -996,7 +1005,10 @@ fn doskey_file_exists(cfg: &Config) -> bool {
 /// exist: a root spelled with a Windows short name (`RUNNER~1`) must still
 /// contain the binary spelled with the long one.
 fn is_within(path: &Path, root: &Path) -> bool {
-    match (dunce::canonicalize(path), dunce::canonicalize(root)) {
+    match (
+        fs_kit::path::canonicalize(path),
+        fs_kit::path::canonicalize(root),
+    ) {
         (Ok(path), Ok(root)) => path.starts_with(root),
         _ => path.starts_with(root),
     }
@@ -1292,7 +1304,7 @@ fn mise_tool_dir_in(exe: &Path, data_dirs: &[PathBuf]) -> Option<PathBuf> {
     data_dirs.iter().find_map(|data| {
         let installs = data.join("installs");
         // The data dir may itself sit behind a symlink; `exe` is canonical.
-        let installs = dunce::canonicalize(&installs).unwrap_or(installs);
+        let installs = fs_kit::path::canon(&installs);
         if !crate::platform::path_is_strict_within(exe, &installs) {
             return None;
         }
@@ -1414,6 +1426,37 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn pre_widens_the_self_release_to_the_newest_cli_prerelease_only() {
+        let release = |tag: &str, prerelease: bool| crate::model::Release {
+            version: crate::model::Version::parse(tag),
+            tag: tag.to_string(),
+            prerelease,
+            draft: false,
+            published_at: None,
+            notes: None,
+            assets: Vec::new(),
+        };
+        let listing = vec![
+            release("desktop-v9999.0.0", false),
+            release("desktop-appcast", true),
+            release("v2.0.0-rc.1", true),
+            release("v1.0.0", false),
+        ];
+        let pick = |pre: bool| {
+            crate::source::pick(
+                "o/ketch",
+                listing.clone(),
+                &VersionSpec::Latest,
+                &release_opts(pre),
+            )
+            .map(|r| r.tag)
+            .ok()
+        };
+        assert_eq!(pick(false).as_deref(), Some("v1.0.0"));
+        assert_eq!(pick(true).as_deref(), Some("v2.0.0-rc.1"));
+    }
 
     #[test]
     fn a_caskroom_directory_is_what_says_brew_installed_ketch() {
@@ -1769,7 +1812,7 @@ mod tests {
         let bootstrap = tmp.path().join("bootstrap");
         record_bootstrap_link(&Ctx::new(&cfg, &Report::silent()), &mut state, &bootstrap).unwrap();
 
-        let link = dunce::canonicalize(&bootstrap)
+        let link = fs_kit::path::canonicalize(&bootstrap)
             .unwrap()
             .join(bootstrap_binary_name());
         #[cfg(unix)]
@@ -1779,8 +1822,8 @@ mod tests {
                 "the bootstrap path must follow the bin-dir binary"
             );
             assert_eq!(
-                dunce::canonicalize(std::fs::read_link(&link).unwrap()).unwrap(),
-                dunce::canonicalize(&bin).unwrap()
+                fs_kit::path::canonicalize(std::fs::read_link(&link).unwrap()).unwrap(),
+                fs_kit::path::canonicalize(&bin).unwrap()
             );
         }
         #[cfg(windows)]
@@ -1792,8 +1835,8 @@ mod tests {
         assert_eq!(pkg.links.len(), 1);
         assert_eq!(pkg.links[0].link, link);
         assert_eq!(
-            dunce::canonicalize(&pkg.links[0].target).unwrap(),
-            dunce::canonicalize(&bin).unwrap()
+            fs_kit::path::canonicalize(&pkg.links[0].target).unwrap(),
+            fs_kit::path::canonicalize(&bin).unwrap()
         );
     }
 

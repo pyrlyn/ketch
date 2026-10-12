@@ -674,7 +674,10 @@ fn windows_path_eq(entry: &str, dir: &Path) -> bool {
     // 8.3 short name (`RUNNER~1`) or go through a link. Folding text cannot
     // see through either; resolving both can, while the folder still exists.
     let entry = entry.trim().trim_matches('"').trim_matches('\'');
-    match (dunce::canonicalize(entry), dunce::canonicalize(dir)) {
+    match (
+        fs_kit::path::canonicalize(entry),
+        fs_kit::path::canonicalize(dir),
+    ) {
         (Ok(a), Ok(b)) => windows_path_key(&a) == windows_path_key(&b),
         _ => false,
     }
@@ -1006,7 +1009,7 @@ pub fn uninstall_powershell_profile(file: &Path) -> Result<bool> {
             Ok(true)
         }
         Some(None) => {
-            let target = dunce::canonicalize(file).unwrap_or_else(|_| file.to_path_buf());
+            let target = fs_kit::path::canon(file);
             std::fs::remove_file(&target).map_err(|e| Error::io(&target, e))?;
             Ok(true)
         }
@@ -1423,11 +1426,7 @@ fn unsplice(text: &str) -> Option<String> {
 
 /// A missing config file reads as empty: it is about to be created.
 fn read(file: &Path) -> Result<String> {
-    match std::fs::read_to_string(file) {
-        Ok(text) => Ok(text),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
-        Err(e) => Err(Error::io(file, e)),
-    }
+    fs_kit::read::text_or_empty(file).map_err(|e| Error::fs_kit(file, e))
 }
 
 /// Replace the file's contents, atomically and in place.
@@ -1435,30 +1434,12 @@ fn write(file: &Path, text: &str) -> Result<()> {
     // A startup file is very often a symlink into a dotfiles repository.
     // Renaming over the link would replace it with a regular file and quietly
     // detach the user from their own dotfiles, so the write follows it first.
-    let target = dunce::canonicalize(file).unwrap_or_else(|_| file.to_path_buf());
-    let Some(parent) = target.parent() else {
-        return Err(Error::msg(format!(
-            "{} has no parent directory",
-            target.display()
-        )));
-    };
-    std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
-
-    let name = target
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "profile".to_string());
-    let tmp = target.with_file_name(format!(".{name}.ketch-tmp"));
-
-    std::fs::write(&tmp, text).map_err(|e| Error::io(&tmp, e))?;
-    // A startup file the user made private must not come back world-readable.
-    if let Ok(meta) = std::fs::metadata(&target) {
-        let _ = std::fs::set_permissions(&tmp, meta.permissions());
-    }
-    std::fs::rename(&tmp, &target).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        Error::io(&target, e)
-    })
+    let target = fs_kit::path::canon(file);
+    fs_kit::write::Options::new()
+        .create_parent(true)
+        .follow_symlinks(false)
+        .write(&target, text)
+        .map_err(|e| Error::fs_kit(&target, e))
 }
 
 #[cfg(test)]

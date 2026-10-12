@@ -708,15 +708,21 @@ the curl/PowerShell/Homebrew installers run.
 ketch self install
 ```
 
-### `ketch self upgrade [--dry-run] [--force] [--yes]`
+### `ketch self upgrade [--dry-run] [--force] [--pre] [--yes]`
 
 Upgrade ketch to the latest release. Aliased as `ketch self update`. A ketch
 installed with mise and never `self install`ed is mise's to upgrade: this
 refuses, and names `mise upgrade`.
 
+`--pre` takes the newest release, prereleases included, instead of GitHub's
+latest release. The macOS app's `desktop-v*` releases are never taken. The
+installers take the same flag: `install.sh --pre` and `install.ps1 --pre`.
+Without it nothing changes.
+
 ```bash
 ketch self upgrade
 ketch self upgrade --dry-run
+ketch self upgrade --pre
 ```
 
 ### `ketch self version`

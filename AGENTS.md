@@ -101,13 +101,15 @@ The commit-msg hook is opt-in via `just hooks`: commitlint then runs on every
 `git commit`, rejecting a malformed subject outright and letting merge and
 revert subjects through.
 
-`file-backup` comes from crates.io (pinned in `Cargo.lock`). For local work
-against the sibling checkout, `just setup` writes a gitignored
-`.cargo/config.toml` with a `paths` override pointing at
-`packages/crates/file-backup`. CI and release builds never run it, so they
-always resolve the registry version. A `paths` override — not a `[patch]` —
-swaps the source without touching `Cargo.lock`, so `--locked` builds work on
-the same committed lock in both directions.
+`fs-kit` (path, atomic writes, tree copy and removal, backups) comes from
+crates.io (pinned in `Cargo.lock`, set once in the root
+`[workspace.dependencies]`). Use it for file and directory work instead of
+writing a local helper. For local work against the sibling checkout,
+`just setup` writes a gitignored `.cargo/config.toml` with a `paths` override
+pointing at `packages/crates/fs-kit`. CI and release builds never run it, so
+they always resolve the registry version. A `paths` override — not a
+`[patch]` — swaps the source without touching `Cargo.lock`, so `--locked`
+builds work on the same committed lock in both directions.
 
 Run the binary against a throwaway tree instead of your real `~/.ketch`:
 
@@ -331,8 +333,8 @@ These are observed throughout; match them rather than introducing your own.
   typed `report::Event`s: `stage`, `step`, `success`, `warn`, `note`, `debug`,
   and `activity`/`download`/`batch`/`counter` handles for long work. The core
   never reads stdin: a question goes to the `decide::Decider` in `Ctx`
-  (`choose_binary`, `stop_processes`), and `NoDecider`, the default, answers
-  like a script. The binary asks through `ui::ctx_asking`, which puts
+  (`choose_binary`, `stop_processes`, `confirm_remove_leftover`), and
+  `NoDecider`, the default, answers like a script. The binary asks through `ui::ctx_asking`, which puts
   `ui::TerminalDecider` there unless `--yes` has already answered. A
   confirmation a command makes before calling the core stays in `cmd/`: it is
   the front end's own dialog, and a GUI makes its own.

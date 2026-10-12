@@ -334,7 +334,8 @@ impl KetchCore {
     /// is checked first, so an unknown one stops the call with `NotFound`
     /// before any installed package is removed — though, as `ketch uninstall`
     /// does, a `store/<name>/` folder a failed uninstall left behind for that
-    /// name is taken away, since nothing else ever will. `cancel` is checked
+    /// exact name, holding no recorded prefix, is taken away when `decider`
+    /// confirms it, since nothing else ever will. `cancel` is checked
     /// before each package: what was removed by then stays removed.
     pub fn uninstall(
         &self,
@@ -350,7 +351,13 @@ impl KetchCore {
         let missing: Vec<&String> = names.iter().filter(|n| state.find(n).is_none()).collect();
         if let Some(first) = missing.first() {
             for name in &missing {
-                install::remove_package_dir(&op.cfg, name, &op.report);
+                // Removing a folder is the person's call, as the CLI asks it;
+                // a host with no decider keeps it.
+                if let Some(dir) = install::leftover_package_dir(&op.cfg, &state, name) {
+                    if cx.decider.confirm_remove_leftover(&dir) {
+                        install::remove_package_dir(&op.cfg, name, &op.report);
+                    }
+                }
             }
             return Err(KetchError::NotFound {
                 name: (*first).clone(),
@@ -994,17 +1001,63 @@ mod tests {
         );
     }
 
+    /// Answers only the leftover question, with `remove`, and counts it.
+    struct Leftovers {
+        remove: bool,
+        asked: std::sync::Mutex<Vec<String>>,
+    }
+
+    impl Decider for Leftovers {
+        fn choose_binary(&self, _package: String, _candidates: Vec<String>) -> Option<u32> {
+            None
+        }
+        fn stop_processes(&self, _holders: Vec<Holder>) -> bool {
+            false
+        }
+        fn confirm_remove_leftover(&self, path: String) -> bool {
+            self.asked.lock().unwrap().push(path);
+            self.remove
+        }
+    }
+
     #[test]
-    fn uninstalling_a_name_with_no_record_takes_its_leftover_folder() {
+    fn a_leftover_folder_is_taken_only_when_the_decider_confirms() {
         let (_dir, core) = scratch();
         let store = core.operation(None, None).unwrap().cfg.store_dir;
         let leftover = store.join("ghost");
         std::fs::create_dir_all(leftover.join("1.0.0.old")).unwrap();
+        let not_found = Err(KetchError::NotFound {
+            name: "ghost".into(),
+        });
+
         assert_eq!(
             core.uninstall(vec!["ghost".into()], None, None, None),
-            Err(KetchError::NotFound {
-                name: "ghost".into()
-            })
+            not_found
+        );
+        assert!(leftover.exists(), "no decider is no consent");
+
+        let declining = Arc::new(Leftovers {
+            remove: false,
+            asked: Default::default(),
+        });
+        let decider: Arc<dyn Decider> = declining.clone();
+        assert_eq!(
+            core.uninstall(vec!["ghost".into()], None, Some(decider), None),
+            not_found
+        );
+        assert!(leftover.exists(), "a decline keeps the folder");
+        assert_eq!(
+            *declining.asked.lock().unwrap(),
+            vec![leftover.display().to_string()]
+        );
+
+        let confirming: Arc<dyn Decider> = Arc::new(Leftovers {
+            remove: true,
+            asked: Default::default(),
+        });
+        assert_eq!(
+            core.uninstall(vec!["ghost".into()], None, Some(confirming), None),
+            not_found
         );
         assert!(!leftover.exists());
     }

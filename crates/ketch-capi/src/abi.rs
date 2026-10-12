@@ -52,6 +52,11 @@ pub type KetchChooseFn = Option<
 pub type KetchStopFn =
     Option<extern "C" fn(holders: *const c_char, user_data: *mut c_void) -> bool>;
 
+/// Whether to remove `path`, a package folder an earlier uninstall left
+/// behind with nothing recorded in it. `false` keeps it. NULL: always `false`.
+pub type KetchConfirmFn =
+    Option<extern "C" fn(path: *const c_char, user_data: *mut c_void) -> bool>;
+
 /// The caller's `user_data`, carried to whichever thread reports.
 struct UserData(*mut c_void);
 
@@ -80,6 +85,8 @@ struct CDecider {
     choose_data: UserData,
     stop: KetchStopFn,
     stop_data: UserData,
+    confirm: KetchConfirmFn,
+    confirm_data: UserData,
 }
 
 impl Decider for CDecider {
@@ -100,6 +107,13 @@ impl Decider for CDecider {
             return false;
         };
         c_json(&holders).is_some_and(|json| call(json.as_ptr(), self.stop_data.0))
+    }
+
+    fn confirm_remove_leftover(&self, path: String) -> bool {
+        let Some(call) = self.confirm else {
+            return false;
+        };
+        CString::new(path).is_ok_and(|path| call(path.as_ptr(), self.confirm_data.0))
     }
 }
 
@@ -123,7 +137,26 @@ fn decider(
     stop: KetchStopFn,
     stop_data: *mut c_void,
 ) -> Option<Arc<dyn Decider>> {
-    if choose.is_none() && stop.is_none() {
+    confirming_decider(
+        choose,
+        choose_data,
+        stop,
+        stop_data,
+        None,
+        std::ptr::null_mut(),
+    )
+}
+
+/// [`decider`], for the one call that may also ask to remove a leftover.
+fn confirming_decider(
+    choose: KetchChooseFn,
+    choose_data: *mut c_void,
+    stop: KetchStopFn,
+    stop_data: *mut c_void,
+    confirm: KetchConfirmFn,
+    confirm_data: *mut c_void,
+) -> Option<Arc<dyn Decider>> {
+    if choose.is_none() && stop.is_none() && confirm.is_none() {
         return None;
     }
     Some(Arc::new(CDecider {
@@ -131,6 +164,8 @@ fn decider(
         choose_data: UserData(choose_data),
         stop,
         stop_data: UserData(stop_data),
+        confirm,
+        confirm_data: UserData(confirm_data),
     }))
 }
 
@@ -424,7 +459,9 @@ pub unsafe extern "C" fn ketch_upgrade(
     }))
 }
 
-/// Uninstall `names`. `ok`: an array of the `Package`s removed.
+/// Uninstall `names`. `ok`: an array of the `Package`s removed. For a name
+/// with no record, `confirm` is asked whether to remove the folder an earlier
+/// uninstall left behind for it.
 ///
 /// # Safety
 ///
@@ -440,6 +477,8 @@ pub unsafe extern "C" fn ketch_uninstall(
     choose_data: *mut c_void,
     stop: KetchStopFn,
     stop_data: *mut c_void,
+    confirm: KetchConfirmFn,
+    confirm_data: *mut c_void,
     cancel_token: Option<&KetchCancel>,
 ) -> *mut c_char {
     answer(respond(|| {
@@ -448,7 +487,7 @@ pub unsafe extern "C" fn ketch_uninstall(
         this(core)?.uninstall(
             names,
             reporter(event, event_data),
-            decider(choose, choose_data, stop, stop_data),
+            confirming_decider(choose, choose_data, stop, stop_data, confirm, confirm_data),
             cancel(cancel_token),
         )
     }))
@@ -946,6 +985,30 @@ mod tests {
         assert_eq!(declining.choose_binary("p".into(), vec!["a".into()]), None);
         assert!(!declining.stop_processes(vec![holder]));
         assert!(decider(None, ptr::null_mut(), None, ptr::null_mut()).is_none());
+    }
+
+    extern "C" fn ghost_only(path: *const c_char, _: *mut c_void) -> bool {
+        // SAFETY: ketch-capi passes a NUL-terminated string valid for this call.
+        let path = unsafe { CStr::from_ptr(path) }.to_str().unwrap();
+        path == "/k/store/ghost"
+    }
+
+    #[test]
+    fn the_leftover_question_reaches_its_callback_and_defaults_to_no() {
+        let asking = confirming_decider(
+            None,
+            ptr::null_mut(),
+            None,
+            ptr::null_mut(),
+            Some(ghost_only),
+            ptr::null_mut(),
+        )
+        .unwrap();
+        assert!(asking.confirm_remove_leftover("/k/store/ghost".into()));
+        assert!(!asking.confirm_remove_leftover("/k/store/other".into()));
+
+        let silent = decider(Some(none), ptr::null_mut(), None, ptr::null_mut()).unwrap();
+        assert!(!silent.confirm_remove_leftover("/k/store/ghost".into()));
     }
 
     #[test]

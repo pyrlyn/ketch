@@ -22,6 +22,7 @@ Install ketch, a Rust CLI for managing GitHub-released apps.
 
 OPTIONS:
   --version <TAG>      Install specific version (default: latest)
+  --pre                Install the newest release, prereleases included
   --root <DIR>         Ketch store root (default: $DefaultRoot)
   --install-dir <DIR>  Bootstrap location: where ketch places a link or copy
                        on your PATH (default: <root>\bin)
@@ -165,6 +166,18 @@ OPTIONS:
         throw $stop
     }
 
+    # The first CLI tag in a `/releases` listing. GitHub lists newest first, the
+    # same order `/releases/latest` picks from, so `--pre` only widens that choice
+    # to prereleases. The repository also releases the macOS app under
+    # `desktop-v*` (and its `desktop-appcast` feed); only `v<digit>` tags are this
+    # installer's.
+    function Select-NewestCliTag {
+        param([object[]]$Releases)
+        $Releases |
+            Where-Object { -not $_.draft -and "$($_.tag_name)" -match '^v[0-9]' } |
+            Select-Object -First 1 -ExpandProperty tag_name
+    }
+
     function Install-Ketch {
         # Parse arguments. $InstallDir stays empty unless given so we can tell an
         # explicit --install-dir from the default <root>\bin after $Root is resolved.
@@ -173,6 +186,7 @@ OPTIONS:
         $InstallDir = ''
         $InstallDirExplicit = $false
         $NoModifyPath = $false
+        $Pre = $false
 
         $argsList = @($args)
         $i = 0
@@ -205,6 +219,9 @@ OPTIONS:
                 }
                 '--no-modify-path' {
                     $NoModifyPath = $true
+                }
+                '--pre' {
+                    $Pre = $true
                 }
                 { $_ -in '--help', '-h' } {
                     Write-Help
@@ -256,9 +273,30 @@ OPTIONS:
         $TarballName = "ketch-$TarballArch-pc-windows-msvc.tar.gz"
 
         if ($Version -eq '') {
-            Write-Status 'Fetching latest release...'
+            if ($Pre) {
+                Write-Status 'Fetching newest release, prereleases included...'
+            }
+            else {
+                Write-Status 'Fetching latest release...'
+            }
             if ($env:KETCH_INSTALL_RELEASE_DIR) {
                 $Version = 'v9.9.9'
+            }
+            elseif ($Pre) {
+                try {
+                    # Assigned before it is piped: Windows PowerShell 5.1 hands a JSON
+                    # array down a pipeline as one object instead of its elements.
+                    $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$SelfRepo/releases?per_page=100"
+                }
+                catch {
+                    Write-ErrorStatus 'Error: Failed to fetch releases.'
+                    Stop-Install
+                }
+                $Version = Select-NewestCliTag @($releases)
+                if ([string]::IsNullOrWhiteSpace($Version)) {
+                    Write-ErrorStatus 'Error: Could not determine latest version.'
+                    Stop-Install
+                }
             }
             else {
                 try {
