@@ -1909,7 +1909,10 @@ fn is_inside_store(store: &Path, prefix: &Path) -> bool {
     // When both exist, resolve symlinks so a decoy link inside the store
     // cannot point `remove_dir_all` at an outside victim. Prefer this before
     // the lexical walk: canonicalize also folds Windows short/long names.
-    if let (Ok(store), Ok(resolved)) = (dunce::canonicalize(store), dunce::canonicalize(prefix)) {
+    if let (Ok(store), Ok(resolved)) = (
+        fs_kit::path::canonicalize(store),
+        fs_kit::path::canonicalize(prefix),
+    ) {
         return crate::platform::path_is_strict_within(&resolved, &store);
     }
     // Lexical fallback for a missing payload (idempotent uninstall). A root

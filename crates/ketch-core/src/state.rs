@@ -87,34 +87,12 @@ impl State {
     }
 
     pub fn save_path(&self, path: &Path) -> Result<()> {
-        let parent = path.parent().unwrap_or(Path::new("."));
-        std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| Error::parse("state".to_string(), e.to_string()))?;
-        let mut staged =
-            tempfile::NamedTempFile::new_in(parent).map_err(|e| Error::io(parent, e))?;
-        staged
-            .write_all(json.as_bytes())
-            .map_err(|e| Error::io(staged.path(), e))?;
-        staged
-            .write_all(b"\n")
-            .map_err(|e| Error::io(staged.path(), e))?;
-        staged.flush().map_err(|e| Error::io(staged.path(), e))?;
-        // The rename is atomic, but only over whatever the file actually
-        // contains. Without this the kernel is free to record the rename and
-        // lose the bytes, leaving a zero-length state file — which is to say,
-        // an empty list of installed packages.
-        staged
-            .as_file()
-            .sync_all()
-            .map_err(|e| Error::io(staged.path(), e))?;
-        staged.persist(path).map_err(|e| Error::io(path, e.error))?;
-        // Then make the rename itself durable. Best effort: some filesystems
-        // refuse to fsync a directory, and that is not a reason to fail a save.
-        if let Ok(dir) = std::fs::File::open(parent) {
-            let _ = dir.sync_all();
-        }
-        Ok(())
+        // Durable by default in fs-kit: without the fsync the kernel is free to
+        // record the rename and lose the bytes, leaving a zero-length state
+        // file, which is to say an empty list of installed packages.
+        crate::fsio::write_private(path, format!("{json}\n"))
     }
 
     pub fn get(&self, name: &str) -> Option<&InstalledPackage> {

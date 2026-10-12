@@ -92,38 +92,10 @@ fn materialize_symlink_as_copy(target: &Path, link: &Path) -> Result<()> {
 /// outer materialisation already flattened what the archive could express.
 #[cfg_attr(unix, allow(dead_code))]
 fn copy_dir_contents(src: &Path, dest: &Path) -> Result<()> {
-    std::fs::create_dir_all(dest).map_err(|e| Error::io(dest, e))?;
-    for entry in walkdir::WalkDir::new(src) {
-        let entry = entry.map_err(|e| Error::msg(format!("walking {}: {e}", src.display())))?;
-        let rel = pathdiff::diff_paths(entry.path(), src)
-            .filter(|r| !r.components().any(|c| matches!(c, Component::ParentDir)))
-            .ok_or_else(|| {
-                Error::msg(format!(
-                    "path {} escaped {}",
-                    entry.path().display(),
-                    src.display()
-                ))
-            })?;
-        if rel.as_os_str().is_empty() {
-            continue;
-        }
-        let target = dest.join(&rel);
-        let ft = entry.file_type();
-        if ft.is_dir() {
-            std::fs::create_dir_all(&target).map_err(|e| Error::io(&target, e))?;
-        } else if ft.is_symlink() {
-            // Nested links inside a materialised directory are left out: creating
-            // them would re-enter the Windows privilege problem this path exists
-            // to avoid, and following them could escape the payload root.
-            continue;
-        } else {
-            if let Some(parent) = target.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
-            }
-            std::fs::copy(entry.path(), &target).map_err(|e| Error::io(&target, e))?;
-        }
-    }
-    Ok(())
+    // Nested links inside a materialised directory are left out: creating
+    // them would re-enter the Windows privilege problem this path exists
+    // to avoid, and following them could escape the payload root.
+    fs_kit::tree::copy_tree(src, dest, fs_kit::tree::Links::Skip).map_err(|e| Error::fs_kit(src, e))
 }
 
 /// `.tar.gz` / `.tgz`
