@@ -107,6 +107,36 @@ fn clear_for_replace(path: &Path) -> std::io::Result<()> {
     }
 }
 
+/// Remove the asides `clear_for_replace` left beside `links` once the
+/// executable they held has stopped.
+///
+/// A running tool upgraded in place leaves `tool.exe.old.<pid>-<ms>` behind,
+/// and nothing else will ever remove it: without this each upgrade of a tool
+/// that was running adds one more. Best effort — one still running stays for
+/// the next sweep.
+fn sweep_busy_asides(links: &[LinkRecord]) {
+    for record in links {
+        let (Some(dir), Some(name)) = (
+            record.link.parent(),
+            record.link.file_name().and_then(|n| n.to_str()),
+        ) else {
+            continue;
+        };
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let aside = entry
+                .file_name()
+                .to_str()
+                .is_some_and(|candidate| super::is_busy_aside_of(name, candidate));
+            if aside && entry.file_type().is_ok_and(|t| t.is_file()) {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
+}
+
 fn copy_over(from: &Path, to: &Path) -> std::io::Result<()> {
     match std::fs::copy(from, to) {
         Ok(_) => Ok(()),
@@ -510,6 +540,8 @@ impl Platform for WindowsPlatform {
     }
 
     fn place(&self, plan: &Placement<'_>) -> Result<Vec<LinkRecord>> {
+        // Install, upgrade, relink and rollback all come through here.
+        sweep_busy_asides(plan.replacing);
         if plan.link {
             let found = cli_targets(self, plan.payload_dir, plan)?;
             let mut destinations = HashSet::new();
@@ -582,6 +614,7 @@ impl Platform for WindowsPlatform {
     }
 
     fn unplace(&self, links: &[LinkRecord], report: &crate::report::Report) -> Result<()> {
+        sweep_busy_asides(links);
         for record in links {
             if std::fs::symlink_metadata(&record.link).is_err() {
                 continue;
@@ -779,6 +812,40 @@ mod tests {
         assert!(
             body.windows(4).any(|w| w == b"user"),
             "user-owned file must be left alone"
+        );
+    }
+
+    #[test]
+    fn the_sweep_removes_only_stamped_asides_of_recorded_links() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bin = tmp.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let link = bin.join("tool.exe");
+        std::fs::write(&link, b"current").unwrap();
+        for name in [
+            "tool.exe.old.4242-1700000000000",
+            "tool.exe.old.backup",
+            "other.exe.old.1-2",
+        ] {
+            std::fs::write(bin.join(name), b"x").unwrap();
+        }
+        let record = LinkRecord {
+            link: link.clone(),
+            target: tmp.path().join("store/tool/1.0/tool.exe"),
+            kind: LinkKind::CopiedFile,
+            role: LinkRole::Binary,
+        };
+
+        sweep_busy_asides(&[record]);
+
+        let mut left: Vec<String> = std::fs::read_dir(&bin)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        assert_eq!(
+            left,
+            ["other.exe.old.1-2", "tool.exe", "tool.exe.old.backup"]
         );
     }
 
