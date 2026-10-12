@@ -712,8 +712,12 @@ pub fn commit(cx: &Ctx<'_>, state: &mut State, prepared: Prepared) -> Result<Ins
 
     // --- place --------------------------------------------------------------
     // Reinstalling the same version writes into the directory the current
-    // install already occupies, and failing there must not delete it.
-    let in_place = existing.as_ref().is_some_and(|p| p.prefix == store_dir);
+    // install already occupies, and failing there must not delete it. A
+    // retained copy of this version is the same: placement restores it on
+    // failure, and deleting it afterwards would lose the rollback target.
+    let in_place = existing
+        .as_ref()
+        .is_some_and(|p| p.prefix == store_dir || p.retained.iter().any(|r| r.prefix == store_dir));
     let mut orphan = ScopedDir((!in_place).then(|| store_dir.clone()));
     let extras = extra_placements(platform.as_ref(), &manifest.extra_paths)?;
     let remembered = existing.as_ref().and_then(|p| p.bin_choice.as_deref());
@@ -771,7 +775,7 @@ pub fn commit(cx: &Ctx<'_>, state: &mut State, prepared: Prepared) -> Result<Ins
         if let Err(e) = platform.unplace(&stale, report) {
             report.warn(&format!("could not remove old links for {}: {e}", old.name));
         }
-        retain_replaced(cfg, old, &store_dir, &mut retained);
+        retain_replaced(cfg, old, &store_dir, &release.version, &mut retained);
     }
 
     if let (Some(pick), crate::model::ManifestOrigin::User(path)) = (&pick, &origin) {
@@ -1316,7 +1320,10 @@ pub fn prune(cx: &Ctx<'_>, state: &mut State, name: &str, keep: u32) -> Result<V
         if previous.prefix.is_dir() && kept.len() < keep {
             kept.push(previous);
         } else {
-            if previous.prefix.exists() {
+            // A state file written before retention dropped the live version
+            // can still list it; the entry goes, the directory every link
+            // points into stays.
+            if previous.prefix.exists() && previous.prefix != pkg.prefix {
                 remove_store_dir(cfg, &previous.prefix, report);
             }
             dropped.push(previous.version);
@@ -1721,13 +1728,23 @@ fn trust_result(verdict: TrustVerdict) -> TrustResult {
 /// Record the replaced prefix instead of deleting it. Missing or out-of-store
 /// prefixes are not eligible: promising a version that is already gone is
 /// worse than keeping nothing.
+///
+/// The new version leaves the list too: upgrading back to a version kept
+/// since a rollback makes its prefix the live one, and a retained entry still
+/// naming it would let `prune` delete the store every link points into.
 fn retain_replaced(
     cfg: &Config,
     old: &InstalledPackage,
     new_prefix: &Path,
+    new_version: &Version,
     retained: &mut Vec<RetainedVersion>,
 ) {
-    retained.retain(|r| r.prefix != old.prefix && r.version != old.version);
+    retained.retain(|r| {
+        r.prefix != old.prefix
+            && r.version != old.version
+            && r.prefix != new_prefix
+            && r.version != *new_version
+    });
     if old.prefix == new_prefix {
         return;
     }
@@ -2364,17 +2381,76 @@ mod tests {
         let old = installed("tool", "1.0.0", old_prefix.clone());
 
         let mut retained = Vec::new();
-        retain_replaced(&cfg, &old, &new_prefix, &mut retained);
+        let v2 = Version::parse("2.0.0");
+        retain_replaced(&cfg, &old, &new_prefix, &v2, &mut retained);
         assert_eq!(retained.len(), 1);
         assert_eq!(retained[0].version.to_string(), "1.0.0");
         assert_eq!(retained[0].prefix, old_prefix);
         assert!(old_prefix.is_dir(), "retention must not delete the prefix");
 
-        retain_replaced(&cfg, &old, &old_prefix, &mut retained);
+        retain_replaced(&cfg, &old, &old_prefix, &old.version, &mut retained);
         assert!(
             retained.is_empty(),
             "an in-place reinstall must not retain itself"
         );
+    }
+
+    #[test]
+    fn upgrading_back_to_a_retained_version_drops_its_retained_entry() {
+        let root = tempfile::tempdir().unwrap();
+        let cfg = Config::load(Some(root.path().join("ketch")), &Report::silent()).unwrap();
+        cfg.ensure_dirs().unwrap();
+        let v1_prefix = cfg.package_dir("tool", "1.0.0");
+        let v2_prefix = cfg.package_dir("tool", "2.0.0");
+        std::fs::create_dir_all(&v1_prefix).unwrap();
+        std::fs::create_dir_all(&v2_prefix).unwrap();
+        // What a rollback from 2.0.0 to 1.0.0 leaves behind.
+        let mut rolled_back = installed("tool", "1.0.0", v1_prefix.clone());
+        let mut retained = vec![RetainedVersion::from_installed(&installed(
+            "tool",
+            "2.0.0",
+            v2_prefix.clone(),
+        ))];
+        rolled_back.retained = retained.clone();
+
+        retain_replaced(
+            &cfg,
+            &rolled_back,
+            &v2_prefix,
+            &Version::parse("2.0.0"),
+            &mut retained,
+        );
+
+        assert_eq!(retained.len(), 1, "{retained:?}");
+        assert_eq!(retained[0].prefix, v1_prefix);
+    }
+
+    #[test]
+    fn prune_never_removes_the_live_prefix_a_stale_entry_names() {
+        let root = tempfile::tempdir().unwrap();
+        let cfg = Config::load(Some(root.path().join("ketch")), &Report::silent()).unwrap();
+        cfg.ensure_dirs().unwrap();
+        let report = Report::silent();
+        let cx = Ctx::new(&cfg, &report);
+        let live = cfg.package_dir("tool", "2.0.0");
+        let old = cfg.package_dir("tool", "1.0.0");
+        std::fs::create_dir_all(&live).unwrap();
+        std::fs::create_dir_all(&old).unwrap();
+        let mut pkg = installed("tool", "2.0.0", live.clone());
+        pkg.retained = vec![
+            RetainedVersion::from_installed(&installed("tool", "1.0.0", old.clone())),
+            RetainedVersion::from_installed(&installed("tool", "2.0.0", live.clone())),
+        ];
+        let mut state = State::default();
+        state.insert(pkg);
+
+        prune(&cx, &mut state, "tool", 1).unwrap();
+
+        assert!(live.is_dir(), "the live prefix must survive");
+        assert!(old.is_dir(), "the one kept version stays");
+        let kept = &state.get("tool").unwrap().retained;
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].prefix, old);
     }
 
     #[test]
