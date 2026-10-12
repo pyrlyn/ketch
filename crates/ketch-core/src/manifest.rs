@@ -18,6 +18,7 @@ use crate::error::{Error, Result};
 use crate::model::{
     normalize_name, InstalledPackage, Manifest, ManifestOrigin, PackageRef, PackageSpec,
 };
+use crate::replace::{replace_file, Replace};
 use crate::report::{Ctx, Report};
 use crate::toml_file::{self, Document, EditDocument};
 use serde::Deserialize;
@@ -316,7 +317,7 @@ pub fn write_bins(path: &Path, package: &str, bins: &[String]) -> Result<bool> {
     table.set_inline_tables("bin", "name", bins);
     let body = doc.render();
     parse_registry(&body, &label)?;
-    replace_file(&target, &body)?;
+    replace_file(&target, body.as_bytes(), USER_FILE)?;
     Ok(true)
 }
 
@@ -334,24 +335,15 @@ pub fn write_manifest(path: &Path, text: &str) -> Result<()> {
     if let Some(dir) = target.parent() {
         std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
     }
-    replace_file(&target, text)
+    replace_file(&target, text.as_bytes(), USER_FILE)
 }
 
-/// Replace `target` by renaming a finished copy over it, so an interrupted
-/// write leaves the old file whole.
-fn replace_file(target: &Path, body: &str) -> Result<()> {
-    let dir = target.parent().unwrap_or_else(|| Path::new("."));
-    let mut temp = tempfile::NamedTempFile::new_in(dir).map_err(|e| Error::io(dir, e))?;
-    std::io::Write::write_all(&mut temp, body.as_bytes()).map_err(|e| Error::io(temp.path(), e))?;
-    if let Ok(meta) = std::fs::metadata(target) {
-        // A temporary file is created private; the manifest keeps the mode
-        // the user gave it.
-        let _ = std::fs::set_permissions(temp.path(), meta.permissions());
-    }
-    temp.persist(target)
-        .map_err(|e| Error::io(target, e.error))?;
-    Ok(())
-}
+/// A manifest keeps the mode the user gave it.
+const USER_FILE: Replace = Replace {
+    keep_mode: true,
+    ordinary_mode: false,
+    durable: false,
+};
 
 /// `parse_registry` for the `manifest_toml` fuzz target (`src/lib.rs`).
 #[cfg(fuzzing)]

@@ -22,6 +22,7 @@
 use crate::config::Config;
 use crate::error::{Error, Result};
 use crate::platform::DoctorCheck;
+use crate::replace::{replace_file, Replace};
 use std::path::{Path, PathBuf};
 
 /// Opens the block ketch owns. Must begin a line and end one.
@@ -1386,22 +1387,14 @@ fn write(file: &Path, text: &str) -> Result<()> {
         )));
     };
     std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
-
-    let name = target
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "profile".to_string());
-    let tmp = target.with_file_name(format!(".{name}.ketch-tmp"));
-
-    std::fs::write(&tmp, text).map_err(|e| Error::io(&tmp, e))?;
-    // A startup file the user made private must not come back world-readable.
-    if let Ok(meta) = std::fs::metadata(&target) {
-        let _ = std::fs::set_permissions(&tmp, meta.permissions());
-    }
-    std::fs::rename(&tmp, &target).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        Error::io(&target, e)
-    })
+    // A startup file the user made private must not come back world-readable,
+    // and a new one is as readable as any other the user's editor makes.
+    let how = Replace {
+        keep_mode: true,
+        ordinary_mode: true,
+        durable: false,
+    };
+    replace_file(&target, text.as_bytes(), how)
 }
 
 #[cfg(test)]

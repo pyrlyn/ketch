@@ -20,6 +20,7 @@ use crate::error::{Error, Result};
 use crate::install::{self, InstalledBuild};
 use crate::manifest::same_source;
 use crate::model::{normalize_name, now_unix, InstalledPackage, Manifest, PackageRef, Release};
+use crate::replace::{replace_file, Replace};
 use crate::report::{Ctx, Report};
 use crate::source::{ListOpts, SourceRegistry};
 use serde::{Deserialize, Serialize};
@@ -601,19 +602,14 @@ impl Cache {
     }
 
     fn try_save(&self, path: &Path) -> Result<()> {
-        let dir = path
-            .parent()
+        path.parent()
             .ok_or_else(|| Error::msg("cache path has no parent"))?;
-        std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
         let text = serde_json::to_string(&Cache {
             format: CACHE_FORMAT,
             entries: self.entries.clone(),
         })
         .map_err(|e| Error::parse("latest cache", e.to_string()))?;
-        let staged = tempfile::NamedTempFile::new_in(dir).map_err(|e| Error::io(dir, e))?;
-        std::fs::write(staged.path(), text).map_err(|e| Error::io(staged.path(), e))?;
-        staged.persist(path).map_err(|e| Error::io(path, e.error))?;
-        Ok(())
+        replace_file(path, text.as_bytes(), Replace::default())
     }
 }
 
