@@ -16,6 +16,7 @@ Install ketch, a Rust CLI for managing GitHub-released apps.
 
 OPTIONS:
   --version <TAG>      Install specific version (default: latest)
+  --pre                Install the newest release, prereleases included
   --root <DIR>         Ketch store root (default: $DefaultRoot)
   --install-dir <DIR>  Bootstrap location: where ketch places a link or copy
                        on your PATH (default: <root>\bin)
@@ -93,30 +94,51 @@ function Test-UserPathHas {
         if (-not $entry) {
             continue
         }
-        if ((Normalize-PathKey $entry) -eq $dirKey) {
+        # The value is read unexpanded, so `%USERPROFILE%\.ketch\bin` is
+        # compared as Windows would use it.
+        $expanded = [Environment]::ExpandEnvironmentVariables($entry)
+        if ((Normalize-PathKey $expanded) -eq $dirKey) {
             return $true
         }
     }
     return $false
 }
 
+# The user Path is read and written through the registry, unexpanded and with
+# its value kind: `[Environment]::GetEnvironmentVariable` expands `%VAR%`, and
+# writing that back as `REG_SZ` freezes every such entry for good.
 function Add-UserPathEntry {
     param([string]$Dir)
-    $current = [Environment]::GetEnvironmentVariable('Path', 'User')
-    if ($null -eq $current) {
+    $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+    try {
         $current = ''
+        $kind = [Microsoft.Win32.RegistryValueKind]::ExpandString
+        if ($key.GetValueNames() -contains 'Path') {
+            $current = [string]$key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+            $existing = $key.GetValueKind('Path')
+            if ($existing -eq [Microsoft.Win32.RegistryValueKind]::String) {
+                $kind = $existing
+            }
+        }
+        if (Test-UserPathHas $current $Dir) {
+            return $false
+        }
+        $trimmed = $Dir.TrimEnd('\')
+        if ($current -eq '') {
+            $next = $trimmed
+        }
+        else {
+            $next = "$trimmed;$current"
+        }
+        $key.SetValue('Path', $next, $kind)
     }
-    if (Test-UserPathHas $current $Dir) {
-        return $false
+    finally {
+        $key.Close()
     }
-    $trimmed = $Dir.TrimEnd('\')
-    if ($current -eq '') {
-        $next = $trimmed
-    }
-    else {
-        $next = "$trimmed;$current"
-    }
-    [Environment]::SetEnvironmentVariable('Path', $next, 'User')
+    # A registry write notifies nobody; this broadcasts WM_SETTINGCHANGE so
+    # a new terminal sees the PATH without a logoff.
+    [Environment]::SetEnvironmentVariable('KETCH_ENV_REFRESH', '1', 'User')
+    [Environment]::SetEnvironmentVariable('KETCH_ENV_REFRESH', $null, 'User')
     return $true
 }
 
@@ -130,6 +152,18 @@ function Write-ErrorStatus {
     Write-Host $Message -ForegroundColor Red
 }
 
+# The first CLI tag in a `/releases` listing. GitHub lists newest first, the
+# same order `/releases/latest` picks from, so `--pre` only widens that choice
+# to prereleases. The repository also releases the macOS app under
+# `desktop-v*` (and its `desktop-appcast` feed); only `v<digit>` tags are this
+# installer's.
+function Select-NewestCliTag {
+    param([object[]]$Releases)
+    $Releases |
+        Where-Object { -not $_.draft -and "$($_.tag_name)" -match '^v[0-9]' } |
+        Select-Object -First 1 -ExpandProperty tag_name
+}
+
 # Parse arguments. $InstallDir stays empty unless given so we can tell an
 # explicit --install-dir from the default <root>\bin after $Root is resolved.
 $Version = ''
@@ -137,6 +171,7 @@ $Root = ''
 $InstallDir = ''
 $InstallDirExplicit = $false
 $NoModifyPath = $false
+$Pre = $false
 
 $argsList = @($args)
 $i = 0
@@ -169,6 +204,9 @@ while ($i -lt $argsList.Count) {
         }
         '--no-modify-path' {
             $NoModifyPath = $true
+        }
+        '--pre' {
+            $Pre = $true
         }
         { $_ -in '--help', '-h' } {
             Write-Help
@@ -220,9 +258,30 @@ switch ($arch) {
 $TarballName = "ketch-$TarballArch-pc-windows-msvc.tar.gz"
 
 if ($Version -eq '') {
-    Write-Status 'Fetching latest release...'
+    if ($Pre) {
+        Write-Status 'Fetching newest release, prereleases included...'
+    }
+    else {
+        Write-Status 'Fetching latest release...'
+    }
     if ($env:KETCH_INSTALL_RELEASE_DIR) {
         $Version = 'v9.9.9'
+    }
+    elseif ($Pre) {
+        try {
+            # Assigned before it is piped: Windows PowerShell 5.1 hands a JSON
+            # array down a pipeline as one object instead of its elements.
+            $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$SelfRepo/releases?per_page=100"
+        }
+        catch {
+            Write-ErrorStatus 'Error: Failed to fetch releases.'
+            exit 1
+        }
+        $Version = Select-NewestCliTag @($releases)
+        if ([string]::IsNullOrWhiteSpace($Version)) {
+            Write-ErrorStatus 'Error: Could not determine latest version.'
+            exit 1
+        }
     }
     else {
         try {
@@ -326,8 +385,16 @@ try {
         exit 1
     }
 
+    # A root this script creates is marked as ketch's, so `ketch self
+    # uninstall` may empty it; one that already existed may hold other programs.
+    $NewRoot = -not (Test-Path -LiteralPath $Root)
     $RootBin = Join-Path $Root 'bin'
     New-Item -ItemType Directory -Path $RootBin -Force | Out-Null
+    if ($NewRoot) {
+        Set-Content -LiteralPath (Join-Path $Root '.ketch-root') -Encoding ascii `
+            -Value 'ketch created this directory; `ketch self uninstall` removes it with everything inside.' `
+            -ErrorAction SilentlyContinue
+    }
     $InstallPath = Join-Path $RootBin $BinaryName
 
     if (Test-Path -LiteralPath $InstallPath) {

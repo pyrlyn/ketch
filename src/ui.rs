@@ -1364,6 +1364,10 @@ impl Decider for TerminalDecider {
         };
         offer(&question, false)
     }
+
+    fn confirm_remove_leftover(&self, path: &std::path::Path) -> bool {
+        offer(&format!("remove leftover {}?", path.display()), false)
+    }
 }
 
 /// The reporter every command hands the core: one [`Terminal`] for the run.
