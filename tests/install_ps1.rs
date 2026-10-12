@@ -107,6 +107,26 @@ fn the_script_writes_path_through_dotnet_not_setx() {
     assert!(!src.contains("setx"), "{src}");
 }
 
+/// Under `irm … | iex` an `exit` closes the user's PowerShell window, so the
+/// only one left is the one that runs when the script is a file.
+#[test]
+fn the_script_exits_only_when_run_as_a_file() {
+    let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1"));
+    let exits: Vec<(usize, &str)> = src
+        .lines()
+        .enumerate()
+        .map(|(n, line)| (n, line.split('#').next().unwrap_or_default()))
+        .filter(|(_, code)| code.split_whitespace().any(|word| word == "exit"))
+        .collect();
+    assert_eq!(exits.len(), 1, "every `exit` in install.ps1: {exits:?}");
+    let (at, _) = exits[0];
+    let guard = src.lines().nth(at - 1).unwrap_or_default();
+    assert!(
+        guard.contains("if ($PSCommandPath)"),
+        "the one `exit` must be guarded by $PSCommandPath, not: {guard}"
+    );
+}
+
 /// Quoted registry PATH entries must match the unquoted bin dir (same rule as
 /// `shell::windows_path_key`), and `;` inside quotes must stay one entry.
 #[test]
@@ -224,6 +244,44 @@ fn help_describes_root_and_install_dir_without_naming_the_root() {
         .stdout(predicate::str::contains("--install-dir"))
         .stdout(predicate::str::contains("names the root").not())
         .stdout(predicate::str::contains("the root becomes its parent").not());
+}
+
+/// `irm … | iex` runs the script in the caller's session: a failure must print
+/// its message and hand the session back with its preference, variables and
+/// environment as they were, rather than closing the window.
+#[test]
+#[cfg(windows)]
+fn a_failure_under_iex_leaves_the_callers_session_running() {
+    if !pwsh_available() {
+        return;
+    }
+    let script = format!(
+        r#"
+$ErrorActionPreference = 'Continue'
+$env:PROCESSOR_ARCHITECTURE = 'ARM64'
+Remove-Item Env:PROCESSOR_ARCHITEW6432 -ErrorAction SilentlyContinue
+Remove-Item Env:KETCH_ROOT -ErrorAction SilentlyContinue
+Get-Content -Raw -LiteralPath '{}' | Invoke-Expression
+"survived exit=$LASTEXITCODE preference=$ErrorActionPreference"
+if (Get-Command Install-Ketch -ErrorAction SilentlyContinue) {{ 'leaked a function' }}
+if (Get-Variable Root -ErrorAction SilentlyContinue) {{ 'leaked a variable' }}
+if ($env:KETCH_ROOT) {{ 'leaked KETCH_ROOT' }}
+"#,
+        concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1")
+    );
+    let pwsh = pwsh_bin().expect("pwsh_available checked");
+    Command::new(pwsh)
+        .args(["-NoProfile", "-Command", &script])
+        .env(
+            "USERPROFILE",
+            std::env::temp_dir().join("ketch-ps1-iex-home"),
+        )
+        .assert()
+        .stdout(predicate::str::contains("Unsupported architecture: ARM64"))
+        .stdout(predicate::str::contains(
+            "survived exit=1 preference=Continue",
+        ))
+        .stdout(predicate::str::contains("leaked").not());
 }
 
 /// The whole script, with the network replaced by a local release tree and the
