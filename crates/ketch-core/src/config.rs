@@ -69,6 +69,8 @@ pub struct ConfigFile {
     pub log_level: Option<crate::log::Level>,
     /// How a record in the log file is written.
     pub log_format: Option<crate::log::Format>,
+    /// The largest single download, in MiB.
+    pub max_download_mib: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -110,7 +112,13 @@ pub struct Config {
     pub log_file: PathBuf,
     pub log_level: crate::log::Level,
     pub log_format: crate::log::Format,
+    /// The largest single download, in bytes. Never zero.
+    pub max_download: u64,
 }
+
+/// `max_download_mib` when neither the file nor the environment sets it: well
+/// above any command-line tool, well below a disk.
+pub const DEFAULT_MAX_DOWNLOAD_MIB: u64 = 4096;
 
 impl Config {
     /// Builds the effective configuration from command-line, environment, file, and default settings.
@@ -240,6 +248,26 @@ impl Config {
             })?),
             None => file.jobs,
         };
+        let max_download_mib = match std::env::var("KETCH_MAX_DOWNLOAD_MIB")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+        {
+            Some(v) => Some(v.trim().parse::<u64>().map_err(|_| {
+                Error::Config(format!(
+                    "KETCH_MAX_DOWNLOAD_MIB must be a whole number, not `{v}`"
+                ))
+            })?),
+            None => file.max_download_mib,
+        };
+        // Zero would refuse every download; that is a typo, not a policy.
+        if max_download_mib == Some(0) {
+            return Err(Error::Config(
+                "max_download_mib must be at least 1".to_string(),
+            ));
+        }
+        let max_download = max_download_mib
+            .unwrap_or(DEFAULT_MAX_DOWNLOAD_MIB)
+            .saturating_mul(1024 * 1024);
 
         Ok(Config {
             bin_dir: root.join("bin"),
@@ -285,6 +313,7 @@ impl Config {
             // the useful number is well above the core count. Capped anyway:
             // a hundred parallel requests is how a source starts refusing them.
             jobs: jobs.filter(|n| *n > 0).unwrap_or(4).min(16),
+            max_download,
             target: TargetSpec::host(),
             root,
         })
@@ -328,6 +357,7 @@ impl Config {
             jobs: Some(4),
             log_level: Some(crate::log::Level::default()),
             log_format: Some(crate::log::Format::default()),
+            max_download_mib: Some(DEFAULT_MAX_DOWNLOAD_MIB),
             root: None,
         };
         format!(
@@ -675,6 +705,7 @@ mod tests {
         assert_eq!(file.self_repo.as_deref(), Some(SELF_REPO));
         assert_eq!(file.registry.as_deref(), Some(REGISTRY_REPO));
         assert_eq!(file.jobs, Some(4));
+        assert_eq!(file.max_download_mib, Some(DEFAULT_MAX_DOWNLOAD_MIB));
         assert_eq!(file.log_level, Some(crate::log::Level::Info));
         assert_eq!(file.log_format, Some(crate::log::Format::Text));
         assert!(file.apps_dir.is_none());
@@ -705,6 +736,7 @@ mod tests {
             "KETCH_STRIP_QUARANTINE",
             "KETCH_AUTO_UPDATE",
             "KETCH_EMOJI",
+            "KETCH_MAX_DOWNLOAD_MIB",
         ];
         let _env = CleanEnv::take(KEYS);
         let tmp = tempfile::tempdir().unwrap();
@@ -724,6 +756,30 @@ mod tests {
         assert_eq!(cfg.jobs, 4);
         assert_eq!(cfg.log_level.to_string(), "info");
         assert_eq!(cfg.log_format.to_string(), "text");
+        assert_eq!(cfg.max_download, 4096 * 1024 * 1024);
+    }
+
+    #[test]
+    fn max_download_comes_from_the_environment_over_the_file() {
+        let _lock = ENV_GUARD.lock().unwrap();
+        let _env = CleanEnv::take(&["KETCH_ROOT", "KETCH_MAX_DOWNLOAD_MIB"]);
+        let tmp = tempfile::tempdir().unwrap();
+        let load = || {
+            Config::load(
+                Some(tmp.path().to_path_buf()),
+                &crate::report::Report::silent(),
+            )
+        };
+        std::fs::write(tmp.path().join("config.toml"), "max_download_mib = 10\n").unwrap();
+        assert_eq!(load().unwrap().max_download, 10 * 1024 * 1024);
+
+        std::env::set_var("KETCH_MAX_DOWNLOAD_MIB", "3");
+        assert_eq!(load().unwrap().max_download, 3 * 1024 * 1024);
+
+        std::env::set_var("KETCH_MAX_DOWNLOAD_MIB", "lots");
+        assert!(load().is_err());
+        std::env::set_var("KETCH_MAX_DOWNLOAD_MIB", "0");
+        assert!(load().is_err());
     }
 
     #[test]
