@@ -53,6 +53,18 @@ public sealed class ContractScenarioTests
     }
 
     [TestMethod]
+    public void An_empty_search_browses_the_registry_the_core_sent()
+    {
+        var core = new FakeKetchCore();
+        core.Script(Scenarios.Named("search"));
+        core.Script(Scenarios.Named("search-browse"));
+
+        string[] expected = ["fd", "ripgrep", "uv"];
+        CollectionAssert.AreEqual(expected, core.Search("").Select(p => p.Name).ToArray());
+        CollectionAssert.AreEqual(expected, core.Search(" \n").Select(p => p.Name).ToArray());
+    }
+
+    [TestMethod]
     public void The_changelog_scenario_reads_as_markdown_headed_by_version()
     {
         var markdown = ContractScenario.Markdown(Scenarios.Named("changelog-range").Value<List<ContractScenario.ChangelogEntry>>());
