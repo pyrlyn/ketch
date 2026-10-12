@@ -202,10 +202,28 @@ pub fn uninstall(cfg: &Config, args: UninstallArgs) -> Result<()> {
         }
     }
     if !missing.is_empty() {
+        // A folder a failed uninstall left behind has no record to match, so
+        // this is the only command that will ever take it away. It is still a
+        // whole folder deleted on a name nothing resolved, so it is asked for.
+        let leftovers: Vec<(&String, std::path::PathBuf)> = missing
+            .iter()
+            .filter_map(|name| {
+                install::leftover_package_dir(cfg, &state, name).map(|dir| (*name, dir))
+            })
+            .collect();
+        if !leftovers.is_empty() {
+            let shown: Vec<String> = leftovers
+                .iter()
+                .map(|(_, dir)| dir.display().to_string())
+                .collect();
+            let question = format!("remove leftover {}?", shown.join(", "));
+            if args.yes || ui::confirm(&question, false) {
+                for (name, _) in &leftovers {
+                    install::remove_package_dir(cfg, name, crate::ui::report());
+                }
+            }
+        }
         for name in missing {
-            // A folder a failed uninstall left behind has no record to match,
-            // so this is the only command that will ever take it away.
-            install::remove_package_dir(cfg, name, crate::ui::report());
             ui::bare_error(&format!("{name}: not found"));
         }
         // Exit 4, `NotInstalled`'s code, so scripts branch the same as before.

@@ -333,9 +333,10 @@ impl KetchCore {
 
     /// Remove `names`: their links, their files and their records. Every name
     /// is checked first, so an unknown one stops the call with `NotFound`
-    /// before any installed package is removed — though, as `ketch uninstall`
-    /// does, a `store/<name>/` folder a failed uninstall left behind for that
-    /// name is taken away, since nothing else ever will. `cancel` is checked
+    /// before any installed package is removed — though, as `ketch uninstall
+    /// --yes` does, a `store/<name>/` folder a failed uninstall left behind for
+    /// that exact name, holding no recorded prefix, is taken away, since
+    /// nothing else ever will. `cancel` is checked
     /// before each package: what was removed by then stays removed.
     pub fn uninstall(
         &self,
@@ -351,7 +352,9 @@ impl KetchCore {
         let missing: Vec<&String> = names.iter().filter(|n| state.find(n).is_none()).collect();
         if let Some(first) = missing.first() {
             for name in &missing {
-                install::remove_package_dir(&op.cfg, name, &op.report);
+                if install::leftover_package_dir(&op.cfg, &state, name).is_some() {
+                    install::remove_package_dir(&op.cfg, name, &op.report);
+                }
             }
             return Err(KetchError::NotFound {
                 name: (*first).clone(),
