@@ -22,3 +22,6 @@
 - B74. xz archives decompress entirely into memory
 - R12. Consolidate duplicated helpers
 - R20. File and directory helpers from `fs-kit`
+- B76. Registry rollback can leave the registry empty
+- B77. A busy `ketch.exe` aborts `self uninstall`
+- B79. A failed link after the store swap leaves state pointing at nothing

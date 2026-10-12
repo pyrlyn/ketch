@@ -60,6 +60,9 @@ Not added: the brand move is done (`brand/build.mjs` already uses `@pyrlyn/brand
 | B74 | todo | P3 | 3 | 0% | |
 | R12 | todo | P3 | 1 | 0% | |
 | R20 | in progress | P2 | 3 | 90% | Claude / sonnet-5.5 |
+| B76 | in progress | P1 | 2 | 0% | Claude Code / opus-5.5 |
+| B77 | in progress | P1 | 2 | 0% | Claude Code / opus-5.5 |
+| B79 | in progress | P1 | 4 | 0% | Claude Code / opus-5.5 |
 
 ### Ketch audit
 
@@ -454,3 +457,15 @@ The creator ordered one entry point for file work. `fs-kit` (path identity, atom
 Plan: (1) add `fs-kit` once under `[workspace.dependencies]`, as a path dependency until it is on crates.io, then `fs-kit = "0.1"` from crates.io with the `just setup` `paths` override for local work (0.1.0 is published); (2) swap canonicalize and simplify calls; (3) swap `remove_any`, `lexical_join` and the atomic writers, with `fsio::write_private` keeping the `0600` and replace-the-link behavior the tempfile writers had; (4) run fmt, clippy and the whole test suite.
 
 Kept local on purpose: `source/local.rs` `copy_tree` (its Windows branch materialises links through `materialize_local_symlink`, with its own missing-target error, where `fs-kit` would create links when Developer Mode allows); `http.rs` download (a streamed write with a cancel check); the store-swap and registry-swap renames; `extract/macos.rs` `copy_tree` (shells out to `ditto`). `platform/windows.rs` `remove_any` and `extract/archive.rs` `copy_dir_contents` moved once `fs-kit` kept the OS error code (`fs_kit::raw_os_error`) and gained `Links::Skip`; the Windows half is checked by Windows CI only. Overlaps R12 (`remove_any` duplicate) and R18 (the rename-over-temp copies).
+
+### B76. Registry rollback can leave the registry empty
+
+Row B76 in the 2026-10-08 findings. `registry.rs` already reports a failed rollback rename, but the live registry is still gone. Done: when the rename back fails, the previous copy is restored by copying, and only a failed copy leaves the error; a test forces both renames to fail.
+
+### B77. A busy `ketch.exe` aborts `self uninstall`
+
+Row B77 in the 2026-10-08 findings. `self_update.rs` removes the running executable with `remove_file(exe)?` after packages and state are gone, so a busy Windows `.exe` stops the rest of the uninstall. Done: that step warns and continues like the other uninstall steps, with a test.
+
+### B79. A failed link after the store swap leaves state pointing at nothing
+
+Row B79 in the 2026-10-08 findings. `place` swaps the store, then links; `ScopedDir` is off when the existing prefix is the store dir, so a failure after the swap leaves a tree that is not on disk. Done: the `.old` copy is restored on error, with a test that fails a link after the swap. B104 (moving occupied link destinations aside) is a separate task.
