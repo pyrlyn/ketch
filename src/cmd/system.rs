@@ -421,6 +421,7 @@ pub fn zelf(cfg: &Config, command: SelfCommand) -> Result<()> {
         SelfCommand::Upgrade {
             dry_run,
             force,
+            pre,
             yes,
         } => {
             if !dry_run {
@@ -434,6 +435,7 @@ pub fn zelf(cfg: &Config, command: SelfCommand) -> Result<()> {
                 &crate::ui::ctx(cfg),
                 force,
                 dry_run,
+                pre,
                 crate::self_docs::SELF_DOCS,
             )?;
             // `replaced` is false both when already current and on dry-run, so

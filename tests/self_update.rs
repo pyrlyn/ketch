@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
 
-//! `ketch self upgrade --dry-run` must not claim an update when already current.
+//! `ketch self upgrade --dry-run` must not claim an update when already current,
+//! and `--pre` must look past `/releases/latest` to the newest prerelease.
 
 use assert_cmd::Command;
 use assert_fs::fixture::PathChild;
@@ -27,6 +28,12 @@ impl GithubLatestMock {
     }
 
     fn spawn_with_body(tag: &str, release_body: Option<&str>) -> Self {
+        Self::spawn_routes(tag, release_body, None)
+    }
+
+    /// `latest` answers `/releases/latest`; `listing`, when given, answers
+    /// the `/releases?…` listing that only `--pre` asks for.
+    fn spawn_routes(tag: &str, release_body: Option<&str>, listing: Option<String>) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock github");
         let addr = listener.local_addr().expect("addr");
         let api_base = format!("http://127.0.0.1:{}", addr.port());
@@ -40,6 +47,7 @@ impl GithubLatestMock {
             payload["body"] = body.into();
         }
         let body = payload.to_string();
+        let listing = listing.unwrap_or_else(|| "[]".into());
         let stop = Arc::new(AtomicBool::new(false));
         let stop_flag = Arc::clone(&stop);
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
@@ -52,11 +60,18 @@ impl GithubLatestMock {
                             break;
                         }
                         let mut buf = [0u8; 8192];
-                        let _ = stream.read(&mut buf);
+                        let n = stream.read(&mut buf).unwrap_or(0);
+                        let request = String::from_utf8_lossy(&buf[..n]);
+                        let path = request.split_whitespace().nth(1).unwrap_or("");
+                        let reply = if path.contains("/releases?") {
+                            &listing
+                        } else {
+                            &body
+                        };
                         let response = format!(
                             "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{}",
-                            body.len(),
-                            body
+                            reply.len(),
+                            reply
                         );
                         let _ = stream.write_all(response.as_bytes());
                     }
@@ -97,15 +112,18 @@ fn ketch_self_update_dry_run(
     mock: &GithubLatestMock,
     root: &std::path::Path,
 ) -> assert_cmd::assert::Assert {
+    ketch_self_upgrade(mock, root, &["--dry-run"])
+}
+
+fn ketch_self_upgrade(
+    mock: &GithubLatestMock,
+    root: &std::path::Path,
+    extra: &[&str],
+) -> assert_cmd::assert::Assert {
     Command::cargo_bin("ketch")
         .unwrap()
-        .args([
-            "--root",
-            root.to_str().unwrap(),
-            "self",
-            "upgrade",
-            "--dry-run",
-        ])
+        .args(["--root", root.to_str().unwrap(), "self", "upgrade"])
+        .args(extra)
         .env("NO_COLOR", "1")
         .env("KETCH_GITHUB_API", &mock.api_base)
         .env_remove("HTTP_PROXY")
@@ -182,4 +200,41 @@ fn release_notes_are_filtered_before_they_reach_stdout() {
         "a bidi override reached the terminal: {stdout:?}"
     );
     assert!(stdout.contains("saferelease notes"), "{stdout:?}");
+}
+
+/// A listing as the ketch repository has it: a CLI prerelease newer than the
+/// stable `latest`, and the macOS app's `desktop-v*` releases beside it.
+fn listing_with_a_cli_prerelease() -> String {
+    serde_json::json!([
+        {"tag_name": "desktop-v9999.0.0", "prerelease": false, "draft": false, "assets": []},
+        {"tag_name": "desktop-appcast", "prerelease": true, "draft": false, "assets": []},
+        {"tag_name": "v999.0.0-rc.1", "prerelease": true, "draft": false, "assets": []},
+        {"tag_name": "v0.0.1", "prerelease": false, "draft": false, "assets": []},
+    ])
+    .to_string()
+}
+
+#[test]
+fn without_pre_a_newer_prerelease_is_not_offered() {
+    let mock =
+        GithubLatestMock::spawn_routes("v0.0.1", None, Some(listing_with_a_cli_prerelease()));
+    let temp = TempDir::new().unwrap();
+
+    ketch_self_upgrade(&mock, temp.child("root").path(), &["--dry-run"])
+        .success()
+        .stderr(predicate::str::contains("already current"))
+        .stderr(predicate::str::contains("999.0.0-rc.1").not());
+}
+
+#[test]
+fn pre_offers_the_newest_cli_prerelease_and_skips_desktop_tags() {
+    let mock =
+        GithubLatestMock::spawn_routes("v0.0.1", None, Some(listing_with_a_cli_prerelease()));
+    let temp = TempDir::new().unwrap();
+
+    ketch_self_upgrade(&mock, temp.child("root").path(), &["--dry-run", "--pre"])
+        .success()
+        .stderr(predicate::str::contains("would upgrade"))
+        .stderr(predicate::str::contains("-> v999.0.0-rc.1"))
+        .stderr(predicate::str::contains("desktop").not());
 }

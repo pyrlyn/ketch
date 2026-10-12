@@ -37,7 +37,7 @@ public sealed partial class DiscoverPage : Page
     {
         if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
         {
-            await App.Store.SearchAsync(sender.Text);
+            await App.Store.SearchAfterTypingAsync(sender.Text);
         }
     }
 

@@ -18,7 +18,6 @@ use crate::error::{Error, Result};
 use crate::model::{
     normalize_name, InstalledPackage, Manifest, ManifestOrigin, PackageRef, PackageSpec,
 };
-use crate::replace::{replace_file, Replace};
 use crate::report::{Ctx, Report};
 use crate::toml_file::{self, Document, EditDocument};
 use serde::Deserialize;
@@ -299,7 +298,7 @@ pub fn to_toml(manifest: &Manifest) -> Result<String> {
 pub fn write_bins(path: &Path, package: &str, bins: &[String]) -> Result<bool> {
     // A manifest linked in from a dotfiles repository is edited there, not
     // replaced by a copy that silently stops following the repository.
-    let target = std::fs::canonicalize(path).map_err(|e| Error::io(path, e))?;
+    let target = fs_kit::path::canonicalize(path).map_err(|e| Error::io(path, e))?;
     let label = target.display().to_string();
     let text = std::fs::read_to_string(&target).map_err(|e| Error::io(&target, e))?;
     let mut doc = EditDocument::parse(&text, &label)?;
@@ -317,7 +316,7 @@ pub fn write_bins(path: &Path, package: &str, bins: &[String]) -> Result<bool> {
     table.set_inline_tables("bin", "name", bins);
     let body = doc.render();
     parse_registry(&body, &label)?;
-    replace_file(&target, body.as_bytes(), USER_FILE)?;
+    replace_file(&target, &body)?;
     Ok(true)
 }
 
@@ -326,7 +325,7 @@ pub fn write_bins(path: &Path, package: &str, bins: &[String]) -> Result<bool> {
 /// so a converter bug fails here instead of leaving a file every later
 /// command warns about; a file linked from elsewhere is written through.
 pub fn write_manifest(path: &Path, text: &str) -> Result<()> {
-    let target = match std::fs::canonicalize(path) {
+    let target = match fs_kit::path::canonicalize(path) {
         Ok(real) => real,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => path.to_path_buf(),
         Err(e) => return Err(Error::io(path, e)),
@@ -335,15 +334,21 @@ pub fn write_manifest(path: &Path, text: &str) -> Result<()> {
     if let Some(dir) = target.parent() {
         std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
     }
-    replace_file(&target, text.as_bytes(), USER_FILE)
+    replace_file(&target, text)
 }
 
-/// A manifest keeps the mode the user gave it.
-const USER_FILE: Replace = Replace {
-    keep_mode: true,
-    ordinary_mode: false,
-    durable: false,
-};
+/// Replace `target` by renaming a finished copy over it, so an interrupted
+/// write leaves the old file whole.
+fn replace_file(target: &Path, body: &str) -> Result<()> {
+    // An existing manifest keeps the mode the user gave it; a new one is
+    // private, as the temporary file it used to be built from was.
+    let options = fs_kit::write::Options::new().follow_symlinks(false);
+    #[cfg(unix)]
+    let options = options.mode(0o600);
+    options
+        .write(target, body)
+        .map_err(|e| Error::fs_kit(target, e))
+}
 
 /// `parse_registry` for the `manifest_toml` fuzz target (`src/lib.rs`).
 #[cfg(fuzzing)]
@@ -617,5 +622,23 @@ mod tests {
         let body = "name = \"rtok\"\nsource = \"github:me/rtok-fork\"\n";
         write_manifest(&path, body).unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), body);
+    }
+
+    /// A manifest keeps the mode the user gave it, and a new one is private.
+    #[cfg(unix)]
+    #[test]
+    fn a_manifest_keeps_its_mode_and_a_new_one_is_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        let dir = tempfile::tempdir().unwrap();
+        let shared = dir.path().join("shared.toml");
+        std::fs::write(&shared, "old").unwrap();
+        std::fs::set_permissions(&shared, std::fs::Permissions::from_mode(0o644)).unwrap();
+        replace_file(&shared, "new").unwrap();
+        assert_eq!(mode(&shared), 0o644);
+
+        let fresh = dir.path().join("fresh.toml");
+        replace_file(&fresh, "new").unwrap();
+        assert_eq!(mode(&fresh), 0o600);
     }
 }

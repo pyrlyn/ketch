@@ -33,7 +33,18 @@ final class Declining: Decider {
         return false
     }
 
+    func confirmRemoveLeftover(path: String) -> Bool { false }
+
     var holders: [Holder] { shown.withLock { $0 } }
+}
+
+/// Agrees to remove a leftover folder, and only that.
+final class RemovingLeftovers: Decider {
+    func chooseBinary(package: String, candidates: [String]) -> UInt32? { nil }
+
+    func stopProcesses(holders: [Holder]) -> Bool { false }
+
+    func confirmRemoveLeftover(path: String) -> Bool { true }
 }
 
 /// A throwaway directory holding a ketch root and a one-file package to
@@ -265,7 +276,7 @@ func run(_ program: String, _ arguments: String...) throws -> String {
     #expect(found.known.map(\.latest) == ["1.2.0"])
 }
 
-@Test func anUninstallReportsWhatItRemovedAndTakesAnUnrecordedLeftover() throws {
+@Test func anUninstallReportsWhatItRemovedAndTakesALeftoverOnlyWhenConfirmed() throws {
     let scratch = try Scratch()
     let core = KetchCore(root: scratch.root)
     let placed = try core.install(
@@ -289,12 +300,15 @@ func run(_ program: String, _ arguments: String...) throws -> String {
 
     let leftover = scratch.dir.appending(path: "root/store/ghost/1.0.0.old")
     try FileManager.default.createDirectory(at: leftover, withIntermediateDirectories: true)
+    let ghost = scratch.dir.appending(path: "root/store/ghost").path(percentEncoded: false)
     #expect(throws: KetchError.NotFound(name: "ghost")) {
-        try core.uninstall(names: ["ghost"], reporter: nil, decider: nil, cancel: nil)
+        try core.uninstall(names: ["ghost"], reporter: nil, decider: Declining(), cancel: nil)
     }
-    #expect(
-        !FileManager.default.fileExists(
-            atPath: scratch.dir.appending(path: "root/store/ghost").path(percentEncoded: false)))
+    #expect(FileManager.default.fileExists(atPath: ghost))
+    #expect(throws: KetchError.NotFound(name: "ghost")) {
+        try core.uninstall(names: ["ghost"], reporter: nil, decider: RemovingLeftovers(), cancel: nil)
+    }
+    #expect(!FileManager.default.fileExists(atPath: ghost))
 }
 
 @Test func aPinHoldsAnUpgradeAndARollbackUndoesOneTheHistoryRecords() throws {

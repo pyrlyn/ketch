@@ -22,7 +22,6 @@
 use crate::config::Config;
 use crate::error::{Error, Result};
 use crate::platform::DoctorCheck;
-use crate::replace::{replace_file, Replace};
 use std::path::{Path, PathBuf};
 
 /// Opens the block ketch owns. Must begin a line and end one.
@@ -462,17 +461,18 @@ pub fn user_path_configured(cfg: &Config) -> bool {
 
 /// Put the bin dir on the Windows user PATH.
 ///
-/// Uses `[Environment]::SetEnvironmentVariable` so Explorer is notified and a
-/// new terminal sees the change without a logoff. `setx` is not used: it
-/// truncates PATH at 1024 characters.
+/// Edits the raw registry value (see [`write_user_path`]) so `%VAR%` entries
+/// keep expanding, and Explorer is notified so a new terminal sees the
+/// change without a logoff. `setx` is not used: it truncates PATH at 1024
+/// characters.
 #[cfg(windows)]
 pub fn install_user(cfg: &Config, dry_run: bool) -> Result<Outcome> {
-    let current = read_user_path()?;
-    match windows_path_prepend(&current, &cfg.bin_dir) {
+    let (kind, current) = read_user_path_raw()?.unzip();
+    match windows_path_prepend(current.as_deref().unwrap_or(""), &cfg.bin_dir) {
         None => Ok(Outcome::Unchanged),
         Some(next) => {
             if !dry_run {
-                write_user_path(&next)?;
+                write_user_path(user_path_kind(kind.as_deref()), &next)?;
             }
             Ok(Outcome::Added)
         }
@@ -563,7 +563,8 @@ pub fn stale_registry_check(cfg: &Config) -> Option<DoctorCheck> {
 fn stale_path_entries<'a>(path: &'a str, bin_dir: &Path) -> Vec<&'a str> {
     windows_path_entries(path)
         .filter(|entry| {
-            let key = windows_path_key(Path::new(entry));
+            let entry = expanded_entry(entry);
+            let key = windows_path_key(Path::new(&entry));
             let ketch_bin = key == windows_path_key(bin_dir) || key.ends_with(r"\.ketch\bin");
             ketch_bin && !Path::new(entry.trim().trim_matches('"')).exists()
         })
@@ -582,12 +583,14 @@ pub fn remove_registry_entry(cfg: &Config, entry: RegistryEntry) -> Result<()> {
 /// Take the bin dir back out of the Windows user PATH.
 #[cfg(windows)]
 pub fn uninstall_user(cfg: &Config, dry_run: bool) -> Result<Outcome> {
-    let current = read_user_path()?;
+    let Some((kind, current)) = read_user_path_raw()? else {
+        return Ok(Outcome::Unchanged);
+    };
     match windows_path_remove(&current, &cfg.bin_dir) {
         None => Ok(Outcome::Unchanged),
         Some(next) => {
             if !dry_run {
-                write_user_path(&next)?;
+                write_user_path(&kind, &next)?;
             }
             Ok(Outcome::Removed)
         }
@@ -662,7 +665,8 @@ fn windows_path_entry_list(path: &str) -> Vec<&str> {
 
 #[cfg_attr(not(windows), allow(dead_code))]
 fn windows_path_eq(entry: &str, dir: &Path) -> bool {
-    if windows_path_key(Path::new(entry)) == windows_path_key(dir) {
+    let entry = expanded_entry(entry);
+    if windows_path_key(Path::new(&entry)) == windows_path_key(dir) {
         return true;
     }
     // The same folder spelled another way: `install.ps1` writes the path
@@ -670,7 +674,10 @@ fn windows_path_eq(entry: &str, dir: &Path) -> bool {
     // 8.3 short name (`RUNNER~1`) or go through a link. Folding text cannot
     // see through either; resolving both can, while the folder still exists.
     let entry = entry.trim().trim_matches('"').trim_matches('\'');
-    match (dunce::canonicalize(entry), dunce::canonicalize(dir)) {
+    match (
+        fs_kit::path::canonicalize(entry),
+        fs_kit::path::canonicalize(dir),
+    ) {
         (Ok(a), Ok(b)) => windows_path_key(&a) == windows_path_key(&b),
         _ => false,
     }
@@ -686,48 +693,121 @@ pub fn windows_path_key(p: &Path) -> String {
     s.trim_end_matches('\\').to_ascii_lowercase()
 }
 
-#[cfg(windows)]
-fn read_user_path() -> Result<String> {
-    let out = std::process::Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "[Environment]::GetEnvironmentVariable('Path','User')",
-        ])
-        .output()
-        .map_err(|e| Error::msg(format!("could not read the user PATH: {e}")))?;
-    if !out.status.success() {
-        return Err(Error::msg(format!(
-            "could not read the user PATH: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        )));
+/// `%NAME%` replaced the way Windows expands a `REG_EXPAND_SZ` value; a
+/// variable `lookup` does not know stays as written.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn expand_percent_vars(s: &str, lookup: impl Fn(&str) -> Option<String>) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(open) = rest.find('%') {
+        out.push_str(&rest[..open]);
+        let after = &rest[open + 1..];
+        let Some(close) = after.find('%') else {
+            out.push_str(&rest[open..]);
+            return out;
+        };
+        let name = &after[..close];
+        match (!name.is_empty()).then(|| lookup(name)).flatten() {
+            Some(value) => out.push_str(&value),
+            None => out.push_str(&rest[open..open + close + 2]),
+        }
+        rest = &after[close + 1..];
     }
-    Ok(String::from_utf8_lossy(&out.stdout)
-        .trim_end_matches(['\r', '\n'])
-        .to_string())
+    out.push_str(rest);
+    out
 }
 
-/// Write the user Path and broadcast `WM_SETTINGCHANGE`.
-///
-/// The new value travels in an environment variable so a PATH that contains
-/// quotes or `$` cannot break out of the PowerShell command.
+/// A PATH entry as Windows would use it: `%VAR%` expanded from this process's
+/// environment. The registry value is read unexpanded, so an entry written as
+/// `%USERPROFILE%\.ketch\bin` must still be recognised as the bin dir.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn expanded_entry(entry: &str) -> String {
+    expand_percent_vars(entry, |name| std::env::var(name).ok())
+}
+
+/// The registry kind to write the user Path back as: the one it has, so a
+/// `REG_EXPAND_SZ` keeps expanding its `%VAR%` entries, or `ExpandString` —
+/// what Windows itself creates — when there is none yet.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn user_path_kind(existing: Option<&str>) -> &str {
+    existing
+        .filter(|kind| matches!(*kind, "String" | "ExpandString"))
+        .unwrap_or("ExpandString")
+}
+
+/// Where the user environment lives, under `HKEY_CURRENT_USER`.
+#[cfg_attr(not(windows), allow(dead_code))]
+const ENVIRONMENT_KEY: &str = "Environment";
+
+/// The user Path's registry kind and raw value, `%VAR%` unexpanded; `None`
+/// when it is unset. `[Environment]::GetEnvironmentVariable` would expand
+/// it, and writing that back freezes every `%VAR%` entry.
 #[cfg(windows)]
-fn write_user_path(value: &str) -> Result<()> {
-    let status = std::process::Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "[Environment]::SetEnvironmentVariable('Path', $env:KETCH_NEW_USER_PATH, 'User')",
-        ])
-        .env("KETCH_NEW_USER_PATH", value)
-        .status()
-        .map_err(|e| Error::msg(format!("could not write the user PATH: {e}")))?;
-    if !status.success() {
-        return Err(Error::msg("could not write the user PATH"));
-    }
-    Ok(())
+fn read_user_path_raw() -> Result<Option<(String, String)>> {
+    read_user_value(ENVIRONMENT_KEY, "Path")
+        .map_err(|e| Error::msg(format!("could not read the user PATH: {e}")))
+}
+
+#[cfg(windows)]
+fn read_user_path() -> Result<String> {
+    Ok(read_user_path_raw()?.map(|(_, v)| v).unwrap_or_default())
+}
+
+/// Write the user Path with its kind, then tell running programs.
+///
+/// A registry write notifies nobody, so Explorer would hand new terminals
+/// the old PATH until a logoff. `SetEnvironmentVariable` broadcasts
+/// `WM_SETTINGCHANGE`; setting and clearing a throwaway variable with it
+/// sends that broadcast without touching Path's kind or `%VAR%` entries.
+#[cfg(windows)]
+fn write_user_path(kind: &str, value: &str) -> Result<()> {
+    write_user_value(
+        ENVIRONMENT_KEY,
+        "Path",
+        user_path_kind(Some(kind)),
+        value,
+        "; [Environment]::SetEnvironmentVariable('KETCH_ENV_REFRESH', '1', 'User'); \
+         [Environment]::SetEnvironmentVariable('KETCH_ENV_REFRESH', $null, 'User')",
+    )
+    .map_err(|e| Error::msg(format!("could not write the user PATH: {e}")))
+}
+
+/// A `HKEY_CURRENT_USER` value's kind and raw value; `None` when unset.
+#[cfg(windows)]
+fn read_user_value(key: &str, name: &str) -> Result<Option<(String, String)>> {
+    let out = powershell(
+        PowerShell::Desktop.exe(),
+        "$k = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($env:KETCH_REG_KEY); \
+         if ($k -and ($k.GetValueNames() -contains $env:KETCH_REG_NAME)) { \
+         [Console]::Out.Write($k.GetValueKind($env:KETCH_REG_NAME).ToString() + [char]10 + \
+         [string]$k.GetValue($env:KETCH_REG_NAME, '', 'DoNotExpandEnvironmentNames')) }",
+        &[("KETCH_REG_KEY", key), ("KETCH_REG_NAME", name)],
+    )?;
+    Ok(out
+        .split_once('\n')
+        .map(|(kind, value)| (kind.trim().to_string(), value.to_string())))
+}
+
+/// Set a `HKEY_CURRENT_USER` value with an explicit kind; `then` is more
+/// script, fixed text only, run after the key is closed.
+#[cfg(windows)]
+fn write_user_value(key: &str, name: &str, kind: &str, value: &str, then: &str) -> Result<()> {
+    let script = format!(
+        "$k = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($env:KETCH_REG_KEY); \
+         $k.SetValue($env:KETCH_REG_NAME, $env:KETCH_REG_VALUE, \
+         [Microsoft.Win32.RegistryValueKind]$env:KETCH_REG_KIND); $k.Close(){then}"
+    );
+    powershell(
+        PowerShell::Desktop.exe(),
+        &script,
+        &[
+            ("KETCH_REG_KEY", key),
+            ("KETCH_REG_NAME", name),
+            ("KETCH_REG_VALUE", value),
+            ("KETCH_REG_KIND", kind),
+        ],
+    )
+    .map(|_| ())
 }
 
 /// The Windows PowerShell editions, each with its own profile directory.
@@ -929,7 +1009,7 @@ pub fn uninstall_powershell_profile(file: &Path) -> Result<bool> {
             Ok(true)
         }
         Some(None) => {
-            let target = dunce::canonicalize(file).unwrap_or_else(|_| file.to_path_buf());
+            let target = fs_kit::path::canon(file);
             std::fs::remove_file(&target).map_err(|e| Error::io(&target, e))?;
             Ok(true)
         }
@@ -1178,35 +1258,14 @@ pub fn uninstall_cmd_macros(cfg: &Config) -> Result<bool> {
 /// AutoRun's kind and raw value, `%VAR%` unexpanded; `None` when it is unset.
 #[cfg(windows)]
 fn read_autorun() -> Result<Option<(String, String)>> {
-    let out = powershell(
-        PowerShell::Desktop.exe(),
-        "$k = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($env:KETCH_AUTORUN_KEY); \
-         if ($k -and ($k.GetValueNames() -contains 'AutoRun')) { \
-         [Console]::Out.Write($k.GetValueKind('AutoRun').ToString() + [char]10 + \
-         [string]$k.GetValue('AutoRun', '', 'DoNotExpandEnvironmentNames')) }",
-        &[("KETCH_AUTORUN_KEY", AUTORUN_KEY)],
-    )
-    .map_err(|e| Error::msg(format!("could not read cmd's AutoRun: {e}")))?;
-    Ok(out
-        .split_once('\n')
-        .map(|(kind, value)| (kind.trim().to_string(), value.to_string())))
+    read_user_value(AUTORUN_KEY, "AutoRun")
+        .map_err(|e| Error::msg(format!("could not read cmd's AutoRun: {e}")))
 }
 
 #[cfg(windows)]
 fn write_autorun(kind: &str, value: &str) -> Result<()> {
-    powershell(
-        PowerShell::Desktop.exe(),
-        "$k = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($env:KETCH_AUTORUN_KEY); \
-         $k.SetValue('AutoRun', $env:KETCH_AUTORUN_VALUE, \
-         [Microsoft.Win32.RegistryValueKind]$env:KETCH_AUTORUN_KIND); $k.Close()",
-        &[
-            ("KETCH_AUTORUN_KEY", AUTORUN_KEY),
-            ("KETCH_AUTORUN_VALUE", value),
-            ("KETCH_AUTORUN_KIND", kind),
-        ],
-    )
-    .map(|_| ())
-    .map_err(|e| Error::msg(format!("could not write cmd's AutoRun: {e}")))
+    write_user_value(AUTORUN_KEY, "AutoRun", kind, value, "")
+        .map_err(|e| Error::msg(format!("could not write cmd's AutoRun: {e}")))
 }
 
 #[cfg(windows)]
@@ -1367,11 +1426,7 @@ fn unsplice(text: &str) -> Option<String> {
 
 /// A missing config file reads as empty: it is about to be created.
 fn read(file: &Path) -> Result<String> {
-    match std::fs::read_to_string(file) {
-        Ok(text) => Ok(text),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
-        Err(e) => Err(Error::io(file, e)),
-    }
+    fs_kit::read::text_or_empty(file).map_err(|e| Error::fs_kit(file, e))
 }
 
 /// Replace the file's contents, atomically and in place.
@@ -1379,22 +1434,12 @@ fn write(file: &Path, text: &str) -> Result<()> {
     // A startup file is very often a symlink into a dotfiles repository.
     // Renaming over the link would replace it with a regular file and quietly
     // detach the user from their own dotfiles, so the write follows it first.
-    let target = dunce::canonicalize(file).unwrap_or_else(|_| file.to_path_buf());
-    let Some(parent) = target.parent() else {
-        return Err(Error::msg(format!(
-            "{} has no parent directory",
-            target.display()
-        )));
-    };
-    std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
-    // A startup file the user made private must not come back world-readable,
-    // and a new one is as readable as any other the user's editor makes.
-    let how = Replace {
-        keep_mode: true,
-        ordinary_mode: true,
-        durable: false,
-    };
-    replace_file(&target, text.as_bytes(), how)
+    let target = fs_kit::path::canon(file);
+    fs_kit::write::Options::new()
+        .create_parent(true)
+        .follow_symlinks(false)
+        .write(&target, text)
+        .map_err(|e| Error::fs_kit(&target, e))
 }
 
 #[cfg(test)]
@@ -1862,5 +1907,121 @@ mod tests {
         )
         .expect("config");
         assert!(registry_entries(&cfg).is_empty());
+    }
+
+    #[test]
+    fn percent_vars_expand_like_a_reg_expand_sz_value() {
+        let lookup = |name: &str| (name == "USERPROFILE").then(|| r"C:\Users\Zoë".to_string());
+        assert_eq!(
+            expand_percent_vars(r"%USERPROFILE%\.ketch\bin", lookup),
+            r"C:\Users\Zoë\.ketch\bin"
+        );
+        // Unknown names, an empty `%%` and a lone `%` stay as written.
+        assert_eq!(
+            expand_percent_vars(r"%JAVA_HOME%\bin;50%%;%USERPROFILE%;a%b", lookup),
+            r"%JAVA_HOME%\bin;50%%;C:\Users\Zoë;a%b"
+        );
+    }
+
+    #[test]
+    fn a_bin_dir_written_with_a_variable_is_already_on_the_path() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::env::set_var("KETCH_TEST_B95_ROOT", tmp.path());
+        let dir = tmp.path().join("bin");
+        let path = r"%SystemRoot%\system32;%KETCH_TEST_B95_ROOT%\bin;%JAVA_HOME%\bin";
+
+        assert!(windows_path_has(path, &dir));
+        assert!(windows_path_prepend(path, &dir).is_none());
+        // What stays is written back exactly as it was read.
+        assert_eq!(
+            windows_path_remove(path, &dir).as_deref(),
+            Some(r"%SystemRoot%\system32;%JAVA_HOME%\bin")
+        );
+    }
+
+    #[test]
+    fn the_user_path_keeps_its_registry_kind() {
+        assert_eq!(user_path_kind(Some("String")), "String");
+        assert_eq!(user_path_kind(Some("ExpandString")), "ExpandString");
+        assert_eq!(user_path_kind(None), "ExpandString");
+        assert_eq!(user_path_kind(Some("Binary")), "ExpandString");
+    }
+
+    /// The real registry: a `%USERPROFILE%` entry must survive a ketch edit
+    /// unexpanded, and a non-ASCII one byte for byte.
+    #[cfg(windows)]
+    #[test]
+    fn editing_the_user_path_keeps_variables_and_non_ascii_entries() {
+        struct Restore(Option<(String, String)>);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                match &self.0 {
+                    Some((kind, value)) => {
+                        let _ = write_user_path(kind, value);
+                    }
+                    None => {
+                        let _ = powershell(
+                            PowerShell::Desktop.exe(),
+                            "$k = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true); \
+                             if ($k) { $k.DeleteValue('Path', $false); $k.Close() }",
+                            &[],
+                        );
+                    }
+                }
+            }
+        }
+        let _restore = Restore(read_user_path_raw().expect("read the user PATH"));
+
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let cfg = Config::load(
+            Some(tmp.path().join("kétch-ö")),
+            &crate::report::Report::silent(),
+        )
+        .expect("config");
+        let before = r"%USERPROFILE%\ketch-b95-probe;C:\Zoë\b95";
+        write_user_path("ExpandString", before).expect("seed the user PATH");
+
+        install_user(&cfg, false).expect("path install");
+        let (kind, value) = read_user_path_raw()
+            .expect("read back")
+            .expect("the user PATH is set");
+        assert_eq!(kind, "ExpandString");
+        assert_eq!(
+            value,
+            format!("{};{before}", cfg.bin_dir.display()),
+            "the edit must prepend the bin dir and change nothing else"
+        );
+
+        uninstall_user(&cfg, false).expect("path uninstall");
+        let (kind, value) = read_user_path_raw()
+            .expect("read back")
+            .expect("the user PATH is set");
+        assert_eq!((kind.as_str(), value.as_str()), ("ExpandString", before));
+    }
+
+    /// A startup file the user made private must not come back readable, and
+    /// a new one must look like any other file the user's editor makes.
+    #[cfg(unix)]
+    #[test]
+    fn a_startup_file_keeps_its_mode_and_a_new_one_gets_the_ordinary_mode() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let private = dir.path().join(".zshrc");
+        std::fs::write(&private, "old").unwrap();
+        std::fs::set_permissions(&private, std::fs::Permissions::from_mode(0o600)).unwrap();
+        write(&private, "new").unwrap();
+        assert_eq!(file_mode(&private), 0o600);
+
+        let reference = dir.path().join("by-std");
+        std::fs::write(&reference, "x").unwrap();
+        let fresh = dir.path().join("config/fish/config.fish");
+        write(&fresh, "new").unwrap();
+        assert_eq!(file_mode(&fresh), file_mode(&reference));
+    }
+
+    #[cfg(unix)]
+    fn file_mode(path: &Path) -> u32 {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(path).unwrap().permissions().mode() & 0o777
     }
 }

@@ -30,6 +30,11 @@ namespace Ketch {
     [CCode (cname = "KetchStopFn", has_target = true)]
     public delegate bool StopFunc (string holders);
 
+    /* Whether to remove `path`, a package folder an earlier uninstall left
+     * behind with nothing recorded in it. */
+    [CCode (cname = "KetchConfirmFn", has_target = true)]
+    public delegate bool ConfirmFunc (string path);
+
     [CCode (cname = "ketch_version")]
     public string version ();
 
@@ -69,7 +74,8 @@ namespace Ketch {
                                EventFunc? report, ChooseFunc? choose, StopFunc? stop, Cancel? cancel);
         [CCode (cname = "ketch_uninstall")]
         public string uninstall ([CCode (array_length_type = "size_t")] string[] names,
-                                 EventFunc? report, ChooseFunc? choose, StopFunc? stop, Cancel? cancel);
+                                 EventFunc? report, ChooseFunc? choose, StopFunc? stop,
+                                 ConfirmFunc? confirm, Cancel? cancel);
         [CCode (cname = "ketch_changelog")]
         public string changelog (string package, string? version, EventFunc? report);
         [CCode (cname = "ketch_changelog_range")]

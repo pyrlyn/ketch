@@ -29,7 +29,6 @@
 use crate::config::{sanitize_component, validate_repo};
 use crate::error::{Error, Result};
 use crate::model::{InstalledPackage, PackageRef};
-use crate::replace::{replace_file, Replace};
 use crate::state::State;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -262,12 +261,7 @@ impl Lockfile {
     /// Write it out, atomically, so an interrupted write cannot leave a
     /// half-parsed lockfile where a whole one used to be.
     pub fn save(&self, path: &Path) -> Result<()> {
-        let text = self.to_toml()?;
-        let how = Replace {
-            durable: true,
-            ..Replace::default()
-        };
-        replace_file(path, text.as_bytes(), how)
+        crate::fsio::write_private(path, self.to_toml()?)
     }
 
     /// The entry for an installed package, matched on source rather than name.

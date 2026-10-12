@@ -7,8 +7,10 @@
 # in what dist has no setting for:
 #
 # - dist's CODESIGN_* secret names mapped to the MACOS_* secrets this
-#   repository holds. CODESIGN_IDENTITY is not a secret: .github/build-setup.yml
-#   discovers it on macOS runners.
+#   repository holds, and moved from build-local-artifacts' job env onto the
+#   one step that signs: `dist build` on macOS. GH_TOKEN leaves that job.
+#   CODESIGN_IDENTITY is not a secret: .github/build-setup.yml discovers it on
+#   macOS runners.
 # - .github/build-check.yml (notarisation and the smoke test) after `dist
 #   build`, before each target's artifacts are uploaded.
 # - An aggregate `SHA256SUMS` beside the tarballs, and their sizes in the
@@ -76,23 +78,42 @@ def fail(message):
     sys.exit(f"dist-generate patch: {message}")
 
 
-for old, new in [
-    (
-        "CODESIGN_CERTIFICATE: ${{ secrets.CODESIGN_CERTIFICATE }}",
-        "CODESIGN_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}",
-    ),
-    (
-        "CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}",
-        "CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}",
-    ),
-    (
-        "      CODESIGN_IDENTITY: ${{ secrets.CODESIGN_IDENTITY }}\n",
-        "      # CODESIGN_IDENTITY: set on macOS by .github/build-setup.yml (not a secret)\n",
-    ),
+# dist puts the certificate and GH_TOKEN in build-local-artifacts' job env, so
+# every step on all four runners — and every dependency's build.rs and
+# proc-macro — could read the Developer ID .p12. Only `dist build` on macOS
+# signs, and no step of that job calls the GitHub API with GH_TOKEN.
+build_env_old = """    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
+      CODESIGN_CERTIFICATE: ${{ secrets.CODESIGN_CERTIFICATE }}
+      CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
+      CODESIGN_IDENTITY: ${{ secrets.CODESIGN_IDENTITY }}
+    steps:
+"""
+build_env_new = """    env:
+      BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
+      # CODESIGN_CERTIFICATE(+_PASSWORD): only on the macOS `Build artifacts` step
+      # CODESIGN_IDENTITY: set on macOS by .github/build-setup.yml (not a secret)
+    steps:
+"""
+build_step_old = """      - name: Build artifacts
+        run: |
+          # Actually do builds and make zips and whatnot
+"""
+build_step_new = """      - name: Build artifacts
+        env:
+          CODESIGN_CERTIFICATE: ${{ runner.os == 'macOS' && secrets.MACOS_CERTIFICATE || '' }}
+          CODESIGN_CERTIFICATE_PASSWORD: ${{ runner.os == 'macOS' && secrets.MACOS_CERTIFICATE_PWD || '' }}
+        run: |
+          # Actually do builds and make zips and whatnot
+"""
+for old, new, what in [
+    (build_env_old, build_env_new, "build-local-artifacts' job env"),
+    (build_step_old, build_step_new, "build-local-artifacts' Build artifacts step"),
 ]:
-    if old not in text:
-        fail(f"missing expected line:\n  {old.strip()}")
-    text = text.replace(old, new)
+    if text.count(old) != 1:
+        fail(f"{what} is missing or changed:\n{old}")
+    text = text.replace(old, new, 1)
 
 # .github/build-check.yml, indented as steps of build-local-artifacts, right
 # before its upload.
@@ -173,7 +194,7 @@ if "notify-failure:" not in text:
 
 path.write_text(text)
 print(
-    f"patched {path}: MACOS_* secrets, build-check steps, SHA256SUMS, download sizes, "
+    f"patched {path}: MACOS_* secrets on the macOS build step, build-check steps, SHA256SUMS, download sizes, "
     "notify-failure job"
 )
 PY
