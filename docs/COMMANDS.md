@@ -708,15 +708,21 @@ the curl/PowerShell/Homebrew installers run.
 ketch self install
 ```
 
-### `ketch self upgrade [--dry-run] [--force] [--yes]`
+### `ketch self upgrade [--dry-run] [--force] [--pre] [--yes]`
 
 Upgrade ketch to the latest release. Aliased as `ketch self update`. A ketch
 installed with mise and never `self install`ed is mise's to upgrade: this
 refuses, and names `mise upgrade`.
 
+`--pre` takes the newest release, prereleases included, instead of GitHub's
+latest release. The macOS app's `desktop-v*` releases are never taken. The
+installers take the same flag: `install.sh --pre` and `install.ps1 --pre`.
+Without it nothing changes.
+
 ```bash
 ketch self upgrade
 ketch self upgrade --dry-run
+ketch self upgrade --pre
 ```
 
 ### `ketch self version`
@@ -735,6 +741,12 @@ installed with mise also asks whether to run `mise unuse -g` for its own copy;
 `--yes` answers that too.
 On Windows the running `ketch.exe` cannot delete itself, so the rest of the
 root is removed by a background process once ketch has exited.
+
+The root's own directories (`bin`, `store`, `cache`, …) are emptied only when
+ketch created the root — it then holds a `.ketch-root` marker — or the root
+is the default `~/.ketch`. A root that already existed, such as `~/.local` or
+`/usr/local`, and the home directory itself keep everything ketch did not
+record there.
 
 On Windows it also removes what ketch wrote to the registry. Today that is
 only the bin dir in the user PATH (`HKCU\Environment\Path`), written by

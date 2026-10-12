@@ -421,6 +421,46 @@ fn uninstall_after_rollback_removes_every_retained_prefix() {
 }
 
 #[test]
+fn prune_after_upgrading_back_to_a_retained_version_keeps_the_live_store() {
+    let sandbox = Sandbox::new();
+    publish_tool(&sandbox, "1.0.0");
+    sandbox.ok(&["install", "test:testtool@1.0.0", "--yes"]);
+    publish_tool(&sandbox, "2.0.0");
+    sandbox.ok(&["upgrade", "--yes"]);
+    sandbox.ok(&["rollback", "testtool"]);
+    sandbox.ok(&["upgrade", "--yes"]);
+    let link = sandbox.bin().join("testtool");
+    assert_eq!(run(&link), "testtool 2.0.0");
+
+    sandbox.ok(&["prune", "testtool", "--keep", "1"]);
+
+    assert!(sandbox.store().join("testtool").join("2.0.0").is_dir());
+    assert_eq!(run(&link), "testtool 2.0.0");
+    let json = sandbox.ok(&["info", "testtool", "--json"]);
+    assert!(json.contains(r#""installed": "2.0.0""#), "{json}");
+}
+
+#[test]
+fn installing_the_same_name_from_another_source_is_refused() {
+    let sandbox = Sandbox::new();
+    publish_tool(&sandbox, "1.0.0");
+    sandbox.ok(&["install", "test:testtool", "--yes"]);
+    let arch = host_arch();
+    let fork = sandbox.asset(
+        &format!("fork-testtool-2.0.0-{arch}-apple-darwin.tar.gz"),
+        tool_archive("2.0.0"),
+    );
+    sandbox.publish("fork/testtool", &[Release::new("2.0.0", vec![fork])]);
+
+    let stderr = sandbox.fails(&["install", "test:fork/testtool", "--yes"]);
+
+    assert!(stderr.contains("--name"), "{stderr}");
+    assert_eq!(run(&sandbox.bin().join("testtool")), "testtool 1.0.0");
+    let json = sandbox.ok(&["info", "testtool", "--json"]);
+    assert!(json.contains(r#""installed": "1.0.0""#), "{json}");
+}
+
+#[test]
 fn a_pinned_package_is_left_where_it_is() {
     let sandbox = Sandbox::new();
     publish_tool(&sandbox, "1.0.0");

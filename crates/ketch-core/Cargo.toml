@@ -55,8 +55,8 @@ walkdir = "2"
 semver = "1"
 tempfile = "3"
 dirs = "7"
-# canonicalize without Windows `\\?\` UNC prefixes (path compare / display)
-dunce = "1"
+# canonicalize without Windows `\\?\` UNC prefixes, atomic writes, tree copy and removal
+fs-kit.workspace = true
 # relative path between two absolute paths (copy_tree, platform link checks)
 pathdiff = "0.2"
 # parse Windows archive member paths correctly on any host (zip-slip guard)
