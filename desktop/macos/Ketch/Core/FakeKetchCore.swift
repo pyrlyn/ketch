@@ -30,6 +30,9 @@ final class FakeKetchCore: KetchCoreProtocol {
         var upgrades: [Upgrade]?
         var findings: [Finding]?
         var changelogText: String?
+        /// Extra latency for one call, keyed as `calls` records it but with
+        /// the arguments as passed, so a test can make an early reply late.
+        var delays: [String: Duration] = [:]
     }
 
     let root: URL
@@ -57,6 +60,12 @@ final class FakeKetchCore: KetchCoreProtocol {
     }
 
     var calls: [String] { state.withLock { $0.calls } }
+
+    /// Makes `call` (`"search <query>"`, `"changelog <name>"`) take `delay`
+    /// longer than the rest.
+    func delay(_ call: String, by delay: Duration) {
+        state.withLock { $0.delays[call] = delay }
+    }
 
     /// Makes the fake answer as the core did in `scenario`: a read returns the
     /// scenario's records, and install, upgrade and uninstall replay its
@@ -96,6 +105,7 @@ final class FakeKetchCore: KetchCoreProtocol {
     }
 
     func search(query: String) throws -> [RegistryPackage] {
+        hold("search \(query)")
         pause()
         let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
         return state.withLock { state in
@@ -205,6 +215,7 @@ final class FakeKetchCore: KetchCoreProtocol {
     }
 
     func changelog(name: String, from: String?, to: String?) throws -> String {
+        hold("changelog \(name)")
         pause()
         state.withLock { $0.calls.append("changelog \(name)") }
         if let text = state.withLock({ $0.changelogText }) { return text }
@@ -321,8 +332,16 @@ final class FakeKetchCore: KetchCoreProtocol {
     }
 
     private func pause() {
-        guard stepDelay > .zero else { return }
-        let (seconds, attoseconds) = stepDelay.components
+        sleep(stepDelay)
+    }
+
+    private func hold(_ call: String) {
+        sleep(state.withLock { $0.delays[call] } ?? .zero)
+    }
+
+    private func sleep(_ duration: Duration) {
+        guard duration > .zero else { return }
+        let (seconds, attoseconds) = duration.components
         Thread.sleep(forTimeInterval: Double(seconds) + Double(attoseconds) / 1e18)
     }
 }

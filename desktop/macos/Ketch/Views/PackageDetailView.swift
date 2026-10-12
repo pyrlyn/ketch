@@ -58,7 +58,10 @@ struct PackageDetailView: View {
         }
         .task(id: name) {
             loading = true
-            changelog = await store.changelog(for: name, from: installed?.version, to: latest)
+            let text = await store.changelog(for: name, from: installed?.version, to: latest)
+            // A newer `name` cancelled this task; its own reply is the one to show.
+            guard !Task.isCancelled else { return }
+            changelog = text
             loading = false
         }
     }
