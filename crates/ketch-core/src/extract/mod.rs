@@ -146,6 +146,63 @@ fn safe_member_path_for(raw: &Path, windows: bool) -> Result<PathBuf> {
     Ok(safe)
 }
 
+/// More links than this on one path is a loop, as the kernel decides too.
+const MAX_LINK_HOPS: u32 = 40;
+
+/// True when `path`, with every symlink along it and at its end followed,
+/// stays under `root`.
+///
+/// A link target checked on its own text cannot answer this: `L -> .` makes
+/// `N -> L/..` look one level deep while it resolves to the parent of the
+/// payload. Links are followed one component at a time rather than through
+/// `canonicalize`, so a dangling link is judged by where it would point, not
+/// waved through because it does not resolve yet. Anything that cannot be
+/// read, or loops, counts as outside.
+pub(crate) fn resolves_inside(path: &Path, root: &Path) -> bool {
+    let mut hops = 0;
+    match (resolve(root, &mut hops), resolve(path, &mut hops)) {
+        (Some(root), Some(path)) => path.starts_with(root),
+        _ => false,
+    }
+}
+
+/// `path` with every existing symlink on it followed and `..` applied, or
+/// `None` on a loop or an unreadable entry.
+fn resolve(path: &Path, hops: &mut u32) -> Option<PathBuf> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir().ok()?.join(path)
+    };
+    let mut resolved = PathBuf::new();
+    for component in absolute.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir => resolved.push(component.as_os_str()),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                resolved.pop();
+            }
+            Component::Normal(name) => {
+                let next = resolved.join(name);
+                match std::fs::symlink_metadata(&next) {
+                    Ok(meta) if meta.file_type().is_symlink() => {
+                        *hops += 1;
+                        if *hops > MAX_LINK_HOPS {
+                            return None;
+                        }
+                        let target = std::fs::read_link(&next).ok()?;
+                        resolved = resolve(&resolved.join(target), hops)?;
+                    }
+                    Ok(_) => resolved = next,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => resolved = next,
+                    Err(_) => return None,
+                }
+            }
+        }
+    }
+    Some(resolved)
+}
+
 /// If the payload is a single wrapper directory, return it.
 ///
 /// Almost every release tarball unpacks to `tool-1.2.3-target/`; treating that

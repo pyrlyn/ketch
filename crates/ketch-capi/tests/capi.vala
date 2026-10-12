@@ -77,7 +77,25 @@ int main () {
     expect (installed.get_object_element (0).get_string_member ("name") == name,
             "installed lists what install placed");
 
-    print ("capi: installed, doctor, cancelled install and a reported install all answered\n");
+    // A folder an earlier uninstall left behind goes only when `confirm`
+    // agrees; the name is still not installed either way.
+    var leftover = Path.build_filename (dir, "root", "store", "ghost");
+    DirUtils.create_with_parents (Path.build_filename (leftover, "1.0.0.old"), 0755);
+    string[] ghost = { "ghost" };
+    string asked = "";
+    var kept = envelope (core.uninstall (ghost, null, null, null, (path) => {
+        asked = path;
+        return false;
+    }, null));
+    expect (kept.get_object_member ("error").get_string_member ("type") == "not_found",
+            "a name with no record is not found");
+    expect (asked.has_suffix (Path.build_filename ("store", "ghost")),
+            "confirm is asked about the leftover folder");
+    expect (FileUtils.test (leftover, FileTest.IS_DIR), "a decline keeps the leftover");
+    envelope (core.uninstall (ghost, null, null, null, (path) => true, null));
+    expect (!FileUtils.test (leftover, FileTest.EXISTS), "a confirmation removes the leftover");
+
+    print ("capi: installed, doctor, cancelled install, a reported install and a leftover all answered\n");
     return 0;
 }
 

@@ -192,6 +192,36 @@ public sealed class KetchStoreTests
     }
 
     [TestMethod]
+    public async Task A_slower_older_search_does_not_replace_a_newer_one()
+    {
+        var core = new FakeKetchCore();
+        core.Delay("search ", TimeSpan.FromMilliseconds(600));
+        var store = new KetchStore(core);
+
+        var older = store.SearchAsync("");
+        await Task.Delay(100);
+        await store.SearchAsync("json");
+        await older;
+
+        CollectionAssert.AreEqual(new[] { "search json", "search " }, core.Calls.ToList());
+        CollectionAssert.AreEqual(new[] { "jq" }, store.SearchResults.Select(p => p.Name).ToList());
+    }
+
+    [TestMethod]
+    public async Task A_burst_of_keystrokes_searches_once_for_the_last_text()
+    {
+        var core = new FakeKetchCore();
+        var store = new KetchStore(core);
+        var pause = TimeSpan.FromMilliseconds(100);
+
+        var typed = new[] { "j", "js", "jso", "json" }.Select(text => store.SearchAfterTypingAsync(text, pause)).ToList();
+        await Task.WhenAll(typed);
+
+        CollectionAssert.AreEqual(new[] { "search json" }, core.Calls.ToList());
+        CollectionAssert.AreEqual(new[] { "jq" }, store.SearchResults.Select(p => p.Name).ToList());
+    }
+
+    [TestMethod]
     public void A_downloads_share_of_the_bar_grows_with_the_bytes_received()
     {
         var half = new PackageProgress(Stage.Download) { Done = 50, Total = 100 };

@@ -195,6 +195,25 @@ fn copy_volume(mount: &Path, dest: &Path) -> Result<()> {
     if !copied_any {
         return Err(Error::EmptyPayload(mount.to_path_buf()));
     }
+    ensure_links_inside(dest)
+}
+
+/// Refuse a copied payload holding any link that leads out of it.
+///
+/// `ditto` copies links exactly as the image or package holds them, so only
+/// the top level of a volume was ever filtered: a nested `Contents/x -> /etc`
+/// or `-> ../../..` arrived intact, and whatever reads the payload next
+/// (binary discovery, man pages, the changelog) would follow it out.
+fn ensure_links_inside(dest: &Path) -> Result<()> {
+    for entry in walkdir::WalkDir::new(dest).follow_links(false) {
+        let entry = entry.map_err(|e| Error::msg(format!("walking {}: {e}", dest.display())))?;
+        if entry.file_type().is_symlink() && !super::resolves_inside(entry.path(), dest) {
+            return Err(Error::msg(format!(
+                "refusing payload link {} that resolves outside the payload",
+                entry.path().display()
+            )));
+        }
+    }
     Ok(())
 }
 
@@ -233,7 +252,7 @@ impl Extractor for PkgExtractor {
                 copy_tree(&entry.path(), &dest.join(entry.file_name()))?;
             }
         }
-        Ok(())
+        ensure_links_inside(dest)
     }
 }
 
@@ -256,6 +275,39 @@ fn find_payload_roots(expanded: &Path) -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A stand-in for a mounted volume: `copy_volume` only reads a directory.
+    fn volume_with_link(target: &str) -> (tempfile::TempDir, PathBuf, PathBuf) {
+        let root = tempfile::tempdir().unwrap();
+        let mount = root.path().join("volume");
+        let resources = mount.join("App.app/Contents/Resources");
+        std::fs::create_dir_all(&resources).unwrap();
+        std::fs::write(resources.join("real"), b"x").unwrap();
+        std::os::unix::fs::symlink(target, resources.join("link")).unwrap();
+        let dest = root.path().join("dest");
+        std::fs::create_dir_all(&dest).unwrap();
+        (root, mount, dest)
+    }
+
+    #[test]
+    fn a_nested_link_out_of_a_volume_is_refused() {
+        for target in ["/etc/hosts", "../../../../..", "../../../../../outside"] {
+            let (_root, mount, dest) = volume_with_link(target);
+            let err = copy_volume(&mount, &dest).unwrap_err();
+            assert!(
+                err.to_string().contains("resolves outside"),
+                "{target}: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_nested_link_inside_a_volume_is_kept() {
+        let (_root, mount, dest) = volume_with_link("real");
+        copy_volume(&mount, &dest).unwrap();
+        let link = dest.join("App.app/Contents/Resources/link");
+        assert!(link.symlink_metadata().unwrap().file_type().is_symlink());
+    }
 
     #[test]
     fn reads_the_mount_point_out_of_hdiutil_output() {
