@@ -25,6 +25,7 @@ public sealed class FakeKetchCore : IKetchCore
     private IReadOnlyList<Upgrade>? upgrades;
     private IReadOnlyList<Finding>? findings;
     private string? changelogText;
+    private readonly Dictionary<string, TimeSpan> delays = [];
 
     public FakeKetchCore(
         string root = @"C:\ketch-fake",
@@ -54,6 +55,18 @@ public sealed class FakeKetchCore : IKetchCore
             {
                 return [.. calls];
             }
+        }
+    }
+
+    /// <summary>
+    /// Makes <paramref name="call"/> (<c>"search &lt;query&gt;"</c>, <c>"changelog &lt;name&gt;"</c>,
+    /// with the arguments as passed) take <paramref name="by"/> longer than the rest.
+    /// </summary>
+    public void Delay(string call, TimeSpan by)
+    {
+        lock (gate)
+        {
+            delays[call] = by;
         }
     }
 
@@ -123,6 +136,7 @@ public sealed class FakeKetchCore : IKetchCore
 
     public IReadOnlyList<RegistryPackage> Search(string query)
     {
+        Hold($"search {query}");
         Pause();
         var needle = query.Trim().ToLowerInvariant();
         lock (gate)
@@ -254,6 +268,7 @@ public sealed class FakeKetchCore : IKetchCore
 
     public string Changelog(string name, string? from, string? to)
     {
+        Hold($"changelog {name}");
         Pause();
         lock (gate)
         {
@@ -460,6 +475,20 @@ public sealed class FakeKetchCore : IKetchCore
         if (stepDelay > TimeSpan.Zero)
         {
             Thread.Sleep(stepDelay);
+        }
+    }
+
+    private void Hold(string call)
+    {
+        TimeSpan delay;
+        lock (gate)
+        {
+            delay = delays.GetValueOrDefault(call);
+        }
+
+        if (delay > TimeSpan.Zero)
+        {
+            Thread.Sleep(delay);
         }
     }
 

@@ -12,7 +12,7 @@
 //!
 //! `reset` is the opposite direction: it writes `config.toml` in the ketch
 //! root with the compiled defaults, backing up the existing file beside it
-//! through the shared `file-backup` crate first.
+//! through the shared `fs-kit` crate first.
 
 use crate::cli::ConfigCommand;
 use crate::config::{sanitize_component, Config};
@@ -48,7 +48,7 @@ fn reset(cfg: &Config, yes: bool) -> Result<()> {
         return Ok(());
     }
     if let Some(made) =
-        file_backup::backup(&cfg.config_file).map_err(|e| Error::io(&cfg.config_file, e))?
+        fs_kit::backup::backup(&cfg.config_file).map_err(|e| Error::fs_kit(&cfg.config_file, e))?
     {
         ui::note(&format!("backed up to {}", made.display()));
     }

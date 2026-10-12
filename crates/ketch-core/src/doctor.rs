@@ -348,8 +348,8 @@ pub fn store_ketch_link(cfg: &Config) -> PathBuf {
 
 /// Whether two paths name the same file, after resolving links.
 pub fn same_binary(a: &Path, b: &Path) -> bool {
-    let left = dunce::canonicalize(a).unwrap_or_else(|_| a.to_path_buf());
-    let right = dunce::canonicalize(b).unwrap_or_else(|_| b.to_path_buf());
+    let left = fs_kit::path::canon(a);
+    let right = fs_kit::path::canon(b);
     if cfg!(windows) {
         shell::windows_path_key(&left) == shell::windows_path_key(&right)
     } else {
@@ -367,7 +367,7 @@ fn first_ketch_on_path_from(path: impl AsRef<std::ffi::OsStr>) -> Option<PathBuf
     for dir in std::env::split_paths(path.as_ref()) {
         let candidate = dir.join(name);
         if candidate.is_file() {
-            return Some(dunce::canonicalize(&candidate).unwrap_or(candidate));
+            return Some(fs_kit::path::canon(&candidate));
         }
     }
     None
@@ -482,7 +482,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let file = tmp.path().join("ketch.bin");
         std::fs::write(&file, b"x").unwrap();
-        let canon = dunce::canonicalize(&file).unwrap();
+        let canon = fs_kit::path::canonicalize(&file).unwrap();
         let mut chars: Vec<char> = canon.to_string_lossy().chars().collect();
         if let Some(c) = chars.first_mut() {
             if c.is_ascii_uppercase() {

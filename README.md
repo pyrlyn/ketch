@@ -127,6 +127,10 @@ On Windows:
 irm https://raw.githubusercontent.com/pyrlyn/ketch/main/install.ps1 | iex
 ```
 
+Both installers take `--pre` to install the newest release, prereleases
+included (`curl … | bash -s -- --pre`; on Windows,
+`& ([scriptblock]::Create((irm …/install.ps1))) --pre`).
+
 or with Homebrew:
 
 ```bash
@@ -413,6 +417,7 @@ release required. See [docs/PLUGINS.md](docs/PLUGINS.md).
 | `jobs` | `KETCH_JOBS` | `4` (capped at `16`) |
 | `log_level` | `KETCH_LOG_LEVEL` | `info` |
 | `log_format` | `KETCH_LOG_FORMAT` | `text` |
+| `max_download_mib` | `KETCH_MAX_DOWNLOAD_MIB` | `4096` |
 
 `self_repo` and `registry` set to the names these repositories had before they
 moved, `listepo/ketch` and `listepo/ketch-registry`, read as the `pyrlyn` ones;
@@ -445,6 +450,10 @@ The root itself is `KETCH_ROOT` or `--root`; it cannot be set from the config
 file, because the file lives inside it. `KETCH_GITHUB_API` overrides the GitHub
 API base URL (for Enterprise); it cannot be set from the config file either.
 `jobs` and `--jobs` above `16` are clamped to `16`.
+
+`max_download_mib` is the largest single download ketch writes, in MiB. A
+download that announces more, or streams past it without saying, is stopped
+and leaves no file behind; raise it for a package that is genuinely larger.
 
 A token is not required, but it raises GitHub's rate limit considerably.
 

@@ -30,8 +30,15 @@ public sealed partial class PackageDetailPage : Page
         Render();
         var installed = App.Store.Installed.FirstOrDefault(p => p.Name == name);
         ChangelogText.Text = "Loading…";
-        ChangelogText.Text = await App.Store.ChangelogAsync(name, installed?.Version, App.Store.OutdatedVersion(name))
-            ?? "The changelog could not be read.";
+        var requested = name;
+        var text = await App.Store.ChangelogAsync(requested, installed?.Version, App.Store.OutdatedVersion(requested));
+        // A cached page navigated to another package meanwhile; that one's reply is the one to show.
+        if (requested != name)
+        {
+            return;
+        }
+
+        ChangelogText.Text = text ?? "The changelog could not be read.";
     }
 
     private void OnStoreChanged(object? sender, PropertyChangedEventArgs e)
