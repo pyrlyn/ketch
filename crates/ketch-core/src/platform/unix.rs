@@ -232,20 +232,12 @@ fn payload_executable_entry(entry: &walkdir::DirEntry, root: &Path) -> Option<Pa
     if !entry.file_type().is_symlink() {
         return None;
     }
-    let target = std::fs::read_link(path).ok()?;
-    let resolved = if target.is_absolute() {
-        target
-    } else {
-        path.parent()?.join(target)
-    };
-    let rel = resolved.strip_prefix(root).ok()?;
-    if rel
-        .components()
-        .any(|c| matches!(c, std::path::Component::ParentDir))
-    {
+    // One hop is not enough: `tool -> abs` reads as inside while `abs`, or
+    // any link further along, leads out of the payload.
+    if !crate::extract::resolves_inside(path, root) {
         return None;
     }
-    std::fs::metadata(&resolved)
+    std::fs::metadata(path)
         .ok()
         .filter(|meta| meta.is_file())
         .map(|_| path.to_path_buf())
@@ -555,6 +547,34 @@ mod tests {
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].0.file_name().unwrap(), "rtok");
         assert_eq!(got[0].1, "rtok");
+    }
+
+    #[test]
+    fn a_payload_link_routed_through_another_link_out_of_the_tree_is_not_a_program() {
+        let outer = tempfile::tempdir().unwrap();
+        let root = outer.path().join("payload");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(outer.path().join("outside"), b"#!/bin/sh\n").unwrap();
+        std::fs::write(root.join("inside"), b"#!/bin/sh\n").unwrap();
+        std::os::unix::fs::symlink(".", root.join("L")).unwrap();
+        // Planted by a payload no extractor checked (a DMG or PKG copy): one
+        // hop reads `abs`, which is inside, and stops there.
+        std::os::unix::fs::symlink(outer.path().join("outside"), root.join("abs")).unwrap();
+        std::os::unix::fs::symlink("abs", root.join("escape")).unwrap();
+        std::os::unix::fs::symlink("L/inside", root.join("alias")).unwrap();
+
+        let entry_for = |name: &str| {
+            walkdir::WalkDir::new(&root)
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .find(|e| e.file_name() == name)
+                .unwrap()
+        };
+        assert_eq!(payload_executable_entry(&entry_for("escape"), &root), None);
+        assert_eq!(
+            payload_executable_entry(&entry_for("alias"), &root),
+            Some(root.join("alias"))
+        );
     }
 
     #[test]

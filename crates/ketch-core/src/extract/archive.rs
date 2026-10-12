@@ -7,7 +7,7 @@
 //! Detection is by magic bytes, never by extension. Every entry path goes
 //! through `super::safe_member_path` before it is joined onto the destination.
 
-use super::{safe_member_path, Extractor};
+use super::{resolves_inside, safe_member_path, Extractor};
 use crate::error::{Error, Result};
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
@@ -482,8 +482,22 @@ fn finish_deferred_links(
         walk_inside(dest, &source, false)?;
         write_hardlink(&source, &out)?;
     }
+    let mut written = Vec::with_capacity(symlinks.len());
     for (out, target) in symlinks {
         write_symlink(&target, &out)?;
+        written.push((out, target));
+    }
+    // Only now, with every link in place, does a target mean what the kernel
+    // will make of it: a later link can reroute an earlier one.
+    for (out, target) in written {
+        let is_link = std::fs::symlink_metadata(&out).is_ok_and(|m| m.file_type().is_symlink());
+        if is_link && !resolves_inside(&out, dest) {
+            return Err(Error::msg(format!(
+                "refusing archive link {} -> {} that resolves outside the target directory",
+                out.display(),
+                target.display()
+            )));
+        }
     }
     Ok(())
 }
@@ -793,6 +807,72 @@ mod tests {
         );
         // Member 2 would have been created here had the link been followed.
         assert!(!dest.join("e").exists(), "the symlink was resolved anyway");
+    }
+
+    /// Each target passes the lexical check alone; through `L -> .` they
+    /// all resolve above the payload.
+    #[cfg(unix)]
+    #[test]
+    fn a_link_routed_through_an_earlier_link_is_refused() {
+        for (name, target) in [("N", "L/.."), ("N", "L/L/../.."), ("sub/N", "../L/L/../..")] {
+            let mut builder = tar::Builder::new(Vec::new());
+            symlink_entry(&mut builder, "L", ".");
+            symlink_entry(&mut builder, name, target);
+            let archive = builder.into_inner().unwrap();
+
+            let outer = tempfile::tempdir().unwrap();
+            let dest = outer.path().join("dest");
+            std::fs::create_dir_all(&dest).unwrap();
+            let err = unpack_tar(&archive[..], &dest).unwrap_err();
+            assert!(
+                err.to_string().contains("resolves outside"),
+                "{target}: {err}"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolves_inside_follows_every_link_and_judges_dangling_ones_by_their_target() {
+        let outer = tempfile::tempdir().unwrap();
+        let root = outer.path().join("root");
+        std::fs::create_dir_all(root.join("bin")).unwrap();
+        std::fs::write(root.join("bin/tool"), b"x").unwrap();
+        let link = |name: &str, target: &str| {
+            std::os::unix::fs::symlink(target, root.join(name)).unwrap();
+            root.join(name)
+        };
+
+        assert!(crate::extract::resolves_inside(
+            &link("alias", "bin/tool"),
+            &root
+        ));
+        assert!(crate::extract::resolves_inside(
+            &link("dangling", "bin/missing"),
+            &root
+        ));
+        link("self", ".");
+        assert!(crate::extract::resolves_inside(
+            &root.join("self/self/bin/tool"),
+            &root
+        ));
+        assert!(!crate::extract::resolves_inside(
+            &link("up", "self/.."),
+            &root
+        ));
+        assert!(!crate::extract::resolves_inside(
+            &link("gone", "self/../nothing"),
+            &root
+        ));
+        assert!(!crate::extract::resolves_inside(
+            &link("abs", "/etc/passwd"),
+            &root
+        ));
+        link("loop-a", "loop-b");
+        assert!(!crate::extract::resolves_inside(
+            &link("loop-b", "loop-a"),
+            &root
+        ));
     }
 
     #[test]

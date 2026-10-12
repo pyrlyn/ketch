@@ -281,20 +281,12 @@ fn payload_executable_entry(entry: &walkdir::DirEntry, root: &Path) -> Option<Pa
     if !entry.file_type().is_symlink() {
         return None;
     }
-    let target = std::fs::read_link(path).ok()?;
-    let resolved = if target.is_absolute() {
-        target
-    } else {
-        path.parent()?.join(target)
-    };
-    let rel = resolved.strip_prefix(root).ok()?;
-    if rel
-        .components()
-        .any(|c| matches!(c, std::path::Component::ParentDir))
-    {
+    // One hop is not enough: `tool -> abs` reads as inside while `abs`, or
+    // any link further along, leads out of the payload.
+    if !crate::extract::resolves_inside(path, root) {
         return None;
     }
-    std::fs::metadata(&resolved)
+    std::fs::metadata(path)
         .ok()
         .filter(|meta| meta.is_file())
         .map(|_| path.to_path_buf())
