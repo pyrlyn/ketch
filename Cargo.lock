@@ -1805,12 +1805,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28dea519a9695b9977216879a3ebfddf92f1c08c05d984f8996aecd6ecdc811d"
 
 [[package]]
-name = "file-backup"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ff3b890ef50489901e35eaf6be4dc7b77d3ac3b568dbf121331f55b3a568fe6"
-
-[[package]]
 name = "filedescriptor"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1936,6 +1930,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b91aa448ca50d7e79433bdf3ee8d99215430d2ec02ade5aefab2a073a1822e8a"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "fs-kit"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ce7c1d8e448538e4054724fc0978228824b84b74f499069665cccc99b09a9a1"
+dependencies = [
+ "dunce",
 ]
 
 [[package]]
@@ -2933,9 +2936,8 @@ dependencies = [
  "clap_mangen",
  "console",
  "crossterm",
- "dunce",
- "file-backup",
  "flate2",
+ "fs-kit",
  "hex",
  "indicatif",
  "insta",
@@ -2984,8 +2986,8 @@ dependencies = [
  "diesel",
  "diesel_migrations",
  "dirs",
- "dunce",
  "flate2",
+ "fs-kit",
  "hex",
  "insta",
  "jsonschema",

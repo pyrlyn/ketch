@@ -14,7 +14,6 @@ use assert_cmd::Command;
 #[cfg(windows)]
 use predicates::prelude::*;
 
-#[cfg(windows)]
 fn pwsh_bin() -> Option<std::path::PathBuf> {
     // Resolve before tests clear PATH — otherwise `Command::new("pwsh")` cannot
     // spawn even when PowerShell is installed on the runner.
@@ -100,10 +99,16 @@ fn the_script_prefers_system32_tar_over_git_bash_tar() {
     );
 }
 
+/// `GetEnvironmentVariable('Path','User')` expands `%VAR%`, and writing that
+/// back freezes every such entry; `setx` also truncates. The registry, read
+/// unexpanded and written with the value's kind, does neither.
 #[test]
-fn the_script_writes_path_through_dotnet_not_setx() {
+fn the_script_edits_path_unexpanded_through_the_registry_not_setx() {
     let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1"));
-    assert!(src.contains("SetEnvironmentVariable('Path'"), "{src}");
+    assert!(src.contains("'DoNotExpandEnvironmentNames'"), "{src}");
+    assert!(src.contains("$key.SetValue('Path', $next, $kind)"), "{src}");
+    assert!(!src.contains("GetEnvironmentVariable('Path'"), "{src}");
+    assert!(!src.contains("SetEnvironmentVariable('Path'"), "{src}");
     assert!(!src.contains("setx"), "{src}");
 }
 
@@ -123,6 +128,51 @@ fn the_script_parses_quoted_path_entries_like_ketch_shell() {
     assert!(
         !src.contains("$PathString -split ';'"),
         "naive -split on ';' would shatter quoted entries with a semicolon: {src}"
+    );
+}
+
+/// `--pre`'s tag choice, run under pwsh on any host that has it: the first
+/// CLI tag in GitHub's newest-first listing, prerelease or not, and never the
+/// macOS app's `desktop-v*` tags or its `desktop-appcast` feed.
+#[test]
+fn pre_picks_the_newest_cli_tag_past_desktop_releases() {
+    // A version-manager shim answers to the name without a PowerShell behind
+    // it; only a pwsh that actually starts can run the helper.
+    let Some(pwsh) = pwsh_bin().filter(|pwsh| {
+        std::process::Command::new(pwsh)
+            .args(["-NoProfile", "-Command", "exit 0"])
+            .output()
+            .is_ok_and(|out| out.status.success())
+    }) else {
+        return;
+    };
+    let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1"));
+    let start = src
+        .find("function Select-NewestCliTag")
+        .expect("Select-NewestCliTag");
+    let end = src.find("# Parse arguments.").expect("argument parsing");
+    let helper = &src[start..end];
+    let script = format!(
+        r#"
+{helper}
+$releases = '[{{"tag_name":"desktop-appcast","prerelease":true,"draft":false}},{{"tag_name":"desktop-v99.0.0","prerelease":false,"draft":false}},{{"tag_name":"v9.9.9-rc.1","prerelease":true,"draft":false}},{{"tag_name":"v1.0.0","prerelease":false,"draft":false}}]' | ConvertFrom-Json
+$got = Select-NewestCliTag @($releases)
+if ($got -ne 'v9.9.9-rc.1') {{
+    Write-Error "picked '$got'"
+    exit 1
+}}
+exit 0
+"#
+    );
+    let out = std::process::Command::new(pwsh)
+        .args(["-NoProfile", "-Command", &script])
+        .output()
+        .expect("run pwsh");
+    assert!(
+        out.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
     );
 }
 

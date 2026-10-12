@@ -12,11 +12,8 @@
 //! away once the whole placement has succeeded. Kept apart from the backends
 //! because every one of them needs the same rule.
 
-#[cfg(unix)]
-use super::unix::remove_any;
-#[cfg(windows)]
-use super::windows::remove_any;
 use crate::error::{Error, Result};
+use fs_kit::tree::remove_any;
 use std::path::{Path, PathBuf};
 
 /// Every destination a placement has claimed, with where its previous occupant
@@ -51,7 +48,7 @@ impl Claims {
             return Ok(());
         }
         let aside = (self.aside)(path);
-        remove_any(&aside).map_err(|e| Error::io(&aside, e))?;
+        remove_any(&aside).map_err(|e| Error::fs_kit(&aside, e))?;
         std::fs::rename(path, &aside).map_err(|e| Error::io(path, e))?;
         self.taken.push((path.to_path_buf(), Some(aside)));
         Ok(())

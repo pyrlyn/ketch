@@ -17,6 +17,7 @@
 //! with whatever it has.
 
 use crate::process::Occupant;
+use std::path::Path;
 
 /// Answers the questions the pipeline asks mid-run. Implementors must be safe
 /// to call from any thread; an answer may block on a person.
@@ -29,6 +30,10 @@ pub trait Decider: Send + Sync {
     /// Whether to stop `occupants`, processes that hold files about to be
     /// replaced. A decline leaves them running.
     fn stop_processes(&self, occupants: &[Occupant]) -> bool;
+
+    /// Whether to remove `path`, a package folder an earlier uninstall left
+    /// behind with nothing recorded in it. A decline keeps it.
+    fn confirm_remove_leftover(&self, path: &Path) -> bool;
 }
 
 /// Answers nothing and declines everything, as a script would.
@@ -42,6 +47,10 @@ impl Decider for NoDecider {
     fn stop_processes(&self, _occupants: &[Occupant]) -> bool {
         false
     }
+
+    fn confirm_remove_leftover(&self, _path: &Path) -> bool {
+        false
+    }
 }
 
 #[cfg(test)]
@@ -53,5 +62,6 @@ mod tests {
         let candidates = ["rtok-cli".to_string(), "rtok-hook".to_string()];
         assert_eq!(NoDecider.choose_binary("rtok", &candidates), None);
         assert!(!NoDecider.stop_processes(&[]));
+        assert!(!NoDecider.confirm_remove_leftover(Path::new("/k/store/ghost")));
     }
 }

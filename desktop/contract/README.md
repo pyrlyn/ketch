@@ -27,7 +27,8 @@ KETCH_BLESS=1 cargo nextest run -p ketch-ffi contract
 
 - `call`: the operation and the arguments the app passes. `operation` is one
   of `installed`, `search`, `outdated`, `install`, `upgrade`, `uninstall`,
-  `changelog_range`, `doctor`.
+  `changelog_range`, `doctor`. A `search` with an empty `query` browses: every
+  known package and no repositories (`search-browse`).
 - `script`: what happens during the call, in order. A `type: "event"` step is
   something the core reports (`step`, `status`, `success`, `warn`, `note`,
   `debug`, `began`, `sized`, `progress`, `ended`, `abandoned`). A

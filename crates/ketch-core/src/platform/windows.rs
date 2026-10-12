@@ -21,6 +21,7 @@ use crate::model::{
     PackageKind, TargetSpec,
 };
 use crate::source::local::copy_tree;
+use fs_kit::tree::remove_any;
 use std::collections::HashSet;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -61,21 +62,12 @@ impl WindowsPlatform {
     }
 }
 
-pub(crate) fn remove_any(path: &Path) -> std::io::Result<()> {
-    match std::fs::symlink_metadata(path) {
-        Ok(meta) if meta.is_dir() => std::fs::remove_dir_all(path),
-        Ok(_) => std::fs::remove_file(path),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e),
-    }
-}
-
 /// Windows `ERROR_ACCESS_DENIED` (5) / `ERROR_SHARING_VIOLATION` (32), plus
 /// `PermissionDenied`. A running `.exe` typically cannot be deleted or
 /// overwritten, but it *can* be renamed aside so a fresh copy can take its path.
 fn is_busy(err: &std::io::Error) -> bool {
     err.kind() == std::io::ErrorKind::PermissionDenied
-        || matches!(err.raw_os_error(), Some(5) | Some(32))
+        || matches!(fs_kit::raw_os_error(err), Some(5) | Some(32))
 }
 
 fn busy_aside(path: &Path) -> PathBuf {
@@ -636,7 +628,7 @@ impl Platform for WindowsPlatform {
                 ));
                 continue;
             }
-            remove_any(&record.link).map_err(|e| Error::io(&record.link, e))?;
+            remove_any(&record.link).map_err(|e| Error::fs_kit(&record.link, e))?;
         }
         Ok(())
     }
@@ -969,6 +961,12 @@ mod tests {
         let sharing = std::io::Error::from_raw_os_error(32);
         assert!(is_busy(&denied));
         assert!(is_busy(&sharing));
+        // `remove_any` comes from fs-kit, which wraps the OS error with its path.
+        let wrapped = std::io::Error::other(fs_kit::PathError {
+            path: PathBuf::from("ketch.exe"),
+            source: std::io::Error::from_raw_os_error(32),
+        });
+        assert!(is_busy(&wrapped));
         assert!(!is_busy(&std::io::Error::from(
             std::io::ErrorKind::NotFound
         )));

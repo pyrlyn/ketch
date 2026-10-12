@@ -54,6 +54,17 @@ import Testing
         #expect(store.problemCount == 2)
     }
 
+    @Test func anEmptySearchBrowsesTheRegistryTheCoreSent() async throws {
+        let (store, core) = try makeStore(scripting: ["search", "search-browse"])
+
+        await store.search("")
+
+        #expect(store.searchResults.map(\.name) == ["fd", "ripgrep", "uv"])
+        #expect(store.errorMessage == nil)
+        // The core trims every kind of whitespace, newlines included.
+        #expect(try core.search(query: " \n").map(\.name) == ["fd", "ripgrep", "uv"])
+    }
+
     @Test func theChangelogRangeIsOneSectionPerRelease() async throws {
         let (store, _) = try makeStore(scripting: ["changelog-range"])
 
