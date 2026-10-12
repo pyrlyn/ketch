@@ -32,10 +32,12 @@ rust-version = "1.86"
 license = "GPL-3.0-or-later OR LicenseRef-Ketch-Royalty-free-1.0 OR LicenseRef-Ketch-Commercial"
 repository = "https://github.com/pyrlyn/ketch"
 
-# The path is temporary: fs-kit is not on crates.io yet, so it is the sibling
-# checkout. Switch to the registry version once it is published.
+# fs-kit comes from crates.io on the committed lock; local work against
+# packages/crates/fs-kit uses the `paths` override `just setup` writes. No
+# `path` or `[patch]` here: CI and release builds must resolve the registry
+# version.
 [workspace.dependencies]
-fs-kit = { path = "../crates-fs-kit/fs-kit", version = "0.1.0" }
+fs-kit = "0.1"
 
 # There is no unsafe code in ketch and there is no reason for any to appear.
 [workspace.lints.rust]

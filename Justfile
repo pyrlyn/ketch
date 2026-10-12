@@ -36,6 +36,36 @@ deps:
     mise install
     mise exec -- npm ci
 
+
+# local dev only (never committed, never on CI): use the sibling checkout at
+# packages/crates/fs-kit instead of crates.io.
+#
+# This is a `paths` override, not a `[patch]`: it swaps the source without
+# touching Cargo.lock, so `--locked` builds keep working on the committed
+# lock in both directions.
+setup:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p .cargo
+    # Cargo reads both `.cargo/config` and `.cargo/config.toml` (the latter
+    # wins), so a legacy `config` file must not be silently shadowed.
+    if [ -e .cargo/config.toml ] || [ -e .cargo/config ]; then
+      echo ".cargo/config.toml already exists; leaving it alone"
+    else
+      printf '%s\n' \
+        '# Local-only Cargo overrides, never committed.' \
+        '#' \
+        '# Written by `just setup` so `fs-kit` resolves to the sibling' \
+        '# checkout at `packages/crates/fs-kit` instead of crates.io.' \
+        '# A `paths` override (not a `[patch]`): the source is swapped' \
+        '# without touching Cargo.lock, so `--locked` keeps working.' \
+        '# CI and release builds never run this, so they always resolve the' \
+        '# pinned crates.io version from `Cargo.lock`.' \
+        'paths = ["../../packages/crates/fs-kit"]' \
+        > .cargo/config.toml
+      echo "wrote .cargo/config.toml (local fs-kit override)"
+    fi
+
 # opt in to the commit-msg hook; undo with `git config --unset core.hooksPath`
 hooks:
     git config core.hooksPath .githooks
