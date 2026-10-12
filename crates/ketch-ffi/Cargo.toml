@@ -35,9 +35,17 @@ bindgen = ["uniffi/cli"]
 schema = ["dep:schemars"]
 
 [dependencies]
-# Only what the desktop apps call: their history view reads `stats`, and an
-# install from them holds a manifest's `trust` table like the CLI does.
-ketch-core = { path = "../ketch-core", default-features = false, features = ["stats", "trust"] }
+# Only what the desktop apps call: their history view reads `stats`, an
+# install from them holds a manifest's `trust` table like the CLI does, and
+# unpacks every archive format the CLI does.
+ketch-core = { path = "../ketch-core", default-features = false, features = [
+    "stats",
+    "trust",
+    "gzip",
+    "xz",
+    "bzip2",
+    "zip",
+] }
 schemars = { version = "1.2", optional = true }
 # The derive that gives the records and events the JSON shape desktop/contract
 # publishes to the Windows and Linux fakes, and that ketch-capi sends over its

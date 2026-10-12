@@ -12,7 +12,9 @@
 use crate::changelog;
 use crate::config::Config;
 use crate::error::{Error, Result};
-use crate::extract::{archive::TarGzExtractor, unwrap_single_dir, Extractor};
+use crate::extract::unwrap_single_dir;
+#[cfg(feature = "gzip")]
+use crate::extract::{archive::TarGzExtractor, Extractor};
 use crate::http::Http;
 use crate::model::{normalize_name, Manifest};
 // `Report` here is `validate`'s answer; the reporter is `reporting::Report`.
@@ -73,9 +75,15 @@ pub fn update(cx: &Ctx<'_>) -> Result<usize> {
     cx.report.stage("registry", Stage::Extracting);
     // The tarball download already drew a byte bar. Unpacking has no member
     // count ahead of time, so this is a spinner rather than a second bar.
-    cx.report
-        .activity("extracting registry")
-        .run(|| TarGzExtractor.extract(&tarball, &unpacked))?;
+    #[cfg(feature = "gzip")]
+    let unpack = || TarGzExtractor.extract(&tarball, &unpacked);
+    #[cfg(not(feature = "gzip"))]
+    let unpack = || -> Result<()> {
+        Err(Error::msg(
+            "this ketch was built without gzip, and the registry is a gzipped tarball",
+        ))
+    };
+    cx.report.activity("extracting registry").run(unpack)?;
     // GitHub wraps the tree in one `owner-repo-<sha>` directory.
     let root = unwrap_single_dir(&unpacked)?;
 

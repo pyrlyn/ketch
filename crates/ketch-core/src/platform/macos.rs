@@ -307,22 +307,11 @@ impl Platform for MacOsPlatform {
     }
 
     fn extractors(&self) -> Vec<Box<dyn Extractor>> {
-        use crate::extract::archive::*;
         use crate::extract::macos::{DmgExtractor, PkgExtractor};
-        vec![
-            Box::new(DmgExtractor),
-            Box::new(PkgExtractor),
-            Box::new(TarGzExtractor),
-            Box::new(TarXzExtractor),
-            Box::new(TarBz2Extractor),
-            Box::new(TarExtractor),
-            Box::new(ZipExtractor),
-            Box::new(GzFileExtractor),
-            Box::new(XzFileExtractor),
-            Box::new(Bz2FileExtractor),
-            // Accepts anything, so it must stay last.
-            Box::new(RawBinaryExtractor),
-        ]
+        let mut extractors: Vec<Box<dyn Extractor>> =
+            vec![Box::new(DmgExtractor), Box::new(PkgExtractor)];
+        extractors.extend(crate::extract::archive::portable_extractors());
+        extractors
     }
 
     fn bin_candidates(&self, payload: &Path, kind: PackageKind, package: &str) -> Vec<PathBuf> {
