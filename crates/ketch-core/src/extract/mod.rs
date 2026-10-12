@@ -77,8 +77,16 @@ pub fn read_head(path: &Path) -> Result<Vec<u8>> {
 /// This is the guard against "zip slip" / tar traversal: a member named
 /// `../../../.zshrc` must never be honoured, no matter who published it.
 /// Absolute paths and `..` components are refused outright; the result is
-/// always a relative path safe to join onto the destination.
+/// always a relative path safe to join onto the destination. On Windows a
+/// component that names a device or loses a trailing dot or space is refused
+/// too.
 pub fn safe_member_path(raw: &Path) -> Result<PathBuf> {
+    safe_member_path_for(raw, cfg!(windows))
+}
+
+/// [`safe_member_path`] with the Windows rules switched on or off, so both are
+/// tested on every host.
+fn safe_member_path_for(raw: &Path, windows: bool) -> Result<PathBuf> {
     let text = raw.to_string_lossy();
     // Check the raw string before `components()`: on Windows a backslash is a
     // separator, so `a\b` would otherwise become the ordinary relative path
@@ -112,7 +120,10 @@ pub fn safe_member_path(raw: &Path) -> Result<PathBuf> {
             Component::Normal(part) => {
                 let part_text = part.to_string_lossy();
                 // NTFS stream / drive-relative crumbs that are not a full root.
-                if part_text.contains(':') || part_text.contains('\\') {
+                if part_text.contains(':')
+                    || part_text.contains('\\')
+                    || (windows && crate::config::windows_unusable_component(&part_text))
+                {
                     return Err(Error::msg(format!(
                         "refusing archive entry with unsafe name: {}",
                         raw.display()
@@ -214,6 +225,25 @@ mod tests {
             safe_member_path(Path::new("rg-14/complete/rg.1")).unwrap(),
             PathBuf::from("rg-14/complete/rg.1")
         );
+    }
+
+    #[test]
+    fn windows_device_names_and_trailing_dots_are_refused_there_only() {
+        for raw in [
+            "bin/nul",
+            "bin/NUL.exe",
+            "COM1",
+            "docs/con.txt",
+            "a/foo.",
+            "a/foo /b",
+            "x/a<b",
+        ] {
+            assert!(safe_member_path_for(Path::new(raw), true).is_err(), "{raw}");
+            assert!(safe_member_path_for(Path::new(raw), false).is_ok(), "{raw}");
+        }
+        for raw in ["bin/console", "lib/nullable.so", "com10", "./bin/tool.exe"] {
+            assert!(safe_member_path_for(Path::new(raw), true).is_ok(), "{raw}");
+        }
     }
 
     #[test]
