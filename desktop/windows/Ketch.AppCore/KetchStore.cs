@@ -109,6 +109,8 @@ public sealed class KetchStore : INotifyPropertyChanged
     private IReadOnlyList<InstalledPackage> installed = [];
     private IReadOnlyList<Upgrade> outdated = [];
     private IReadOnlyList<RegistryPackage> searchResults = [];
+    private int searchGeneration;
+    private int typingGeneration;
     private IReadOnlyList<Finding> findings = [];
     private IReadOnlyList<LogEntry> log = [];
     private Activity? activity;
@@ -191,16 +193,47 @@ public sealed class KetchStore : INotifyPropertyChanged
         }
     }
 
+    /// <summary>How long typing must pause before <see cref="SearchAfterTypingAsync"/> searches; the macOS app waits as long.</summary>
+    public static readonly TimeSpan TypingPause = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>
+    /// Core calls cannot be cancelled, so an older, slower search can answer
+    /// after a newer one; only the newest search's reply is shown.
+    /// </summary>
     public async Task SearchAsync(string query)
     {
+        var generation = Interlocked.Increment(ref searchGeneration);
         try
         {
-            searchResults = await Background(c => c.Search(query));
+            var results = await Background(c => c.Search(query));
+            if (generation != Volatile.Read(ref searchGeneration))
+            {
+                return;
+            }
+
+            searchResults = results;
             Changed(nameof(SearchResults));
         }
         catch (Exception error)
         {
-            Report(error, null);
+            if (generation == Volatile.Read(ref searchGeneration))
+            {
+                Report(error, null);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Searches once typing has paused for <paramref name="pause"/> (default
+    /// <see cref="TypingPause"/>), so a burst of keystrokes asks the core once.
+    /// </summary>
+    public async Task SearchAfterTypingAsync(string query, TimeSpan? pause = null)
+    {
+        var keystroke = Interlocked.Increment(ref typingGeneration);
+        await Task.Delay(pause ?? TypingPause);
+        if (keystroke == Volatile.Read(ref typingGeneration))
+        {
+            await SearchAsync(query);
         }
     }
 

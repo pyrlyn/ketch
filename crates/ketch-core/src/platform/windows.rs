@@ -21,6 +21,7 @@ use crate::model::{
     PackageKind, TargetSpec,
 };
 use crate::source::local::copy_tree;
+use fs_kit::tree::remove_any;
 use std::collections::HashSet;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -61,21 +62,12 @@ impl WindowsPlatform {
     }
 }
 
-pub(crate) fn remove_any(path: &Path) -> std::io::Result<()> {
-    match std::fs::symlink_metadata(path) {
-        Ok(meta) if meta.is_dir() => std::fs::remove_dir_all(path),
-        Ok(_) => std::fs::remove_file(path),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e),
-    }
-}
-
 /// Windows `ERROR_ACCESS_DENIED` (5) / `ERROR_SHARING_VIOLATION` (32), plus
 /// `PermissionDenied`. A running `.exe` typically cannot be deleted or
 /// overwritten, but it *can* be renamed aside so a fresh copy can take its path.
 fn is_busy(err: &std::io::Error) -> bool {
     err.kind() == std::io::ErrorKind::PermissionDenied
-        || matches!(err.raw_os_error(), Some(5) | Some(32))
+        || matches!(fs_kit::raw_os_error(err), Some(5) | Some(32))
 }
 
 fn busy_aside(path: &Path) -> PathBuf {
@@ -105,6 +97,36 @@ fn clear_for_replace(path: &Path) -> std::io::Result<()> {
             Ok(())
         }
         Err(e) => Err(e),
+    }
+}
+
+/// Remove the asides `clear_for_replace` left beside `links` once the
+/// executable they held has stopped.
+///
+/// A running tool upgraded in place leaves `tool.exe.old.<pid>-<ms>` behind,
+/// and nothing else will ever remove it: without this each upgrade of a tool
+/// that was running adds one more. Best effort — one still running stays for
+/// the next sweep.
+fn sweep_busy_asides(links: &[LinkRecord]) {
+    for record in links {
+        let (Some(dir), Some(name)) = (
+            record.link.parent(),
+            record.link.file_name().and_then(|n| n.to_str()),
+        ) else {
+            continue;
+        };
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let aside = entry
+                .file_name()
+                .to_str()
+                .is_some_and(|candidate| super::is_busy_aside_of(name, candidate));
+            if aside && entry.file_type().is_ok_and(|t| t.is_file()) {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
     }
 }
 
@@ -293,20 +315,12 @@ fn payload_executable_entry(entry: &walkdir::DirEntry, root: &Path) -> Option<Pa
     if !entry.file_type().is_symlink() {
         return None;
     }
-    let target = std::fs::read_link(path).ok()?;
-    let resolved = if target.is_absolute() {
-        target
-    } else {
-        path.parent()?.join(target)
-    };
-    let rel = resolved.strip_prefix(root).ok()?;
-    if rel
-        .components()
-        .any(|c| matches!(c, std::path::Component::ParentDir))
-    {
+    // One hop is not enough: `tool -> abs` reads as inside while `abs`, or
+    // any link further along, leads out of the payload.
+    if !crate::extract::resolves_inside(path, root) {
         return None;
     }
-    std::fs::metadata(&resolved)
+    std::fs::metadata(path)
         .ok()
         .filter(|meta| meta.is_file())
         .map(|_| path.to_path_buf())
@@ -524,6 +538,8 @@ impl Platform for WindowsPlatform {
     }
 
     fn place(&self, plan: &Placement<'_>) -> Result<Vec<LinkRecord>> {
+        // Install, upgrade, relink and rollback all come through here.
+        sweep_busy_asides(plan.replacing);
         if plan.link {
             let found = cli_targets(self, plan.payload_dir, plan)?;
             let mut destinations = HashSet::new();
@@ -618,6 +634,7 @@ impl Platform for WindowsPlatform {
     }
 
     fn unplace(&self, links: &[LinkRecord], report: &crate::report::Report) -> Result<()> {
+        sweep_busy_asides(links);
         for record in links {
             if std::fs::symlink_metadata(&record.link).is_err() {
                 continue;
@@ -629,7 +646,7 @@ impl Platform for WindowsPlatform {
                 ));
                 continue;
             }
-            remove_any(&record.link).map_err(|e| Error::io(&record.link, e))?;
+            remove_any(&record.link).map_err(|e| Error::fs_kit(&record.link, e))?;
         }
         Ok(())
     }
@@ -819,6 +836,40 @@ mod tests {
     }
 
     #[test]
+    fn the_sweep_removes_only_stamped_asides_of_recorded_links() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bin = tmp.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let link = bin.join("tool.exe");
+        std::fs::write(&link, b"current").unwrap();
+        for name in [
+            "tool.exe.old.4242-1700000000000",
+            "tool.exe.old.backup",
+            "other.exe.old.1-2",
+        ] {
+            std::fs::write(bin.join(name), b"x").unwrap();
+        }
+        let record = LinkRecord {
+            link: link.clone(),
+            target: tmp.path().join("store/tool/1.0/tool.exe"),
+            kind: LinkKind::CopiedFile,
+            role: LinkRole::Binary,
+        };
+
+        sweep_busy_asides(&[record]);
+
+        let mut left: Vec<String> = std::fs::read_dir(&bin)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        assert_eq!(
+            left,
+            ["other.exe.old.1-2", "tool.exe", "tool.exe.old.backup"]
+        );
+    }
+
+    #[test]
     fn unplace_refuses_to_delete_a_replaced_copy() {
         let tmp = tempfile::tempdir().unwrap();
         let store = tmp.path().join("store/pkg/1.0");
@@ -928,6 +979,12 @@ mod tests {
         let sharing = std::io::Error::from_raw_os_error(32);
         assert!(is_busy(&denied));
         assert!(is_busy(&sharing));
+        // `remove_any` comes from fs-kit, which wraps the OS error with its path.
+        let wrapped = std::io::Error::other(fs_kit::PathError {
+            path: PathBuf::from("ketch.exe"),
+            source: std::io::Error::from_raw_os_error(32),
+        });
+        assert!(is_busy(&wrapped));
         assert!(!is_busy(&std::io::Error::from(
             std::io::ErrorKind::NotFound
         )));

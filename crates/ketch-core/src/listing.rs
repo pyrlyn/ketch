@@ -601,19 +601,15 @@ impl Cache {
     }
 
     fn try_save(&self, path: &Path) -> Result<()> {
-        let dir = path
-            .parent()
-            .ok_or_else(|| Error::msg("cache path has no parent"))?;
-        std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
+        if path.parent().is_none() {
+            return Err(Error::msg("cache path has no parent"));
+        }
         let text = serde_json::to_string(&Cache {
             format: CACHE_FORMAT,
             entries: self.entries.clone(),
         })
         .map_err(|e| Error::parse("latest cache", e.to_string()))?;
-        let staged = tempfile::NamedTempFile::new_in(dir).map_err(|e| Error::io(dir, e))?;
-        std::fs::write(staged.path(), text).map_err(|e| Error::io(staged.path(), e))?;
-        staged.persist(path).map_err(|e| Error::io(path, e.error))?;
-        Ok(())
+        crate::fsio::write_private(path, text)
     }
 }
 

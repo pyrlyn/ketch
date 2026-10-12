@@ -540,9 +540,55 @@ pub(crate) fn order_discovered_executables(found: &mut [PathBuf], package: &str)
     });
 }
 
+/// Whether `candidate` is an aside the Windows backend made of a file named
+/// `link_name`: `<link_name>.old.<pid>-<millis>`, the name a running `.exe` is
+/// renamed to so its replacement can be copied in.
+///
+/// Matched this narrowly because whatever matches is deleted: a user's own
+/// `tool.exe.old.backup` beside the bin copy is not ketch's. Case-insensitive
+/// in the name, as the Windows file system is. Here rather than in the Windows
+/// backend so the rule is tested on every host.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn is_busy_aside_of(link_name: &str, candidate: &str) -> bool {
+    let named = candidate
+        .get(..link_name.len())
+        .is_some_and(|head| head.eq_ignore_ascii_case(link_name));
+    let Some(rest) = candidate
+        .get(link_name.len()..)
+        .filter(|_| named)
+        .and_then(|rest| rest.strip_prefix(".old."))
+    else {
+        return false;
+    };
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    rest.split_once('-')
+        .is_some_and(|(pid, stamp)| digits(pid) && digits(stamp))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_pid_and_time_stamped_aside_of_the_link_is_one() {
+        for ours in ["tool.exe.old.4242-1700000000000", "Tool.EXE.old.1-2"] {
+            assert!(is_busy_aside_of("tool.exe", ours), "{ours}");
+        }
+        for theirs in [
+            "tool.exe",
+            "tool.exe.old",
+            "tool.exe.old.",
+            "tool.exe.old.backup",
+            "tool.exe.old.12-",
+            "tool.exe.old.-12",
+            "tool.exe.old.1-2-3",
+            "tool.exe.old.1-2x",
+            "other.exe.old.1-2",
+            "xtool.exe.old.1-2",
+        ] {
+            assert!(!is_busy_aside_of("tool.exe", theirs), "{theirs}");
+        }
+    }
 
     fn write_executable(dir: &Path, name: &str) {
         let path = dir.join(name);

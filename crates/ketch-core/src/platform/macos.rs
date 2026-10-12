@@ -12,8 +12,8 @@
 use super::claim::Claims;
 use super::scoring::looks_like_build_artifact;
 use super::unix::{
-    clear_destination, destination_available, discover_executables, link_binary, remove_any,
-    resolve_bin_specs, symlink, writable,
+    clear_destination, destination_available, discover_executables, link_binary, resolve_bin_specs,
+    symlink, writable,
 };
 use super::{AssetScore, DoctorCheck, Placement, Platform, TrustVerdict};
 use crate::config::Config;
@@ -22,6 +22,7 @@ use crate::extract::archive::is_program_head;
 use crate::extract::macos::copy_tree;
 use crate::extract::Extractor;
 use crate::model::{Arch, LinkKind, LinkRecord, LinkRole, PackageKind, TargetSpec};
+use fs_kit::tree::remove_any;
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::os::unix::fs::PermissionsExt;

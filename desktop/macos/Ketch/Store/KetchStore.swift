@@ -75,6 +75,7 @@ final class KetchStore {
     private(set) var installed: [InstalledPackage] = []
     private(set) var outdated: [Upgrade] = []
     private(set) var searchResults: [RegistryPackage] = []
+    @ObservationIgnored private var searchGeneration = 0
     private(set) var findings: [Finding] = []
     private(set) var activity: Activity?
     private(set) var log: [LogEntry] = []
@@ -145,19 +146,31 @@ final class KetchStore {
         }
     }
 
+    /// Core calls cannot be cancelled, so an older, slower search can answer
+    /// after a newer one; only the newest search's reply is shown.
     func search(_ query: String) async {
+        searchGeneration += 1
+        let generation = searchGeneration
         do {
-            searchResults = try await background { try $0.search(query: query) }
+            let results = try await background { try $0.search(query: query) }
+            guard generation == searchGeneration else { return }
+            searchResults = results
         } catch {
+            guard generation == searchGeneration else { return }
             report(error, retry: { [weak self] in await self?.search(query) })
         }
     }
 
+    /// `nil` when the core could not read it, or when the caller's task was
+    /// cancelled while the core was still reading: the page that asked has
+    /// moved on, and its reply must not land on the next one.
     func changelog(for name: String, from: String?, to: String?) async -> AttributedString? {
         do {
             let markdown = try await background { try $0.changelog(name: name, from: from, to: to) }
+            guard !Task.isCancelled else { return nil }
             return Self.render(markdown: markdown)
         } catch {
+            guard !Task.isCancelled else { return nil }
             report(error, retry: nil)
             return nil
         }

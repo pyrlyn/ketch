@@ -706,15 +706,21 @@ bash-completion 2 завантажує його під час першого в�
 ketch self install
 ```
 
-### `ketch self upgrade [--dry-run] [--force] [--yes]`
+### `ketch self upgrade [--dry-run] [--force] [--pre] [--yes]`
 
 Оновлює ketch до останнього релізу. Аліас — `ketch self update`. ketch,
 встановлений через mise й жодного разу не встановлений через `self install`, оновлює mise:
 команда відмовляється й називає `mise upgrade`.
 
+`--pre` бере найновіший реліз, включно з пре-релізами, а не останній реліз за
+версією GitHub. Релізи macOS-застосунку `desktop-v*` не беруться ніколи. Той
+самий прапорець приймають інсталятори: `install.sh --pre` та
+`install.ps1 --pre`. Без прапорця нічого не змінюється.
+
 ```bash
 ketch self upgrade
 ketch self upgrade --dry-run
+ketch self upgrade --pre
 ```
 
 ### `ketch self version`
@@ -733,6 +739,12 @@ ketch self version
 `--yes` відповідає й на це.
 У Windows запущений `ketch.exe` не може видалити сам себе, тому решта
 кореня видаляється фоновим процесом після виходу ketch.
+
+Власні каталоги кореня (`bin`, `store`, `cache`, …) очищуються, лише якщо
+корінь створив ketch — тоді в ньому лежить мітка `.ketch-root` — або корінь
+стандартний, `~/.ketch`. Корінь, що існував раніше, наприклад `~/.local`
+чи `/usr/local`, і сам домашній каталог зберігають усе, що ketch там не
+записував.
 
 У Windows він також видаляє те, що ketch записав до реєстру Windows. Зараз це
 лише каталог bin у користувацькому PATH (`HKCU\Environment\Path`), записаний

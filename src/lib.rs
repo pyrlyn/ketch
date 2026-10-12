@@ -43,7 +43,7 @@ pub mod fuzzing {
     use crate::model::{CompletionShell, ExtraKind, ExtraPath, ExtraPathSpec, PackageSpec};
     use clap::{Command, CommandFactory, Parser};
     use std::ffi::OsString;
-    use std::path::{Component, Path, PathBuf};
+    use std::path::{Component, Path};
     use std::sync::OnceLock;
 
     /// Every word of the clap tree — subcommands, aliases, flags, possible
@@ -148,7 +148,7 @@ pub mod fuzzing {
         let Ok(work) = tempfile::tempdir() else {
             return;
         };
-        let Ok(work_path) = dunce::canonicalize(work.path()) else {
+        let Ok(work_path) = fs_kit::path::canonicalize(work.path()) else {
             return;
         };
         let src = work_path.join("payload");
@@ -191,7 +191,7 @@ pub mod fuzzing {
                 continue;
             };
             let parent = entry.path().parent().unwrap_or(&dest);
-            let resolved = lexical_join(parent, &target);
+            let resolved = fs_kit::path::normalize(parent, &target);
             assert!(
                 resolved.starts_with(&dest),
                 "symlink {:?} -> {:?} leaves the destination",
@@ -199,25 +199,6 @@ pub mod fuzzing {
                 target
             );
         }
-    }
-
-    /// `base.join(rel)` with `..` and `.` folded away without touching disk.
-    fn lexical_join(base: &Path, rel: &Path) -> PathBuf {
-        let mut out = if rel.is_absolute() {
-            PathBuf::new()
-        } else {
-            base.to_path_buf()
-        };
-        for component in rel.components() {
-            match component {
-                Component::ParentDir => {
-                    out.pop();
-                }
-                Component::CurDir => {}
-                other => out.push(other),
-            }
-        }
-        out
     }
 
     /// One `extra_paths` entry: a bare path, or a table naming kind, shell and
