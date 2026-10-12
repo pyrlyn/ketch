@@ -41,10 +41,8 @@ pub(crate) fn replace_file(target: &Path, body: &[u8], how: Replace) -> Result<(
         .unwrap_or(Path::new("."));
     std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
     let mut builder = tempfile::Builder::new();
-    #[cfg(unix)]
     if how.ordinary_mode {
-        use std::os::unix::fs::PermissionsExt;
-        builder.permissions(std::fs::Permissions::from_mode(0o666));
+        ordinary_permissions(&mut builder);
     }
     let mut staged = builder
         .tempfile_in(parent)
@@ -76,6 +74,17 @@ pub(crate) fn replace_file(target: &Path, body: &[u8], how: Replace) -> Result<(
     }
     Ok(())
 }
+
+/// The mode `std::fs::write` would give a new file, before the umask.
+#[cfg(unix)]
+fn ordinary_permissions(builder: &mut tempfile::Builder) {
+    use std::os::unix::fs::PermissionsExt;
+    builder.permissions(std::fs::Permissions::from_mode(0o666));
+}
+
+/// Windows has no mode bits for a staged file to differ in.
+#[cfg(not(unix))]
+fn ordinary_permissions(_: &mut tempfile::Builder) {}
 
 #[cfg(test)]
 mod tests {
