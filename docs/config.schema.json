@@ -54,6 +54,12 @@
         }
       ]
     },
+    "max_download_mib": {
+      "description": "The largest single download, in MiB.",
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
     "prerelease": {
       "type": "boolean"
     },

@@ -9,6 +9,7 @@
 //! CLI binary and a `.app` bundle, and trust checks run `codesign`/`spctl`
 //! before any quarantine flag is cleared.
 
+use super::claim::Claims;
 use super::scoring::looks_like_build_artifact;
 use super::unix::{
     clear_destination, destination_available, discover_executables, link_binary, remove_any,
@@ -266,11 +267,12 @@ fn place_app(
     link_apps: bool,
     owned: &Path,
     recorded: &[LinkRecord],
+    claims: &mut Claims,
 ) -> Result<LinkRecord> {
     std::fs::create_dir_all(apps_dir).map_err(|e| Error::io(apps_dir, e))?;
     let name = bundle.file_name().unwrap_or_default();
     let link = apps_dir.join(name);
-    clear_destination(&link, owned, recorded)?;
+    clear_destination(&link, owned, recorded, claims)?;
 
     if link_apps {
         symlink(bundle, &link)?;
@@ -351,6 +353,7 @@ impl Platform for MacOsPlatform {
             return Ok(Vec::new());
         }
         let mut links = Vec::new();
+        let mut claims = Claims::default();
         let result = (|| -> Result<Vec<LinkRecord>> {
             // Every version of this package lives under here. The version being
             // replaced still owns its links at this point: install retires them
@@ -364,6 +367,7 @@ impl Platform for MacOsPlatform {
                         plan.link_apps,
                         package_dir,
                         plan.replacing,
+                        &mut claims,
                     )?);
                 }
             }
@@ -405,6 +409,7 @@ impl Platform for MacOsPlatform {
                         &name,
                         package_dir,
                         plan.replacing,
+                        &mut claims,
                     )?);
                 }
             }
@@ -414,6 +419,7 @@ impl Platform for MacOsPlatform {
                 plan.store_dir,
                 package_dir,
                 plan.replacing,
+                &mut claims,
             )?);
 
             if links.is_empty() {
@@ -423,11 +429,13 @@ impl Platform for MacOsPlatform {
         })();
         match result {
             Ok(links) => {
+                claims.discard();
                 finalize_store_swap(plan.store_dir);
                 Ok(links)
             }
             Err(e) => {
                 let _ = super::unix::unplace(&links, &crate::report::Report::silent());
+                claims.restore();
                 restore_retired_store(plan.store_dir);
                 Err(e)
             }
@@ -739,7 +747,7 @@ mod tests {
         let bin = tmp.path().join("bin");
         std::fs::create_dir_all(&bin).unwrap();
         std::os::unix::fs::symlink(theirs.join("tool"), bin.join("tool")).unwrap();
-        assert!(link_binary(&target, &bin, "tool", &mine, &[]).is_err());
+        assert!(link_binary(&target, &bin, "tool", &mine, &[], &mut Claims::default()).is_err());
         assert_eq!(
             std::fs::read_link(bin.join("tool")).unwrap(),
             theirs.join("tool"),
@@ -752,7 +760,8 @@ mod tests {
         std::fs::write(old.join("tool"), b"#!/bin/sh\n").unwrap();
         std::fs::remove_file(bin.join("tool")).unwrap();
         std::os::unix::fs::symlink(old.join("tool"), bin.join("tool")).unwrap();
-        let record = link_binary(&target, &bin, "tool", &mine, &[]).unwrap();
+        let record =
+            link_binary(&target, &bin, "tool", &mine, &[], &mut Claims::default()).unwrap();
         assert_eq!(std::fs::read_link(&record.link).unwrap(), target);
     }
 
@@ -940,7 +949,15 @@ mod tests {
         std::fs::create_dir_all(&existing).unwrap();
         std::fs::write(existing.join("mine.txt"), b"the user's own copy").unwrap();
 
-        assert!(place_app(&bundle, &apps, false, &package_dir, &[]).is_err());
+        assert!(place_app(
+            &bundle,
+            &apps,
+            false,
+            &package_dir,
+            &[],
+            &mut Claims::default()
+        )
+        .is_err());
         assert!(existing.join("mine.txt").is_file(), "must not be deleted");
 
         // A copied bundle leaves no mark on disk; the record we wrote when we
@@ -951,9 +968,123 @@ mod tests {
             kind: LinkKind::CopiedApp,
             role: LinkRole::Binary,
         }];
-        place_app(&bundle, &apps, false, &package_dir, &recorded).unwrap();
+        let mut claims = Claims::default();
+        place_app(&bundle, &apps, false, &package_dir, &recorded, &mut claims).unwrap();
+        claims.discard();
         assert!(existing.join("Contents/Info.plist").is_file());
         assert!(!existing.join("mine.txt").exists());
+    }
+
+    /// A payload with `tool` and `README`, and an extra whose destination
+    /// cannot be created because a file sits where its folder should be — so
+    /// placement fails after every binary link and app copy is in place.
+    fn failing_upgrade(tmp: &Path) -> (PathBuf, PathBuf, [crate::extra::ExtraPlacement; 1]) {
+        let payload = tmp.join("payload");
+        std::fs::create_dir_all(&payload).unwrap();
+        let tool = payload.join("tool");
+        std::fs::write(&tool, b"#!/bin/sh\necho 2.0\n").unwrap();
+        std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::write(payload.join("README"), b"2.0").unwrap();
+        let blocker = tmp.join("blocker");
+        std::fs::write(&blocker, b"not a folder").unwrap();
+        let extras = [crate::extra::ExtraPlacement {
+            rel_path: "README".into(),
+            dest: blocker.join("README"),
+            role: LinkRole::Man,
+        }];
+        (payload, tmp.join("store/tool/2.0"), extras)
+    }
+
+    #[test]
+    fn a_failed_placement_puts_the_old_links_back() {
+        let tmp = tempfile::tempdir().unwrap();
+        let old_target = tmp.path().join("store/tool/1.0/tool");
+        std::fs::create_dir_all(old_target.parent().unwrap()).unwrap();
+        std::fs::write(&old_target, b"#!/bin/sh\necho 1.0\n").unwrap();
+        let bin = tmp.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let link = bin.join("tool");
+        std::os::unix::fs::symlink(&old_target, &link).unwrap();
+        let recorded = [LinkRecord {
+            link: link.clone(),
+            target: old_target.clone(),
+            kind: LinkKind::Symlink,
+            role: LinkRole::Binary,
+        }];
+        let (payload, store, extras) = failing_upgrade(tmp.path());
+        let apps = tmp.path().join("Applications");
+
+        let placed = MacOsPlatform::new().place(&Placement {
+            name: "tool",
+            version: "2.0",
+            payload_dir: &payload,
+            store_dir: &store,
+            bin_dir: &bin,
+            apps_dir: &apps,
+            kind: PackageKind::Binary,
+            bin_specs: &[],
+            replacing: &recorded,
+            link_apps: false,
+            link: true,
+            extras: &extras,
+        });
+
+        assert!(placed.is_err(), "{placed:?}");
+        assert_eq!(std::fs::read_link(&link).unwrap(), old_target);
+        let leftovers: Vec<_> = std::fs::read_dir(&bin)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(leftovers, ["tool"], "no aside left behind");
+    }
+
+    #[test]
+    fn a_failed_placement_puts_the_old_app_copy_back() {
+        let tmp = tempfile::tempdir().unwrap();
+        let old_bundle = tmp.path().join("store/tool/1.0/Tool.app");
+        std::fs::create_dir_all(old_bundle.join("Contents")).unwrap();
+        std::fs::write(old_bundle.join("Contents/Info.plist"), b"1.0").unwrap();
+        let apps = tmp.path().join("Applications");
+        let copy = apps.join("Tool.app");
+        std::fs::create_dir_all(copy.join("Contents")).unwrap();
+        std::fs::write(copy.join("Contents/Info.plist"), b"1.0").unwrap();
+        let recorded = [LinkRecord {
+            link: copy.clone(),
+            target: old_bundle,
+            kind: LinkKind::CopiedApp,
+            role: LinkRole::Binary,
+        }];
+        let (payload, store, extras) = failing_upgrade(tmp.path());
+        let new_bundle = payload.join("Tool.app/Contents");
+        std::fs::create_dir_all(&new_bundle).unwrap();
+        std::fs::write(new_bundle.join("Info.plist"), b"2.0").unwrap();
+        let bin = tmp.path().join("bin");
+
+        let placed = MacOsPlatform::new().place(&Placement {
+            name: "tool",
+            version: "2.0",
+            payload_dir: &payload,
+            store_dir: &store,
+            bin_dir: &bin,
+            apps_dir: &apps,
+            kind: PackageKind::App,
+            bin_specs: &[],
+            replacing: &recorded,
+            link_apps: false,
+            link: true,
+            extras: &extras,
+        });
+
+        assert!(placed.is_err(), "{placed:?}");
+        assert_eq!(
+            std::fs::read(copy.join("Contents/Info.plist")).unwrap(),
+            b"1.0"
+        );
+        let leftovers: Vec<_> = std::fs::read_dir(&apps)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(leftovers, ["Tool.app"], "no aside left behind");
     }
 
     #[test]
