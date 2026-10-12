@@ -271,6 +271,38 @@ fn scenarios() -> Vec<Scenario> {
             }),
         },
         Scenario {
+            name: "search-browse",
+            description: "An empty query browses: every package the registry knows, and no repositories, since no source is asked.",
+            call: Call::Search {
+                query: String::new(),
+                limit: 50,
+            },
+            script: vec![],
+            outcome: ok(SearchResults {
+                known: vec![
+                    RegistryPackage {
+                        name: "fd".into(),
+                        source: "github:sharkdp/fd".into(),
+                        description: Some("A simple, fast alternative to find".into()),
+                        latest: Some("10.2.0".into()),
+                    },
+                    RegistryPackage {
+                        name: "ripgrep".into(),
+                        source: "github:BurntSushi/ripgrep".into(),
+                        description: Some("Line-oriented search tool".into()),
+                        latest: Some("14.1.1".into()),
+                    },
+                    RegistryPackage {
+                        name: "uv".into(),
+                        source: "github:astral-sh/uv".into(),
+                        description: Some("An extremely fast Python package manager".into()),
+                        latest: None,
+                    },
+                ],
+                repositories: Vec::new(),
+            }),
+        },
+        Scenario {
             name: "outdated",
             description: "One upgrade available and one held back by a pin.",
             call: Call::Outdated,

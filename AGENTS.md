@@ -284,9 +284,12 @@ line to cmd's `AutoRun`; `self uninstall` takes back exactly those. It edits a s
 markers, so the block can be found again, rewritten when the root moves, and
 removed without guessing which line was ketch's. It follows a symlinked
 startup file to its target before writing, because that file is very often a
-link into a dotfiles repository. On Windows `ketch path install` writes
-`HKCU\Environment\Path` via `[Environment]::SetEnvironmentVariable` so a new
-terminal sees it without a logoff; `setx` is not used, because it truncates.
+link into a dotfiles repository. On Windows `ketch path install` reads and
+writes `HKCU\Environment\Path` through `Microsoft.Win32.Registry`, unexpanded
+and with its value kind, so `%VAR%` entries keep expanding; it then sets and
+clears a throwaway variable with `[Environment]::SetEnvironmentVariable` so a
+new terminal sees the change without a logoff. `setx` is not used, because it
+truncates.
 
 ## macOS app
 

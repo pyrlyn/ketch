@@ -49,6 +49,9 @@ impl Sandbox {
                 .create_dir_all()
                 .expect("create sandbox dir");
         }
+        // The root is made here rather than by ketch, so mark it as the
+        // installers do when they create one; `self uninstall` then empties it.
+        std::fs::write(sandbox.root().join(".ketch-root"), b"").expect("root marker");
         sandbox.write_plugin();
         sandbox
     }

@@ -299,6 +299,28 @@ exit 0
         root.child("bin/ketch").assert(predicate::path::is_file());
     }
 
+    /// Only a root the script created is marked as ketch's to empty on
+    /// `self uninstall`; a shared prefix that was already there is not.
+    #[test]
+    fn only_a_root_the_script_creates_is_marked_as_ketchs() {
+        let release = StubRelease::new();
+        let work = TempDir::new().unwrap();
+        let fresh = work.child("fresh");
+        let shared = work.child("shared");
+        shared.child("bin/someone-elses").write_str("x").unwrap();
+
+        for root in [&fresh, &shared] {
+            run(&release, &work, &[Path::new("--root"), root.path()]).success();
+        }
+
+        fresh
+            .child(".ketch-root")
+            .assert(predicate::path::is_file());
+        shared
+            .child(".ketch-root")
+            .assert(predicate::path::missing());
+    }
+
     /// GitHub release tags are v-prefixed; `--version` must accept either form.
     #[test]
     fn version_flags_accept_bare_and_v_prefixed_tags() {
