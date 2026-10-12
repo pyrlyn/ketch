@@ -38,6 +38,7 @@ pub mod manifest;
 pub mod model;
 pub mod platform;
 pub mod process;
+#[cfg(feature = "push")]
 pub mod push;
 pub mod registry;
 pub mod releases;
