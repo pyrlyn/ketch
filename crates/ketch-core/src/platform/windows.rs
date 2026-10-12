@@ -127,9 +127,15 @@ fn sibling(original: &Path, suffix: &str) -> PathBuf {
     original.with_file_name(format!("{name}{suffix}"))
 }
 
-fn move_into_store(payload: &Path, store: &Path) -> Result<()> {
+/// Move the extracted payload into the store, keeping the previous tree as
+/// `.old` until placement has succeeded.
+///
+/// Returns true when it retired a previous tree to `.old`. Only then may the
+/// caller finalize or restore: a `.old` found otherwise is an earlier run's
+/// leftover, and restoring it would replace the live prefix with it.
+fn move_into_store(payload: &Path, store: &Path) -> Result<bool> {
     if payload == store {
-        return Ok(());
+        return Ok(false);
     }
     if let Some(parent) = store.parent() {
         std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
@@ -140,7 +146,9 @@ fn move_into_store(payload: &Path, store: &Path) -> Result<()> {
         copy_tree(payload, &staged)?;
     }
     if store.symlink_metadata().is_err() {
-        return std::fs::rename(&staged, store).map_err(|e| Error::io(store, e));
+        return std::fs::rename(&staged, store)
+            .map(|()| false)
+            .map_err(|e| Error::io(store, e));
     }
     let retired = sibling(store, ".old");
     let _ = remove_any(&retired);
@@ -152,7 +160,7 @@ fn move_into_store(payload: &Path, store: &Path) -> Result<()> {
     }
     // Leave `.old` until copies succeed. A failed place after this swap can
     // put the working version back; deleting it here would leave none.
-    Ok(())
+    Ok(true)
 }
 
 fn finalize_store_swap(store: &Path) {
@@ -543,12 +551,18 @@ impl Platform for WindowsPlatform {
                 return Err(Error::EmptyPayload(plan.payload_dir.to_path_buf()));
             }
         }
-        move_into_store(plan.payload_dir, plan.store_dir)?;
+        let swapped = move_into_store(plan.payload_dir, plan.store_dir)?;
         if !plan.link {
-            finalize_store_swap(plan.store_dir);
+            if swapped {
+                finalize_store_swap(plan.store_dir);
+            }
             return Ok(Vec::new());
         }
-        let replacing = retired_targets(plan.replacing, plan.store_dir);
+        let replacing = if swapped {
+            retired_targets(plan.replacing, plan.store_dir)
+        } else {
+            plan.replacing.to_vec()
+        };
         let mut links = Vec::new();
         // Named like `clear_for_replace`'s asides: one a running exe keeps
         // undeletable is then the same kind of leftover, swept the same way.
@@ -577,13 +591,17 @@ impl Platform for WindowsPlatform {
         match result {
             Ok(links) => {
                 claims.discard();
-                finalize_store_swap(plan.store_dir);
+                if swapped {
+                    finalize_store_swap(plan.store_dir);
+                }
                 Ok(links)
             }
             Err(e) => {
                 let _ = self.unplace(&links, &crate::report::Report::silent());
                 claims.restore();
-                restore_retired_store(plan.store_dir);
+                if swapped {
+                    restore_retired_store(plan.store_dir);
+                }
                 Err(e)
             }
         }

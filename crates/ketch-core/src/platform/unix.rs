@@ -183,10 +183,14 @@ pub(crate) fn sibling(original: &Path, suffix: &str) -> PathBuf {
 /// Deleting the old directory first would mean an upgrade that fails while
 /// copying leaves the user with no working version of a package they already
 /// had installed.
+///
+/// Returns true when it retired a previous tree to `.old`. Only then may the
+/// caller finalize or restore: a `.old` found otherwise is an earlier run's
+/// leftover, and restoring it would replace the live prefix with it.
 #[cfg(target_os = "linux")]
-pub(crate) fn move_into_store(payload: &Path, store: &Path) -> Result<()> {
+pub(crate) fn move_into_store(payload: &Path, store: &Path) -> Result<bool> {
     if payload == store {
-        return Ok(());
+        return Ok(false);
     }
     if let Some(parent) = store.parent() {
         std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
@@ -199,7 +203,9 @@ pub(crate) fn move_into_store(payload: &Path, store: &Path) -> Result<()> {
     }
 
     if store.symlink_metadata().is_err() {
-        return std::fs::rename(&staged, store).map_err(|e| Error::io(store, e));
+        return std::fs::rename(&staged, store)
+            .map(|()| false)
+            .map_err(|e| Error::io(store, e));
     }
     let retired = sibling(store, ".old");
     let _ = remove_any(&retired);
@@ -211,7 +217,7 @@ pub(crate) fn move_into_store(payload: &Path, store: &Path) -> Result<()> {
     }
     // Leave `.old` until links succeed. A failed place after this swap can
     // put the working version back; deleting it here would leave none.
-    Ok(())
+    Ok(true)
 }
 
 /// Drop the retired previous version once placement has finished successfully.
@@ -445,9 +451,11 @@ pub(crate) fn place_cli(platform: &dyn Platform, plan: &Placement<'_>) -> Result
         preflight_cli(platform, plan, package_dir)?;
         preflight_extras(plan, package_dir)?;
     }
-    move_into_store(plan.payload_dir, plan.store_dir)?;
+    let swapped = move_into_store(plan.payload_dir, plan.store_dir)?;
     if !plan.link {
-        finalize_store_swap(plan.store_dir);
+        if swapped {
+            finalize_store_swap(plan.store_dir);
+        }
         return Ok(Vec::new());
     }
     let mut links = Vec::new();
@@ -478,13 +486,17 @@ pub(crate) fn place_cli(platform: &dyn Platform, plan: &Placement<'_>) -> Result
     match result {
         Ok(links) => {
             claims.discard();
-            finalize_store_swap(plan.store_dir);
+            if swapped {
+                finalize_store_swap(plan.store_dir);
+            }
             Ok(links)
         }
         Err(e) => {
             let _ = unplace(&links, &crate::report::Report::silent());
             claims.restore();
-            restore_retired_store(plan.store_dir);
+            if swapped {
+                restore_retired_store(plan.store_dir);
+            }
             Err(e)
         }
     }

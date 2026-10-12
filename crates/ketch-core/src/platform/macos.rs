@@ -100,11 +100,15 @@ fn sibling(original: &Path, suffix: &str) -> PathBuf {
 /// Deleting the old directory first — as the obvious version does — means an
 /// upgrade that fails while copying leaves the user with no working version of
 /// a package they already had installed.
-fn move_into_store(payload: &Path, store: &Path) -> Result<()> {
+///
+/// Returns true when it retired a previous tree to `.old`. Only then may the
+/// caller finalize or restore: a `.old` found otherwise is an earlier run's
+/// leftover, and restoring it would replace the live prefix with it.
+fn move_into_store(payload: &Path, store: &Path) -> Result<bool> {
     // `relink` re-runs placement over a payload that is already in the store;
     // without this the swap below would move it out from under itself.
     if payload == store {
-        return Ok(());
+        return Ok(false);
     }
     if let Some(parent) = store.parent() {
         std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
@@ -117,7 +121,9 @@ fn move_into_store(payload: &Path, store: &Path) -> Result<()> {
     }
 
     if store.symlink_metadata().is_err() {
-        return std::fs::rename(&staged, store).map_err(|e| Error::io(store, e));
+        return std::fs::rename(&staged, store)
+            .map(|()| false)
+            .map_err(|e| Error::io(store, e));
     }
     let retired = sibling(store, ".old");
     let _ = remove_any(&retired);
@@ -130,7 +136,7 @@ fn move_into_store(payload: &Path, store: &Path) -> Result<()> {
     }
     // Leave `.old` until links succeed. A failed place after this swap can
     // put the working version back; deleting it here would leave none.
-    Ok(())
+    Ok(true)
 }
 
 fn finalize_store_swap(store: &Path) {
@@ -347,9 +353,11 @@ impl Platform for MacOsPlatform {
         if plan.link {
             preflight_destinations(self, plan, package_dir)?;
         }
-        move_into_store(plan.payload_dir, plan.store_dir)?;
+        let swapped = move_into_store(plan.payload_dir, plan.store_dir)?;
         if !plan.link {
-            finalize_store_swap(plan.store_dir);
+            if swapped {
+                finalize_store_swap(plan.store_dir);
+            }
             return Ok(Vec::new());
         }
         let mut links = Vec::new();
@@ -430,13 +438,17 @@ impl Platform for MacOsPlatform {
         match result {
             Ok(links) => {
                 claims.discard();
-                finalize_store_swap(plan.store_dir);
+                if swapped {
+                    finalize_store_swap(plan.store_dir);
+                }
                 Ok(links)
             }
             Err(e) => {
                 let _ = super::unix::unplace(&links, &crate::report::Report::silent());
                 claims.restore();
-                restore_retired_store(plan.store_dir);
+                if swapped {
+                    restore_retired_store(plan.store_dir);
+                }
                 Err(e)
             }
         }
@@ -1085,6 +1097,49 @@ mod tests {
             .map(|e| e.unwrap().file_name())
             .collect();
         assert_eq!(leftovers, ["Tool.app"], "no aside left behind");
+    }
+
+    #[test]
+    fn a_failed_relink_keeps_the_live_prefix_over_a_stale_old_copy() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = tmp.path().join("store/tool/1.0");
+        std::fs::create_dir_all(&store).unwrap();
+        let tool = store.join("tool");
+        std::fs::write(&tool, b"#!/bin/sh\necho live\n").unwrap();
+        std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::write(store.join("README"), b"live").unwrap();
+        // Left by an earlier swap that was interrupted before its cleanup.
+        let stale = tmp.path().join("store/tool/1.0.old");
+        std::fs::create_dir_all(&stale).unwrap();
+        std::fs::write(stale.join("tool"), b"stale").unwrap();
+        let blocker = tmp.path().join("blocker");
+        std::fs::write(&blocker, b"not a folder").unwrap();
+        let extras = [crate::extra::ExtraPlacement {
+            rel_path: "README".into(),
+            dest: blocker.join("README"),
+            role: LinkRole::Man,
+        }];
+        let bin = tmp.path().join("bin");
+        let apps = tmp.path().join("Applications");
+
+        // Relink and rollback place a payload that is already the store.
+        let placed = MacOsPlatform::new().place(&Placement {
+            name: "tool",
+            version: "1.0",
+            payload_dir: &store,
+            store_dir: &store,
+            bin_dir: &bin,
+            apps_dir: &apps,
+            kind: PackageKind::Binary,
+            bin_specs: &[],
+            replacing: &[],
+            link_apps: false,
+            link: true,
+            extras: &extras,
+        });
+
+        assert!(placed.is_err(), "{placed:?}");
+        assert_eq!(std::fs::read(&tool).unwrap(), b"#!/bin/sh\necho live\n");
     }
 
     #[test]
