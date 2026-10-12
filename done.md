@@ -1469,3 +1469,22 @@ Execution plan:
 Status: done (Claude Code / opus-5.5). `install::is_upgrade` is the one rule: it takes an `InstalledBuild` and the lookup's `ListOpts`, so `outdated`, `upgrade`, `list` and the FFI `Upgrade` record agree on every channel, including the guard against a prerelease nobody asked for, which moved there from `listing::update_available` (removed). The listing cache is format 2, keyed `source#stable|pre|draft` or `source@tag#dev`; a file without that format number is ignored and rewritten. `list --draft` widens installed rows only: a registry row would almost never have push access and would turn into `?`. A pinned package still shows no update in `list`; that stays a display rule.
 
 Tests: `listing::tests` (a dev rebuild by date and by digest, the dev lookup key and kept assets, draft/pre/stable cache keys, a draft install offered its publication, an unasked prerelease, an older cache format set aside); `tests/draft.rs` (`releases --draft` with and without a token, `info --releases --draft`, a draft install listing drafts by itself, `list` and `list --draft` agreeing with `outdated`); `tests/dev.rs` (a republish shows as an update in `list`, a plugin source refuses `releases --draft`). 1156 tests green. Binary in a scratch root: `neovim/neovim@nightly` lists as `nightly (dev)` with `latest` `nightly`, and as `(update available)` once its recorded build was made older; `releases neovim --draft` without a token stops naming the token variables; `info --releases --draft` warns with the same message and still prints the details. Not checked: a real draft (no repository with a draft and a push token at hand), and `outdated` against GitHub in that run (anonymous rate limit, HTTP 403).
+
+### B76. Registry rollback can leave the registry empty
+
+Row B76 in the 2026-10-08 findings. `registry.rs` already reported a failed rollback rename, but the live registry was still gone. Done: `replace_dir` copies the aside tree back with `source::local::copy_tree` when the rename back fails; if the copy fails too, the error names all three failures and the aside is kept as the only complete copy.
+
+Status: done (Claude Code / opus-5.5). Test: `registry::tests::a_failed_rename_back_restores_the_previous_registry_by_copy`, which fails with the copy fallback removed. Not covered: the path where the copy also fails, which a unit test cannot force without more injection.
+
+### B77. A busy `ketch.exe` aborts `self uninstall`
+
+Row B77 in the 2026-10-08 findings. `self uninstall` removed the running executable with `?`, so a busy Windows `.exe` stopped the rest of the uninstall.
+
+Status: done (Claude Code / opus-5.5). The fix was already on `main` in 5152c87 (the step warns and continues) but had no test. Test: `self_update::tests::uninstall_warns_and_finishes_when_the_running_binary_cannot_be_removed`, on every OS, which fails with the old `?` restored.
+
+### B79. A failed link after the store swap leaves state pointing at nothing
+
+Row B79 in the 2026-10-08 findings. `place` swapped the store, then linked, and an in-place reinstall had no guard to restore the old tree when linking failed.
+
+Status: done (Claude Code / opus-5.5). The fix was already on `main` in 5152c87: `move_into_store` keeps `<version>.old` until linking succeeds and each platform's `place` calls `restore_retired_store` on error. Test: `install::tests::a_reinstall_whose_linking_fails_after_the_swap_puts_the_previous_store_back` (unix), which fails with the restore call removed. Not covered: an end-to-end test of the Windows restore path. B104 stays a separate task.
+
