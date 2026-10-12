@@ -7,7 +7,7 @@
 //! Detection is by magic bytes, never by extension. Every entry path goes
 //! through `super::safe_member_path` before it is joined onto the destination.
 
-use super::{safe_member_path, Extractor};
+use super::{safe_member_path, Budget, Extractor};
 use crate::error::{Error, Result};
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
@@ -391,7 +391,7 @@ fn ensure_parent(dest: &Path, out: &Path) -> Result<()> {
 /// Symlinks and hard links are deferred until every regular member is on disk:
 /// Windows materialisation copies the target file, and tar/zip often list the
 /// link before the file it points at.
-fn unpack_tar<R: Read>(reader: R, dest: &Path) -> Result<()> {
+fn unpack_tar<R: Read>(reader: R, dest: &Path, budget: &mut Budget) -> Result<()> {
     use tar::EntryType;
 
     let mut archive = tar::Archive::new(reader);
@@ -415,6 +415,7 @@ fn unpack_tar<R: Read>(reader: R, dest: &Path) -> Result<()> {
         }
         let safe = safe_member_path(&raw)?;
         let out = dest.join(&safe);
+        budget.entry()?;
 
         match kind {
             EntryType::Directory => {
@@ -449,6 +450,9 @@ fn unpack_tar<R: Read>(reader: R, dest: &Path) -> Result<()> {
                 deferred_hardlinks.push((out, safe_target));
             }
             EntryType::Regular | EntryType::Continuous | EntryType::GNUSparse => {
+                // `size()` is the unpacked size, sparse holes included, so it
+                // is charged before a byte reaches the disk.
+                budget.bytes(entry.size())?;
                 ensure_parent(dest, &out)?;
                 unpack_member(&mut entry, &out)?;
             }
@@ -513,7 +517,11 @@ impl Extractor for TarGzExtractor {
     }
     fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
         let file = File::open(src).map_err(|e| Error::io(src, e))?;
-        unpack_tar(flate2::read::GzDecoder::new(BufReader::new(file)), dest)
+        unpack_tar(
+            flate2::read::GzDecoder::new(BufReader::new(file)),
+            dest,
+            &mut Budget::for_archive(src)?,
+        )
     }
 }
 
@@ -526,7 +534,7 @@ impl Extractor for TarXzExtractor {
     }
     fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
         let file = File::open(src).map_err(|e| Error::io(src, e))?;
-        unpack_tar(xz_reader(file), dest)
+        unpack_tar(xz_reader(file), dest, &mut Budget::for_archive(src)?)
     }
 }
 
@@ -539,7 +547,11 @@ impl Extractor for TarBz2Extractor {
     }
     fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
         let file = File::open(src).map_err(|e| Error::io(src, e))?;
-        unpack_tar(bzip2::read::BzDecoder::new(BufReader::new(file)), dest)
+        unpack_tar(
+            bzip2::read::BzDecoder::new(BufReader::new(file)),
+            dest,
+            &mut Budget::for_archive(src)?,
+        )
     }
 }
 
@@ -552,7 +564,7 @@ impl Extractor for TarExtractor {
     }
     fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
         let file = File::open(src).map_err(|e| Error::io(src, e))?;
-        unpack_tar(BufReader::new(file), dest)
+        unpack_tar(BufReader::new(file), dest, &mut Budget::for_archive(src)?)
     }
 }
 
@@ -564,62 +576,77 @@ impl Extractor for ZipExtractor {
         head.starts_with(ZIP_MAGIC)
     }
     fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
-        let file = File::open(src).map_err(|e| Error::io(src, e))?;
-        let mut zip = zip::ZipArchive::new(BufReader::new(file))
-            .map_err(|e| Error::parse(src.display().to_string(), e.to_string()))?;
-
-        let mut deferred_symlinks: Vec<(PathBuf, PathBuf)> = Vec::new();
-
-        for index in 0..zip.len() {
-            let mut entry = zip
-                .by_index(index)
-                .map_err(|e| Error::parse(src.display().to_string(), e.to_string()))?;
-            let name = entry.name().to_string();
-            // Finder metadata, not payload.
-            if name.starts_with("__MACOSX/") || name.ends_with("/.DS_Store") {
-                continue;
-            }
-            let safe = safe_member_path(Path::new(&name))?;
-            let out = dest.join(&safe);
-
-            if entry.is_dir() || name.ends_with('/') {
-                walk_inside(dest, &out, true)?;
-                continue;
-            }
-            let mode = entry.unix_mode();
-            ensure_parent(dest, &out)?;
-
-            // Zip stores a symlink as a regular member whose body is the target.
-            if mode.is_some_and(|m| m & 0o170000 == 0o120000) {
-                let mut target = String::new();
-                entry
-                    .read_to_string(&mut target)
-                    .map_err(|e| Error::io(&out, e))?;
-                let target = PathBuf::from(target.trim());
-                check_link_target(&safe, &target)?;
-                deferred_symlinks.push((out, target));
-                continue;
-            }
-
-            let mut file = File::create(&out).map_err(|e| Error::io(&out, e))?;
-            std::io::copy(&mut entry, &mut file).map_err(|e| Error::io(&out, e))?;
-            drop(file);
-            // Without this, every binary in a zip lands non-executable.
-            if let Some(mode) = mode {
-                set_unix_mode(&out, payload_mode(mode))?;
-            }
-            // A zip written on Windows — Java's `ZipOutputStream`, .NET, Gradle
-            // distributions — marks every member 0644 or carries no unix mode
-            // at all. Placement only links files it can run, so from the
-            // outside that payload looks like it contains nothing. The bytes
-            // are the evidence left: a program header says the file is one.
-            if is_program_head(&crate::extract::read_head(&out).unwrap_or_default()) {
-                #[cfg(unix)]
-                crate::platform::unix::ensure_executable(&out)?;
-            }
-        }
-        finish_deferred_links(dest, Vec::new(), deferred_symlinks)
+        unpack_zip(src, dest, &mut Budget::for_archive(src)?)
     }
+}
+
+/// The longest symlink target a zip member may carry; the body is read into
+/// memory, and no real path is longer.
+const MAX_ZIP_LINK_TARGET: u64 = 4096;
+
+fn unpack_zip(src: &Path, dest: &Path, budget: &mut Budget) -> Result<()> {
+    let file = File::open(src).map_err(|e| Error::io(src, e))?;
+    let mut zip = zip::ZipArchive::new(BufReader::new(file))
+        .map_err(|e| Error::parse(src.display().to_string(), e.to_string()))?;
+
+    let mut deferred_symlinks: Vec<(PathBuf, PathBuf)> = Vec::new();
+
+    for index in 0..zip.len() {
+        let mut entry = zip
+            .by_index(index)
+            .map_err(|e| Error::parse(src.display().to_string(), e.to_string()))?;
+        let name = entry.name().to_string();
+        // Finder metadata, not payload.
+        if name.starts_with("__MACOSX/") || name.ends_with("/.DS_Store") {
+            continue;
+        }
+        let safe = safe_member_path(Path::new(&name))?;
+        let out = dest.join(&safe);
+        budget.entry()?;
+
+        if entry.is_dir() || name.ends_with('/') {
+            walk_inside(dest, &out, true)?;
+            continue;
+        }
+        let mode = entry.unix_mode();
+        ensure_parent(dest, &out)?;
+
+        // Zip stores a symlink as a regular member whose body is the target.
+        if mode.is_some_and(|m| m & 0o170000 == 0o120000) {
+            let mut target = String::new();
+            (&mut entry)
+                .take(MAX_ZIP_LINK_TARGET + 1)
+                .read_to_string(&mut target)
+                .map_err(|e| Error::io(&out, e))?;
+            if target.len() as u64 > MAX_ZIP_LINK_TARGET {
+                return Err(Error::msg(format!(
+                    "refusing archive link {} with an over-long target",
+                    safe.display()
+                )));
+            }
+            let target = PathBuf::from(target.trim());
+            check_link_target(&safe, &target)?;
+            deferred_symlinks.push((out, target));
+            continue;
+        }
+
+        let file = File::create(&out).map_err(|e| Error::io(&out, e))?;
+        std::io::copy(&mut entry, &mut budget.writer(file)).map_err(|e| Error::io(&out, e))?;
+        // Without this, every binary in a zip lands non-executable.
+        if let Some(mode) = mode {
+            set_unix_mode(&out, payload_mode(mode))?;
+        }
+        // A zip written on Windows — Java's `ZipOutputStream`, .NET, Gradle
+        // distributions — marks every member 0644 or carries no unix mode
+        // at all. Placement only links files it can run, so from the
+        // outside that payload looks like it contains nothing. The bytes
+        // are the evidence left: a program header says the file is one.
+        if is_program_head(&crate::extract::read_head(&out).unwrap_or_default()) {
+            #[cfg(unix)]
+            crate::platform::unix::ensure_executable(&out)?;
+        }
+    }
+    finish_deferred_links(dest, Vec::new(), deferred_symlinks)
 }
 
 impl Extractor for GzFileExtractor {
@@ -630,34 +657,35 @@ impl Extractor for GzFileExtractor {
         head.starts_with(GZIP_MAGIC) && !looks_like_tar(&gzip_inner_head(path))
     }
     fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
-        let stem = src
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "payload".to_string());
-        let stem = stem.strip_suffix(".gz").unwrap_or(&stem).to_string();
-        let out = dest.join(safe_member_path(Path::new(&stem))?);
-
         let file = File::open(src).map_err(|e| Error::io(src, e))?;
-        let mut decoder = flate2::read::GzDecoder::new(BufReader::new(file));
-        let mut written = File::create(&out).map_err(|e| Error::io(&out, e))?;
-        std::io::copy(&mut decoder, &mut written).map_err(|e| Error::io(&out, e))?;
-        drop(written);
-        // A lone gzipped file in a release is a program; nothing else is
-        // published this way.
-        set_unix_mode(&out, 0o755)
+        extract_lone_file(
+            flate2::read::GzDecoder::new(BufReader::new(file)),
+            src,
+            dest,
+            ".gz",
+            &mut Budget::for_archive(src)?,
+        )
     }
 }
 
-fn extract_lone_file<D: Read>(mut decoder: D, src: &Path, dest: &Path, suffix: &str) -> Result<()> {
+/// A lone compressed file in a release is a program; nothing else is
+/// published this way, hence the 0755.
+fn extract_lone_file<D: Read>(
+    mut decoder: D,
+    src: &Path,
+    dest: &Path,
+    suffix: &str,
+    budget: &mut Budget,
+) -> Result<()> {
     let stem = src
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "payload".to_string());
     let stem = stem.strip_suffix(suffix).unwrap_or(&stem).to_string();
     let out = dest.join(safe_member_path(Path::new(&stem))?);
-    let mut written = File::create(&out).map_err(|e| Error::io(&out, e))?;
-    std::io::copy(&mut decoder, &mut written).map_err(|e| Error::io(&out, e))?;
-    drop(written);
+    budget.entry()?;
+    let written = File::create(&out).map_err(|e| Error::io(&out, e))?;
+    std::io::copy(&mut decoder, &mut budget.writer(written)).map_err(|e| Error::io(&out, e))?;
     set_unix_mode(&out, 0o755)
 }
 
@@ -670,7 +698,13 @@ impl Extractor for XzFileExtractor {
     }
     fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
         let file = File::open(src).map_err(|e| Error::io(src, e))?;
-        extract_lone_file(xz_reader(file), src, dest, ".xz")
+        extract_lone_file(
+            xz_reader(file),
+            src,
+            dest,
+            ".xz",
+            &mut Budget::for_archive(src)?,
+        )
     }
 }
 
@@ -688,6 +722,7 @@ impl Extractor for Bz2FileExtractor {
             src,
             dest,
             ".bz2",
+            &mut Budget::for_archive(src)?,
         )
     }
 }
@@ -788,7 +823,7 @@ mod tests {
         std::fs::create_dir_all(&dest).unwrap();
 
         assert!(
-            unpack_tar(&archive[..], &dest).is_err(),
+            unpack_tar(&archive[..], &dest, &mut unlimited()).is_err(),
             "an entry named through a planted symlink must be refused"
         );
         // Member 2 would have been created here had the link been followed.
@@ -851,7 +886,7 @@ mod tests {
         let archive = builder.into_inner().unwrap();
 
         let dest = tempfile::tempdir().unwrap();
-        unpack_tar(&archive[..], dest.path()).unwrap();
+        unpack_tar(&archive[..], dest.path(), &mut unlimited()).unwrap();
         let alias = dest.path().join("bin/tool-alias");
         assert!(alias.symlink_metadata().unwrap().file_type().is_symlink());
         assert_eq!(std::fs::read(&alias).unwrap(), b"hi");
@@ -899,7 +934,7 @@ mod tests {
         let archive = builder.into_inner().unwrap();
 
         let dest = tempfile::tempdir().unwrap();
-        unpack_tar(&archive[..], dest.path()).unwrap();
+        unpack_tar(&archive[..], dest.path(), &mut unlimited()).unwrap();
         let alias = dest.path().join("bin/tool-alias");
         assert!(alias.symlink_metadata().unwrap().file_type().is_symlink());
         assert_eq!(std::fs::read(&alias).unwrap(), b"hi");
@@ -1172,6 +1207,118 @@ mod tests {
             .mode()
             & 0o7777;
         assert_eq!(mode, 0o755);
+    }
+
+    fn unlimited() -> Budget {
+        Budget::new(u64::MAX, u64::MAX)
+    }
+
+    fn gz_bytes(plain: &[u8]) -> Vec<u8> {
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        encoder.write_all(plain).unwrap();
+        encoder.finish().unwrap()
+    }
+
+    #[test]
+    fn a_lone_gzip_bomb_stops_at_the_budget() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("tool.gz");
+        std::fs::write(&src, gz_bytes(&vec![0u8; 4 << 20])).unwrap();
+        let dest = dir.path().join("out");
+        std::fs::create_dir_all(&dest).unwrap();
+
+        let file = File::open(&src).unwrap();
+        let decoder = flate2::read::GzDecoder::new(BufReader::new(file));
+        let err = extract_lone_file(decoder, &src, &dest, ".gz", &mut Budget::new(1 << 20, 10))
+            .unwrap_err();
+        assert!(err.to_string().contains("unpacks to more than"), "{err}");
+        let written = std::fs::metadata(dest.join("tool")).map_or(0, |m| m.len());
+        assert!(written <= 1 << 20, "wrote {written} bytes past the budget");
+    }
+
+    #[test]
+    fn a_tar_member_larger_than_the_budget_is_refused_before_it_is_written() {
+        let mut builder = tar::Builder::new(Vec::new());
+        let body = vec![0u8; 2 << 20];
+        let mut header = tar::Header::new_gnu();
+        header.set_size(body.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder.append_data(&mut header, "big", &body[..]).unwrap();
+        let archive = builder.into_inner().unwrap();
+
+        let dest = tempfile::tempdir().unwrap();
+        let err = unpack_tar(&archive[..], dest.path(), &mut Budget::new(1 << 20, 10)).unwrap_err();
+        assert!(err.to_string().contains("unpacks to more than"), "{err}");
+        assert!(!dest.path().join("big").exists());
+    }
+
+    #[test]
+    fn a_tar_with_too_many_members_is_refused() {
+        let mut builder = tar::Builder::new(Vec::new());
+        for i in 0..20 {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(0);
+            header.set_mode(0o644);
+            header.set_cksum();
+            builder
+                .append_data(&mut header, format!("f{i}"), &[] as &[u8])
+                .unwrap();
+        }
+        let archive = builder.into_inner().unwrap();
+
+        let dest = tempfile::tempdir().unwrap();
+        let err =
+            unpack_tar(&archive[..], dest.path(), &mut Budget::new(u64::MAX, 10)).unwrap_err();
+        assert!(err.to_string().contains("more than 10 entries"), "{err}");
+    }
+
+    #[test]
+    fn a_zip_with_too_many_members_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("many.zip");
+        let mut writer = zip::ZipWriter::new(File::create(&src).unwrap());
+        for i in 0..20 {
+            writer
+                .start_file(format!("f{i}"), zip::write::SimpleFileOptions::default())
+                .unwrap();
+        }
+        writer.finish().unwrap();
+        let dest = dir.path().join("out");
+        std::fs::create_dir_all(&dest).unwrap();
+
+        let err = unpack_zip(&src, &dest, &mut Budget::new(u64::MAX, 10)).unwrap_err();
+        assert!(err.to_string().contains("more than 10 entries"), "{err}");
+    }
+
+    #[test]
+    fn a_zip_bomb_stops_at_the_budget() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("bomb.zip");
+        let mut writer = zip::ZipWriter::new(File::create(&src).unwrap());
+        writer
+            .start_file("zeros", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(&vec![0u8; 4 << 20]).unwrap();
+        writer.finish().unwrap();
+        let dest = dir.path().join("out");
+        std::fs::create_dir_all(&dest).unwrap();
+
+        let err = unpack_zip(&src, &dest, &mut Budget::new(1 << 20, 10)).unwrap_err();
+        assert!(err.to_string().contains("unpacks to more than"), "{err}");
+        let written = std::fs::metadata(dest.join("zeros")).map_or(0, |m| m.len());
+        assert!(written <= 1 << 20, "wrote {written} bytes past the budget");
+    }
+
+    #[test]
+    fn the_budget_scales_with_the_archive_between_a_floor_and_a_ceiling() {
+        let tiny = Budget::for_compressed_len(1);
+        let mid = Budget::for_compressed_len(1 << 30);
+        let huge = Budget::for_compressed_len(u64::MAX);
+        assert_eq!(tiny.limit_bytes, 256 << 20);
+        assert_eq!(mid.limit_bytes, 32 << 30);
+        assert_eq!(Budget::for_compressed_len(10 << 20).limit_bytes, 1000 << 20);
+        assert_eq!(huge.limit_bytes, 32 << 30);
     }
 
     fn macho_match_32bit_only(head: &[u8]) -> bool {
