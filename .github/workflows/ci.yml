@@ -342,6 +342,7 @@ jobs:
           bash -n install.sh
           bash -n scripts/release.sh
           bash -n scripts/dist-generate.sh
+          bash -n scripts/core-features.sh
           sh tests/release-sh.sh
           sh tests/crate-version.sh
           sh tests/release-workflows.sh
@@ -358,6 +359,13 @@ jobs:
         env:
           RUSTFLAGS: --cfg fuzzing
         run: cargo check --locked -p ketch -p ketch-core
+
+      # Every other build unifies the core's features into one set, so a
+      # feature that compiles only beside another would pass all of them.
+      # What `just core-features` runs.
+      - name: The core builds with each feature alone
+        if: env.RUN == 'true' && runner.os == 'Linux'
+        run: scripts/core-features.sh
 
       # release.yml is generated; a dist-workspace.toml or build-*.yml change
       # without `just dist-generate` would ship a workflow nobody reviewed.
