@@ -8,6 +8,7 @@
 //! linking: creating a symlink needs a privilege most users do not have. Every
 //! copy is recorded so uninstall can prove identity before deleting.
 
+use super::claim::Claims;
 use super::scoring::looks_like_build_artifact;
 use super::{AssetScore, DoctorCheck, Placement, Platform};
 use crate::config::Config;
@@ -60,7 +61,7 @@ impl WindowsPlatform {
     }
 }
 
-fn remove_any(path: &Path) -> std::io::Result<()> {
+pub(crate) fn remove_any(path: &Path) -> std::io::Result<()> {
     match std::fs::symlink_metadata(path) {
         Ok(meta) if meta.is_dir() => std::fs::remove_dir_all(path),
         Ok(_) => std::fs::remove_file(path),
@@ -255,9 +256,12 @@ fn destination_available(link: &Path, recorded: &[LinkRecord]) -> Result<()> {
     }
 }
 
-fn clear_destination(link: &Path, recorded: &[LinkRecord]) -> Result<()> {
+/// Clear a destination, or explain who already has it. What was there moves
+/// aside into `claims` — a rename, which also frees the name of a running
+/// `.exe` — so a placement that fails later can put it back.
+fn clear_destination(link: &Path, recorded: &[LinkRecord], claims: &mut Claims) -> Result<()> {
     destination_available(link, recorded)?;
-    clear_for_replace(link).map_err(|e| Error::io(link, e))
+    claims.take(link)
 }
 
 /// Keep a Windows executable suffix, or add `.exe` so PATH lookup finds it.
@@ -429,6 +433,7 @@ fn copy_binary(
     bin_dir: &Path,
     name: &str,
     recorded: &[LinkRecord],
+    claims: &mut Claims,
 ) -> Result<LinkRecord> {
     std::fs::create_dir_all(bin_dir).map_err(|e| Error::io(bin_dir, e))?;
     let link = bin_dir.join(name);
@@ -436,12 +441,12 @@ fn copy_binary(
     if let Ok(entries) = std::fs::read_dir(bin_dir) {
         for entry in entries.flatten() {
             if dest_key(&entry.path()) == dest_key(&link) {
-                clear_destination(&entry.path(), recorded)?;
+                clear_destination(&entry.path(), recorded, claims)?;
                 break;
             }
         }
     }
-    clear_destination(&link, recorded)?;
+    clear_destination(&link, recorded, claims)?;
     copy_over(target, &link).map_err(|e| Error::io(&link, e))?;
     Ok(LinkRecord {
         link,
@@ -455,6 +460,7 @@ pub(crate) fn link_planned_extras(
     extras: &[ExtraPlacement],
     root: &Path,
     recorded: &[LinkRecord],
+    claims: &mut Claims,
 ) -> Result<Vec<LinkRecord>> {
     let mut links = Vec::new();
     for extra in extras {
@@ -462,7 +468,7 @@ pub(crate) fn link_planned_extras(
         if let Some(parent) = extra.dest.parent() {
             std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
         }
-        clear_destination(&extra.dest, recorded)?;
+        clear_destination(&extra.dest, recorded, claims)?;
         std::fs::copy(&target, &extra.dest).map_err(|e| Error::io(&extra.dest, e))?;
         links.push(LinkRecord {
             link: extra.dest.clone(),
@@ -544,14 +550,24 @@ impl Platform for WindowsPlatform {
         }
         let replacing = retired_targets(plan.replacing, plan.store_dir);
         let mut links = Vec::new();
+        // Named like `clear_for_replace`'s asides: one a running exe keeps
+        // undeletable is then the same kind of leftover, swept the same way.
+        let mut claims = Claims::new(busy_aside);
         let result = (|| -> Result<Vec<LinkRecord>> {
             for (target, name) in cli_targets(self, plan.store_dir, plan)? {
-                links.push(copy_binary(&target, plan.bin_dir, &name, &replacing)?);
+                links.push(copy_binary(
+                    &target,
+                    plan.bin_dir,
+                    &name,
+                    &replacing,
+                    &mut claims,
+                )?);
             }
             links.extend(link_planned_extras(
                 plan.extras,
                 plan.store_dir,
                 &replacing,
+                &mut claims,
             )?);
             if links.is_empty() {
                 return Err(Error::EmptyPayload(plan.store_dir.to_path_buf()));
@@ -560,11 +576,13 @@ impl Platform for WindowsPlatform {
         })();
         match result {
             Ok(links) => {
+                claims.discard();
                 finalize_store_swap(plan.store_dir);
                 Ok(links)
             }
             Err(e) => {
                 let _ = self.unplace(&links, &crate::report::Report::silent());
+                claims.restore();
                 restore_retired_store(plan.store_dir);
                 Err(e)
             }
@@ -879,6 +897,7 @@ mod tests {
             &bin,
             "tool.exe",
             &recorded,
+            &mut Claims::default(),
         )
         .unwrap();
         assert_eq!(got.link, link);
@@ -970,6 +989,7 @@ mod tests {
             &bin,
             "tool.exe",
             &recorded,
+            &mut Claims::default(),
         )
         .unwrap();
         assert_eq!(std::fs::read(&link).unwrap(), b"v2");

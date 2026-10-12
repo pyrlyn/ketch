@@ -13,6 +13,9 @@
 
 pub mod scoring;
 
+#[cfg(any(unix, windows))]
+pub(crate) mod claim;
+
 #[cfg(target_os = "linux")]
 pub mod linux;
 #[cfg(target_os = "macos")]
@@ -374,14 +377,26 @@ pub fn expose_extras(
     owned: &Path,
     recorded: &[LinkRecord],
 ) -> Result<Vec<LinkRecord>> {
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
-        unix::link_planned_extras(extras, root, owned, recorded)
-    }
-    #[cfg(windows)]
-    {
-        let _ = owned;
-        windows::link_planned_extras(extras, root, recorded)
+        let mut claims = claim::Claims::default();
+        #[cfg(unix)]
+        let linked = unix::link_planned_extras(extras, root, owned, recorded, &mut claims);
+        #[cfg(windows)]
+        let linked = {
+            let _ = owned;
+            windows::link_planned_extras(extras, root, recorded, &mut claims)
+        };
+        match linked {
+            Ok(links) => {
+                claims.discard();
+                Ok(links)
+            }
+            Err(e) => {
+                claims.restore();
+                Err(e)
+            }
+        }
     }
     #[cfg(not(any(unix, windows)))]
     {
