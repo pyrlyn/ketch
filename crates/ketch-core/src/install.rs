@@ -2643,6 +2643,50 @@ mod tests {
         assert_eq!(state.packages.len(), 2);
     }
 
+    #[test]
+    #[cfg(unix)]
+    fn a_reinstall_whose_linking_fails_after_the_swap_puts_the_previous_store_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let (cfg, program) = local_fixture(dir.path(), "swaptool");
+        let report = Report::silent();
+        let cx = Ctx::new(&cfg, &report);
+        let sources = SourceRegistry::load(&cx);
+        let mut state = State::default();
+        let req = local_request(&program, &Cancel::new());
+        install(&cx, &sources, &mut state, &req).unwrap();
+        let before = state.get("swaptool").cloned().expect("installed");
+        // Marks the tree state names, so a swapped-in copy cannot pass for it.
+        std::fs::write(before.prefix.join("previous"), "kept").unwrap();
+        // A local reinstall lands on the same version, so the swap goes into
+        // the prefix state already records — the case the orphan guard skips.
+        // A file where the bin dir was passes preflight (nothing occupies the
+        // link) and fails only when linking creates the dir, after the swap.
+        std::fs::remove_dir_all(&cfg.bin_dir).unwrap();
+        std::fs::write(&cfg.bin_dir, "").unwrap();
+
+        let reinstall = InstallRequest {
+            force: true,
+            ..req.clone()
+        };
+        let err = install(&cx, &sources, &mut state, &reinstall).expect_err("linking must fail");
+        // Any earlier failure would leave the store untouched and prove nothing.
+        assert!(
+            err.to_string().contains(&cfg.bin_dir.display().to_string()),
+            "{err}"
+        );
+
+        let after = state.get("swaptool").expect("state entry survives");
+        assert_eq!(after.prefix, before.prefix);
+        assert_eq!(
+            std::fs::read_to_string(before.prefix.join("previous")).unwrap(),
+            "kept",
+            "the store state names is the one that was there before"
+        );
+        let mut retired = before.prefix.clone().into_os_string();
+        retired.push(".old");
+        assert!(!Path::new(&retired).exists(), "no retired copy left behind");
+    }
+
     /// The event sequence a front end draws an install from: every stage in
     /// order, the download as one task that ends, and nothing printed.
     #[cfg(unix)]
