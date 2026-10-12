@@ -433,6 +433,7 @@ mod tests {
         assert_eq!(body, expected);
     }
 
+    #[cfg(feature = "push")]
     #[test]
     fn the_push_loader_accepts_what_the_wizard_renders() {
         let manifest = manifest(&full_answers()).unwrap();
@@ -468,6 +469,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "push")]
     #[test]
     fn quotes_and_backslashes_in_an_answer_survive_the_round_trip() {
         let hostile = r#"says "hi", C:\path\to, and \ itself"#;
