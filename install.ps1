@@ -347,8 +347,16 @@ try {
         exit 1
     }
 
+    # A root this script creates is marked as ketch's, so `ketch self
+    # uninstall` may empty it; one that already existed may hold other programs.
+    $NewRoot = -not (Test-Path -LiteralPath $Root)
     $RootBin = Join-Path $Root 'bin'
     New-Item -ItemType Directory -Path $RootBin -Force | Out-Null
+    if ($NewRoot) {
+        Set-Content -LiteralPath (Join-Path $Root '.ketch-root') -Encoding ascii `
+            -Value 'ketch created this directory; `ketch self uninstall` removes it with everything inside.' `
+            -ErrorAction SilentlyContinue
+    }
     $InstallPath = Join-Path $RootBin $BinaryName
 
     if (Test-Path -LiteralPath $InstallPath) {

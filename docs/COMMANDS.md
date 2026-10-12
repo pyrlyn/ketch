@@ -736,6 +736,12 @@ installed with mise also asks whether to run `mise unuse -g` for its own copy;
 On Windows the running `ketch.exe` cannot delete itself, so the rest of the
 root is removed by a background process once ketch has exited.
 
+The root's own directories (`bin`, `store`, `cache`, …) are emptied only when
+ketch created the root — it then holds a `.ketch-root` marker — or the root
+is the default `~/.ketch`. A root that already existed, such as `~/.local` or
+`/usr/local`, and the home directory itself keep everything ketch did not
+record there.
+
 On Windows it also removes what ketch wrote to the registry. Today that is
 only the bin dir in the user PATH (`HKCU\Environment\Path`), written by
 `install.ps1` or `ketch path install`. The entry is matched however it is

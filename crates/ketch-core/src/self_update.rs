@@ -990,7 +990,8 @@ fn doskey_file_exists(cfg: &Config) -> bool {
 /// root the parent of that directory, which is the user's home in the worst
 /// case. When the root *is* the home directory, the named children (`bin`,
 /// `store`, `cache`, …) are not emptied either — they are shared with the
-/// rest of the account. A dedicated root like `~/.ketch` is still wiped.
+/// rest of the account, and neither are those of any root ketch did not
+/// create; see [`owns_root`]. A dedicated root like `~/.ketch` is still wiped.
 /// `path` is `root` or below it, compared on resolved paths where both
 /// exist: a root spelled with a Windows short name (`RUNNER~1`) must still
 /// contain the binary spelled with the long one.
@@ -1018,7 +1019,7 @@ fn remove_root_at(
     finish: impl FnOnce(&Path, &[PathBuf]) -> bool,
 ) -> (Vec<PathBuf>, bool) {
     let (cfg, report) = (cx.cfg, cx.report);
-    let wipe = home.is_none_or(|h| cfg.root != h);
+    let wipe = owns_root(cfg, home);
     let mut removed = Vec::new();
     let mut left = Vec::new();
     let dirs = [
@@ -1029,12 +1030,14 @@ fn remove_root_at(
         &cfg.plugin_dir,
         &cfg.registry_dir,
     ];
+    let marker = cfg.root_marker();
     let files = [
         &cfg.state_file,
         &cfg.stats_db,
         &cfg.config_file,
         &cfg.lock_file,
         &cfg.registry_meta,
+        &marker,
     ];
     for dir in dirs {
         remove_owned_dir(dir, wipe, &mut removed, &mut left, report);
@@ -1082,6 +1085,37 @@ fn remove_root_at(
         }
     }
     (removed, false)
+}
+
+/// Whether the named children of the root are ketch's to empty.
+///
+/// Only a root ketch created (it carries the marker) or the default
+/// `~/.ketch` qualifies: a root like `/usr/local` or `~/.local` that existed
+/// before ketch shares `bin/` and `cache/` with other programs. The home
+/// directory, or anything holding it, never does, whatever it carries.
+fn owns_root(cfg: &Config, home: Option<&Path>) -> bool {
+    match home {
+        Some(home) if contains_dir(&cfg.root, home) => false,
+        Some(home) if same_dir(&cfg.root, &home.join(".ketch")) => true,
+        _ => cfg.root_marker().is_file(),
+    }
+}
+
+/// Resolved and case-folded, so a symlink or another spelling of the same
+/// directory compares equal. Folding on a case-sensitive file system can only
+/// call two directories the same, which errs towards keeping files.
+fn folded(path: &Path) -> PathBuf {
+    let resolved = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    PathBuf::from(resolved.to_string_lossy().to_lowercase())
+}
+
+fn same_dir(a: &Path, b: &Path) -> bool {
+    folded(a) == folded(b)
+}
+
+/// `outer` is `inner` or one of its ancestors.
+fn contains_dir(outer: &Path, inner: &Path) -> bool {
+    folded(inner).starts_with(folded(outer))
 }
 
 fn remove_owned_dir(
@@ -1524,6 +1558,93 @@ mod tests {
     }
 
     #[test]
+    fn uninstall_keeps_foreign_files_under_a_root_ketch_did_not_create() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let home = tmp.path().join("home");
+        std::fs::create_dir_all(&home).expect("home");
+        // `KETCH_ROOT=/usr/local`: a shared prefix that existed before ketch.
+        let root = tmp.path().join("usr-local");
+        let cfg =
+            Config::load(Some(root.clone()), &crate::report::Report::silent()).expect("config");
+        std::fs::create_dir_all(&cfg.bin_dir).expect("bin");
+        std::fs::write(cfg.bin_dir.join("someone-elses"), b"stay").expect("bin file");
+        std::fs::create_dir_all(&cfg.cache_dir).expect("cache");
+        std::fs::write(cfg.cache_dir.join("theirs"), b"stay").expect("cache file");
+
+        remove_root_at(
+            &Ctx::new(&cfg, &Report::silent()),
+            &cfg.root,
+            Some(&home),
+            |_, _| false,
+        );
+
+        assert_eq!(
+            std::fs::read(cfg.bin_dir.join("someone-elses")).expect("kept bin file"),
+            b"stay"
+        );
+        assert_eq!(
+            std::fs::read(cfg.cache_dir.join("theirs")).expect("kept cache file"),
+            b"stay"
+        );
+    }
+
+    #[test]
+    fn uninstall_wipes_the_default_root_without_a_marker() {
+        // Roots made before the marker existed: `~/.ketch` is ketch's by name.
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let home = tmp.path().join("home");
+        let root = home.join(".ketch");
+        let cfg =
+            Config::load(Some(root.clone()), &crate::report::Report::silent()).expect("config");
+        std::fs::create_dir_all(&cfg.bin_dir).expect("bin");
+        std::fs::write(cfg.bin_dir.join("gone"), b"x").expect("bin file");
+
+        remove_root_at(
+            &Ctx::new(&cfg, &Report::silent()),
+            &cfg.root,
+            Some(&home),
+            |_, _| panic!("nothing was left to finish later"),
+        );
+
+        assert!(!root.exists(), "the default root goes whole");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn uninstall_does_not_wipe_home_reached_through_a_symlink() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let home = tmp.path().join("home");
+        std::fs::create_dir_all(&home).expect("home");
+        let link = tmp.path().join("home-link");
+        std::os::unix::fs::symlink(&home, &link).expect("symlink");
+        let cfg = Config::load(Some(link), &crate::report::Report::silent()).expect("config");
+        // Even a marker does not make the home directory ketch's to empty.
+        cfg.mark_root().expect("marker");
+        std::fs::create_dir_all(&cfg.bin_dir).expect("bin");
+        std::fs::write(cfg.bin_dir.join("keep-me"), b"stay").expect("bin file");
+
+        remove_root_at(
+            &Ctx::new(&cfg, &Report::silent()),
+            &cfg.root,
+            Some(&home),
+            |_, _| false,
+        );
+
+        assert!(home.join("bin").join("keep-me").exists());
+    }
+
+    #[test]
+    fn same_dir_folds_case_and_trailing_separators() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let home = tmp.path().join("Home");
+        std::fs::create_dir_all(&home).expect("home");
+        let shouted = tmp.path().join("HOME");
+        assert!(same_dir(&shouted, &home));
+        assert!(contains_dir(tmp.path(), &home));
+        assert!(!contains_dir(&home, tmp.path()));
+    }
+
+    #[test]
     fn uninstall_wipes_a_dedicated_root() {
         let tmp = tempfile::tempdir().expect("temp dir");
         let home = tmp.path().join("home");
@@ -1533,6 +1654,7 @@ mod tests {
             Config::load(Some(root.clone()), &crate::report::Report::silent()).expect("config");
         std::fs::create_dir_all(&cfg.bin_dir).expect("bin");
         std::fs::write(cfg.bin_dir.join("gone"), b"x").expect("bin file");
+        cfg.mark_root().expect("marker");
 
         remove_root_at(
             &Ctx::new(&cfg, &Report::silent()),
@@ -1562,6 +1684,7 @@ mod tests {
         std::fs::create_dir_all(&locked).expect("store");
         std::fs::write(locked.join("ketch"), b"running").expect("binary");
         std::fs::create_dir_all(&cfg.bin_dir).expect("bin");
+        cfg.mark_root().expect("marker");
         std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o555))
             .expect("read-only");
 
@@ -1844,6 +1967,7 @@ mod tests {
         let cfg = Config::load(Some(tmp.path().join(".ketch")), &Report::silent()).expect("config");
         std::fs::create_dir_all(&cfg.bin_dir).expect("bin");
         std::fs::write(cfg.bin_dir.join("ketch"), b"bin").expect("bin file");
+        cfg.mark_root().expect("marker");
         let root = cfg.root.clone();
         let lock_file = cfg.lock_file.clone();
 
