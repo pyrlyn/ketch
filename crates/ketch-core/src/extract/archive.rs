@@ -10,10 +10,14 @@
 use super::{resolves_inside, safe_member_path, Extractor};
 use crate::error::{Error, Result};
 use std::fs::File;
-use std::io::{self, BufReader, Read, Write};
+use std::io::{BufReader, Read};
 use std::path::{Component, Path, PathBuf};
-use std::sync::mpsc::{self, Receiver, SyncSender};
-use std::thread;
+#[cfg(feature = "xz")]
+use {
+    std::io::{self, Write},
+    std::sync::mpsc::{self, Receiver, SyncSender},
+    std::thread,
+};
 
 /// Permission bits taken from an untrusted archive: never setuid/setgid/sticky.
 fn payload_mode(mode: u32) -> u32 {
@@ -99,27 +103,34 @@ fn copy_dir_contents(src: &Path, dest: &Path) -> Result<()> {
 }
 
 /// `.tar.gz` / `.tgz`
+#[cfg(feature = "gzip")]
 pub struct TarGzExtractor;
 
 /// `.tar.xz` / `.txz`
+#[cfg(feature = "xz")]
 pub struct TarXzExtractor;
 
 /// `.tar.bz2`
+#[cfg(feature = "bzip2")]
 pub struct TarBz2Extractor;
 
 /// Uncompressed `.tar`
 pub struct TarExtractor;
 
 /// `.zip`
+#[cfg(feature = "zip")]
 pub struct ZipExtractor;
 
 /// `.gz` wrapping a single file rather than a tar stream.
+#[cfg(feature = "gzip")]
 pub struct GzFileExtractor;
 
 /// `.xz` wrapping a single file rather than a tar stream.
+#[cfg(feature = "xz")]
 pub struct XzFileExtractor;
 
 /// `.bz2` wrapping a single file rather than a tar stream.
+#[cfg(feature = "bzip2")]
 pub struct Bz2FileExtractor;
 
 /// A bare executable published with no container at all.
@@ -141,6 +152,7 @@ fn looks_like_tar(head: &[u8]) -> bool {
 ///
 /// This is what separates `tool.tar.gz` from `tool.gz` when the publisher named
 /// the file wrongly, which happens often enough to matter.
+#[cfg(feature = "gzip")]
 fn gzip_inner_head(path: &Path) -> Vec<u8> {
     let Ok(file) = File::open(path) else {
         return Vec::new();
@@ -149,6 +161,7 @@ fn gzip_inner_head(path: &Path) -> Vec<u8> {
     read_head_of(&mut decoder, 512)
 }
 
+#[cfg(feature = "xz")]
 fn xz_inner_head(path: &Path) -> Vec<u8> {
     let Ok(file) = File::open(path) else {
         return Vec::new();
@@ -162,6 +175,7 @@ fn xz_inner_head(path: &Path) -> Vec<u8> {
     out.buf
 }
 
+#[cfg(feature = "bzip2")]
 fn bz2_inner_head(path: &Path) -> Vec<u8> {
     let Ok(file) = File::open(path) else {
         return Vec::new();
@@ -171,11 +185,13 @@ fn bz2_inner_head(path: &Path) -> Vec<u8> {
 }
 
 /// Collects a prefix of decompressed bytes, then errors so the decoder stops.
+#[cfg(feature = "xz")]
 struct CapWrite {
     buf: Vec<u8>,
     cap: usize,
 }
 
+#[cfg(feature = "xz")]
 impl Write for CapWrite {
     fn write(&mut self, data: &[u8]) -> io::Result<usize> {
         if self.buf.len() >= self.cap {
@@ -191,6 +207,7 @@ impl Write for CapWrite {
 }
 
 /// Stream xz plaintext as `Read` so unpacking never holds the whole file in RAM.
+#[cfg(feature = "xz")]
 fn xz_reader(file: File) -> impl Read {
     let (tx, rx): (SyncSender<io::Result<Vec<u8>>>, Receiver<_>) = mpsc::sync_channel(2);
     thread::spawn(move || {
@@ -207,8 +224,10 @@ fn xz_reader(file: File) -> impl Read {
     }
 }
 
+#[cfg(feature = "xz")]
 struct ChannelWrite(SyncSender<io::Result<Vec<u8>>>);
 
+#[cfg(feature = "xz")]
 impl Write for ChannelWrite {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if buf.is_empty() {
@@ -224,12 +243,14 @@ impl Write for ChannelWrite {
     }
 }
 
+#[cfg(feature = "xz")]
 struct ChannelRead {
     rx: Receiver<io::Result<Vec<u8>>>,
     buf: Vec<u8>,
     at: usize,
 }
 
+#[cfg(feature = "xz")]
 impl Read for ChannelRead {
     fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
         loop {
@@ -254,6 +275,7 @@ impl Read for ChannelRead {
     }
 }
 
+#[cfg(any(feature = "gzip", feature = "bzip2"))]
 fn read_head_of<R: Read>(reader: &mut R, want: usize) -> Vec<u8> {
     let mut buffer = vec![0u8; want];
     let mut filled = 0;
@@ -508,6 +530,7 @@ fn write_hardlink(source: &Path, out: &Path) -> Result<()> {
     }
 }
 
+#[cfg(feature = "gzip")]
 impl Extractor for TarGzExtractor {
     fn id(&self) -> &str {
         "tar.gz"
@@ -521,6 +544,7 @@ impl Extractor for TarGzExtractor {
     }
 }
 
+#[cfg(feature = "xz")]
 impl Extractor for TarXzExtractor {
     fn id(&self) -> &str {
         "tar.xz"
@@ -534,6 +558,7 @@ impl Extractor for TarXzExtractor {
     }
 }
 
+#[cfg(feature = "bzip2")]
 impl Extractor for TarBz2Extractor {
     fn id(&self) -> &str {
         "tar.bz2"
@@ -560,6 +585,7 @@ impl Extractor for TarExtractor {
     }
 }
 
+#[cfg(feature = "zip")]
 impl Extractor for ZipExtractor {
     fn id(&self) -> &str {
         "zip"
@@ -626,6 +652,7 @@ impl Extractor for ZipExtractor {
     }
 }
 
+#[cfg(feature = "gzip")]
 impl Extractor for GzFileExtractor {
     fn id(&self) -> &str {
         "gz"
@@ -652,6 +679,7 @@ impl Extractor for GzFileExtractor {
     }
 }
 
+#[cfg(any(feature = "xz", feature = "bzip2"))]
 fn extract_lone_file<D: Read>(mut decoder: D, src: &Path, dest: &Path, suffix: &str) -> Result<()> {
     let stem = src
         .file_name()
@@ -665,6 +693,7 @@ fn extract_lone_file<D: Read>(mut decoder: D, src: &Path, dest: &Path, suffix: &
     set_unix_mode(&out, 0o755)
 }
 
+#[cfg(feature = "xz")]
 impl Extractor for XzFileExtractor {
     fn id(&self) -> &str {
         "xz"
@@ -678,6 +707,7 @@ impl Extractor for XzFileExtractor {
     }
 }
 
+#[cfg(feature = "bzip2")]
 impl Extractor for Bz2FileExtractor {
     fn id(&self) -> &str {
         "bz2"
@@ -700,8 +730,11 @@ impl Extractor for RawBinaryExtractor {
     fn id(&self) -> &str {
         "raw"
     }
-    fn detect(&self, _path: &Path, _head: &[u8]) -> bool {
-        true
+    fn detect(&self, _path: &Path, head: &[u8]) -> bool {
+        // An archive whose codec this build left out is not a bare program:
+        // copied as one, it would install as an executable nobody can run.
+        // Refused here, it reads as an unsupported format.
+        !is_container_head(head)
     }
     fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
         let name = src
@@ -712,6 +745,39 @@ impl Extractor for RawBinaryExtractor {
         std::fs::copy(src, &out).map_err(|e| Error::io(&out, e))?;
         set_unix_mode(&out, 0o755)
     }
+}
+
+/// True when the first bytes open a compressed stream or a zip. Every one of
+/// them is claimed by its codec's extractor when that codec is built in.
+fn is_container_head(head: &[u8]) -> bool {
+    [GZIP_MAGIC, XZ_MAGIC, BZ2_MAGIC, ZIP_MAGIC]
+        .iter()
+        .any(|magic| head.starts_with(magic))
+}
+
+/// Every format this build unpacks on any OS, most specific first. A codec
+/// left out of the build is left out here, and its files are then refused as
+/// unsupported. `RawBinaryExtractor` accepts what the others refused, so it
+/// stays last.
+pub fn portable_extractors() -> Vec<Box<dyn Extractor>> {
+    vec![
+        #[cfg(feature = "gzip")]
+        Box::new(TarGzExtractor),
+        #[cfg(feature = "xz")]
+        Box::new(TarXzExtractor),
+        #[cfg(feature = "bzip2")]
+        Box::new(TarBz2Extractor),
+        Box::new(TarExtractor),
+        #[cfg(feature = "zip")]
+        Box::new(ZipExtractor),
+        #[cfg(feature = "gzip")]
+        Box::new(GzFileExtractor),
+        #[cfg(feature = "xz")]
+        Box::new(XzFileExtractor),
+        #[cfg(feature = "bzip2")]
+        Box::new(Bz2FileExtractor),
+        Box::new(RawBinaryExtractor),
+    ]
 }
 
 /// True when the first bytes are a Mach-O image, an ELF image, or a `#!` line.
@@ -743,8 +809,9 @@ pub fn is_program_head(head: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(any(feature = "gzip", feature = "bzip2", feature = "zip"))]
     use std::io::Write;
-    #[cfg(unix)]
+    #[cfg(all(unix, any(feature = "gzip", feature = "zip")))]
     use std::os::unix::fs::PermissionsExt;
 
     #[cfg(unix)]
@@ -975,6 +1042,7 @@ mod tests {
         assert_eq!(std::fs::read(&alias).unwrap(), b"hi");
     }
 
+    #[cfg(feature = "gzip")]
     fn tar_gz_with(entries: &[(&str, &[u8], u32)]) -> Vec<u8> {
         let mut builder = tar::Builder::new(Vec::new());
         for (name, body, mode) in entries {
@@ -990,6 +1058,7 @@ mod tests {
         encoder.finish().unwrap()
     }
 
+    #[cfg(feature = "gzip")]
     #[cfg(unix)]
     #[test]
     fn extracts_a_tar_gz_and_keeps_the_executable_bit() {
@@ -1008,6 +1077,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "bzip2")]
     #[cfg(unix)]
     #[test]
     fn bzip2_archives_use_the_same_traversal_guard_as_tar() {
@@ -1043,6 +1113,7 @@ mod tests {
         assert!(!outer.path().join("e").exists());
     }
 
+    #[cfg(feature = "gzip")]
     #[test]
     fn detection_separates_tar_gz_from_a_lone_gz() {
         let dir = tempfile::tempdir().unwrap();
@@ -1062,12 +1133,14 @@ mod tests {
         assert!(GzFileExtractor.detect(&plain, &head));
     }
 
+    #[cfg(feature = "xz")]
     fn xz_bytes(plain: &[u8]) -> Vec<u8> {
         let mut out = Vec::new();
         lzma_rs::xz_compress(&mut &plain[..], &mut out).unwrap();
         out
     }
 
+    #[cfg(feature = "xz")]
     fn tar_xz_with(entries: &[(&str, &[u8], u32)]) -> Vec<u8> {
         let mut builder = tar::Builder::new(Vec::new());
         for (name, body, mode) in entries {
@@ -1080,6 +1153,7 @@ mod tests {
         xz_bytes(&builder.into_inner().unwrap())
     }
 
+    #[cfg(feature = "xz")]
     #[test]
     fn detection_separates_tar_xz_from_a_lone_xz() {
         let dir = tempfile::tempdir().unwrap();
@@ -1097,6 +1171,7 @@ mod tests {
         assert!(XzFileExtractor.detect(&plain, &head));
     }
 
+    #[cfg(feature = "xz")]
     #[test]
     fn a_lone_xz_file_is_extracted_as_the_program() {
         let dir = tempfile::tempdir().unwrap();
@@ -1108,12 +1183,14 @@ mod tests {
         assert_eq!(std::fs::read(dest.join("jq")).unwrap(), b"\x7fELF payload");
     }
 
+    #[cfg(feature = "bzip2")]
     fn bz2_bytes(plain: &[u8]) -> Vec<u8> {
         let mut encoder = bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::fast());
         encoder.write_all(plain).unwrap();
         encoder.finish().unwrap()
     }
 
+    #[cfg(feature = "bzip2")]
     #[test]
     fn detection_separates_tar_bz2_from_a_lone_bz2() {
         let dir = tempfile::tempdir().unwrap();
@@ -1149,6 +1226,7 @@ mod tests {
     /// A zip the way Windows tools write one: every member 0644, with no
     /// execute bit anywhere. Gradle and Maven `-bin.zip` distributions are
     /// these.
+    #[cfg(feature = "zip")]
     #[cfg(unix)]
     fn write_zip_with_mode(path: &std::path::Path, members: &[(&str, &[u8], u32)]) {
         let file = std::fs::File::create(path).unwrap();
@@ -1162,6 +1240,7 @@ mod tests {
         writer.finish().unwrap();
     }
 
+    #[cfg(feature = "zip")]
     #[cfg(unix)]
     #[test]
     fn a_program_in_a_zip_without_an_execute_bit_still_comes_out_runnable() {
@@ -1194,6 +1273,7 @@ mod tests {
         assert_eq!(mode, 0o644);
     }
 
+    #[cfg(feature = "gzip")]
     #[cfg(unix)]
     fn tar_gz_with_dir(name: &str, mode: u32) -> Vec<u8> {
         let mut builder = tar::Builder::new(Vec::new());
@@ -1211,6 +1291,7 @@ mod tests {
         encoder.finish().unwrap()
     }
 
+    #[cfg(feature = "gzip")]
     #[cfg(unix)]
     #[test]
     fn tar_directory_members_keep_mode() {
@@ -1227,6 +1308,7 @@ mod tests {
         assert_eq!(mode, 0o700);
     }
 
+    #[cfg(feature = "gzip")]
     #[cfg(unix)]
     fn tar_with_read_only_dir(dir_first: bool) -> Vec<u8> {
         let mut builder = tar::Builder::new(Vec::new());
@@ -1303,6 +1385,39 @@ mod tests {
                 u32::from_be_bytes([head[0], head[1], head[2], head[3]]),
                 0xfeed_face | 0xcefa_edfe
             )
+    }
+
+    #[test]
+    fn a_compressed_file_is_never_taken_for_a_bare_program() {
+        let path = Path::new("tool");
+        for magic in [GZIP_MAGIC, XZ_MAGIC, BZ2_MAGIC, ZIP_MAGIC] {
+            let head = [magic, b"rest of the stream"].concat();
+            assert!(!RawBinaryExtractor.detect(path, &head), "{magic:?}");
+        }
+        assert!(RawBinaryExtractor.detect(path, b"\x7fELF\x02\x01\x01"));
+        assert!(RawBinaryExtractor.detect(path, b"#!/bin/sh\n"));
+    }
+
+    #[cfg(not(any(feature = "gzip", feature = "xz", feature = "bzip2", feature = "zip")))]
+    #[test]
+    fn an_archive_whose_codec_is_left_out_is_unsupported() {
+        let dir = tempfile::tempdir().unwrap();
+        for magic in [GZIP_MAGIC, XZ_MAGIC, BZ2_MAGIC, ZIP_MAGIC] {
+            let src = dir.path().join("tool.archive");
+            std::fs::write(&src, [magic, b"rest of the stream"].concat()).unwrap();
+            let dest = dir.path().join("out");
+            let result = crate::extract::extract_auto(
+                &src,
+                &dest,
+                &portable_extractors(),
+                &crate::report::Report::silent(),
+            );
+            assert!(
+                matches!(result, Err(Error::UnsupportedArchive(_))),
+                "{magic:?}: {result:?}"
+            );
+            assert!(!dest.join("tool.archive").exists());
+        }
     }
 
     #[test]

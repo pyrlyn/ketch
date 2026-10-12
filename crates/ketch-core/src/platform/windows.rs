@@ -508,18 +508,7 @@ impl Platform for WindowsPlatform {
     }
 
     fn extractors(&self) -> Vec<Box<dyn Extractor>> {
-        use crate::extract::archive::*;
-        vec![
-            Box::new(TarGzExtractor),
-            Box::new(TarXzExtractor),
-            Box::new(TarBz2Extractor),
-            Box::new(TarExtractor),
-            Box::new(ZipExtractor),
-            Box::new(GzFileExtractor),
-            Box::new(XzFileExtractor),
-            Box::new(Bz2FileExtractor),
-            Box::new(RawBinaryExtractor),
-        ]
+        crate::extract::archive::portable_extractors()
     }
 
     fn bin_candidates(&self, payload: &Path, kind: PackageKind, package: &str) -> Vec<PathBuf> {

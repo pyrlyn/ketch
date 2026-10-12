@@ -32,7 +32,7 @@ fi
 
 lint() {
     echo "==> ketch-core $*" >&2
-    cargo clippy --locked -p ketch-core --lib --no-default-features "$@" -- -D warnings
+    cargo clippy --locked -p ketch-core --lib --tests --no-default-features "$@" -- -D warnings
 }
 
 lint
