@@ -25,6 +25,7 @@ pub mod doctor;
 pub mod error;
 pub mod extra;
 pub mod extract;
+pub(crate) mod fsio;
 pub mod hooks;
 pub(crate) mod http;
 pub mod import;

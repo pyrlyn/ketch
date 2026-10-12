@@ -32,7 +32,6 @@ use crate::model::{InstalledPackage, PackageRef};
 use crate::state::State;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// Bumped only when the on-disk shape changes incompatibly.
@@ -262,22 +261,7 @@ impl Lockfile {
     /// Write it out, atomically, so an interrupted write cannot leave a
     /// half-parsed lockfile where a whole one used to be.
     pub fn save(&self, path: &Path) -> Result<()> {
-        let text = self.to_toml()?;
-        let parent = path.parent().filter(|p| !p.as_os_str().is_empty());
-        let parent = parent.unwrap_or(Path::new("."));
-        std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
-        let mut staged =
-            tempfile::NamedTempFile::new_in(parent).map_err(|e| Error::io(parent, e))?;
-        staged
-            .write_all(text.as_bytes())
-            .map_err(|e| Error::io(staged.path(), e))?;
-        staged.flush().map_err(|e| Error::io(staged.path(), e))?;
-        staged
-            .as_file()
-            .sync_all()
-            .map_err(|e| Error::io(staged.path(), e))?;
-        staged.persist(path).map_err(|e| Error::io(path, e.error))?;
-        Ok(())
+        crate::fsio::write_private(path, self.to_toml()?)
     }
 
     /// The entry for an installed package, matched on source rather than name.

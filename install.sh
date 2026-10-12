@@ -36,6 +36,7 @@ Install ketch, a Rust CLI for managing GitHub-released apps.
 
 OPTIONS:
   --version <TAG>      Install specific version (default: latest)
+  --pre                Install the newest release, prereleases included
   --root <DIR>         Ketch store root (default: $DEFAULT_ROOT)
   --install-dir <DIR>  Bootstrap location: ketch places a link here to the
                        installed binary (default: <root>/bin)
@@ -59,6 +60,7 @@ ROOT=""
 INSTALL_DIR=""
 INSTALL_DIR_EXPLICIT=0
 NO_MODIFY_PATH=0
+PRE=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -80,6 +82,10 @@ while [ $# -gt 0 ]; do
       ;;
     --no-modify-path)
       NO_MODIFY_PATH=1
+      shift
+      ;;
+    --pre)
+      PRE=1
       shift
       ;;
     --help|-h)
@@ -167,10 +173,29 @@ case "${ARCH}" in
 esac
 TARBALL_NAME="ketch-${TARBALL_ARCH}-${TRIPLE_VENDOR_OS}.tar.gz"
 
+# The first CLI tag in a `/releases` listing, read from stdin. GitHub lists
+# newest first, the same order `/releases/latest` picks from, so `--pre` only
+# widens that choice to prereleases. The repository also releases the macOS
+# app under `desktop-v*` (and its `desktop-appcast` feed); only `v<digit>`
+# tags are this installer's. Splitting on commas puts each `"tag_name"` on a
+# line of its own whether or not the JSON is pretty-printed.
+newest_cli_tag() {
+  tr ',' '\n' \
+    | grep '"tag_name"' \
+    | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' \
+    | grep '^v[0-9]' \
+    | head -1 || true
+}
+
 # Resolve version
 if [ -z "${VERSION}" ]; then
-  echo "Fetching latest release..."
-  RELEASES_URL="https://api.github.com/repos/${SELF_REPO}/releases/latest"
+  if [ "${PRE}" -eq 1 ]; then
+    echo "Fetching newest release, prereleases included..."
+    RELEASES_URL="https://api.github.com/repos/${SELF_REPO}/releases?per_page=100"
+  else
+    echo "Fetching latest release..."
+    RELEASES_URL="https://api.github.com/repos/${SELF_REPO}/releases/latest"
+  fi
 
   # Try curl first, fall back to wget
   if command -v curl >/dev/null 2>&1; then
@@ -191,7 +216,11 @@ if [ -z "${VERSION}" ]; then
   # Parse tag_name without jq using grep/sed
   # `|| true`: a grep that matches nothing exits 1, and under `set -e` with
   # `pipefail` that would abort here instead of reaching the check below.
-  VERSION="$(printf '%s\n' "${RELEASE_JSON}" | grep '"tag_name"' | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' | head -1 || true)"
+  if [ "${PRE}" -eq 1 ]; then
+    VERSION="$(printf '%s\n' "${RELEASE_JSON}" | newest_cli_tag)"
+  else
+    VERSION="$(printf '%s\n' "${RELEASE_JSON}" | grep '"tag_name"' | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' | head -1 || true)"
+  fi
 
   if [ -z "${VERSION}" ]; then
     echo "${RED}Error: Could not determine latest version.${NC}" >&2
@@ -289,11 +318,19 @@ else
   fi
 fi
 
-# Create the root bin dir the installed binary will live in.
+# Create the root bin dir the installed binary will live in. A root this
+# script creates is marked as ketch's, so `ketch self uninstall` may empty it;
+# one that already existed (`~/.local`, `/usr/local`) may hold other programs.
+NEW_ROOT=""
+[ -e "${ROOT}" ] || NEW_ROOT=1
 mkdir -p "${ROOT}/bin" || {
   echo "${RED}Error: Failed to create install directory: ${ROOT}/bin${NC}" >&2
   exit 1
 }
+if [ -n "${NEW_ROOT}" ]; then
+  echo "ketch created this directory; \`ketch self uninstall\` removes it with everything inside." \
+    >"${ROOT}/.ketch-root" || true
+fi
 
 # Check if this is an upgrade
 INSTALL_PATH="${ROOT}/bin/${BINARY_NAME}"

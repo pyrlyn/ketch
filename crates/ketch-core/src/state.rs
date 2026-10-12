@@ -87,34 +87,12 @@ impl State {
     }
 
     pub fn save_path(&self, path: &Path) -> Result<()> {
-        let parent = path.parent().unwrap_or(Path::new("."));
-        std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| Error::parse("state".to_string(), e.to_string()))?;
-        let mut staged =
-            tempfile::NamedTempFile::new_in(parent).map_err(|e| Error::io(parent, e))?;
-        staged
-            .write_all(json.as_bytes())
-            .map_err(|e| Error::io(staged.path(), e))?;
-        staged
-            .write_all(b"\n")
-            .map_err(|e| Error::io(staged.path(), e))?;
-        staged.flush().map_err(|e| Error::io(staged.path(), e))?;
-        // The rename is atomic, but only over whatever the file actually
-        // contains. Without this the kernel is free to record the rename and
-        // lose the bytes, leaving a zero-length state file — which is to say,
-        // an empty list of installed packages.
-        staged
-            .as_file()
-            .sync_all()
-            .map_err(|e| Error::io(staged.path(), e))?;
-        staged.persist(path).map_err(|e| Error::io(path, e.error))?;
-        // Then make the rename itself durable. Best effort: some filesystems
-        // refuse to fsync a directory, and that is not a reason to fail a save.
-        if let Ok(dir) = std::fs::File::open(parent) {
-            let _ = dir.sync_all();
-        }
-        Ok(())
+        // Durable by default in fs-kit: without the fsync the kernel is free to
+        // record the rename and lose the bytes, leaving a zero-length state
+        // file, which is to say an empty list of installed packages.
+        crate::fsio::write_private(path, format!("{json}\n"))
     }
 
     pub fn get(&self, name: &str) -> Option<&InstalledPackage> {
@@ -226,60 +204,41 @@ impl Lock {
             wrote_file: false,
         };
 
-        for attempt in 0..2 {
-            match std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(path)
-            {
-                Ok(mut file) => {
-                    let _ = write!(file, "{me}");
-                    lock.wrote_file = true;
-                    return Ok(lock);
+        for _ in 0..3 {
+            if create_exclusive(path, me).map_err(|e| Error::io(path, e))? {
+                lock.wrote_file = true;
+                return Ok(lock);
+            }
+            match judge(path, me) {
+                // Released between the two calls: try again.
+                None => continue,
+                Some(Holder::Live(pid)) => {
+                    return Err(Error::Busy {
+                        pid,
+                        lock: path.to_path_buf(),
+                    })
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    let holder = std::fs::read_to_string(path)
-                        .ok()
-                        .and_then(|t| t.trim().parse::<u32>().ok());
-                    match holder {
-                        // Our own pid with no in-process claim (checked above)
-                        // is a leftover: a crashed run whose pid was reused.
-                        Some(pid) if pid != me && process_alive(pid) => {
+                Some(Holder::Stale(pid)) => {
+                    report.debug(&format!(
+                        "clearing stale lock {} ({})",
+                        path.display(),
+                        pid.map(|p| format!("pid {p} is gone"))
+                            .unwrap_or_else(|| "unreadable".into())
+                    ));
+                    match reclaim(path, me).map_err(|e| Error::io(path, e))? {
+                        Reclaim::Taken => {
+                            lock.wrote_file = true;
+                            return Ok(lock);
+                        }
+                        Reclaim::Busy(pid) => {
                             return Err(Error::Busy {
-                                pid: Some(pid),
+                                pid,
                                 lock: path.to_path_buf(),
                             })
                         }
-                        // A crashed run left the file behind. Reclaim it by
-                        // renaming rather than unlinking: `rename` fails if the
-                        // file is already gone, so of two processes that both
-                        // judge the lock stale exactly one can claim it. Plain
-                        // `remove_file` succeeds for both — including for the
-                        // one that would delete the winner's fresh lock — and
-                        // they would then both proceed.
-                        other => {
-                            if attempt == 0 {
-                                report.debug(&format!(
-                                    "clearing stale lock {} ({})",
-                                    path.display(),
-                                    other
-                                        .map(|p| format!("pid {p} is gone"))
-                                        .unwrap_or_else(|| "unreadable".into())
-                                ));
-                                let reclaimed = path.with_extension(format!("stale.{me}"));
-                                if std::fs::rename(path, &reclaimed).is_ok() {
-                                    let _ = std::fs::remove_file(&reclaimed);
-                                }
-                                continue;
-                            }
-                            return Err(Error::Busy {
-                                pid: None,
-                                lock: path.to_path_buf(),
-                            });
-                        }
+                        Reclaim::Again => continue,
                     }
                 }
-                Err(e) => return Err(Error::io(path, e)),
             }
         }
         Err(Error::Busy {
@@ -289,9 +248,134 @@ impl Lock {
     }
 }
 
+/// An empty or unreadable lock or reclaim file younger than this belongs to
+/// a process still writing its pid, not to one that crashed.
+const UNREADABLE_GRACE: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Who a lock file names, as far as this process can tell.
+enum Holder {
+    Live(Option<u32>),
+    Stale(Option<u32>),
+}
+
+/// `None` when the file is gone.
+fn judge(path: &Path, me: u32) -> Option<Holder> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(_) => String::new(),
+    };
+    match text.trim().parse::<u32>() {
+        // Our own pid with no in-process claim (the caller holds that claim)
+        // is a leftover: a crashed run whose pid was reused.
+        Ok(pid) if pid != me && process_alive(pid) => Some(Holder::Live(Some(pid))),
+        Ok(pid) => Some(Holder::Stale(Some(pid))),
+        Err(_) => {
+            let age = std::fs::metadata(path)
+                .and_then(|m| m.modified())
+                .ok()?
+                .elapsed()
+                .unwrap_or_default();
+            Some(if age < UNREADABLE_GRACE {
+                Holder::Live(None)
+            } else {
+                Holder::Stale(None)
+            })
+        }
+    }
+}
+
+/// Create `path` holding `me`, failing rather than replacing it. `false` when
+/// it already exists.
+///
+/// The pid is written to a private file first and hard-linked into place, so
+/// the file is never seen empty: with `create_new` and a write after it, a
+/// second process can read the empty file in between, call it stale and take
+/// the live lock away.
+fn create_exclusive(path: &Path, me: u32) -> std::io::Result<bool> {
+    static STAGED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = STAGED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let staged = path.with_extension(format!("new.{me}.{n}"));
+    std::fs::write(&staged, me.to_string())?;
+    let linked = std::fs::hard_link(&staged, path);
+    let _ = std::fs::remove_file(&staged);
+    match linked {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+        // A file system without hard links (FAT, some network shares). The
+        // pid then lands a moment after the file, which `UNREADABLE_GRACE`
+        // covers.
+        Err(_) => match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+        {
+            Ok(mut file) => {
+                let _ = write!(file, "{me}");
+                Ok(true)
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+            Err(e) => Err(e),
+        },
+    }
+}
+
+enum Reclaim {
+    Taken,
+    Busy(Option<u32>),
+    Again,
+}
+
+/// Replace a stale lock file with ours, as the one process allowed to.
+///
+/// Renaming or deleting it on the strength of an earlier read is a race: by
+/// then another process may have reclaimed it and written a fresh lock, which
+/// would be thrown away, and both would run. So the right to reclaim is a
+/// second file, taken the same exclusive way. Only its holder removes the lock
+/// file, and judges it again first; nothing else can replace a lock file that
+/// exists, so what it judged is what it removes.
+fn reclaim(path: &Path, me: u32) -> std::io::Result<Reclaim> {
+    let right = path.with_extension("reclaim");
+    if !create_exclusive(&right, me)? {
+        // Held for microseconds, so one that is old as well as orphaned was
+        // left by a crash mid-reclaim. Clearing it is still a race with
+        // another process clearing it, which is why this attempt stops here.
+        let old = std::fs::metadata(&right)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age >= UNREADABLE_GRACE);
+        if old && matches!(judge(&right, me), Some(Holder::Stale(_))) {
+            let _ = std::fs::remove_file(&right);
+        }
+        return Ok(Reclaim::Busy(None));
+    }
+    let outcome = match judge(path, me) {
+        None => Ok(Reclaim::Again),
+        Some(Holder::Live(pid)) => Ok(Reclaim::Busy(pid)),
+        Some(Holder::Stale(_)) => match std::fs::remove_file(path) {
+            Ok(()) => create_exclusive(path, me).map(|taken| {
+                if taken {
+                    Reclaim::Taken
+                } else {
+                    Reclaim::Again
+                }
+            }),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Reclaim::Again),
+            Err(e) => Err(e),
+        },
+    };
+    let _ = std::fs::remove_file(&right);
+    outcome
+}
+
 impl Drop for Lock {
     fn drop(&mut self) {
-        if self.wrote_file {
+        // Only while it still names us: a file another process wrote is
+        // that process's to remove.
+        let ours = std::fs::read_to_string(&self.path)
+            .is_ok_and(|t| t.trim().parse::<u32>().ok() == Some(std::process::id()));
+        if self.wrote_file && ours {
             let _ = std::fs::remove_file(&self.path);
         }
         // After the file is gone, so a waiting thread never finds the claim
@@ -688,6 +772,128 @@ mod tests {
         assert_eq!(
             loaded.get("plain").unwrap().channel,
             crate::model::Channel::Stable
+        );
+    }
+
+    #[test]
+    fn an_empty_lock_file_is_busy_until_it_is_old() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("lock");
+        // What a holder that has created the file but not yet written its
+        // pid looks like from outside.
+        let file = std::fs::File::create(&path).unwrap();
+        assert!(matches!(
+            Lock::acquire_path(&path, &crate::report::Report::silent()),
+            Err(Error::Busy { pid: None, .. })
+        ));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "");
+
+        let old = std::time::SystemTime::now() - UNREADABLE_GRACE * 2;
+        file.set_modified(old).unwrap();
+        drop(file);
+        drop(Lock::acquire_path(&path, &crate::report::Report::silent()).unwrap());
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn a_late_reclaim_never_takes_a_fresh_lock_away() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("lock");
+        std::fs::write(&path, "999999").unwrap();
+        // This process reclaims the dead pid's lock first...
+        let held = Lock::acquire_path(&path, &crate::report::Report::silent()).unwrap();
+        // ...while another, which judged the same file stale a moment
+        // earlier, reclaims now.
+        let other_pid = 999_998;
+        match reclaim(&path, other_pid).unwrap() {
+            Reclaim::Busy(pid) => assert_eq!(pid, Some(std::process::id())),
+            _ => panic!("a live lock was reclaimed"),
+        }
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            std::process::id().to_string()
+        );
+        drop(held);
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn dropping_a_lock_leaves_a_file_another_process_wrote() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("lock");
+        let held = Lock::acquire_path(&path, &crate::report::Report::silent()).unwrap();
+        std::fs::remove_file(&path).unwrap();
+        std::fs::write(&path, "1").unwrap();
+        drop(held);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "1");
+    }
+
+    /// Run by [`processes_never_hold_the_lock_together`] in child processes;
+    /// a plain test run finds no variable and does nothing.
+    #[test]
+    fn lock_contender() {
+        let Some(dir) = std::env::var_os("KETCH_TEST_LOCK_CONTENDER").map(PathBuf::from) else {
+            return;
+        };
+        let lock = dir.join("lock");
+        let inside = dir.join("inside");
+        for round in 0..150 {
+            let Ok(held) = Lock::acquire_path(&lock, &crate::report::Report::silent()) else {
+                continue;
+            };
+            if std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&inside)
+                .is_err()
+            {
+                std::fs::write(dir.join(format!("overlap.{}", std::process::id())), "").unwrap();
+            }
+            std::thread::sleep(std::time::Duration::from_micros(300));
+            let _ = std::fs::remove_file(&inside);
+            if round % 7 == 0 {
+                // A crash: the file stays behind naming a pid that is gone,
+                // and every other contender judges it stale at once.
+                std::fs::write(&lock, "999999").unwrap();
+                std::mem::forget(held);
+                held_release(&lock);
+            }
+        }
+    }
+
+    /// What a crashed process leaves: no claim in `HELD`, the file on disk.
+    fn held_release(path: &Path) {
+        held().retain(|p| p != path);
+    }
+
+    #[test]
+    fn processes_never_hold_the_lock_together() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("lock"), "999999").unwrap();
+        let exe = std::env::current_exe().unwrap();
+        let children: Vec<_> = (0..6)
+            .map(|_| {
+                std::process::Command::new(&exe)
+                    .args(["--exact", "state::tests::lock_contender", "--nocapture"])
+                    .env("KETCH_TEST_LOCK_CONTENDER", dir.path())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn()
+                    .unwrap()
+            })
+            .collect();
+        for mut child in children {
+            assert!(child.wait().unwrap().success());
+        }
+        let overlaps: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.starts_with("overlap."))
+            .collect();
+        assert!(
+            overlaps.is_empty(),
+            "two processes held the lock: {overlaps:?}"
         );
     }
 }

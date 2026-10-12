@@ -63,7 +63,8 @@ pub fn offer_to_stop(paths: &[PathBuf], yes: bool, cx: &Ctx<'_>) {
     }
 }
 
-/// Processes running from, or with a command line naming, one of `paths`.
+/// Processes running one of `paths`: as their executable, or as the script
+/// an interpreter's command line names.
 /// A listing that had to be stopped is a warning on `report`.
 pub fn using(paths: &[PathBuf], report: &Report) -> Vec<Occupant> {
     let keys = unique_keys(paths);
@@ -87,7 +88,7 @@ fn unique_keys(paths: &[PathBuf]) -> Vec<(PathBuf, String)> {
 }
 
 fn path_key(p: &Path) -> String {
-    let p = dunce::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let p = fs_kit::path::canon(p);
     if cfg!(windows) {
         crate::shell::windows_path_key(&p)
     } else {
@@ -319,27 +320,68 @@ fn matches_exe(exe: &Path, candidate: &Path, key: &str) -> bool {
     exe_key.starts_with(&format!("{key}/")) || exe_key.starts_with(&format!("{key}\\"))
 }
 
-#[cfg(windows)]
-fn cmd_hits(cmdline: &str, candidate: &Path, key: &str) -> bool {
-    // Windows CommandLine casing is arbitrary; keys from `path_key` are folded.
-    let cmdline = cmdline.to_ascii_lowercase();
-    let raw = candidate
-        .to_string_lossy()
-        .to_ascii_lowercase()
-        .replace('/', "\\");
-    if !raw.is_empty() && cmdline.contains(raw.as_str()) {
-        return true;
-    }
-    !key.is_empty() && cmdline.contains(key)
+/// Whether `candidate` is a compiled program. The OS then runs it as the
+/// process's own executable, so the executable (and on Linux an open file)
+/// is the evidence; a command line that merely names it — an editor, a
+/// shell — is not. A script is run by an interpreter, and only its command
+/// line says which.
+#[cfg(any(target_os = "linux", windows, test))]
+fn is_native(candidate: &Path) -> bool {
+    use std::io::Read;
+    let mut head = [0u8; 4];
+    let read = std::fs::File::open(candidate).and_then(|mut f| f.read(&mut head));
+    let head = &head[..read.unwrap_or(0)];
+    head.starts_with(b"MZ")
+        || head == b"\x7fELF"
+        || matches!(
+            head,
+            [0xfe, 0xed, 0xfa, 0xce | 0xcf]
+                | [0xce | 0xcf, 0xfa, 0xed, 0xfe]
+                | [0xca, 0xfe, 0xba, 0xbe]
+        )
 }
 
-#[cfg(target_os = "linux")]
+/// Command-line evidence counts only for a script file, and only for an
+/// argument that is exactly its path: `…/bin/rga` and `…/bin/rg-helper` are
+/// not `…/bin/rg`.
+#[cfg(any(target_os = "linux", windows, test))]
+fn script_named(candidate: &Path, names: impl FnOnce() -> bool) -> bool {
+    candidate.is_file() && !is_native(candidate) && names()
+}
+
+/// Windows hands over one command line, quoted however the launcher chose —
+/// cmd wraps a script in two pairs of quotes — so instead of splitting it,
+/// a match must be bounded by whitespace, a quote or either end.
+#[cfg(any(windows, test))]
 fn cmd_hits(cmdline: &str, candidate: &Path, key: &str) -> bool {
-    let raw = candidate.to_string_lossy();
-    if !raw.is_empty() && cmdline.contains(raw.as_ref()) {
-        return true;
-    }
-    !key.is_empty() && cmdline.contains(key)
+    script_named(candidate, || {
+        // Windows CommandLine casing is arbitrary; keys from `path_key` are folded.
+        let cmdline = cmdline.to_ascii_lowercase();
+        let raw = candidate
+            .to_string_lossy()
+            .to_ascii_lowercase()
+            .replace('/', "\\");
+        whole_arg_in(&cmdline, &raw) || whole_arg_in(&cmdline, key)
+    })
+}
+
+#[cfg(any(windows, test))]
+fn whole_arg_in(cmdline: &str, needle: &str) -> bool {
+    let bound = |c: Option<char>| c.is_none_or(|c| c.is_whitespace() || c == '"');
+    !needle.is_empty()
+        && cmdline.match_indices(needle).any(|(i, m)| {
+            bound(cmdline[..i].chars().next_back()) && bound(cmdline[i + m.len()..].chars().next())
+        })
+}
+
+/// `args` is `/proc/<pid>/cmdline`: the arguments, each ended by a NUL.
+#[cfg(any(target_os = "linux", test))]
+fn args_hit(args: &str, candidate: &Path, key: &str) -> bool {
+    script_named(candidate, || {
+        let raw = candidate.to_string_lossy();
+        args.split('\0')
+            .any(|arg| !arg.is_empty() && (arg == raw || arg == key))
+    })
 }
 
 #[cfg(target_os = "linux")]
@@ -356,12 +398,12 @@ fn list(keys: &[(PathBuf, String)], _report: &Report) -> Vec<Occupant> {
         let base = entry.path();
         let exe = std::fs::read_link(base.join("exe")).ok();
         let cmdline = std::fs::read(base.join("cmdline")).unwrap_or_default();
-        let cmdline = String::from_utf8_lossy(&cmdline).replace('\0', " ");
+        let cmdline = String::from_utf8_lossy(&cmdline);
         for (path, key) in keys {
             let exe_hit = exe
                 .as_deref()
                 .is_some_and(|exe| matches_exe(exe, path, key));
-            if exe_hit || cmd_hits(&cmdline, path, key) || linux_fd_hits(&base, path, key) {
+            if exe_hit || linux_fd_hits(&base, path, key) || args_hit(&cmdline, path, key) {
                 found.push(Occupant {
                     pid,
                     path: path.clone(),
@@ -673,10 +715,72 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn cmd_hits_folds_command_line_case() {
-        let path = PathBuf::from(r"C:\Users\User\.ketch\bin\tool.cmd");
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("tool.cmd");
+        std::fs::write(&path, "@echo off\r\n").unwrap();
         let key = path_key(&path);
-        let cmdline = r#"C:\WINDOWS\system32\cmd.exe /c "C:\Users\User\.ketch\bin\TOOL.CMD""#;
-        assert!(cmd_hits(cmdline, &path, &key));
+        let shouted = path.display().to_string().to_ascii_uppercase();
+        let cmdline = format!(r#"C:\WINDOWS\system32\cmd.exe /c "{shouted}""#);
+        assert!(cmd_hits(&cmdline, &path, &key));
+    }
+
+    /// A script, with its path spelled the way Windows command lines are.
+    fn script(dir: &Path, name: &str) -> (PathBuf, String) {
+        let path = dir.join(name);
+        std::fs::write(&path, "#!/bin/sh\n").unwrap();
+        let spelled = path.display().to_string().replace('/', "\\");
+        (path, spelled)
+    }
+
+    #[test]
+    fn a_neighbour_whose_name_extends_the_path_is_not_an_occupant() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (rg, spelled) = script(tmp.path(), "rg");
+        let key = path_key(&rg);
+        for cmdline in [
+            format!(r#""{spelled}a" --files"#),
+            format!("{spelled}-helper"),
+            format!(r"{spelled}.exe"),
+            format!(r"{spelled}\sub"),
+        ] {
+            assert!(!cmd_hits(&cmdline, &rg, &key), "{cmdline}");
+        }
+        let raw = rg.display().to_string();
+        for args in [format!("{raw}a\0--files\0"), format!("sh\0{raw}-helper\0")] {
+            assert!(!args_hit(&args, &rg, &key), "{args:?}");
+        }
+    }
+
+    #[test]
+    fn a_script_named_as_a_whole_argument_is_an_occupant() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (tool, spelled) = script(tmp.path(), "tool.cmd");
+        let key = path_key(&tool);
+        // How Rust's `Command` starts a batch file: the path in two pairs of quotes.
+        for cmdline in [
+            format!(r#"C:\WINDOWS\system32\cmd.exe /e:ON /v:OFF /d /c ""{spelled}" arg""#),
+            format!("cmd /c {spelled} arg"),
+            format!(r#"cmd /c "{spelled}""#),
+        ] {
+            assert!(cmd_hits(&cmdline, &tool, &key), "{cmdline}");
+        }
+        let raw = tool.display().to_string();
+        assert!(args_hit(&format!("/bin/sh\0{raw}\0--flag\0"), &tool, &key));
+    }
+
+    #[test]
+    fn a_program_named_on_another_command_line_is_not_an_occupant() {
+        let tmp = tempfile::tempdir().unwrap();
+        let rg = tmp.path().join("rg");
+        let spelled = rg.display().to_string().replace('/', "\\");
+        let key = path_key(&rg);
+        for magic in [&b"\x7fELF"[..], b"MZ\x90\0", &[0xcf, 0xfa, 0xed, 0xfe]] {
+            std::fs::write(&rg, magic).unwrap();
+            // An editor or a shell holding the path, not running it.
+            assert!(!cmd_hits(&format!("notepad.exe {spelled}"), &rg, &key));
+            let raw = rg.display().to_string();
+            assert!(!args_hit(&format!("vim\0{raw}\0"), &rg, &key));
+        }
     }
 
     #[cfg(windows)]

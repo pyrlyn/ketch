@@ -276,6 +276,17 @@ pub fn prepare(
     // Nothing is downloaded until we know the install is actually wanted.
     let existing = state.get(&manifest.name).cloned();
     if let Some(old) = &existing {
+        // State is keyed by name alone. Another project under the same name
+        // would take over this one's links, run its update hooks and mix two
+        // sources' versions in one retained list — a replacement nobody asked
+        // for by name.
+        if !crate::manifest::same_source(&old.source, &manifest.source) {
+            return Err(Error::msg(format!(
+                "`{}` is already installed from {}; {} would replace it. \
+                 Install it under another name with --name, or uninstall `{}` first",
+                old.name, old.source, manifest.source, old.name
+            )));
+        }
         if old.pinned && !matches!(req.spec.version, VersionSpec::Exact(_)) {
             return Err(Error::Pinned {
                 name: old.name.clone(),
@@ -712,8 +723,12 @@ pub fn commit(cx: &Ctx<'_>, state: &mut State, prepared: Prepared) -> Result<Ins
 
     // --- place --------------------------------------------------------------
     // Reinstalling the same version writes into the directory the current
-    // install already occupies, and failing there must not delete it.
-    let in_place = existing.as_ref().is_some_and(|p| p.prefix == store_dir);
+    // install already occupies, and failing there must not delete it. A
+    // retained copy of this version is the same: placement restores it on
+    // failure, and deleting it afterwards would lose the rollback target.
+    let in_place = existing
+        .as_ref()
+        .is_some_and(|p| p.prefix == store_dir || p.retained.iter().any(|r| r.prefix == store_dir));
     let mut orphan = ScopedDir((!in_place).then(|| store_dir.clone()));
     let extras = extra_placements(platform.as_ref(), &manifest.extra_paths)?;
     let remembered = existing.as_ref().and_then(|p| p.bin_choice.as_deref());
@@ -771,7 +786,7 @@ pub fn commit(cx: &Ctx<'_>, state: &mut State, prepared: Prepared) -> Result<Ins
         if let Err(e) = platform.unplace(&stale, report) {
             report.warn(&format!("could not remove old links for {}: {e}", old.name));
         }
-        retain_replaced(cfg, old, &store_dir, &mut retained);
+        retain_replaced(cfg, old, &store_dir, &release.version, &mut retained);
     }
 
     if let (Some(pick), crate::model::ManifestOrigin::User(path)) = (&pick, &origin) {
@@ -1316,7 +1331,10 @@ pub fn prune(cx: &Ctx<'_>, state: &mut State, name: &str, keep: u32) -> Result<V
         if previous.prefix.is_dir() && kept.len() < keep {
             kept.push(previous);
         } else {
-            if previous.prefix.exists() {
+            // A state file written before retention dropped the live version
+            // can still list it; the entry goes, the directory every link
+            // points into stays.
+            if previous.prefix.exists() && previous.prefix != pkg.prefix {
                 remove_store_dir(cfg, &previous.prefix, report);
             }
             dropped.push(previous.version);
@@ -1721,13 +1739,23 @@ fn trust_result(verdict: TrustVerdict) -> TrustResult {
 /// Record the replaced prefix instead of deleting it. Missing or out-of-store
 /// prefixes are not eligible: promising a version that is already gone is
 /// worse than keeping nothing.
+///
+/// The new version leaves the list too: upgrading back to a version kept
+/// since a rollback makes its prefix the live one, and a retained entry still
+/// naming it would let `prune` delete the store every link points into.
 fn retain_replaced(
     cfg: &Config,
     old: &InstalledPackage,
     new_prefix: &Path,
+    new_version: &Version,
     retained: &mut Vec<RetainedVersion>,
 ) {
-    retained.retain(|r| r.prefix != old.prefix && r.version != old.version);
+    retained.retain(|r| {
+        r.prefix != old.prefix
+            && r.version != old.version
+            && r.prefix != new_prefix
+            && r.version != *new_version
+    });
     if old.prefix == new_prefix {
         return;
     }
@@ -1815,6 +1843,11 @@ fn sweep_swap_leftovers(
 
 /// `store/<name>/` when `name` is one plain path component and the folder
 /// exists inside the store after symlinks resolve.
+///
+/// The folder's own name on disk must be `name` byte for byte. A file system
+/// that folds case (APFS, NTFS) or drops a trailing dot (Windows) opens
+/// `store/ripgrep` for `RipGrep` or `ripgrep.`, and a lookup by path alone
+/// would hand an installed package's folder to whoever spelled it nearly.
 fn package_dir_candidate(cfg: &Config, name: &str) -> Option<PathBuf> {
     use std::path::Component;
     let mut components = Path::new(name).components();
@@ -1827,6 +1860,28 @@ fn package_dir_candidate(cfg: &Config, name: &str) -> Option<PathBuf> {
     let dir = cfg.store_dir.join(name);
     if dir.symlink_metadata().is_err() || !is_inside_store(&cfg.store_dir, &dir) {
         return None;
+    }
+    let spelled_so = std::fs::read_dir(&cfg.store_dir)
+        .ok()?
+        .flatten()
+        .any(|entry| entry.file_name() == std::ffi::OsStr::new(name));
+    spelled_so.then_some(dir)
+}
+
+/// `store/<name>/` when it is a folder no state entry accounts for: a
+/// candidate as `remove_package_dir` takes it, holding no prefix any installed
+/// package records. What `ketch uninstall` of an unknown name may offer to
+/// remove.
+pub fn leftover_package_dir(cfg: &Config, state: &State, name: &str) -> Option<PathBuf> {
+    let dir = package_dir_candidate(cfg, name)?;
+    let recorded = state
+        .packages
+        .values()
+        .flat_map(|p| std::iter::once(&p.prefix).chain(p.retained.iter().map(|r| &r.prefix)));
+    for prefix in recorded {
+        if *prefix == dir || is_inside_store(&dir, prefix) {
+            return None;
+        }
     }
     Some(dir)
 }
@@ -1854,7 +1909,10 @@ fn is_inside_store(store: &Path, prefix: &Path) -> bool {
     // When both exist, resolve symlinks so a decoy link inside the store
     // cannot point `remove_dir_all` at an outside victim. Prefer this before
     // the lexical walk: canonicalize also folds Windows short/long names.
-    if let (Ok(store), Ok(resolved)) = (dunce::canonicalize(store), dunce::canonicalize(prefix)) {
+    if let (Ok(store), Ok(resolved)) = (
+        fs_kit::path::canonicalize(store),
+        fs_kit::path::canonicalize(prefix),
+    ) {
         return crate::platform::path_is_strict_within(&resolved, &store);
     }
     // Lexical fallback for a missing payload (idempotent uninstall). A root
@@ -2265,6 +2323,39 @@ mod tests {
     }
 
     #[test]
+    fn a_folder_holding_a_recorded_prefix_is_not_a_leftover() {
+        let root = tempfile::tempdir().unwrap();
+        let cfg = Config::load(Some(root.path().join("ketch")), &Report::silent()).unwrap();
+        cfg.ensure_dirs().unwrap();
+        let prefix = cfg.package_dir("tool", "1.0.0");
+        std::fs::create_dir_all(&prefix).unwrap();
+        let orphan = cfg.store_dir.join("ghost");
+        std::fs::create_dir_all(&orphan).unwrap();
+        let mut state = State::default();
+        // Recorded under another key, so `State::find("tool")` misses it.
+        let mut pkg = installed("renamed", "1.0.0", prefix);
+        pkg.name = "renamed".into();
+        state.insert(pkg);
+
+        assert_eq!(leftover_package_dir(&cfg, &state, "tool"), None);
+        assert_eq!(leftover_package_dir(&cfg, &state, "ghost"), Some(orphan));
+    }
+
+    #[test]
+    fn a_name_spelled_differently_on_disk_is_not_a_candidate() {
+        let root = tempfile::tempdir().unwrap();
+        let cfg = Config::load(Some(root.path().join("ketch")), &Report::silent()).unwrap();
+        cfg.ensure_dirs().unwrap();
+        let folder = cfg.store_dir.join("tool");
+        std::fs::create_dir_all(&folder).unwrap();
+
+        for name in ["TOOL", "Tool"] {
+            assert_eq!(package_dir_candidate(&cfg, name), None, "{name}");
+        }
+        assert_eq!(package_dir_candidate(&cfg, "tool"), Some(folder));
+    }
+
+    #[test]
     fn a_missing_package_folder_is_not_a_candidate() {
         let root = tempfile::tempdir().unwrap();
         let cfg = Config::load(
@@ -2364,17 +2455,76 @@ mod tests {
         let old = installed("tool", "1.0.0", old_prefix.clone());
 
         let mut retained = Vec::new();
-        retain_replaced(&cfg, &old, &new_prefix, &mut retained);
+        let v2 = Version::parse("2.0.0");
+        retain_replaced(&cfg, &old, &new_prefix, &v2, &mut retained);
         assert_eq!(retained.len(), 1);
         assert_eq!(retained[0].version.to_string(), "1.0.0");
         assert_eq!(retained[0].prefix, old_prefix);
         assert!(old_prefix.is_dir(), "retention must not delete the prefix");
 
-        retain_replaced(&cfg, &old, &old_prefix, &mut retained);
+        retain_replaced(&cfg, &old, &old_prefix, &old.version, &mut retained);
         assert!(
             retained.is_empty(),
             "an in-place reinstall must not retain itself"
         );
+    }
+
+    #[test]
+    fn upgrading_back_to_a_retained_version_drops_its_retained_entry() {
+        let root = tempfile::tempdir().unwrap();
+        let cfg = Config::load(Some(root.path().join("ketch")), &Report::silent()).unwrap();
+        cfg.ensure_dirs().unwrap();
+        let v1_prefix = cfg.package_dir("tool", "1.0.0");
+        let v2_prefix = cfg.package_dir("tool", "2.0.0");
+        std::fs::create_dir_all(&v1_prefix).unwrap();
+        std::fs::create_dir_all(&v2_prefix).unwrap();
+        // What a rollback from 2.0.0 to 1.0.0 leaves behind.
+        let mut rolled_back = installed("tool", "1.0.0", v1_prefix.clone());
+        let mut retained = vec![RetainedVersion::from_installed(&installed(
+            "tool",
+            "2.0.0",
+            v2_prefix.clone(),
+        ))];
+        rolled_back.retained = retained.clone();
+
+        retain_replaced(
+            &cfg,
+            &rolled_back,
+            &v2_prefix,
+            &Version::parse("2.0.0"),
+            &mut retained,
+        );
+
+        assert_eq!(retained.len(), 1, "{retained:?}");
+        assert_eq!(retained[0].prefix, v1_prefix);
+    }
+
+    #[test]
+    fn prune_never_removes_the_live_prefix_a_stale_entry_names() {
+        let root = tempfile::tempdir().unwrap();
+        let cfg = Config::load(Some(root.path().join("ketch")), &Report::silent()).unwrap();
+        cfg.ensure_dirs().unwrap();
+        let report = Report::silent();
+        let cx = Ctx::new(&cfg, &report);
+        let live = cfg.package_dir("tool", "2.0.0");
+        let old = cfg.package_dir("tool", "1.0.0");
+        std::fs::create_dir_all(&live).unwrap();
+        std::fs::create_dir_all(&old).unwrap();
+        let mut pkg = installed("tool", "2.0.0", live.clone());
+        pkg.retained = vec![
+            RetainedVersion::from_installed(&installed("tool", "1.0.0", old.clone())),
+            RetainedVersion::from_installed(&installed("tool", "2.0.0", live.clone())),
+        ];
+        let mut state = State::default();
+        state.insert(pkg);
+
+        prune(&cx, &mut state, "tool", 1).unwrap();
+
+        assert!(live.is_dir(), "the live prefix must survive");
+        assert!(old.is_dir(), "the one kept version stays");
+        let kept = &state.get("tool").unwrap().retained;
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].prefix, old);
     }
 
     #[test]
@@ -2589,6 +2739,10 @@ mod tests {
         }
 
         fn stop_processes(&self, _occupants: &[crate::process::Occupant]) -> bool {
+            false
+        }
+
+        fn confirm_remove_leftover(&self, _path: &Path) -> bool {
             false
         }
     }

@@ -7,7 +7,7 @@
 //! Detection is by magic bytes, never by extension. Every entry path goes
 //! through `super::safe_member_path` before it is joined onto the destination.
 
-use super::{safe_member_path, Extractor};
+use super::{resolves_inside, safe_member_path, Extractor};
 use crate::error::{Error, Result};
 use std::fs::File;
 use std::io::{BufReader, Read};
@@ -96,38 +96,10 @@ fn materialize_symlink_as_copy(target: &Path, link: &Path) -> Result<()> {
 /// outer materialisation already flattened what the archive could express.
 #[cfg_attr(unix, allow(dead_code))]
 fn copy_dir_contents(src: &Path, dest: &Path) -> Result<()> {
-    std::fs::create_dir_all(dest).map_err(|e| Error::io(dest, e))?;
-    for entry in walkdir::WalkDir::new(src) {
-        let entry = entry.map_err(|e| Error::msg(format!("walking {}: {e}", src.display())))?;
-        let rel = pathdiff::diff_paths(entry.path(), src)
-            .filter(|r| !r.components().any(|c| matches!(c, Component::ParentDir)))
-            .ok_or_else(|| {
-                Error::msg(format!(
-                    "path {} escaped {}",
-                    entry.path().display(),
-                    src.display()
-                ))
-            })?;
-        if rel.as_os_str().is_empty() {
-            continue;
-        }
-        let target = dest.join(&rel);
-        let ft = entry.file_type();
-        if ft.is_dir() {
-            std::fs::create_dir_all(&target).map_err(|e| Error::io(&target, e))?;
-        } else if ft.is_symlink() {
-            // Nested links inside a materialised directory are left out: creating
-            // them would re-enter the Windows privilege problem this path exists
-            // to avoid, and following them could escape the payload root.
-            continue;
-        } else {
-            if let Some(parent) = target.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
-            }
-            std::fs::copy(entry.path(), &target).map_err(|e| Error::io(&target, e))?;
-        }
-    }
-    Ok(())
+    // Nested links inside a materialised directory are left out: creating
+    // them would re-enter the Windows privilege problem this path exists
+    // to avoid, and following them could escape the payload root.
+    fs_kit::tree::copy_tree(src, dest, fs_kit::tree::Links::Skip).map_err(|e| Error::fs_kit(src, e))
 }
 
 /// `.tar.gz` / `.tgz`
@@ -422,6 +394,7 @@ fn unpack_tar<R: Read>(reader: R, dest: &Path) -> Result<()> {
 
     let mut deferred_symlinks: Vec<(PathBuf, PathBuf)> = Vec::new();
     let mut deferred_hardlinks: Vec<(PathBuf, PathBuf)> = Vec::new();
+    let mut deferred_dir_modes: Vec<(PathBuf, u32)> = Vec::new();
 
     for entry in archive.entries().map_err(|e| Error::io(dest, e))? {
         let mut entry = entry.map_err(|e| Error::io(dest, e))?;
@@ -440,8 +413,13 @@ fn unpack_tar<R: Read>(reader: R, dest: &Path) -> Result<()> {
 
         match kind {
             EntryType::Directory => {
-                ensure_parent(dest, &out)?;
-                unpack_member(&mut entry, &out)?;
+                // Created here, its mode set only once everything is written:
+                // a 0555 directory listed before its children would refuse
+                // them, and one listed after would refuse removal later.
+                walk_inside(dest, &out, true)?;
+                if let Ok(mode) = entry.header().mode() {
+                    deferred_dir_modes.push((out, mode));
+                }
             }
             EntryType::Symlink => {
                 let target = entry
@@ -478,7 +456,19 @@ fn unpack_tar<R: Read>(reader: R, dest: &Path) -> Result<()> {
             _ => continue,
         }
     }
-    finish_deferred_links(dest, deferred_hardlinks, deferred_symlinks)
+    finish_deferred_links(dest, deferred_hardlinks, deferred_symlinks)?;
+    apply_dir_modes(deferred_dir_modes)
+}
+
+/// Set directory modes after every member is on disk, deepest first, always
+/// leaving the owner `rwx`: ketch has to be able to remove its own store on
+/// uninstall and upgrade, whatever the archive asked for.
+fn apply_dir_modes(mut dirs: Vec<(PathBuf, u32)>) -> Result<()> {
+    dirs.sort_by_key(|(path, _)| std::cmp::Reverse(path.components().count()));
+    for (path, mode) in dirs {
+        set_unix_mode(&path, payload_mode(mode) | 0o700)?;
+    }
+    Ok(())
 }
 
 fn unpack_member<R: Read>(entry: &mut tar::Entry<'_, R>, out: &Path) -> Result<()> {
@@ -504,8 +494,22 @@ fn finish_deferred_links(
         walk_inside(dest, &source, false)?;
         write_hardlink(&source, &out)?;
     }
+    let mut written = Vec::with_capacity(symlinks.len());
     for (out, target) in symlinks {
         write_symlink(&target, &out)?;
+        written.push((out, target));
+    }
+    // Only now, with every link in place, does a target mean what the kernel
+    // will make of it: a later link can reroute an earlier one.
+    for (out, target) in written {
+        let is_link = std::fs::symlink_metadata(&out).is_ok_and(|m| m.file_type().is_symlink());
+        if is_link && !resolves_inside(&out, dest) {
+            return Err(Error::msg(format!(
+                "refusing archive link {} -> {} that resolves outside the target directory",
+                out.display(),
+                target.display()
+            )));
+        }
     }
     Ok(())
 }
@@ -807,7 +811,7 @@ mod tests {
     use super::*;
     #[cfg(any(feature = "gzip", feature = "bzip2", feature = "zip"))]
     use std::io::Write;
-    #[cfg(all(unix, any(feature = "gzip", feature = "zip")))]
+    #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
     #[cfg(unix)]
@@ -860,6 +864,72 @@ mod tests {
         );
         // Member 2 would have been created here had the link been followed.
         assert!(!dest.join("e").exists(), "the symlink was resolved anyway");
+    }
+
+    /// Each target passes the lexical check alone; through `L -> .` they
+    /// all resolve above the payload.
+    #[cfg(unix)]
+    #[test]
+    fn a_link_routed_through_an_earlier_link_is_refused() {
+        for (name, target) in [("N", "L/.."), ("N", "L/L/../.."), ("sub/N", "../L/L/../..")] {
+            let mut builder = tar::Builder::new(Vec::new());
+            symlink_entry(&mut builder, "L", ".");
+            symlink_entry(&mut builder, name, target);
+            let archive = builder.into_inner().unwrap();
+
+            let outer = tempfile::tempdir().unwrap();
+            let dest = outer.path().join("dest");
+            std::fs::create_dir_all(&dest).unwrap();
+            let err = unpack_tar(&archive[..], &dest).unwrap_err();
+            assert!(
+                err.to_string().contains("resolves outside"),
+                "{target}: {err}"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolves_inside_follows_every_link_and_judges_dangling_ones_by_their_target() {
+        let outer = tempfile::tempdir().unwrap();
+        let root = outer.path().join("root");
+        std::fs::create_dir_all(root.join("bin")).unwrap();
+        std::fs::write(root.join("bin/tool"), b"x").unwrap();
+        let link = |name: &str, target: &str| {
+            std::os::unix::fs::symlink(target, root.join(name)).unwrap();
+            root.join(name)
+        };
+
+        assert!(crate::extract::resolves_inside(
+            &link("alias", "bin/tool"),
+            &root
+        ));
+        assert!(crate::extract::resolves_inside(
+            &link("dangling", "bin/missing"),
+            &root
+        ));
+        link("self", ".");
+        assert!(crate::extract::resolves_inside(
+            &root.join("self/self/bin/tool"),
+            &root
+        ));
+        assert!(!crate::extract::resolves_inside(
+            &link("up", "self/.."),
+            &root
+        ));
+        assert!(!crate::extract::resolves_inside(
+            &link("gone", "self/../nothing"),
+            &root
+        ));
+        assert!(!crate::extract::resolves_inside(
+            &link("abs", "/etc/passwd"),
+            &root
+        ));
+        link("loop-a", "loop-b");
+        assert!(!crate::extract::resolves_inside(
+            &link("loop-b", "loop-a"),
+            &root
+        ));
     }
 
     #[test]
@@ -1236,6 +1306,59 @@ mod tests {
         assert!(private.is_dir());
         let mode = std::fs::metadata(&private).unwrap().permissions().mode() & 0o7777;
         assert_eq!(mode, 0o700);
+    }
+
+    #[cfg(unix)]
+    fn tar_with_read_only_dir(dir_first: bool) -> Vec<u8> {
+        let mut builder = tar::Builder::new(Vec::new());
+        let dir = |builder: &mut tar::Builder<Vec<u8>>| {
+            let mut header = tar::Header::new_gnu();
+            header.set_entry_type(tar::EntryType::Directory);
+            header.set_size(0);
+            header.set_mode(0o555);
+            header.set_cksum();
+            builder
+                .append_data(&mut header, "ro/", &[] as &[u8])
+                .unwrap();
+        };
+        if dir_first {
+            dir(&mut builder);
+        }
+        let mut header = tar::Header::new_gnu();
+        header.set_size(2);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, "ro/file", &b"hi"[..])
+            .unwrap();
+        if !dir_first {
+            dir(&mut builder);
+        }
+        builder.into_inner().unwrap()
+    }
+
+    /// Nix and some reproducible tarballs mark directories 0555. Applied as
+    /// written, the mode either stops the children from being written or
+    /// leaves a tree nothing can remove.
+    #[cfg(unix)]
+    #[test]
+    fn a_read_only_directory_extracts_and_stays_removable_in_either_order() {
+        for dir_first in [true, false] {
+            let outer = tempfile::tempdir().unwrap();
+            let dest = outer.path().join("dest");
+            std::fs::create_dir_all(&dest).unwrap();
+
+            unpack_tar(&tar_with_read_only_dir(dir_first)[..], &dest)
+                .unwrap_or_else(|e| panic!("dir_first={dir_first}: {e}"));
+            assert_eq!(std::fs::read(dest.join("ro/file")).unwrap(), b"hi");
+            let mode = std::fs::metadata(dest.join("ro"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, 0o755, "dir_first={dir_first}: owner always gets rwx");
+            std::fs::remove_dir_all(&dest).unwrap_or_else(|e| panic!("dir_first={dir_first}: {e}"));
+        }
     }
 
     #[cfg(feature = "gzip")]

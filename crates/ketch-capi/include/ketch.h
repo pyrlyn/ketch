@@ -36,6 +36,10 @@ typedef int64_t (*KetchChooseFn)(const char *package, const char *candidates, vo
 // always `false`.
 typedef bool (*KetchStopFn)(const char *holders, void *user_data);
 
+// Whether to remove `path`, a package folder an earlier uninstall left
+// behind with nothing recorded in it. `false` keeps it. NULL: always `false`.
+typedef bool (*KetchConfirmFn)(const char *path, void *user_data);
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -161,7 +165,9 @@ char *ketch_upgrade(const struct KetchCore *core,
                     void *stop_data,
                     const struct KetchCancel *cancel_token);
 
-// Uninstall `names`. `ok`: an array of the `Package`s removed.
+// Uninstall `names`. `ok`: an array of the `Package`s removed. For a name
+// with no record, `confirm` is asked whether to remove the folder an earlier
+// uninstall left behind for it.
 //
 // # Safety
 //
@@ -175,6 +181,8 @@ char *ketch_uninstall(const struct KetchCore *core,
                       void *choose_data,
                       KetchStopFn stop,
                       void *stop_data,
+                      KetchConfirmFn confirm,
+                      void *confirm_data,
                       const struct KetchCancel *cancel_token);
 
 // What changed in `package` at `version`, or at its newest release when
