@@ -18,13 +18,16 @@ dist = false
 # `ketch-ffi` turns them off and names its own set. `scripts/core-features.sh`
 # builds the core with none of them and with each one alone.
 [features]
-default = ["stats", "push"]
+default = ["stats", "push", "trust"]
 # `stats.db`, the install history: diesel over a bundled SQLite. Without it an
 # install records nothing, and `stats::history`/`summary` do not exist.
 stats = ["dep:diesel", "dep:diesel_migrations", "dep:libsqlite3-sys"]
 # `ketch registry push`: octocrab, and the tokio runtime it blocks on. Without
 # it there is no `push` module.
 push = ["dep:octocrab", "dep:tokio"]
+# Publisher signatures: sigstore, minisign and OpenPGP. Without it a manifest's
+# `trust` table can never be satisfied, so `require` refuses the install.
+trust = ["dep:sigstore", "dep:minisign-verify", "dep:pgp"]
 
 [dependencies]
 # `shell::Shell` is a clap `ValueEnum` and `CompletionShell` maps onto
@@ -74,9 +77,9 @@ tokio = { version = "1", features = ["rt"], optional = true }
 # Publisher signatures (the manifest's `trust` table). Verification only:
 # sigstore without its signing, OCI and TUF-fetching halves, rPGP without
 # bzip2 (signatures are never compressed), minisign-verify has no deps.
-sigstore = { version = "0.14", default-features = false, features = ["verify"] }
-minisign-verify = "0.3"
-pgp = { version = "0.20", default-features = false }
+sigstore = { version = "0.14", default-features = false, features = ["verify"], optional = true }
+minisign-verify = { version = "0.3", optional = true }
+pgp = { version = "0.20", default-features = false, optional = true }
 
 [dev-dependencies]
 insta = "1.48"
