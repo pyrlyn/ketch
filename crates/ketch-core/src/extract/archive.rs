@@ -400,6 +400,7 @@ fn unpack_tar<R: Read>(reader: R, dest: &Path) -> Result<()> {
 
     let mut deferred_symlinks: Vec<(PathBuf, PathBuf)> = Vec::new();
     let mut deferred_hardlinks: Vec<(PathBuf, PathBuf)> = Vec::new();
+    let mut deferred_dir_modes: Vec<(PathBuf, u32)> = Vec::new();
 
     for entry in archive.entries().map_err(|e| Error::io(dest, e))? {
         let mut entry = entry.map_err(|e| Error::io(dest, e))?;
@@ -418,8 +419,13 @@ fn unpack_tar<R: Read>(reader: R, dest: &Path) -> Result<()> {
 
         match kind {
             EntryType::Directory => {
-                ensure_parent(dest, &out)?;
-                unpack_member(&mut entry, &out)?;
+                // Created here, its mode set only once everything is written:
+                // a 0555 directory listed before its children would refuse
+                // them, and one listed after would refuse removal later.
+                walk_inside(dest, &out, true)?;
+                if let Ok(mode) = entry.header().mode() {
+                    deferred_dir_modes.push((out, mode));
+                }
             }
             EntryType::Symlink => {
                 let target = entry
@@ -456,7 +462,19 @@ fn unpack_tar<R: Read>(reader: R, dest: &Path) -> Result<()> {
             _ => continue,
         }
     }
-    finish_deferred_links(dest, deferred_hardlinks, deferred_symlinks)
+    finish_deferred_links(dest, deferred_hardlinks, deferred_symlinks)?;
+    apply_dir_modes(deferred_dir_modes)
+}
+
+/// Set directory modes after every member is on disk, deepest first, always
+/// leaving the owner `rwx`: ketch has to be able to remove its own store on
+/// uninstall and upgrade, whatever the archive asked for.
+fn apply_dir_modes(mut dirs: Vec<(PathBuf, u32)>) -> Result<()> {
+    dirs.sort_by_key(|(path, _)| std::cmp::Reverse(path.components().count()));
+    for (path, mode) in dirs {
+        set_unix_mode(&path, payload_mode(mode) | 0o700)?;
+    }
+    Ok(())
 }
 
 fn unpack_member<R: Read>(entry: &mut tar::Entry<'_, R>, out: &Path) -> Result<()> {
@@ -1235,6 +1253,59 @@ mod tests {
         assert!(private.is_dir());
         let mode = std::fs::metadata(&private).unwrap().permissions().mode() & 0o7777;
         assert_eq!(mode, 0o700);
+    }
+
+    #[cfg(unix)]
+    fn tar_with_read_only_dir(dir_first: bool) -> Vec<u8> {
+        let mut builder = tar::Builder::new(Vec::new());
+        let dir = |builder: &mut tar::Builder<Vec<u8>>| {
+            let mut header = tar::Header::new_gnu();
+            header.set_entry_type(tar::EntryType::Directory);
+            header.set_size(0);
+            header.set_mode(0o555);
+            header.set_cksum();
+            builder
+                .append_data(&mut header, "ro/", &[] as &[u8])
+                .unwrap();
+        };
+        if dir_first {
+            dir(&mut builder);
+        }
+        let mut header = tar::Header::new_gnu();
+        header.set_size(2);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, "ro/file", &b"hi"[..])
+            .unwrap();
+        if !dir_first {
+            dir(&mut builder);
+        }
+        builder.into_inner().unwrap()
+    }
+
+    /// Nix and some reproducible tarballs mark directories 0555. Applied as
+    /// written, the mode either stops the children from being written or
+    /// leaves a tree nothing can remove.
+    #[cfg(unix)]
+    #[test]
+    fn a_read_only_directory_extracts_and_stays_removable_in_either_order() {
+        for dir_first in [true, false] {
+            let outer = tempfile::tempdir().unwrap();
+            let dest = outer.path().join("dest");
+            std::fs::create_dir_all(&dest).unwrap();
+
+            unpack_tar(&tar_with_read_only_dir(dir_first)[..], &dest)
+                .unwrap_or_else(|e| panic!("dir_first={dir_first}: {e}"));
+            assert_eq!(std::fs::read(dest.join("ro/file")).unwrap(), b"hi");
+            let mode = std::fs::metadata(dest.join("ro"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, 0o755, "dir_first={dir_first}: owner always gets rwx");
+            std::fs::remove_dir_all(&dest).unwrap_or_else(|e| panic!("dir_first={dir_first}: {e}"));
+        }
     }
 
     #[cfg(unix)]
