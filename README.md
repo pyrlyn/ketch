@@ -127,6 +127,10 @@ On Windows:
 irm https://raw.githubusercontent.com/pyrlyn/ketch/main/install.ps1 | iex
 ```
 
+Both installers take `--pre` to install the newest release, prereleases
+included (`curl … | bash -s -- --pre`; on Windows,
+`& ([scriptblock]::Create((irm …/install.ps1))) --pre`).
+
 or with Homebrew:
 
 ```bash

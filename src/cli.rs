@@ -703,6 +703,9 @@ pub enum SelfCommand {
         /// Reinstall even when already current
         #[arg(long, short)]
         force: bool,
+        /// Take the newest release, prereleases included
+        #[arg(long)]
+        pre: bool,
         /// Answer yes to every prompt
         #[arg(long, short = 'y')]
         yes: bool,

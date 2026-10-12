@@ -706,15 +706,21 @@ bash-completion 2 завантажує його під час першого в�
 ketch self install
 ```
 
-### `ketch self upgrade [--dry-run] [--force] [--yes]`
+### `ketch self upgrade [--dry-run] [--force] [--pre] [--yes]`
 
 Оновлює ketch до останнього релізу. Аліас — `ketch self update`. ketch,
 встановлений через mise й жодного разу не встановлений через `self install`, оновлює mise:
 команда відмовляється й називає `mise upgrade`.
 
+`--pre` бере найновіший реліз, включно з пре-релізами, а не останній реліз за
+версією GitHub. Релізи macOS-застосунку `desktop-v*` не беруться ніколи. Той
+самий прапорець приймають інсталятори: `install.sh --pre` та
+`install.ps1 --pre`. Без прапорця нічого не змінюється.
+
 ```bash
 ketch self upgrade
 ketch self upgrade --dry-run
+ketch self upgrade --pre
 ```
 
 ### `ketch self version`
