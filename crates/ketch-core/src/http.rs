@@ -22,19 +22,17 @@ use std::time::Duration;
 /// sign we are being fed something we should not buffer.
 const MAX_API_BODY: u64 = 32 * 1024 * 1024;
 
-/// Cap on a single asset download. A release that large is not a CLI tool, and
-/// streaming without a bound would fill the disk on a lying Content-Length.
-const MAX_DOWNLOAD: u64 = 4 * 1024 * 1024 * 1024;
-
-fn download_too_large(n: u64) -> bool {
-    n > MAX_DOWNLOAD
-}
+/// Cap on a single asset download when no configuration says otherwise.
+const DEFAULT_MAX_DOWNLOAD: u64 = crate::config::DEFAULT_MAX_DOWNLOAD_MIB * 1024 * 1024;
 
 pub struct Http {
     agent: ureq::Agent,
     token: Option<String>,
     /// Where each request is noted, for `--verbose` and the log.
     report: Report,
+    /// Bytes one download may write. Streaming without a bound would fill the
+    /// disk on a lying or missing Content-Length.
+    max_download: u64,
 }
 
 impl Http {
@@ -48,6 +46,7 @@ impl Http {
             agent,
             token: cx.cfg.github_token.clone(),
             report: cx.report.clone(),
+            max_download: cx.cfg.max_download,
         }
     }
 
@@ -62,7 +61,15 @@ impl Http {
             agent,
             token: None,
             report: report.clone(),
+            max_download: DEFAULT_MAX_DOWNLOAD,
         }
+    }
+
+    /// The same client with another download cap, for a caller holding a
+    /// `Config` but not a `Ctx`.
+    pub fn with_max_download(mut self, bytes: u64) -> Self {
+        self.max_download = bytes;
+        self
     }
 
     /// Where this client reports, for the source that owns it.
@@ -150,10 +157,9 @@ impl Http {
             .header("Content-Length")
             .and_then(|v| v.parse::<u64>().ok())
             .filter(|n| *n > 0);
-        if total.is_some_and(download_too_large) {
-            return Err(Error::msg(format!(
-                "{url} is larger than {MAX_DOWNLOAD} bytes; refusing the download"
-            )));
+        let max = self.max_download;
+        if total.is_some_and(|n| n > max) {
+            return Err(too_large(url, max));
         }
         let label = dest
             .file_name()
@@ -184,10 +190,8 @@ impl Http {
                 .write_all(&buffer[..n])
                 .map_err(|e| Error::io(staged.path(), e))?;
             written += n as u64;
-            if download_too_large(written) {
-                return Err(Error::msg(format!(
-                    "{url} exceeded {MAX_DOWNLOAD} bytes; refusing the download"
-                )));
+            if written > max {
+                return Err(too_large(url, max));
             }
             progress.advance(n as u64);
         }
@@ -207,6 +211,14 @@ impl Http {
         progress.finish(&format!("{label} ({})", crate::text::bytes(written)));
         Ok(hex::encode(hasher.finalize()))
     }
+}
+
+/// The refusal for a download over the cap, naming the setting that raises it.
+fn too_large(url: &str, max: u64) -> Error {
+    Error::msg(format!(
+        "{url} is larger than {} (max_download_mib); refusing the download",
+        crate::text::bytes(max)
+    ))
 }
 
 /// Turn a `ureq` failure into our error type, keeping the server's own message
@@ -321,9 +333,48 @@ mod tests {
     }
 
     #[test]
-    fn the_download_cap_is_four_gib() {
-        assert!(!download_too_large(MAX_DOWNLOAD));
-        assert!(download_too_large(MAX_DOWNLOAD + 1));
+    fn the_default_download_cap_is_four_gib() {
+        assert_eq!(DEFAULT_MAX_DOWNLOAD, 4 * 1024 * 1024 * 1024);
+        let http = Http::anonymous(&crate::report::Report::silent());
+        assert_eq!(http.max_download, DEFAULT_MAX_DOWNLOAD);
+    }
+
+    /// No Content-Length, so only the count while streaming can stop it.
+    #[test]
+    fn a_body_streaming_past_a_configured_cap_is_refused_and_leaves_no_file() {
+        use std::net::TcpListener;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/big.bin", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut conn, _) = listener.accept().unwrap();
+            let mut request = [0u8; 2048];
+            let _ = conn.read(&mut request);
+            let _ = conn.write_all(b"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n");
+            let _ = conn.write_all(&vec![7u8; 1024 * 1024]);
+        });
+
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("big.bin");
+        let result = Http::anonymous(&crate::report::Report::silent())
+            .with_max_download(64 * 1024)
+            .download(
+                &url,
+                &dest,
+                &BTreeMap::new(),
+                false,
+                &crate::report::Report::silent().download("t"),
+                &Cancel::new(),
+            );
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("refusing the download"), "{err}");
+        assert!(err.contains("max_download_mib"), "{err}");
+        assert!(!dest.exists());
+        assert_eq!(
+            std::fs::read_dir(dir.path()).unwrap().count(),
+            0,
+            "no staging file"
+        );
+        server.join().unwrap();
     }
 
     #[test]
@@ -331,7 +382,7 @@ mod tests {
         use std::net::TcpListener;
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}/huge.bin", listener.local_addr().unwrap());
-        let len = MAX_DOWNLOAD + 1;
+        let len = DEFAULT_MAX_DOWNLOAD + 1;
         let server = std::thread::spawn(move || {
             let (mut conn, _) = listener.accept().unwrap();
             let mut request = [0u8; 2048];
