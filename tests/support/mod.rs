@@ -396,11 +396,12 @@ impl Sandbox {
     /// Publish the releases the test plugin will serve for `id`.
     pub fn publish(&self, id: &str, releases: &[Release]) {
         let json: Vec<String> = releases.iter().map(Release::to_json).collect();
-        self.tmp
-            .child("assets")
-            .child(format!("{id}.releases.json"))
-            .write_str(&format!("[{}]", json.join(",")))
-            .expect("write releases");
+        let file = self.assets().join(format!("{id}.releases.json"));
+        // An `owner/repo` id is a folder per owner.
+        if let Some(parent) = file.parent() {
+            std::fs::create_dir_all(parent).expect("create releases folder");
+        }
+        std::fs::write(&file, format!("[{}]", json.join(","))).expect("write releases");
     }
 
     /// Build a release asset on disk and describe it for the plugin.

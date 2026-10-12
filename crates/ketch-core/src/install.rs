@@ -276,6 +276,17 @@ pub fn prepare(
     // Nothing is downloaded until we know the install is actually wanted.
     let existing = state.get(&manifest.name).cloned();
     if let Some(old) = &existing {
+        // State is keyed by name alone. Another project under the same name
+        // would take over this one's links, run its update hooks and mix two
+        // sources' versions in one retained list — a replacement nobody asked
+        // for by name.
+        if !crate::manifest::same_source(&old.source, &manifest.source) {
+            return Err(Error::msg(format!(
+                "`{}` is already installed from {}; {} would replace it. \
+                 Install it under another name with --name, or uninstall `{}` first",
+                old.name, old.source, manifest.source, old.name
+            )));
+        }
         if old.pinned && !matches!(req.spec.version, VersionSpec::Exact(_)) {
             return Err(Error::Pinned {
                 name: old.name.clone(),
