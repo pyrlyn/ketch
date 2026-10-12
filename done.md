@@ -1469,3 +1469,21 @@ Execution plan:
 Status: done (Claude Code / opus-5.5). `install::is_upgrade` is the one rule: it takes an `InstalledBuild` and the lookup's `ListOpts`, so `outdated`, `upgrade`, `list` and the FFI `Upgrade` record agree on every channel, including the guard against a prerelease nobody asked for, which moved there from `listing::update_available` (removed). The listing cache is format 2, keyed `source#stable|pre|draft` or `source@tag#dev`; a file without that format number is ignored and rewritten. `list --draft` widens installed rows only: a registry row would almost never have push access and would turn into `?`. A pinned package still shows no update in `list`; that stays a display rule.
 
 Tests: `listing::tests` (a dev rebuild by date and by digest, the dev lookup key and kept assets, draft/pre/stable cache keys, a draft install offered its publication, an unasked prerelease, an older cache format set aside); `tests/draft.rs` (`releases --draft` with and without a token, `info --releases --draft`, a draft install listing drafts by itself, `list` and `list --draft` agreeing with `outdated`); `tests/dev.rs` (a republish shows as an update in `list`, a plugin source refuses `releases --draft`). 1156 tests green. Binary in a scratch root: `neovim/neovim@nightly` lists as `nightly (dev)` with `latest` `nightly`, and as `(update available)` once its recorded build was made older; `releases neovim --draft` without a token stops naming the token variables; `info --releases --draft` warns with the same message and still prints the details. Not checked: a real draft (no repository with a draft and a push token at hand), and `outdated` against GitHub in that run (anonymous rate limit, HTTP 403).
+
+### B79. Restore the swapped store when placement fails
+
+Found by the 2026-10-08 cloud review: a failure after the store swap could leave state naming a tree that was not on disk. On re-check it was already fixed by 5152c87: unix, macOS and Windows `place` keep `<ver>.old` and restore it on error, so `ScopedDir` being off for the same prefix is safe.
+Model: Claude Code / opus-5.5 · Status: done 2026-10-12 (already fixed in 5152c87) · Priority: P1 · Complexity: 4
+Check: `a_failed_place_after_the_swap_restores_the_previous_store` in `platform/unix.rs` and `platform/macos.rs`.
+
+### B105. Windows same-version reinstall refuses its own copied bin
+
+Found by the 2026-10-12 review: ownership of a copied bin was proven against `record.target` after the swap had changed it. On re-check it was already fixed by 13efcf9: `retired_targets` compares bin and extra copies against `<store>.old` after the swap. A Windows end-to-end test (`install`, then `install --force`) is still missing.
+Model: Claude Code / opus-5.5 · Status: done 2026-10-12 (already fixed in 13efcf9) · Priority: P2 · Complexity: 3
+Check: `retired_targets` in `platform/windows.rs`; not covered by a Windows test.
+
+### B80. A lone `.xz`/`.bz2` file fails as a tarball
+
+Found by the 2026-10-08 cloud review: `TarXzExtractor` claimed any xz stream without peeking for ustar. On re-check it was already fixed by 5152c87: detection peeks the decompressed head, and `XzFileExtractor` and `Bz2FileExtractor` are registered on all three platforms. A lone bz2 has only a detection test.
+Model: Claude Code / opus-5.5 · Status: done 2026-10-12 (already fixed in 5152c87) · Priority: P2 · Complexity: 3
+Check: the lone `.xz` extraction test in `extract/archive.rs`.
