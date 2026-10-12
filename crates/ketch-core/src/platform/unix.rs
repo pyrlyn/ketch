@@ -6,6 +6,7 @@
 //! backends. macOS-only app placement stays in `macos.rs`.
 #![cfg(unix)]
 
+use super::claim::Claims;
 use super::Platform;
 use crate::error::{Error, Result};
 use crate::extra::ExtraPlacement;
@@ -117,10 +118,16 @@ pub(crate) fn is_ours(link: &Path, owned: &Path, recorded: &[LinkRecord]) -> boo
     target.starts_with(owned)
 }
 
-/// Clear a destination, or explain who already has it.
-pub(crate) fn clear_destination(link: &Path, owned: &Path, recorded: &[LinkRecord]) -> Result<()> {
+/// Clear a destination, or explain who already has it. What was there moves
+/// aside into `claims`, so a placement that fails later can put it back.
+pub(crate) fn clear_destination(
+    link: &Path,
+    owned: &Path,
+    recorded: &[LinkRecord],
+    claims: &mut Claims,
+) -> Result<()> {
     destination_available(link, owned, recorded)?;
-    remove_any(link).map_err(|e| Error::fs_kit(link, e))
+    claims.take(link)
 }
 
 pub(crate) fn destination_available(
@@ -349,10 +356,11 @@ pub(crate) fn link_binary(
     name: &str,
     owned: &Path,
     recorded: &[LinkRecord],
+    claims: &mut Claims,
 ) -> Result<LinkRecord> {
     std::fs::create_dir_all(bin_dir).map_err(|e| Error::io(bin_dir, e))?;
     let link = bin_dir.join(name);
-    clear_destination(&link, owned, recorded)?;
+    clear_destination(&link, owned, recorded, claims)?;
     ensure_executable(target)?;
     symlink(target, &link)?;
     Ok(LinkRecord {
@@ -433,6 +441,7 @@ pub(crate) fn place_cli(platform: &dyn Platform, plan: &Placement<'_>) -> Result
         return Ok(Vec::new());
     }
     let mut links = Vec::new();
+    let mut claims = Claims::default();
     let result = (|| -> Result<Vec<LinkRecord>> {
         for (target, name) in cli_targets(platform, plan.store_dir, plan)? {
             links.push(link_binary(
@@ -441,6 +450,7 @@ pub(crate) fn place_cli(platform: &dyn Platform, plan: &Placement<'_>) -> Result
                 &name,
                 package_dir,
                 plan.replacing,
+                &mut claims,
             )?);
         }
         links.extend(link_planned_extras(
@@ -448,6 +458,7 @@ pub(crate) fn place_cli(platform: &dyn Platform, plan: &Placement<'_>) -> Result
             plan.store_dir,
             package_dir,
             plan.replacing,
+            &mut claims,
         )?);
         if links.is_empty() {
             return Err(Error::EmptyPayload(plan.store_dir.to_path_buf()));
@@ -456,11 +467,13 @@ pub(crate) fn place_cli(platform: &dyn Platform, plan: &Placement<'_>) -> Result
     })();
     match result {
         Ok(links) => {
+            claims.discard();
             finalize_store_swap(plan.store_dir);
             Ok(links)
         }
         Err(e) => {
             let _ = unplace(&links, &crate::report::Report::silent());
+            claims.restore();
             restore_retired_store(plan.store_dir);
             Err(e)
         }
@@ -507,6 +520,7 @@ pub(crate) fn link_planned_extras(
     root: &Path,
     owned: &Path,
     recorded: &[LinkRecord],
+    claims: &mut Claims,
 ) -> Result<Vec<LinkRecord>> {
     let mut links = Vec::new();
     for extra in extras {
@@ -514,7 +528,7 @@ pub(crate) fn link_planned_extras(
         if let Some(parent) = extra.dest.parent() {
             std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
         }
-        clear_destination(&extra.dest, owned, recorded)?;
+        clear_destination(&extra.dest, owned, recorded, claims)?;
         symlink(&target, &extra.dest)?;
         links.push(LinkRecord {
             link: extra.dest.clone(),
@@ -729,7 +743,7 @@ mod tests {
 
         assert!(!is_ours(&link, &owned, &recorded));
         assert!(destination_available(&link, &owned, &recorded).is_err());
-        assert!(clear_destination(&link, &owned, &recorded).is_err());
+        assert!(clear_destination(&link, &owned, &recorded, &mut Claims::default()).is_err());
         assert!(link.is_file(), "the user's file must survive");
     }
 
@@ -751,7 +765,7 @@ mod tests {
         }];
 
         assert!(!is_ours(&link, &owned, &recorded));
-        assert!(clear_destination(&link, &owned, &recorded).is_err());
+        assert!(clear_destination(&link, &owned, &recorded, &mut Claims::default()).is_err());
     }
 
     #[test]
@@ -781,7 +795,7 @@ mod tests {
         std::fs::create_dir_all(link.parent().unwrap()).unwrap();
         std::os::unix::fs::symlink(&target, &link).unwrap();
 
-        clear_destination(&link, &owned, &[]).unwrap();
+        clear_destination(&link, &owned, &[], &mut Claims::default()).unwrap();
         assert!(
             std::fs::symlink_metadata(&link).is_err(),
             "owned symlink should be gone"
@@ -793,7 +807,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let (owned, link) = prepare_destination(&tmp, Occupant::RegularFile);
 
-        assert!(clear_destination(&link, &owned, &[]).is_err());
+        assert!(clear_destination(&link, &owned, &[], &mut Claims::default()).is_err());
         assert!(link.is_file(), "must not be deleted");
     }
 
