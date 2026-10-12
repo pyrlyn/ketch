@@ -2088,6 +2088,51 @@ mod tests {
         );
     }
 
+    /// Stands in for Windows refusing to delete the running `ketch.exe`: a
+    /// directory is something `remove_file` rejects on every OS.
+    #[test]
+    fn uninstall_warns_and_finishes_when_the_running_binary_cannot_be_removed() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let cfg = Config::load(Some(tmp.path().join(".ketch")), &Report::silent()).expect("config");
+        std::fs::create_dir_all(&cfg.root).expect("root");
+        let shell = tmp.path().join(".bashrc");
+        std::fs::write(
+            &shell,
+            "# kept\n# >>> ketch >>>\nexport PATH=\"/tmp/ketch/bin:$PATH\"\n# <<< ketch <<<\n",
+        )
+        .expect("shell file");
+        let exe = tmp.path().join("ketch.exe");
+        std::fs::create_dir(&exe).expect("unremovable exe");
+
+        let plan = UninstallPlan {
+            shell_files: vec![shell.clone()],
+            exe: Some(exe.clone()),
+            ..UninstallPlan::default()
+        };
+        let recorder = std::sync::Arc::new(crate::report::Recorder::default());
+        let report = Report::shared(recorder.clone());
+        let removed = uninstall_self(&Ctx::new(&cfg, &report), &plan)
+            .expect("a binary that cannot be removed must not fail the uninstall");
+
+        assert!(
+            removed.iter().any(|p| p == &shell),
+            "the shell file was not reported removed: {removed:?}"
+        );
+        assert!(
+            !removed.iter().any(|p| p == &exe),
+            "the binary was reported removed: {removed:?}"
+        );
+        let exe_shown = exe.display().to_string();
+        assert!(
+            recorder.events().iter().any(|event| matches!(
+                event,
+                crate::report::Event::Warn { detail } if detail.contains(&exe_shown)
+            )),
+            "no warning named the binary: {:?}",
+            recorder.events()
+        );
+    }
+
     #[cfg(windows)]
     #[test]
     fn probe_rejects_a_binary_that_fails() {
