@@ -1117,7 +1117,7 @@ fn owns_root(cfg: &Config, home: Option<&Path>) -> bool {
 /// directory compares equal. Folding on a case-sensitive file system can only
 /// call two directories the same, which errs towards keeping files.
 fn folded(path: &Path) -> PathBuf {
-    let resolved = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let resolved = fs_kit::path::canon(path);
     PathBuf::from(resolved.to_string_lossy().to_lowercase())
 }
 
