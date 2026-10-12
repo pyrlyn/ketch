@@ -63,6 +63,10 @@ pub struct InstallRequest {
     /// release stops with `Error::UpdateAvailable`, so the command can ask
     /// before it updates, instead of updating on its own.
     pub offer_update: bool,
+    /// Install even when the package was installed against a published
+    /// checksum and this release publishes none (`--allow-unverified`,
+    /// `--yes`).
+    pub allow_unverified: bool,
     /// Stops this install at its next check: before the download, between
     /// chunks, and before anything is placed. Clones share one flag, so a host
     /// keeps a clone to cancel with. `Cancel::new()` never fires on its own.
@@ -86,6 +90,7 @@ impl InstallRequest {
             bin: None,
             locked_bin: None,
             offer_update: false,
+            allow_unverified: false,
             cancel: Cancel::new(),
         }
     }
@@ -403,6 +408,7 @@ pub fn prepare(
                 require,
                 report,
             )?;
+            refuse_checksum_downgrade(req, existing.as_ref(), checksum_verified, &asset)?;
 
             // --- signature ------------------------------------------------------
             // Before extraction: the unpacker is the widest attack surface ketch
@@ -1506,6 +1512,7 @@ pub fn upgrade_request(
         bin,
         locked_bin: None,
         offer_update: false,
+        allow_unverified: false,
         cancel,
     }
 }
@@ -1628,6 +1635,29 @@ pub(crate) fn verify_checksum(
             Ok(false)
         }
     }
+}
+
+/// Refuse to replace a package installed against a published checksum with a
+/// release that publishes none, unless the request says to.
+///
+/// Without this, a release whose checksums were removed — by its publisher or
+/// by whoever took over the repository — installs with only the first-use note,
+/// and the one check that catches a replaced asset quietly disappears. A
+/// lockfile hash is a stronger pin than either, so it stands in for consent.
+fn refuse_checksum_downgrade(
+    req: &InstallRequest,
+    existing: Option<&InstalledPackage>,
+    checksum_verified: bool,
+    asset: &ReleaseAsset,
+) -> Result<()> {
+    let dropped = !checksum_verified && existing.is_some_and(|old| old.checksum_verified);
+    if dropped && !req.allow_unverified && req.expected_sha256.is_none() {
+        return Err(Error::ChecksumDropped {
+            name: existing.map(|old| old.name.clone()).unwrap_or_default(),
+            asset: asset.name.clone(),
+        });
+    }
+    Ok(())
 }
 
 /// Apply `strip_prefix`, or unwrap the single wrapper directory most tarballs
@@ -2347,6 +2377,40 @@ mod tests {
             draft: false,
             published_at: None,
         }
+    }
+
+    #[test]
+    fn an_unverified_release_replacing_a_verified_install_needs_consent() {
+        let spec = || PackageSpec::parse("o/r");
+        let verified = installed("r", "1.0.0", PathBuf::from("/nowhere"));
+        let unverified = InstalledPackage {
+            checksum_verified: false,
+            ..installed("r", "1.0.0", PathBuf::from("/nowhere"))
+        };
+        let next = asset("r-2.0.0.tar.gz");
+        let plain = InstallRequest::new(spec());
+
+        let refused = refuse_checksum_downgrade(&plain, Some(&verified), false, &next);
+        assert!(
+            matches!(refused, Err(Error::ChecksumDropped { ref name, .. }) if name == "r"),
+            "{refused:?}"
+        );
+        // A verified release, a fresh install and an install that was never
+        // verified lose nothing, so they are not asked about.
+        assert!(refuse_checksum_downgrade(&plain, Some(&verified), true, &next).is_ok());
+        assert!(refuse_checksum_downgrade(&plain, None, false, &next).is_ok());
+        assert!(refuse_checksum_downgrade(&plain, Some(&unverified), false, &next).is_ok());
+
+        let consented = InstallRequest {
+            allow_unverified: true,
+            ..InstallRequest::new(spec())
+        };
+        assert!(refuse_checksum_downgrade(&consented, Some(&verified), false, &next).is_ok());
+        let locked = InstallRequest {
+            expected_sha256: Some("0".repeat(64)),
+            ..InstallRequest::new(spec())
+        };
+        assert!(refuse_checksum_downgrade(&locked, Some(&verified), false, &next).is_ok());
     }
 
     #[test]

@@ -53,6 +53,9 @@ the repository (`KETCH_GITHUB_TOKEN`, `GITHUB_TOKEN`, `GH_TOKEN` or
 files download through the API with the token, and are checked like any
 other. Other sources have no drafts and refuse `--draft`; `--no-link` unpacks without linking onto PATH;
 `--require-checksum` refuses releases with no published checksum;
+`--allow-unverified` replaces a package installed against a published
+checksum with a release that publishes none, which otherwise fails with exit
+6 (`--yes` allows it too);
 `--asset <NAME>` takes one release file by exact name (asks for confirmation,
 since the platform check is skipped); `-j/--jobs <N>` and `-y/--yes` control
 parallelism and prompts. Aliased as `ketch i`.
@@ -119,6 +122,8 @@ asset's digest, or by when the release was published when the source gives
 no digest; a newer version under another tag is not. `--force` upgrades pinned packages
 too; `--bin <NAME>` (exactly one package) picks which binary to link when the
 new release ships several sharing the package's name, as on `install`;
+`--allow-unverified` (or `-y/--yes`) accepts a release that drops the
+checksum the installed version was verified against, as on `install`;
 `-j/--jobs <N>`, `-y/--yes`. Pinned and `local:` packages are skipped unless
 forced.
 

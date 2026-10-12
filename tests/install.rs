@@ -455,6 +455,50 @@ fn a_download_that_does_not_match_its_checksum_installs_nothing() {
     assert!(sandbox.ok(&["list", "local"]).contains("nothing installed"));
 }
 
+/// Publish `testtool` at `version` with no checksum, as a release whose
+/// checksums were removed would look.
+fn publish_unverified_tool(sandbox: &Sandbox, version: &str) {
+    let native = sandbox
+        .asset(
+            &format!("testtool-{version}-{}-apple-darwin.tar.gz", host_arch()),
+            tool_archive(version),
+        )
+        .without_digest();
+    sandbox.publish("testtool", &[Release::new(version, vec![native])]);
+}
+
+#[test]
+fn an_upgrade_that_drops_the_checksum_is_refused_without_consent() {
+    let sandbox = Sandbox::new();
+    publish_tool(&sandbox, "1.0.0");
+    sandbox.ok(&["install", "test:testtool@1.0.0", "--yes"]);
+    publish_unverified_tool(&sandbox, "2.0.0");
+
+    // Without a terminal `upgrade` declines before it installs anything, so
+    // the exact-version install is the path that reaches the check unasked.
+    let out = sandbox.ketch(&["install", "test:testtool@2.0.0"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(6), "{stderr}");
+    assert!(stderr.contains("publishes none"), "{stderr}");
+    assert!(stderr.contains("--allow-unverified"), "{stderr}");
+    assert_eq!(run(&sandbox.bin().join("testtool")), "testtool 1.0.0");
+
+    sandbox.ok(&["install", "test:testtool@2.0.0", "--allow-unverified"]);
+    assert_eq!(run(&sandbox.bin().join("testtool")), "testtool 2.0.0");
+    assert!(sandbox.state().contains(r#""checksum_verified": false"#));
+}
+
+#[test]
+fn yes_consents_to_an_upgrade_that_drops_the_checksum() {
+    let sandbox = Sandbox::new();
+    publish_tool(&sandbox, "1.0.0");
+    sandbox.ok(&["install", "test:testtool@1.0.0", "--yes"]);
+    publish_unverified_tool(&sandbox, "2.0.0");
+
+    sandbox.ok(&["upgrade", "--yes"]);
+    assert_eq!(run(&sandbox.bin().join("testtool")), "testtool 2.0.0");
+}
+
 #[test]
 fn uninstall_removes_every_trace_of_a_tool() {
     let sandbox = Sandbox::new();

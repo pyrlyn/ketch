@@ -211,6 +211,10 @@ pub struct InstallArgs {
     #[arg(long)]
     pub require_checksum: bool,
 
+    /// Replace a checksum-verified install with a release that publishes no checksum
+    #[arg(long)]
+    pub allow_unverified: bool,
+
     /// Use this release asset by exact file name instead of auto-selecting
     #[arg(long, value_name = "NAME")]
     pub asset: Option<String>,
@@ -422,6 +426,10 @@ pub struct UpgradeArgs {
     /// Upgrade pinned packages too
     #[arg(long)]
     pub force: bool,
+
+    /// Upgrade a checksum-verified package to a release that publishes no checksum
+    #[arg(long)]
+    pub allow_unverified: bool,
 
     /// Which binary to link when several share the package's name (single package)
     #[arg(long, value_name = "NAME")]

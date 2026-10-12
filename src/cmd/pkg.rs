@@ -90,6 +90,7 @@ pub fn install(cfg: &Config, args: InstallArgs) -> Result<()> {
             locked_bin: None,
             // `--yes` has already answered the question this would ask.
             offer_update: !args.yes,
+            allow_unverified: args.allow_unverified || args.yes,
             cancel: Cancel::new(),
         })
         .collect();
@@ -358,8 +359,9 @@ pub fn upgrade(cfg: &Config, args: UpgradeArgs) -> Result<()> {
 
     let reqs: Vec<InstallRequest> = plan
         .iter()
-        .map(|(pkg, release)| {
-            install::upgrade_request(cfg, pkg, &release.tag, args.bin.clone(), Cancel::new())
+        .map(|(pkg, release)| InstallRequest {
+            allow_unverified: args.allow_unverified || args.yes,
+            ..install::upgrade_request(cfg, pkg, &release.tag, args.bin.clone(), Cancel::new())
         })
         .collect();
 

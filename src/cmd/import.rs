@@ -161,6 +161,7 @@ fn request(cfg: &Config, name: &str, plan: &Apply) -> InstallRequest {
         // The version is the one the source names; asking whether to take
         // a newer one would be a different command.
         offer_update: false,
+        allow_unverified: false,
         cancel: Cancel::new(),
     }
 }
