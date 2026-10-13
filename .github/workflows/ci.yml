@@ -58,7 +58,10 @@ jobs:
     permissions:
       contents: read
       actions: write
-    secrets: inherit
+    # Only the sccache R2 pair the workflow declares, not every repository secret.
+    secrets:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
     with:
       sccache: true
       nextest-archive: true
