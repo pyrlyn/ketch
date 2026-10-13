@@ -1475,6 +1475,7 @@ Tests: `listing::tests` (a dev rebuild by date and by digest, the dev lookup key
 Found by the 2026-10-08 cloud review: a failure after the store swap could leave state naming a tree that was not on disk. On re-check it was already fixed by 5152c87: unix, macOS and Windows `place` keep `<ver>.old` and restore it on error, so `ScopedDir` being off for the same prefix is safe.
 Model: Claude Code / opus-5.5 · Status: done 2026-10-12 (already fixed in 5152c87) · Priority: P1 · Complexity: 4
 Check: `a_failed_place_after_the_swap_restores_the_previous_store` in `platform/unix.rs` and `platform/macos.rs`.
+Also through `commit`: `install::tests::a_reinstall_whose_linking_fails_after_the_swap_puts_the_previous_store_back` (unix), an in-place reinstall whose linking fails after the swap; it fails with the restore call removed. B104 stays a separate task.
 
 ### B105. Windows same-version reinstall refuses its own copied bin
 
@@ -1589,3 +1590,15 @@ Check: a Windows-gated test.
 Found by the 2026-10-12 review. Done: out-of-date search and changelog replies are dropped, and Windows search is debounced. Plan: request tokens in the macOS views and the Windows store/page.
 Model: Claude Code / opus-5.5 · Status: done, merged in #314 · Priority: P3 · Complexity: 3
 Check: store tests in Swift and in `Ketch.AppCore.Tests`.
+
+### B76. Registry rollback can leave the registry empty
+
+Row B76 in the 2026-10-08 findings. `registry.rs` already reported a failed rollback rename, but the live registry was still gone. Done: `replace_dir` copies the aside tree back with `source::local::copy_tree` when the rename back fails; if the copy fails too, the error names all three failures and the aside is kept as the only complete copy.
+
+Status: done (Claude Code / opus-5.5). Test: `registry::tests::a_failed_rename_back_restores_the_previous_registry_by_copy`, which fails with the copy fallback removed. Not covered: the path where the copy also fails, which a unit test cannot force without more injection.
+
+### B77. A busy `ketch.exe` aborts `self uninstall`
+
+Row B77 in the 2026-10-08 findings. `self uninstall` removed the running executable with `?`, so a busy Windows `.exe` stopped the rest of the uninstall.
+
+Status: done (Claude Code / opus-5.5). The fix was already on `main` in 5152c87 (the step warns and continues) but had no test. Test: `self_update::tests::uninstall_warns_and_finishes_when_the_running_binary_cannot_be_removed`, on every OS, which fails with the old `?` restored.
