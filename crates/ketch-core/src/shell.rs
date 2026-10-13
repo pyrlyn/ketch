@@ -1998,4 +1998,30 @@ mod tests {
             .expect("the user PATH is set");
         assert_eq!((kind.as_str(), value.as_str()), ("ExpandString", before));
     }
+
+    /// A startup file the user made private must not come back readable, and
+    /// a new one must look like any other file the user's editor makes.
+    #[cfg(unix)]
+    #[test]
+    fn a_startup_file_keeps_its_mode_and_a_new_one_gets_the_ordinary_mode() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let private = dir.path().join(".zshrc");
+        std::fs::write(&private, "old").unwrap();
+        std::fs::set_permissions(&private, std::fs::Permissions::from_mode(0o600)).unwrap();
+        write(&private, "new").unwrap();
+        assert_eq!(file_mode(&private), 0o600);
+
+        let reference = dir.path().join("by-std");
+        std::fs::write(&reference, "x").unwrap();
+        let fresh = dir.path().join("config/fish/config.fish");
+        write(&fresh, "new").unwrap();
+        assert_eq!(file_mode(&fresh), file_mode(&reference));
+    }
+
+    #[cfg(unix)]
+    fn file_mode(path: &Path) -> u32 {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
 }
