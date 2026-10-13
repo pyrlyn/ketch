@@ -97,6 +97,9 @@ pub enum Error {
     #[error("no published checksum for {0}")]
     ChecksumMissing(String),
 
+    #[error("{name} was installed against a published checksum, but {asset} publishes none")]
+    ChecksumDropped { name: String, asset: String },
+
     #[error("no installable files found in {0}")]
     EmptyPayload(PathBuf),
 
@@ -205,6 +208,11 @@ impl Error {
             Error::ChecksumMismatch { .. } => {
                 Some("Refusing to install. Re-run to retry the download.".to_string())
             }
+            Error::ChecksumDropped { .. } => Some(
+                "A release that stops publishing checksums may have been replaced. \
+                 Pass --allow-unverified (or --yes) to install it anyway."
+                    .to_string(),
+            ),
             Error::AlreadyInstalled { .. } | Error::NoUpdate { .. } => {
                 Some("Use --force to reinstall.".to_string())
             }
@@ -230,7 +238,9 @@ impl Error {
             | Error::NoUpdate { .. }
             | Error::UpdateAvailable { .. }
             | Error::Pinned { .. } => 5,
-            Error::ChecksumMismatch { .. } | Error::ChecksumMissing(_) => 6,
+            Error::ChecksumMismatch { .. }
+            | Error::ChecksumMissing(_)
+            | Error::ChecksumDropped { .. } => 6,
             Error::Http { .. } | Error::Network { .. } => 7,
             Error::Busy { .. } => 8,
             Error::Reported(code) => *code,

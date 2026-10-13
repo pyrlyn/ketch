@@ -49,11 +49,11 @@ impl From<Error> for KetchError {
             Error::Http { .. } | Error::Network { .. } => KetchError::Network {
                 message: describe(&error),
             },
-            Error::ChecksumMismatch { .. } | Error::ChecksumMissing(_) => {
-                KetchError::Verification {
-                    message: describe(&error),
-                }
-            }
+            Error::ChecksumMismatch { .. }
+            | Error::ChecksumMissing(_)
+            | Error::ChecksumDropped { .. } => KetchError::Verification {
+                message: describe(&error),
+            },
             other => KetchError::Other {
                 message: describe(&other),
             },
