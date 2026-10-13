@@ -75,8 +75,9 @@ Project programs and direct packages from manifests.
 | sha2 | local | https://crates.io/crates/sha2 | Rust dependency |
 | tar | local | https://crates.io/crates/tar | Rust dependency |
 | tempfile | local | https://crates.io/crates/tempfile | Rust dependency |
+| operation-icons | local | https://crates.io/crates/operation-icons | Status-line verb icons and icon gutter, shared with rtok |
 | terminal_size | local | https://crates.io/crates/terminal_size | Terminal width for `ketch list remote` descriptions |
-| unicode-width | local | https://github.com/unicode-rs/unicode-width | Column width of status-line emoji icons |
+| unicode-width | local (dev) | https://github.com/unicode-rs/unicode-width | Tests: every status-line icon fills one gutter width |
 | thiserror | local | https://crates.io/crates/thiserror | Errors |
 | tokio | local | https://crates.io/crates/tokio | Async runtime |
 | uniffi | local (`crates/ketch-ffi`) | https://github.com/mozilla/uniffi-rs | Exports the core to Swift (and later other languages) as `ketch-ffi`; its `cli` feature is the in-tree `uniffi-bindgen` (`just xcframework`) |

@@ -72,9 +72,8 @@ fs-kit.workspace = true
 # opt-in `tui` renderer draws them full screen. The core prints nothing, so
 # none of these are its dependencies.
 indicatif = "0.18"
-# How many columns a status-line icon takes, so the verb column stays aligned.
-# Already in the tree through indicatif, so it costs the binary nothing.
-unicode-width = "0.2"
+# Status-line verb icons and the icon gutter, shared with rtok.
+operation-icons = "0.1.0"
 # The terminal width `ketch list remote` fits descriptions to. Already in the
 # tree through clap's `wrap_help`, so it costs the binary nothing.
 terminal_size = "0.4"
@@ -94,6 +93,8 @@ console = { version = "0.16", default-features = false, features = ["std"] }
 walkdir = "2"
 
 [dev-dependencies]
+# The status-line tests measure that every icon fills one gutter width.
+unicode-width = "0.2"
 assert_cmd = "2"
 assert_fs = "1"
 insta = "1.48"
