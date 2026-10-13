@@ -53,7 +53,7 @@ jobs:
     # is marked ready, and a draft must not look broken meanwhile.
     needs: config
     if: ${{ !cancelled() && github.event.pull_request.draft != true }}
-    uses: pyrlyn/ci/.github/workflows/ci-rust.yml@ce98c614219bfad8253cfec3530565c470745ed5 # main
+    uses: pyrlyn/ci/.github/workflows/ci-rust.yml@36a4d6e10609c6a3c5d006635820ff1d0199e92b # pyrlyn/ci PR 72, verify only
     # actions: write for infra's cancel-run (the first failing job cancels the run).
     permissions:
       contents: read
