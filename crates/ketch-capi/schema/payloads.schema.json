@@ -544,6 +544,11 @@
     "InstallOptions": {
       "description": "How to install. The defaults are `ketch install` with no flags, except that\nan installed package with a newer release is updated rather than asked\nabout: the person already chose to install it in the front end.",
       "properties": {
+        "allow_unverified": {
+          "default": false,
+          "description": "Replace a package installed against a published checksum with a\nrelease that publishes none: the person's consent, as the CLI's\n`--allow-unverified` (or `--yes`) gives it. Without it that update\nfails with a verification error.",
+          "type": "boolean"
+        },
         "bin": {
           "default": null,
           "description": "Which of several binaries sharing the package's name to link.",

@@ -100,6 +100,12 @@ pub struct InstallOptions {
     /// Fail rather than trust a download no checksum was published for.
     #[uniffi(default = false)]
     pub require_checksum: bool,
+    /// Replace a package installed against a published checksum with a
+    /// release that publishes none: the person's consent, as the CLI's
+    /// `--allow-unverified` (or `--yes`) gives it. Without it that update
+    /// fails with a verification error.
+    #[uniffi(default = false)]
+    pub allow_unverified: bool,
     /// Which of several binaries sharing the package's name to link.
     #[uniffi(default = None)]
     pub bin: Option<String>,
@@ -112,6 +118,7 @@ impl Default for InstallOptions {
             prerelease: false,
             link: true,
             require_checksum: false,
+            allow_unverified: false,
             bin: None,
         }
     }
