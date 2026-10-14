@@ -1469,3 +1469,136 @@ Execution plan:
 Status: done (Claude Code / opus-5.5). `install::is_upgrade` is the one rule: it takes an `InstalledBuild` and the lookup's `ListOpts`, so `outdated`, `upgrade`, `list` and the FFI `Upgrade` record agree on every channel, including the guard against a prerelease nobody asked for, which moved there from `listing::update_available` (removed). The listing cache is format 2, keyed `source#stable|pre|draft` or `source@tag#dev`; a file without that format number is ignored and rewritten. `list --draft` widens installed rows only: a registry row would almost never have push access and would turn into `?`. A pinned package still shows no update in `list`; that stays a display rule.
 
 Tests: `listing::tests` (a dev rebuild by date and by digest, the dev lookup key and kept assets, draft/pre/stable cache keys, a draft install offered its publication, an unasked prerelease, an older cache format set aside); `tests/draft.rs` (`releases --draft` with and without a token, `info --releases --draft`, a draft install listing drafts by itself, `list` and `list --draft` agreeing with `outdated`); `tests/dev.rs` (a republish shows as an update in `list`, a plugin source refuses `releases --draft`). 1156 tests green. Binary in a scratch root: `neovim/neovim@nightly` lists as `nightly (dev)` with `latest` `nightly`, and as `(update available)` once its recorded build was made older; `releases neovim --draft` without a token stops naming the token variables; `info --releases --draft` warns with the same message and still prints the details. Not checked: a real draft (no repository with a draft and a push token at hand), and `outdated` against GitHub in that run (anonymous rate limit, HTTP 403).
+
+### B79. Restore the swapped store when placement fails
+
+Found by the 2026-10-08 cloud review: a failure after the store swap could leave state naming a tree that was not on disk. On re-check it was already fixed by 5152c87: unix, macOS and Windows `place` keep `<ver>.old` and restore it on error, so `ScopedDir` being off for the same prefix is safe.
+Model: Claude Code / opus-5.5 · Status: done 2026-10-12 (already fixed in 5152c87) · Priority: P1 · Complexity: 4
+Check: `a_failed_place_after_the_swap_restores_the_previous_store` in `platform/unix.rs` and `platform/macos.rs`.
+Also through `commit`: `install::tests::a_reinstall_whose_linking_fails_after_the_swap_puts_the_previous_store_back` (unix), an in-place reinstall whose linking fails after the swap; it fails with the restore call removed. B104 stays a separate task.
+
+### B105. Windows same-version reinstall refuses its own copied bin
+
+Found by the 2026-10-12 review: ownership of a copied bin was proven against `record.target` after the swap had changed it. On re-check it was already fixed by 13efcf9: `retired_targets` compares bin and extra copies against `<store>.old` after the swap. A Windows end-to-end test (`install`, then `install --force`) is still missing.
+Model: Claude Code / opus-5.5 · Status: done 2026-10-12 (already fixed in 13efcf9) · Priority: P2 · Complexity: 3
+Check: `retired_targets` in `platform/windows.rs`; not covered by a Windows test.
+
+### B80. A lone `.xz`/`.bz2` file fails as a tarball
+
+Found by the 2026-10-08 cloud review: `TarXzExtractor` claimed any xz stream without peeking for ustar. On re-check it was already fixed by 5152c87: detection peeks the decompressed head, and `XzFileExtractor` and `Bz2FileExtractor` are registered on all three platforms. A lone bz2 has only a detection test.
+Model: Claude Code / opus-5.5 · Status: done 2026-10-12 (already fixed in 5152c87) · Priority: P2 · Complexity: 3
+Check: the lone `.xz` extraction test in `extract/archive.rs`.
+
+### B84. Downloads have no size cap
+
+Found by the 2026-10-08 review. Done: `Http::download` aborts over a configurable cap. Plan: a `max_download` setting in `config.rs` with a sane default, enforced while streaming in `http.rs`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #301 · Priority: P2 · Complexity: 3
+Check: a test with a cap below the body size that errors and leaves no partial file.
+
+### B90. Retained versions and `prune` can delete the live store
+
+Found by the 2026-10-12 review. Done: rollback, upgrade back and `prune` never remove `pkg.prefix`, and `ScopedDir` never deletes a restored retained copy. Plan: `retain_replaced` also drops entries matching the new prefix/version; a retained prefix counts as in-place in `place`; `prune` skips `pkg.prefix`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #295 · Priority: P1 · Complexity: 4
+Check: an end-to-end test of 1.0 → rollback 0.9 → upgrade 1.0 → `prune --keep 1` with links still resolving.
+
+### B91. Uninstall of a near-miss name wipes an installed store
+
+Found by the 2026-10-12 review. Done: a leftover dir is removed only when its on-disk name is byte-equal to the request and no recorded prefix lies under it, with confirmation and `--dry-run` honoured, in the CLI and `ketch-ffi`. Plan: tighten `package_dir_candidate`/`remove_package_dir` in `install.rs`; route the confirmation through `cmd/pkg.rs`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #317 · Priority: P1 · Complexity: 3
+Check: a test where `uninstall RipGrep` on a case-insensitive store refuses and leaves `store/ripgrep`.
+
+### B92. `self uninstall` wipes children of a root ketch does not own
+
+Found by the 2026-10-12 review. Done: named children are wiped only under a root carrying a ketch marker; otherwise only recorded entries go; home is compared canonicalized and case-folded. Plan: write a marker at `self install`/root creation; `remove_root_at` checks it; fallback removes recorded entries only.
+Model: Claude Code / opus-5.5 · Status: done, merged in #307 · Priority: P1 · Complexity: 4
+Check: a test with a root holding foreign files in `bin/` and no marker, left untouched.
+
+### B93. Installers and self upgrade never see prerelease CLI releases
+
+Found by the 2026-10-12 review. The creator chose to keep publishing CLI releases as prereleases and to teach the readers an opt-in flag. Done: `install.sh --pre`, `install.ps1 --pre` and `ketch self upgrade --pre` (and `self install` where it picks a version) take the newest release including prereleases; without the flag they behave as today. Plan: reuse the release listing and `select_release` from `source/mod.rs` (the `--pre` path from M18–M22) in `self_update.rs` and the CLI flag in `cli.rs`; list `/releases` in both installers when the flag is given, skipping `desktop-v*` tags; docs and help in `docs/` (with `ru`, `uk`). The cask keeps `:github_latest` (noted, not changed).
+Model: Claude Code / opus-5.5 · Status: done, merged in #316 · Priority: P1 · Complexity: 3
+Check: a unit test of version selection with the flag, an end-to-end test of `self upgrade --pre` against the fixture source, and `tests/desktop-release.sh` still passing.
+
+### B95. Windows user PATH loses `%VAR%` entries and non-ASCII text
+
+Found by the 2026-10-12 review. Done: `shell.rs` and `install.ps1` read and write `HKCU\Environment\Path` unexpanded, keep the value kind, and decode UTF-8. Plan: switch `read_user_path`/`write_user_path` to `Microsoft.Win32.Registry` with `DoNotExpandEnvironmentNames` through the UTF-8 `powershell()` helper; same in `install.ps1`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #308 · Priority: P1 · Complexity: 4
+Check: a Windows-gated test round-tripping a `%USERPROFILE%` entry and a non-ASCII one; Windows CI.
+
+### B97. Release builds expose the signing certificate to every build script
+
+Found by the 2026-10-12 review. Done: the certificate and its password reach only the macOS signing step, and `GH_TOKEN` only where needed. Plan: patch the env in `scripts/dist-generate.sh`, regenerate `release.yml` with `just dist-generate`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #311 · Priority: P2 · Complexity: 3
+Check: the generated-file CI check passes and a grep shows no job-level `CODESIGN_*`.
+
+### B101. Read-only directory modes break extraction and removal
+
+Found by the 2026-10-12 review. Done: directory modes are applied after all members, always with `u+rwx`. Plan: defer directory modes in `extract/archive.rs`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #302 · Priority: P2 · Complexity: 3
+Check: a test with a `0o555` directory before and after its children that extracts and is removable.
+
+### B103. Installing the same name from another source replaces a package
+
+Found by the 2026-10-12 review. Done: `prepare` refuses when `existing.source` differs from `manifest.source` and points at `--name`; `ketch sync` reports it. Plan: compare in `install.rs` `prepare` and the lockfile plan.
+Model: Claude Code / opus-5.5 · Status: done, merged in #298 · Priority: P2 · Complexity: 3
+Check: an end-to-end test installing `otherowner/x` over `owner/x` that fails and leaves the first install intact.
+
+### B104. A failed placement loses the old links and app copy
+
+Found by the 2026-10-12 review. Done: occupied destinations are moved aside and restored on failure on every platform. Plan: an aside-and-restore step in `platform/unix.rs`, `macos.rs`, `windows.rs` placement, building on B79.
+Model: Claude Code / opus-5.5 · Status: done, merged in #296 · Priority: P2 · Complexity: 5
+Check: a test that fails the second link and finds the old link back.
+
+### B108. Process matching kills unrelated processes
+
+Found by the 2026-10-12 review. Done: occupants match whole arguments against exact canonical paths, preferring exe and open-fd evidence. Plan: rewrite `cmd_hits` in `process.rs`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #310 · Priority: P2 · Complexity: 3
+Check: unit tests where `…/bin/rga` and an editor with the path in its arguments are not matched.
+
+### B109. The process lock is not atomic
+
+Found by the 2026-10-12 review. Done: two processes can never both hold the lock, and one's `Drop` never deletes the other's. Plan: rework `Lock::acquire_path` in `state.rs` (temp file plus no-replace link, or an OS advisory lock).
+Model: Claude Code / opus-5.5 · Status: done, merged in #309 · Priority: P2 · Complexity: 4
+Check: a concurrent acquire test and an empty-lock-is-busy test.
+
+### B111. Discover's empty search errors on the real core
+
+Found by the 2026-10-12 review. Done: `ketch-ffi` defines what `search("")` returns, both fakes agree, and a contract scenario covers it. Plan: decide in `crates/ketch-ffi/src/lib.rs` (browse the registry), align `FakeKetchCore` in Swift and C#, add a scenario under `desktop/contract/scenarios`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #313 · Priority: P2 · Complexity: 3
+Check: the ffi unit test and the scenario.
+
+### B114. Link targets are checked lexically
+
+Found by the 2026-10-12 review. Done: every link is canonicalized after extraction and must stay under the destination. Plan: canonicalize in `finish_deferred_links` and `payload_executable_entry`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #304 · Priority: P3 · Complexity: 4
+Check: a test with `L -> .` and `N -> L/L/../../..` that is refused.
+
+### B115. DMG and PKG payloads keep escaping links
+
+Found by the 2026-10-12 review. Done: after the copy every link goes through the B114 containment check. Plan: walk the tree in `extract/macos.rs`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #305 · Priority: P3 · Complexity: 3
+Check: a macOS-gated test with a nested escaping link.
+
+### B124. Windows asides of running exes pile up
+
+Found by the 2026-10-12 review. Done: `*.old.*` siblings of recorded links are swept at commit, relink and uninstall. Plan: a sweep in `platform/windows.rs`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #299 · Priority: P3 · Complexity: 3
+Check: a Windows-gated test.
+
+### B130. Stale desktop replies overwrite newer ones
+
+Found by the 2026-10-12 review. Done: out-of-date search and changelog replies are dropped, and Windows search is debounced. Plan: request tokens in the macOS views and the Windows store/page.
+Model: Claude Code / opus-5.5 · Status: done, merged in #314 · Priority: P3 · Complexity: 3
+Check: store tests in Swift and in `Ketch.AppCore.Tests`.
+
+### B76. Registry rollback can leave the registry empty
+
+Row B76 in the 2026-10-08 findings. `registry.rs` already reported a failed rollback rename, but the live registry was still gone. Done: `replace_dir` copies the aside tree back with `source::local::copy_tree` when the rename back fails; if the copy fails too, the error names all three failures and the aside is kept as the only complete copy.
+
+Status: done (Claude Code / opus-5.5). Test: `registry::tests::a_failed_rename_back_restores_the_previous_registry_by_copy`, which fails with the copy fallback removed. Not covered: the path where the copy also fails, which a unit test cannot force without more injection.
+
+### B77. A busy `ketch.exe` aborts `self uninstall`
+
+Row B77 in the 2026-10-08 findings. `self uninstall` removed the running executable with `?`, so a busy Windows `.exe` stopped the rest of the uninstall.
+
+Status: done (Claude Code / opus-5.5). The fix was already on `main` in 5152c87 (the step warns and continues) but had no test. Test: `self_update::tests::uninstall_warns_and_finishes_when_the_running_binary_cannot_be_removed`, on every OS, which fails with the old `?` restored.

@@ -563,6 +563,12 @@ impl Asset {
         self
     }
 
+    /// Publish no digest at all, the way a release without checksums looks.
+    pub fn without_digest(mut self) -> Asset {
+        self.digest = None;
+        self
+    }
+
     fn to_json(&self) -> String {
         let digest = match &self.digest {
             Some(hex) => format!(r#","digest":{{"algo":"sha256","hex":"{hex}"}}"#),

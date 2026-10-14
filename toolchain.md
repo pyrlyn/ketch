@@ -6,9 +6,11 @@ Project programs and direct packages from manifests.
 
 | Program | How to install | Why here | Source |
 | --- | --- | --- | --- |
+| sccache | mise (`sccache`, Linux and macOS; `mise.toml` `[env]` makes it the rustc wrapper where installed) | Compiler cache; CI uses a Cloudflare R2 bucket when the `R2_*` secrets exist | https://github.com/mozilla/sccache |
 | mise | brew / curl, then `mise install` | Pinned tool versions | https://github.com/jdx/mise |
 | cargo-cache | mise | `just cache` / `just cache-autoclean`; the shared cargo home fills up | https://github.com/matthiaskrgr/cargo-cache |
 | cargo-nextest | global (cargo install) | Parallel test runner | https://github.com/nextest-rs/nextest |
+| cargo-hakari | mise (`cargo:cargo-hakari`) | Keeps the `workspace-hack` crate unified so shared dependencies build once; CI runs `cargo hakari verify` | https://github.com/guppy-rs/guppy |
 | node | mise | commitlint for `just lint-commits` and the commit-msg hook, and the macOS design-token generator and checks; node-based checks live in Just and CI only | https://github.com/nodejs/node |
 | rustc | mise (through rustup) | Rust compiler; `mise.toml` pins the one version local work, CI and release builds use | https://github.com/rust-lang/rust |
 | cargo | with rustc | Rust build and dependencies | https://github.com/rust-lang/cargo |
@@ -50,7 +52,7 @@ Project programs and direct packages from manifests.
 | diesel_migrations | local | https://crates.io/crates/diesel_migrations | SQLite migrations |
 | dirs | local | https://crates.io/crates/dirs | Rust dependency |
 | flate2 | local | https://crates.io/crates/flate2 | Rust dependency |
-| fs-kit | local | https://github.com/pyrlyn/crates-packages/tree/main/fs-kit | Path identity without Windows UNC prefixes, atomic writes, tree copy and removal, backups |
+| fs-kit | local | https://github.com/pyrlyn/crates/tree/main/fs-kit | Path identity without Windows UNC prefixes, atomic writes, tree copy and removal, backups |
 | hex | local | https://crates.io/crates/hex | Rust dependency |
 | indicatif | local | https://crates.io/crates/indicatif | Rust dependency |
 | insta | local | https://crates.io/crates/insta | Reviewed snapshots |
@@ -73,8 +75,9 @@ Project programs and direct packages from manifests.
 | sha2 | local | https://crates.io/crates/sha2 | Rust dependency |
 | tar | local | https://crates.io/crates/tar | Rust dependency |
 | tempfile | local | https://crates.io/crates/tempfile | Rust dependency |
+| operation-icons | local | https://crates.io/crates/operation-icons | Status-line verb icons and icon gutter, shared with rtok |
 | terminal_size | local | https://crates.io/crates/terminal_size | Terminal width for `ketch list remote` descriptions |
-| unicode-width | local | https://github.com/unicode-rs/unicode-width | Column width of status-line emoji icons |
+| unicode-width | local (dev) | https://github.com/unicode-rs/unicode-width | Tests: every status-line icon fills one gutter width |
 | thiserror | local | https://crates.io/crates/thiserror | Errors |
 | tokio | local | https://crates.io/crates/tokio | Async runtime |
 | uniffi | local (`crates/ketch-ffi`) | https://github.com/mozilla/uniffi-rs | Exports the core to Swift (and later other languages) as `ketch-ffi`; its `cli` feature is the in-tree `uniffi-bindgen` (`just xcframework`) |
