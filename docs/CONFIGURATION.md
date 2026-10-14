@@ -1,7 +1,5 @@
 # Configuration
 
-## Configuration
-
 `~/.ketch/config.toml`, with environment variables taking precedence:
 
 | Key | Environment | Default |

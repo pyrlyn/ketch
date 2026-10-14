@@ -1,7 +1,5 @@
 # How ketch compares
 
-## How it compares
-
 Every tool below is good at what it was built for; this is where ketch sits
 among them. Checked against each project's documentation in September 2026.
 

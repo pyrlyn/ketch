@@ -120,7 +120,7 @@ behind the old one. The tag is what reproduces everywhere; the recorded
 checksum is enforced on a machine of the same target, and elsewhere ketch picks
 the asset that fits and verifies it against the source. `--prune` removes what
 the lockfile does not name, `--dry-run` shows the plan first. See
-[docs/LOCKFILE.md](LOCKFILE.md).
+[LOCKFILE.md](LOCKFILE.md).
 
 ## Getting on PATH
 
@@ -149,7 +149,7 @@ startup file has it but the current shell predates the edit, and `ketch doctor
 A name is resolved against four tiers, in order:
 
 1. your own manifests in `~/.ketch/manifests/`
-2. the fetched package registry — see [docs/REGISTRY.md](REGISTRY.md)
+2. the fetched package registry — see [REGISTRY.md](REGISTRY.md)
 3. the registry compiled into the binary, so common tools work offline
 4. inference from `owner/repo`, which is what makes an uncurated repository
    installable with no manifest at all
@@ -158,10 +158,10 @@ Inference picks the release asset that matches your machine — architecture,
 OS, and libc — and explains its choice under `ketch info --assets`.
 
 When it guesses wrong, a manifest says what to do instead: which asset, which
-binaries, under what names. See [docs/MANIFESTS.md](MANIFESTS.md).
+binaries, under what names. See [MANIFESTS.md](MANIFESTS.md).
 
 Sources other than GitHub are added as plugins — a single executable, no ketch
-release required. See [docs/PLUGINS.md](PLUGINS.md).
+release required. See [PLUGINS.md](PLUGINS.md).
 
 ## Platform support
 
