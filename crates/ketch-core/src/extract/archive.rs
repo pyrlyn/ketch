@@ -1336,6 +1336,8 @@ mod tests {
         assert_eq!(mode, 0o755);
     }
 
+    // Only the Unix-only tar tests use it; Windows would flag it as dead code.
+    #[cfg(unix)]
     fn unlimited() -> Budget {
         Budget::new(u64::MAX, u64::MAX)
     }
