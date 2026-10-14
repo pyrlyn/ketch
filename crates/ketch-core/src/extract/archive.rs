@@ -137,13 +137,17 @@ pub struct Bz2FileExtractor;
 /// Must be last in the extractor list: it accepts anything the others refused.
 pub struct RawBinaryExtractor;
 
-const GZIP_MAGIC: &[u8] = &[0x1f, 0x8b];
-const XZ_MAGIC: &[u8] = &[0xfd, b'7', b'z', b'X', b'Z', 0x00];
-const BZ2_MAGIC: &[u8] = b"BZh";
-const ZIP_MAGIC: &[u8] = &[b'P', b'K', 0x03, 0x04];
+/// Gzip header. The local source classifies from these same bytes.
+pub(crate) const GZIP_MAGIC: &[u8] = &[0x1f, 0x8b];
+/// XZ header. The local source classifies from these same bytes.
+pub(crate) const XZ_MAGIC: &[u8] = &[0xfd, b'7', b'z', b'X', b'Z', 0x00];
+/// bzip2 header. The local source classifies from these same bytes.
+pub(crate) const BZ2_MAGIC: &[u8] = b"BZh";
+/// ZIP local-file header. The local source classifies from these same bytes.
+pub(crate) const ZIP_MAGIC: &[u8] = &[b'P', b'K', 0x03, 0x04];
 
 /// The `ustar` marker tar writes at offset 257 of every header block.
-fn looks_like_tar(head: &[u8]) -> bool {
+pub(crate) fn looks_like_tar(head: &[u8]) -> bool {
     head.len() >= 262 && &head[257..262] == b"ustar"
 }
 

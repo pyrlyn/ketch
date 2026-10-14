@@ -11,6 +11,7 @@
 
 use super::claim::Claims;
 use super::scoring::looks_like_build_artifact;
+use super::sibling;
 use super::unix::{
     clear_destination, destination_available, discover_executables, link_binary, resolve_bin_specs,
     symlink, writable,
@@ -85,14 +86,6 @@ fn first_line(text: &str) -> String {
 // ---------------------------------------------------------------------------
 // Placement helpers
 // ---------------------------------------------------------------------------
-
-/// A path next to `original`, so swapping the two is a rename that never
-/// crosses a filesystem.
-fn sibling(original: &Path, suffix: &str) -> PathBuf {
-    let mut name = original.file_name().unwrap_or_default().to_os_string();
-    name.push(suffix);
-    original.with_file_name(name)
-}
 
 /// Move the extracted payload to its final home, falling back to a copy when
 /// the cache and the store are on different filesystems.

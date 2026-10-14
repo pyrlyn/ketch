@@ -117,7 +117,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | D18 | todo | P3 | 3 | 0% | |
 | D19 | todo | P3 | 4 | 0% | |
 | B74 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
-| R12 | todo | P3 | 1 | 0% | |
+| R12 | done | P3 | 1 | 100% | Cursor / grok 4.7 |
 | R20 | in progress | P2 | 3 | 90% | Claude / sonnet-5.5 |
 | B98 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | B99 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
@@ -510,7 +510,7 @@ Status: steps 1–6 landed in #215. `docs/ru` and `docs/uk` translate the user-f
 
 ### R12. Consolidate duplicated helpers
 
-`platform/unix.rs:46-53` and `self_update.rs:180-187` carry identical `remove_any`; `platform/unix.rs:164-170` and `platform/macos.rs:89-93` duplicate `sibling`; `source/local.rs:263-281` re-declares the GZIP/XZ/BZ2/ZIP/ustar magic constants from `extract/archive.rs:145-153`; `http.rs:60-64` keeps `Http::has_token` behind `#[allow(dead_code)]`. Done means: one implementation of each, and `has_token` is either used or gone.
+Done. `remove_any` already lives in `fs_kit::tree::remove_any` (R20); the local copies are gone. `Http::has_token` is used by the GitHub source before a draft listing, so it stays. `sibling` is one function in `platform/mod.rs`: the suffix is appended as bytes (a non-UTF-8 name is kept) and a path with no file name becomes `pkg`. The three backends call that. The GZIP/XZ/BZ2/ZIP magics and `looks_like_tar` are `pub(crate)` in `extract/archive.rs`; the local source classifies from them and still does not peek inside a compressed stream.
 
 ### R20. File and directory helpers from `fs-kit`
 

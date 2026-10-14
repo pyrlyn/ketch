@@ -19,7 +19,6 @@
 - D17. Linux: the app on the real core
 - D18. Linux: notifications, background and autostart
 - D19. Linux: packaging and release
-- R12. Consolidate duplicated helpers
 - R20. File and directory helpers from `fs-kit`
 - B98. `install.ps1` closes the user's PowerShell window on error
 - B99. Extraction has no byte or entry budget

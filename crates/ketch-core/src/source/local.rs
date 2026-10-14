@@ -13,6 +13,7 @@
 use super::{ListOpts, Source};
 use crate::cancel::Cancel;
 use crate::error::{Error, Result};
+use crate::extract::archive::{looks_like_tar, BZ2_MAGIC, GZIP_MAGIC, XZ_MAGIC, ZIP_MAGIC};
 use crate::extract::{is_bundle_name, read_head};
 use crate::http;
 use crate::model::{
@@ -261,23 +262,14 @@ pub fn classify(path: &Path) -> Result<LocalKind> {
 }
 
 fn looks_like_archive(_path: &Path, head: &[u8]) -> bool {
-    // Magic-byte detection mirrors `extract::archive`, without accepting the
-    // catch-all raw-binary extractor.
-    const GZIP: &[u8] = &[0x1f, 0x8b];
-    const XZ: &[u8] = &[0xfd, b'7', b'z', b'X', b'Z', 0x00];
-    const BZ2: &[u8] = b"BZh";
-    const ZIP: &[u8] = &[b'P', b'K', 0x03, 0x04];
-    if head.starts_with(GZIP)
-        || head.starts_with(XZ)
-        || head.starts_with(BZ2)
-        || head.starts_with(ZIP)
-    {
-        return true;
-    }
-    if head.len() >= 262 && &head[257..262] == b"ustar" {
-        return true;
-    }
-    false
+    // Same bytes the extractors sniff, without opening the file to see whether
+    // a compressed stream wraps tar. A lone `.gz` is still an archive here;
+    // the raw-binary extractor is not.
+    head.starts_with(GZIP_MAGIC)
+        || head.starts_with(XZ_MAGIC)
+        || head.starts_with(BZ2_MAGIC)
+        || head.starts_with(ZIP_MAGIC)
+        || looks_like_tar(head)
 }
 
 fn path_id(path: &Path) -> String {
@@ -581,6 +573,20 @@ mod tests {
             sha256_tree(linked.path()).unwrap(),
             sha256_tree(again.path()).unwrap()
         );
+    }
+
+    #[test]
+    fn archive_bytes_match_the_extractor_magics() {
+        let path = Path::new("tool");
+        assert!(looks_like_archive(path, GZIP_MAGIC));
+        assert!(looks_like_archive(path, XZ_MAGIC));
+        assert!(looks_like_archive(path, BZ2_MAGIC));
+        assert!(looks_like_archive(path, ZIP_MAGIC));
+        let mut tar = vec![0u8; 262];
+        tar[257..262].copy_from_slice(b"ustar");
+        assert!(looks_like_tar(&tar));
+        assert!(looks_like_archive(path, &tar));
+        assert!(!looks_like_archive(path, b"#!/bin/sh\n"));
     }
 
     #[test]

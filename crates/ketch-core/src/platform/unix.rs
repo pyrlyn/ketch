@@ -18,6 +18,8 @@ use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use super::scoring::looks_like_build_artifact;
 #[cfg(target_os = "linux")]
+use super::sibling;
+#[cfg(target_os = "linux")]
 use super::Placement;
 #[cfg(target_os = "linux")]
 use crate::model::PackageKind;
@@ -155,15 +157,6 @@ pub(crate) fn writable(dir: &Path) -> std::result::Result<(), String> {
         .tempfile_in(dir)
         .map(|_| ())
         .map_err(|e| e.to_string())
-}
-
-#[cfg(target_os = "linux")]
-pub(crate) fn sibling(original: &Path, suffix: &str) -> PathBuf {
-    let name = original
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "pkg".into());
-    original.with_file_name(format!("{name}{suffix}"))
 }
 
 /// Move the extracted payload to its final home, falling back to a copy when
