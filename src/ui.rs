@@ -23,7 +23,6 @@ use std::collections::HashMap;
 use std::io::{IsTerminal, Write};
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Mutex;
-use unicode_width::UnicodeWidthStr;
 
 #[cfg(feature = "tui")]
 use std::sync::Arc;
@@ -332,31 +331,10 @@ pub fn tone(tone: Tone, text: &str) -> String {
     }
 }
 
-/// Icons for what a verb is doing, looked up before the [`Tone`]'s own.
-///
-/// Matched as substrings of the verb, in order, so `installing`, `installed`
-/// and `already installed` share one entry. `uninstall` comes before `install`
-/// because it contains it.
-const OPERATION_ICONS: &[(&str, &str)] = &[
-    ("uninstall", "🧹"),
-    ("remov", "🧹"),
-    ("prun", "🧹"),
-    ("install", "📦"),
-    ("upgrad", "⏫"),
-    ("updat", "⏫"),
-    ("download", "⏬"),
-    ("fetch", "⏬"),
-    ("link", "🔗"),
-    ("roll", "⏪"),
-    ("search", "🔍"),
-    ("doctor", "🩺"),
-];
-
 /// The icon a line carries: its operation's when the verb names one, else its
 /// meaning's. Work in progress and questions have no icon of their own.
 fn icon(verb: &str, kind: Tone) -> Option<&'static str> {
-    let verb = verb.to_ascii_lowercase();
-    if let Some((_, icon)) = OPERATION_ICONS.iter().find(|(key, _)| verb.contains(key)) {
+    if let Some(icon) = operation_icons::icon(verb) {
         return Some(icon);
     }
     match kind {
@@ -368,14 +346,6 @@ fn icon(verb: &str, kind: Tone) -> Option<&'static str> {
     }
 }
 
-/// Columns every icon is padded to. Every icon is one code point that is wide
-/// by default. A narrow symbol made wide by U+FE0F (`⬆️`, `⚠️`) is two columns
-/// to `unicode-width` but one to terminals that ignore the selector, which
-/// then draw the glyph over the space after it and shift the verb left. Each icon is still
-/// measured rather than assumed, so a narrower one added later pads out
-/// instead of pulling its line left.
-const ICON_WIDTH: usize = 2;
-
 /// The icon gutter in front of the verb column: the icon and a space, or as
 /// many blanks when the line has none, so lines with and without icons align.
 /// Empty when icons are off.
@@ -383,16 +353,14 @@ fn gutter(icon: Option<&str>) -> String {
     if !emoji_enabled() {
         return String::new();
     }
-    let icon = icon.unwrap_or("");
-    let pad = ICON_WIDTH.saturating_sub(UnicodeWidthStr::width(icon));
-    format!("{icon}{} ", " ".repeat(pad))
+    operation_icons::gutter(icon)
 }
 
 /// The width of the verb column, icon gutter included: where the text after
 /// the verb starts, for lines that continue under it.
 fn label_width() -> usize {
     if emoji_enabled() {
-        10 + ICON_WIDTH + 1
+        10 + operation_icons::ICON_WIDTH + 1
     } else {
         10
     }
@@ -1395,6 +1363,7 @@ pub fn ctx_asking(cfg: &Config, ask: bool) -> Ctx<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use unicode_width::UnicodeWidthStr;
 
     const HOSTILE: &str = "evil\u{1b}[2K\u{1b}[1;31mFAKE\u{1b}[0m";
     const FILTERED: &str = "evil[2K[1;31mFAKE[0m";
@@ -1507,20 +1476,28 @@ mod tests {
         EMOJI.store(false, Ordering::Relaxed);
         let shown = every_line_kind().join("\n");
         insta::assert_snapshot!(shown);
-        for (_, icon) in OPERATION_ICONS {
+        for (_, icon) in operation_icons::OPERATION_ICONS {
             assert!(!shown.contains(icon), "{shown}");
         }
     }
 
     #[test]
     fn every_icon_fills_the_same_gutter() {
-        for (_, icon) in OPERATION_ICONS {
-            assert_eq!(UnicodeWidthStr::width(*icon), ICON_WIDTH, "{icon}");
+        for (_, icon) in operation_icons::OPERATION_ICONS {
+            assert_eq!(
+                UnicodeWidthStr::width(*icon),
+                operation_icons::ICON_WIDTH,
+                "{icon}"
+            );
             assert_eq!(icon.chars().count(), 1, "{icon} needs a selector");
         }
         for kind in [Tone::Success, Tone::Warning, Tone::Error, Tone::Note] {
             let icon = icon("", kind).unwrap_or_default();
-            assert_eq!(UnicodeWidthStr::width(icon), ICON_WIDTH, "{icon}");
+            assert_eq!(
+                UnicodeWidthStr::width(icon),
+                operation_icons::ICON_WIDTH,
+                "{icon}"
+            );
             assert_eq!(icon.chars().count(), 1, "{icon} needs a selector");
         }
     }

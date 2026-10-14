@@ -261,15 +261,7 @@ impl KetchCore {
         let cancel = token(cancel);
         let reqs: Vec<InstallRequest> = specs
             .iter()
-            .map(|raw| InstallRequest {
-                force: options.force,
-                prerelease: options.prerelease,
-                link: options.link,
-                require_checksum: options.require_checksum || op.cfg.require_checksums,
-                bin: options.bin.clone(),
-                cancel: cancel.clone(),
-                ..InstallRequest::new(PackageSpec::parse(raw))
-            })
+            .map(|raw| install_request(&op.cfg, &options, raw, &cancel))
             .collect();
         let outcomes = install::batch(&cx, &sources, &mut state, &reqs, op.cfg.jobs);
         let labels = reqs.iter().map(|r| r.spec.label()).collect();
@@ -689,6 +681,25 @@ fn installed_names(state: &State, names: &[String]) -> Result<BTreeSet<String>> 
 
 /// The upgrades on offer for installed packages, all of them or those in
 /// `only`: `ketch list`'s lookups, cache and update rules.
+/// What `install` asks the core for one `raw` spec under `options`.
+fn install_request(
+    cfg: &Config,
+    options: &InstallOptions,
+    raw: &str,
+    cancel: &Cancel,
+) -> InstallRequest {
+    InstallRequest {
+        force: options.force,
+        prerelease: options.prerelease,
+        link: options.link,
+        require_checksum: options.require_checksum || cfg.require_checksums,
+        allow_unverified: options.allow_unverified,
+        bin: options.bin.clone(),
+        cancel: cancel.clone(),
+        ..InstallRequest::new(PackageSpec::parse(raw))
+    }
+}
+
 fn upgrades(cx: &Ctx<'_>, state: &State, only: Option<&BTreeSet<String>>) -> Result<Vec<Upgrade>> {
     let locals = state
         .iter()
@@ -991,6 +1002,21 @@ mod tests {
         ];
         assert_eq!(summarise(2, cancelled), Some(KetchError::Cancelled));
         assert_eq!(summarise(2, Vec::new()), None);
+    }
+
+    #[test]
+    fn install_options_carry_consent_to_drop_checksum_verification() {
+        let (_dir, core) = scratch();
+        let cfg = core.operation(None, None).unwrap().cfg;
+        let cancel = Cancel::default();
+        let asked = |options: InstallOptions| {
+            install_request(&cfg, &options, "o/r", &cancel).allow_unverified
+        };
+        assert!(!asked(InstallOptions::default()));
+        assert!(asked(InstallOptions {
+            allow_unverified: true,
+            ..InstallOptions::default()
+        }));
     }
 
     #[test]

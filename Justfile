@@ -47,10 +47,11 @@ setup:
     #!/usr/bin/env bash
     set -euo pipefail
     mkdir -p .cargo
-    # Cargo reads both `.cargo/config` and `.cargo/config.toml` (the latter
-    # wins), so a legacy `config` file must not be silently shadowed.
-    if [ -e .cargo/config.toml ] || [ -e .cargo/config ]; then
-      echo ".cargo/config.toml already exists; leaving it alone"
+    # `.cargo/config.toml` is tracked (Windows rust-lld) and pulls in the
+    # git-ignored `.cargo/config.local.toml` via `include` (cargo >= 1.93),
+    # so the local override never dirties the tracked file.
+    if [ -e .cargo/config.local.toml ]; then
+      echo ".cargo/config.local.toml already exists; leaving it alone"
     else
       printf '%s\n' \
         '# Local-only Cargo overrides, never committed.' \
@@ -62,8 +63,8 @@ setup:
         '# CI and release builds never run this, so they always resolve the' \
         '# pinned crates.io version from `Cargo.lock`.' \
         'paths = ["../../packages/crates/fs-kit"]' \
-        > .cargo/config.toml
-      echo "wrote .cargo/config.toml (local fs-kit override)"
+        > .cargo/config.local.toml
+      echo "wrote .cargo/config.local.toml (local fs-kit override)"
     fi
 
 # opt in to the commit-msg hook; undo with `git config --unset core.hooksPath`
@@ -310,3 +311,8 @@ fuzz target="" secs="60":
     for t in $targets; do
         cargo +nightly fuzz run "$t" -- -max_total_time={{secs}} -max_len=16384 -rss_limit_mb=4096
     done
+
+# Opt-in Cranelift dev build (nightly; dev profile only, never release). `just cranelift check` also works.
+cranelift *args='build':
+    rustup component add rustc-codegen-cranelift-preview --toolchain nightly
+    cargo +nightly --config .cargo/cranelift.toml {{args}}
