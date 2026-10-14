@@ -24,9 +24,11 @@ camino = { version = "1", default-features = false, features = ["serde1"] }
 clap = { version = "4", features = ["cargo", "derive", "env", "wrap_help"] }
 clap_builder = { version = "4", default-features = false, features = ["cargo", "color", "env", "std", "suggestions", "usage", "wrap_help"] }
 console = { version = "0.16", default-features = false, features = ["ansi-parsing", "std", "unicode-width"] }
+crc32fast = { version = "1" }
 derive_more = { version = "2", features = ["debug", "display", "is_variant"] }
 digest = { version = "0.11", features = ["alloc", "mac", "oid"] }
 either = { version = "1", features = ["use_std"] }
+flate2 = { version = "1", features = ["zlib-rs"] }
 form_urlencoded = { version = "1" }
 futures-channel = { version = "0.3", features = ["sink"] }
 futures-core = { version = "0.3" }
@@ -56,6 +58,7 @@ serde = { version = "1", features = ["alloc", "derive"] }
 serde_core = { version = "1", features = ["alloc"] }
 serde_json = { version = "1", features = ["alloc", "float_roundtrip", "unbounded_depth"] }
 serde_spanned = { version = "1" }
+simd-adler32 = { version = "0.3", default-features = false, features = ["std"] }
 smallvec = { version = "1", default-features = false, features = ["const_new", "write"] }
 strum = { version = "0.28", features = ["derive"] }
 subtle = { version = "2" }
