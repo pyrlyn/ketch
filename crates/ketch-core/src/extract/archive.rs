@@ -1341,6 +1341,7 @@ mod tests {
     /// Nix and some reproducible tarballs mark directories 0555. Applied as
     /// written, the mode either stops the children from being written or
     /// leaves a tree nothing can remove.
+    #[cfg(feature = "gzip")]
     #[cfg(unix)]
     #[test]
     fn a_read_only_directory_extracts_and_stays_removable_in_either_order() {
@@ -1362,6 +1363,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "gzip")]
     #[cfg(unix)]
     #[test]
     fn setuid_bits_from_an_archive_are_dropped() {
