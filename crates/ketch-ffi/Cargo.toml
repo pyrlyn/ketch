@@ -44,6 +44,7 @@ serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 # Proc-macro mode: the exported surface is the Rust code itself, no UDL file.
 uniffi = "0.32.2"
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"

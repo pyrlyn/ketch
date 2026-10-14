@@ -623,4 +623,22 @@ mod tests {
         write_manifest(&path, body).unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), body);
     }
+
+    /// A manifest keeps the mode the user gave it, and a new one is private.
+    #[cfg(unix)]
+    #[test]
+    fn a_manifest_keeps_its_mode_and_a_new_one_is_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        let dir = tempfile::tempdir().unwrap();
+        let shared = dir.path().join("shared.toml");
+        std::fs::write(&shared, "old").unwrap();
+        std::fs::set_permissions(&shared, std::fs::Permissions::from_mode(0o644)).unwrap();
+        replace_file(&shared, "new").unwrap();
+        assert_eq!(mode(&shared), 0o644);
+
+        let fresh = dir.path().join("fresh.toml");
+        replace_file(&fresh, "new").unwrap();
+        assert_eq!(mode(&fresh), 0o600);
+    }
 }
