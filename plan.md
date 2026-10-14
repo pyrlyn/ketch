@@ -116,7 +116,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | D17 | todo | P3 | 4 | 0% | |
 | D18 | todo | P3 | 3 | 0% | |
 | D19 | todo | P3 | 4 | 0% | |
-| B74 | todo | P3 | 3 | 0% | |
+| B74 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
 | R12 | todo | P3 | 1 | 0% | |
 | R20 | in progress | P2 | 3 | 90% | Claude / sonnet-5.5 |
 | B98 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
@@ -506,7 +506,7 @@ Status: steps 1–6 landed in #215. `docs/ru` and `docs/uk` translate the user-f
 
 ### B74. xz archives decompress entirely into memory
 
-`crates/ketch-core/src/extract/archive.rs:400-409`: `TarXzExtractor` does `xz_decompress` into a `Vec` before tar parsing; a hostile multi-GB `.tar.xz` (checksum-valid, same publisher) is a memory-exhaustion DoS during extraction. The gz/bz2 paths already stream via `lzma-rs` readers. Done means: the xz path streams like the others. Related doc note: the plugin protocol v1 has no checksum channel at all (`source/plugin.rs:125-191` never overrides `Source::checksums`) — state the TOFU limitation in `docs/PLUGINS.md` if not already there.
+`lzma-rs` decoded each XZ block into one `Vec` before any plaintext was written (`decode::xz::read_block`), so a channel adapter around `xz_decompress` still held a hostile multi-GB block in memory. Done: `TarXzExtractor` and `XzFileExtractor` read through `lzma-rust2`'s `XzReader`, which yields plaintext as it is decoded, and refuse a block whose LZMA2 dictionary would take more than 256 MiB of decoder memory. `docs/PLUGINS.md` states that protocol v1 has no checksum subcommand, so a plugin asset without a sha256 `digest` is trust on first use.
 
 ### R12. Consolidate duplicated helpers
 
