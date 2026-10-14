@@ -7,7 +7,7 @@ install_alternatives:
   - 'irm https://raw.githubusercontent.com/pyrlyn/ketch/main/install.ps1 | iex'
   - 'brew install --cask pyrlyn/tap/ketch'
   - 'mise use -g github:pyrlyn/ketch'
-version: "0.6.0"
+version: "0.10.0"
 accent: "#3DDCB0"
 accentLight: "#0F6F5C"
 order: 2
@@ -16,8 +16,8 @@ order: 2
 <!-- Website copy for the pyrlyn project site. The sync-docs workflow copies this file to
 pyrlyn/landing (main) as content/projects/ketch.md on every change to main and on every v*
 tag; front matter follows CONTENT_CONTRACT.md in that repository.
-Sources (checked 2026-09-27): README.md and the clap CLI in src/cli.rs; version from the latest
-GitHub release (v0.6.0); accent is the dark-theme --accent in site/DESIGN.md. -->
+Sources (checked 2026-10-14): README.md and the clap CLI in src/cli.rs; version from the latest
+GitHub release (v0.10.0); accent is the dark-theme --accent in site/DESIGN.md. -->
 
 ## Overview
 
@@ -120,6 +120,7 @@ ketch self uninstall
 
 - Repository: <https://github.com/pyrlyn/ketch>
 - Package registry: <https://github.com/pyrlyn/ketch-registry>
+- Documentation: <https://github.com/pyrlyn/ketch/tree/main/docs>
 - Releases: <https://github.com/pyrlyn/ketch/releases>
 - License: your choice of GNU GPLv3, a royalty-free license for proprietary desktop, mobile and web
   apps (with attribution), or a commercial license (see <https://github.com/pyrlyn/ketch#license>)
