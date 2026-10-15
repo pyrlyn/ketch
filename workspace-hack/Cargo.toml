@@ -25,7 +25,7 @@ clap_builder = { version = "4", default-features = false, features = ["cargo", "
 console = { version = "0.16", default-features = false, features = ["ansi-parsing", "std", "unicode-width"] }
 derive_more = { version = "2", features = ["debug", "display", "is_variant"] }
 either = { version = "1", features = ["use_std"] }
-getrandom-468e82937335b1c9 = { package = "getrandom", version = "0.3", default-features = false, features = ["std"] }
+getrandom = { version = "0.3", default-features = false, features = ["std"] }
 hashbrown = { version = "0.17" }
 indexmap = { version = "2", features = ["serde"] }
 itertools = { version = "0.14" }
@@ -88,6 +88,7 @@ mio = { version = "1", features = ["net", "os-ext"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 [target.x86_64-unknown-linux-gnu.build-dependencies]
+getrandom = { version = "0.3", default-features = false, features = ["std"] }
 libc = { version = "0.2" }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
@@ -99,15 +100,15 @@ rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 [target.aarch64-apple-darwin.build-dependencies]
 errno = { version = "0.3" }
+getrandom = { version = "0.3", default-features = false, features = ["std"] }
 libc = { version = "0.2" }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 [target.x86_64-pc-windows-msvc.dependencies]
-getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std"] }
 windows-sys = { version = "0.61", features = ["Wdk_Foundation", "Wdk_Storage_FileSystem", "Wdk_System_IO", "Win32_Globalization", "Win32_Networking_WinSock", "Win32_Security_Authentication_Identity", "Win32_Security_Credentials", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Console", "Win32_System_IO", "Win32_System_LibraryLoader", "Win32_System_Memory", "Win32_System_Pipes", "Win32_System_SystemInformation", "Win32_System_SystemServices", "Win32_System_Threading", "Win32_System_WindowsProgramming", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell"] }
 
 [target.x86_64-pc-windows-msvc.build-dependencies]
-getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std"] }
+getrandom = { version = "0.3", default-features = false, features = ["std"] }
 windows-sys = { version = "0.61", features = ["Wdk_Foundation", "Wdk_Storage_FileSystem", "Wdk_System_IO", "Win32_Globalization", "Win32_Networking_WinSock", "Win32_Security_Authentication_Identity", "Win32_Security_Credentials", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Console", "Win32_System_IO", "Win32_System_LibraryLoader", "Win32_System_Memory", "Win32_System_Pipes", "Win32_System_SystemInformation", "Win32_System_SystemServices", "Win32_System_Threading", "Win32_System_WindowsProgramming", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell"] }
 
 ### END HAKARI SECTION
