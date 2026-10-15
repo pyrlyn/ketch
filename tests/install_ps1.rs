@@ -58,6 +58,49 @@ fn install_ps1() -> Command {
     cmd
 }
 
+/// GitHub release tags are v-prefixed; `--version` must accept either form.
+/// The status line is printed before the download, so a missing release still
+/// shows the tag the URL will use.
+#[test]
+fn a_bare_version_is_printed_with_the_release_tag_prefix() {
+    let Some(pwsh) = pwsh_bin() else {
+        return;
+    };
+    let work = std::env::temp_dir().join(format!("ketch-ps1-ver-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&work);
+    std::fs::create_dir_all(&work).unwrap();
+    for (given, shown) in [
+        ("0.0.0-ketch-flag-probe", "v0.0.0-ketch-flag-probe"),
+        ("v0.0.0-ketch-flag-probe", "v0.0.0-ketch-flag-probe"),
+    ] {
+        let output = std::process::Command::new(&pwsh)
+            .args([
+                "-NoProfile",
+                "-File",
+                concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1"),
+                "--no-modify-path",
+                "--version",
+                given,
+                "--root",
+            ])
+            .arg(work.join("root"))
+            .env("USERPROFILE", &work)
+            .env("PROCESSOR_ARCHITECTURE", "AMD64")
+            .output()
+            .expect("pwsh");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains(&format!("Installing ketch version {shown}")),
+            "given {given}: {stdout}"
+        );
+        assert!(
+            !stdout.contains("Installing ketch version vv"),
+            "given {given}: {stdout}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&work);
+}
+
 /// Reaching the release fetch means the flags were accepted.
 #[cfg(windows)]
 fn fails_after_flag_parse() -> impl predicates::Predicate<str> {

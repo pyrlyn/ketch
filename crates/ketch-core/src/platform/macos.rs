@@ -15,6 +15,7 @@ use super::unix::{
     clear_destination, destination_available, discover_executables, link_binary, resolve_bin_specs,
     symlink, writable,
 };
+use super::{finalize_store_swap, restore_retired_store};
 use super::{AssetScore, DoctorCheck, Placement, Platform, TrustVerdict};
 use crate::config::Config;
 use crate::error::{Error, Result};
@@ -22,7 +23,6 @@ use crate::extract::archive::is_program_head;
 use crate::extract::macos::copy_tree;
 use crate::extract::Extractor;
 use crate::model::{Arch, LinkKind, LinkRecord, LinkRole, PackageKind, TargetSpec};
-use fs_kit::tree::remove_any;
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::os::unix::fs::PermissionsExt;
@@ -86,70 +86,9 @@ fn first_line(text: &str) -> String {
 // Placement helpers
 // ---------------------------------------------------------------------------
 
-/// A path next to `original`, so swapping the two is a rename that never
-/// crosses a filesystem.
-fn sibling(original: &Path, suffix: &str) -> PathBuf {
-    let mut name = original.file_name().unwrap_or_default().to_os_string();
-    name.push(suffix);
-    original.with_file_name(name)
-}
-
-/// Move the extracted payload to its final home, falling back to a copy when
-/// the cache and the store are on different filesystems.
-///
-/// The replacement is assembled beside the destination and swapped in last.
-/// Deleting the old directory first — as the obvious version does — means an
-/// upgrade that fails while copying leaves the user with no working version of
-/// a package they already had installed.
-///
-/// Returns true when it retired a previous tree to `.old`. Only then may the
-/// caller finalize or restore: a `.old` found otherwise is an earlier run's
-/// leftover, and restoring it would replace the live prefix with it.
+/// `ditto` is what copies a payload when the cache and the store differ.
 fn move_into_store(payload: &Path, store: &Path) -> Result<bool> {
-    // `relink` re-runs placement over a payload that is already in the store;
-    // without this the swap below would move it out from under itself.
-    if payload == store {
-        return Ok(false);
-    }
-    if let Some(parent) = store.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
-    }
-
-    let staged = sibling(store, ".incoming");
-    let _ = remove_any(&staged);
-    if std::fs::rename(payload, &staged).is_err() {
-        copy_tree(payload, &staged)?;
-    }
-
-    if store.symlink_metadata().is_err() {
-        return std::fs::rename(&staged, store)
-            .map(|()| false)
-            .map_err(|e| Error::io(store, e));
-    }
-    let retired = sibling(store, ".old");
-    let _ = remove_any(&retired);
-    std::fs::rename(store, &retired).map_err(|e| Error::io(store, e))?;
-    if let Err(e) = std::fs::rename(&staged, store) {
-        // Put back the version that was working before reporting the failure.
-        let _ = std::fs::rename(&retired, store);
-        let _ = remove_any(&staged);
-        return Err(Error::io(store, e));
-    }
-    // Leave `.old` until links succeed. A failed place after this swap can
-    // put the working version back; deleting it here would leave none.
-    Ok(true)
-}
-
-fn finalize_store_swap(store: &Path) {
-    let _ = remove_any(&sibling(store, ".old"));
-}
-
-fn restore_retired_store(store: &Path) {
-    let retired = sibling(store, ".old");
-    if retired.symlink_metadata().is_ok() {
-        let _ = remove_any(store);
-        let _ = std::fs::rename(&retired, store);
-    }
+    super::swap_into_store(payload, store, copy_tree)
 }
 
 /// True when `path` sits inside *another* bundle — a helper app nested in the

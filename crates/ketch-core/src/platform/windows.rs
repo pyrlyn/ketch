@@ -10,6 +10,8 @@
 
 use super::claim::Claims;
 use super::scoring::looks_like_build_artifact;
+use super::sibling;
+use super::{finalize_store_swap, restore_retired_store};
 use super::{AssetScore, DoctorCheck, Placement, Platform};
 use crate::config::Config;
 use crate::error::{Error, Result};
@@ -141,60 +143,9 @@ fn copy_over(from: &Path, to: &Path) -> std::io::Result<()> {
     }
 }
 
-fn sibling(original: &Path, suffix: &str) -> PathBuf {
-    let name = original
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "pkg".into());
-    original.with_file_name(format!("{name}{suffix}"))
-}
-
-/// Move the extracted payload into the store, keeping the previous tree as
-/// `.old` until placement has succeeded.
-///
-/// Returns true when it retired a previous tree to `.old`. Only then may the
-/// caller finalize or restore: a `.old` found otherwise is an earlier run's
-/// leftover, and restoring it would replace the live prefix with it.
+/// Copies with `copy_tree` when a rename cannot cross filesystems.
 fn move_into_store(payload: &Path, store: &Path) -> Result<bool> {
-    if payload == store {
-        return Ok(false);
-    }
-    if let Some(parent) = store.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
-    }
-    let staged = sibling(store, ".incoming");
-    let _ = remove_any(&staged);
-    if std::fs::rename(payload, &staged).is_err() {
-        copy_tree(payload, &staged)?;
-    }
-    if store.symlink_metadata().is_err() {
-        return std::fs::rename(&staged, store)
-            .map(|()| false)
-            .map_err(|e| Error::io(store, e));
-    }
-    let retired = sibling(store, ".old");
-    let _ = remove_any(&retired);
-    std::fs::rename(store, &retired).map_err(|e| Error::io(store, e))?;
-    if let Err(e) = std::fs::rename(&staged, store) {
-        let _ = std::fs::rename(&retired, store);
-        let _ = remove_any(&staged);
-        return Err(Error::io(store, e));
-    }
-    // Leave `.old` until copies succeed. A failed place after this swap can
-    // put the working version back; deleting it here would leave none.
-    Ok(true)
-}
-
-fn finalize_store_swap(store: &Path) {
-    let _ = remove_any(&sibling(store, ".old"));
-}
-
-fn restore_retired_store(store: &Path) {
-    let retired = sibling(store, ".old");
-    if retired.symlink_metadata().is_ok() {
-        let _ = remove_any(store);
-        let _ = std::fs::rename(&retired, store);
-    }
+    super::swap_into_store(payload, store, copy_tree)
 }
 
 /// `recorded` with targets under `store` pointed at its retired copy.

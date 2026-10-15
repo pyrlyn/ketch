@@ -114,6 +114,7 @@ tower = { version = "0.5", default-features = false, features = ["buffer", "retr
 tower-http = { version = "0.6", features = ["follow-redirect", "map-response-body", "trace"] }
 
 [target.x86_64-unknown-linux-gnu.build-dependencies]
+getrandom-468e82937335b1c9 = { package = "getrandom", version = "0.3", default-features = false, features = ["std"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 [target.aarch64-apple-darwin.dependencies]
@@ -128,11 +129,11 @@ tower-http = { version = "0.6", features = ["follow-redirect", "map-response-bod
 
 [target.aarch64-apple-darwin.build-dependencies]
 errno = { version = "0.3" }
+getrandom-468e82937335b1c9 = { package = "getrandom", version = "0.3", default-features = false, features = ["std"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 [target.x86_64-pc-windows-msvc.dependencies]
 aws-lc-rs = { version = "1", features = ["prebuilt-nasm"] }
-getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std"] }
 sync_wrapper = { version = "1", default-features = false, features = ["futures"] }
 tokio-util = { version = "0.7", default-features = false, features = ["io-util"] }
 tower = { version = "0.5", default-features = false, features = ["buffer", "retry", "timeout"] }
@@ -140,7 +141,7 @@ tower-http = { version = "0.6", features = ["follow-redirect", "map-response-bod
 windows-sys = { version = "0.61", features = ["Wdk_Foundation", "Wdk_Storage_FileSystem", "Wdk_System_IO", "Win32_Globalization", "Win32_Networking_WinSock", "Win32_Security_Authentication_Identity", "Win32_Security_Credentials", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Console", "Win32_System_IO", "Win32_System_LibraryLoader", "Win32_System_Memory", "Win32_System_Pipes", "Win32_System_SystemInformation", "Win32_System_SystemServices", "Win32_System_Threading", "Win32_System_WindowsProgramming", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell"] }
 
 [target.x86_64-pc-windows-msvc.build-dependencies]
-getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std"] }
+getrandom-468e82937335b1c9 = { package = "getrandom", version = "0.3", default-features = false, features = ["std"] }
 windows-sys = { version = "0.61", features = ["Wdk_Foundation", "Wdk_Storage_FileSystem", "Wdk_System_IO", "Win32_Globalization", "Win32_Networking_WinSock", "Win32_Security_Authentication_Identity", "Win32_Security_Credentials", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Console", "Win32_System_IO", "Win32_System_LibraryLoader", "Win32_System_Memory", "Win32_System_Pipes", "Win32_System_SystemInformation", "Win32_System_SystemServices", "Win32_System_Threading", "Win32_System_WindowsProgramming", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell"] }
 
 ### END HAKARI SECTION

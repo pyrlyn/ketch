@@ -1,3 +1,45 @@
+### B132. `install.ps1` omits the `v` on `--version`
+
+`install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.
+
+Test: `a_bare_version_is_printed_with_the_release_tag_prefix` (runs when `pwsh` is installed; the status line is printed before the download).
+
+### B120. Shell blocks miss CRLF startup files
+
+`marker_at_line_start` treated a marker as a whole line only when the next character was `\n` or the end of the file. A PowerShell profile or an autocrlf dotfile ends the line with `\r\n`, so the block was invisible: every install appended another copy, and uninstall left them all. A marker now also ends at `\r`, and `block_span` consumes the `\r\n` or `\r` that follows the end marker.
+
+Test: `a_crlf_block_is_replaced_rather_than_appended`.
+
+### B122. Download bar labels skip the terminal filter
+
+`BarProgress::start` put the asset name on the download bar with `truncate` and no `printable`. Every other status line runs client text through `changelog::sanitize` first, which drops escapes and bidi overrides. The bar now filters the label, including one stored for a batch, and then truncates it. Callers that already pass a clean name are unchanged.
+
+Test: `a_download_bar_label_cannot_redraw_the_terminal`.
+
+### R18. One atomic replace helper in `ketch-core`
+
+File replacements already went through `fs_kit::write`. The store swap was still three copies of the same rename: stage as `.incoming`, retire the live tree to `.old`, swap the stage in, and put `.old` back if the second rename fails. That sequence is now `swap_into_store` in `platform/mod.rs`. macOS passes `ditto`; Linux and Windows pass `copy_tree`, and the copy runs only when the rename onto the stage fails. `finalize_store_swap` and `restore_retired_store` moved with it. A payload that is already the store is not retired, and `.old` stays until placement finishes.
+
+Tests: `swap_into_store_of_the_same_path_does_not_retire_it`, `swap_into_store_retires_the_previous_tree_and_restore_puts_it_back`, `swap_into_store_copies_when_the_rename_onto_the_stage_fails`, plus the existing place-failure restore on Linux and macOS.
+
+### R12. Consolidate duplicated helpers
+
+`sibling` lived in three backends. Linux and Windows lossily rebuilt the file name and fell back to `pkg`; macOS appended the suffix as bytes and used an empty name when the path had none. One function in `platform/mod.rs` does both: bytes, so a non-UTF-8 name stays intact, and `pkg` when there is no file name. Store swaps still rename `.incoming` and `.old` beside the live directory.
+
+`remove_any` was already `fs_kit::tree::remove_any`. `Http::has_token` is called before a GitHub draft listing, so the unused-helper note was stale and the method stays.
+
+The local source redeclared the gzip, xz, bzip2, zip and ustar checks. Those constants and `looks_like_tar` are now `pub(crate)` on the extractors, and `looks_like_archive` uses them. It still treats a lone compressed file as an archive and does not open the stream to see whether tar follows.
+
+Tests: `sibling_appends_the_suffix_to_the_file_name`, `sibling_of_a_nameless_path_uses_pkg`, `sibling_keeps_a_non_utf8_file_name`, `archive_bytes_match_the_extractor_magics`.
+
+### B74. xz archives decompress entirely into memory
+
+`lzma-rs` decoded each XZ block into one `Vec` (`read_block` writes the block only after it has been decompressed) before tar or a lone-file extract saw a byte. A channel in front of that writer still held the whole block. `TarXzExtractor` and `XzFileExtractor` now read `lzma-rust2`'s `XzReader`, which implements `Read` and yields plaintext as it is decoded. A block whose LZMA2 dictionary plus decoder overhead would exceed 256 MiB is refused before the dictionary is allocated; stock `xz -9` uses 64 MiB and still fits. The crate's `optimization` feature (its unsafe path) stays off, and the encoder is not a dependency: tests use fixed xz fixtures. `lzma-rs` is gone.
+
+Protocol v1 has no checksum subcommand. `docs/PLUGINS.md` (and `docs/ru`, `docs/uk`) says a plugin asset without a sha256 `digest` is trust on first use, and `require_checksums` refuses that install.
+
+Tests: `xz_plaintext_arrives_in_the_callers_buffer`, `an_xz_dictionary_over_the_memory_limit_is_refused`, `a_tar_xz_extracts_through_the_streaming_decoder`, plus the existing lone-xz and detection cases.
+
 ### B87. Local tree hash collides and skips symlinks and modes
 
 `sha256_tree` used to hash `path \0 bytes` for regular files only. `a` = `X` plus `b` = `Y` was the same digest as one file `a` = `Xb\0Y`, a symlink was invisible, and the exec bit was ignored, so a lockfile could accept a different `.app`. Each file and symlink is now one record: kind, path length, path, permission bits, payload length, and either the file bytes or the symlink's own target. A lock written before this framing does not match an unchanged bundle; `ketch lock` records the new digest. Noted in `docs/LOCKFILE.md`.
@@ -1602,3 +1644,11 @@ Status: done (Claude Code / opus-5.5). Test: `registry::tests::a_failed_rename_b
 Row B77 in the 2026-10-08 findings. `self uninstall` removed the running executable with `?`, so a busy Windows `.exe` stopped the rest of the uninstall.
 
 Status: done (Claude Code / opus-5.5). The fix was already on `main` in 5152c87 (the step warns and continues) but had no test. Test: `self_update::tests::uninstall_warns_and_finishes_when_the_running_binary_cannot_be_removed`, on every OS, which fails with the old `?` restored.
+
+### T900. Update vulnerable dependencies
+
+The creator authorized dependency updates across the audit. Update only vulnerable dependencies and the resolver-required graph without weakening existing guards or advisory policy.
+
+Execution plan: reproduce the advisory audit; apply compatible package-manager updates; review the lockfile diff; run advisory regression checks and the project test/lint/format gates; publish a PR and merge only after required checks pass. No custom dependency implementation is needed. Rollback is a revert of the dependency-update commit.
+
+Validation: rustls 0.23.46 resolves its RustSec advisories; the existing rsa RUSTSEC-2023-0071 has no patched release and remains reported. The complete nextest run passed 1241 of 1242 tests; the sole failure was an unconfigured mise PowerShell shim. Re-running all 7 PowerShell tests with installed PowerShell 7.6.6 passed. Workspace clippy with warnings denied and formatting passed. Existing rustls is reused; no custom implementation or new dependency was added. Regenerated workspace-hack for the resolved graph; hakari generate --diff, manage-deps --dry-run, and verify passed.
