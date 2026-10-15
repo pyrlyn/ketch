@@ -299,6 +299,11 @@ if ($Version -eq '') {
     }
 }
 
+# Release tags are always v-prefixed; accept either form on --version.
+if ($Version -notlike 'v*') {
+    $Version = "v$Version"
+}
+
 Write-Status "Installing ketch version $Version..."
 
 $TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("ketch-install-" + [guid]::NewGuid().ToString())

@@ -1,3 +1,9 @@
+### B132. `install.ps1` omits the `v` on `--version`
+
+`install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.
+
+Test: `a_bare_version_is_printed_with_the_release_tag_prefix` (runs when `pwsh` is installed; the status line is printed before the download).
+
 ### B120. Shell blocks miss CRLF startup files
 
 `marker_at_line_start` treated a marker as a whole line only when the next character was `\n` or the end of the file. A PowerShell profile or an autocrlf dotfile ends the line with `\r\n`, so the block was invisible: every install appended another copy, and uninstall left them all. A marker now also ends at `\r`, and `block_span` consumes the `\r\n` or `\r` that follows the end marker.
