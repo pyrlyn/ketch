@@ -1363,7 +1363,13 @@ fn block_span(text: &str) -> Option<(usize, usize)> {
     let start = marker_at_line_start(text, BEGIN, 0)?;
     let end_line = marker_at_line_start(text, END, start + BEGIN.len())?;
     let mut end = end_line + END.len();
-    if text[end..].starts_with('\n') {
+    // CRLF profiles (PowerShell, autocrlf dotfiles) end the marker line with
+    // `\r\n`. Consuming only `\n` would leave the `\r` and, before the match
+    // itself accepted `\r`, miss the block entirely.
+    let tail = &text[end..];
+    if tail.starts_with("\r\n") {
+        end += 2;
+    } else if tail.starts_with('\n') || tail.starts_with('\r') {
         end += 1;
     }
     Some((start, end))
@@ -1372,19 +1378,19 @@ fn block_span(text: &str) -> Option<(usize, usize)> {
 /// Offset of `marker` where it occupies a whole line, at or after `from`.
 ///
 /// Whole-line matching is what keeps a marker quoted inside somebody's own
-/// script from being mistaken for the block ketch owns.
+/// script from being mistaken for the block ketch owns. `\r` counts as a line
+/// boundary because PowerShell profiles and autocrlf dotfiles end lines with
+/// `\r\n`.
 fn marker_at_line_start(text: &str, marker: &str, from: usize) -> Option<usize> {
     text[from..]
         .match_indices(marker)
         .map(|(offset, _)| from + offset)
         .find(|&i| {
-            // A byte order mark (a PowerShell profile may open with one)
-            // is not part of the first line.
-            let starts_line = i == 0 || text.as_bytes()[i - 1] == b'\n' || &text[..i] == "\u{FEFF}";
-            let ends_line = text[i + marker.len()..]
-                .chars()
-                .next()
-                .is_none_or(|c| c == '\n');
+            let prev = i.checked_sub(1).map(|p| text.as_bytes()[p]);
+            let starts_line =
+                i == 0 || prev == Some(b'\n') || prev == Some(b'\r') || &text[..i] == "\u{FEFF}";
+            let rest = &text[i + marker.len()..];
+            let ends_line = rest.is_empty() || rest.starts_with('\n') || rest.starts_with('\r');
             starts_line && ends_line
         })
 }
@@ -1525,6 +1531,18 @@ mod tests {
     ) {
         assert_eq!(quote_posix(dir), posix);
         assert_eq!(quote_fish(dir), fish);
+    }
+
+    #[test]
+    fn a_crlf_block_is_replaced_rather_than_appended() {
+        let crlf = zsh_block().replace('\n', "\r\n");
+        let original = format!("# mine\r\n{crlf}");
+        assert!(block_span(&original).is_some(), "{original:?}");
+        let rewritten = splice(&original, &zsh_block()).expect("one block, rewritten");
+        assert_eq!(rewritten.matches(BEGIN).count(), 1, "{rewritten:?}");
+        assert!(rewritten.starts_with("# mine\r\n"), "{rewritten:?}");
+        assert!(rewritten.contains("# <<< ketch <<<\n"), "{rewritten:?}");
+        assert_eq!(unsplice(&original).as_deref(), Some("# mine\r\n"));
     }
 
     #[test]
