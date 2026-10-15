@@ -84,6 +84,7 @@ fn both_crates_forbid_unsafe_code_through_the_workspace_lints() {
 const CORE_FEATURES: &[(&str, &[&str])] = &[
     ("stats", &["diesel", "diesel_migrations", "libsqlite3-sys"]),
     ("push", &["octocrab", "tokio"]),
+    ("trust", &["sigstore", "minisign-verify", "pgp"]),
 ];
 
 #[test]

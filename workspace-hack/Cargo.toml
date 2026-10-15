@@ -25,7 +25,9 @@ clap = { version = "4", features = ["cargo", "derive", "env", "wrap_help"] }
 clap_builder = { version = "4", default-features = false, features = ["cargo", "color", "env", "std", "suggestions", "usage", "wrap_help"] }
 console = { version = "0.16", default-features = false, features = ["ansi-parsing", "std", "unicode-width"] }
 derive_more = { version = "2", features = ["debug", "display", "is_variant"] }
+digest = { version = "0.11", features = ["alloc", "mac", "oid"] }
 either = { version = "1", features = ["use_std"] }
+form_urlencoded = { version = "1" }
 futures-channel = { version = "0.3", features = ["sink"] }
 futures-core = { version = "0.3" }
 futures-sink = { version = "0.3" }
@@ -41,10 +43,14 @@ num-iter = { version = "0.1", default-features = false, features = ["i128", "std
 num-traits = { version = "0.2", features = ["i128", "libm"] }
 pem = { version = "3", features = ["serde"] }
 percent-encoding = { version = "2" }
+ppv-lite86 = { version = "0.2", default-features = false, features = ["simd", "std"] }
 proc-macro2 = { version = "1" }
 quote = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-onepass", "dfa-search", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
 regex-syntax = { version = "0.8" }
+ring = { version = "0.17" }
+rustls-pki-types = { version = "1", features = ["std"] }
+rustls-webpki = { version = "0.103", default-features = false, features = ["aws-lc-rs", "ring", "std"] }
 semver = { version = "1", features = ["serde"] }
 serde = { version = "1", features = ["alloc", "derive"] }
 serde_core = { version = "1", features = ["alloc"] }
@@ -52,6 +58,7 @@ serde_json = { version = "1", features = ["alloc", "float_roundtrip", "unbounded
 serde_spanned = { version = "1" }
 smallvec = { version = "1", default-features = false, features = ["const_new", "write"] }
 strum = { version = "0.28", features = ["derive"] }
+subtle = { version = "2" }
 syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
 time = { version = "0.3", default-features = false, features = ["formatting", "local-offset", "macros", "parsing"] }
 tokio = { version = "1", features = ["io-util", "net", "rt", "sync", "time"] }
@@ -64,12 +71,14 @@ toml_writer = { version = "1" }
 tracing = { version = "0.1", features = ["log"] }
 tracing-core = { version = "0.1", default-features = false, features = ["std"] }
 uniffi = { version = "0.32", features = ["cli"] }
+url = { version = "2", features = ["serde"] }
 winnow = { version = "1", features = ["simd"] }
 zeroize = { version = "1", features = ["derive"] }
 
 [build-dependencies]
 aho-corasick = { version = "1" }
 camino = { version = "1", default-features = false, features = ["serde1"] }
+cc = { version = "1", default-features = false, features = ["parallel"] }
 derive_more-impl = { version = "2", features = ["debug", "display", "is_variant"] }
 either = { version = "1", features = ["use_std"] }
 hashbrown = { version = "0.17" }
@@ -96,46 +105,39 @@ toml_writer = { version = "1" }
 winnow = { version = "1", features = ["simd"] }
 
 [target.x86_64-unknown-linux-gnu.dependencies]
-form_urlencoded = { version = "1" }
-libc = { version = "0.2" }
+aws-lc-rs = { version = "1", features = ["prebuilt-nasm"] }
 mio = { version = "1", features = ["net", "os-ext"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 sync_wrapper = { version = "1", default-features = false, features = ["futures"] }
 tokio-util = { version = "0.7", default-features = false, features = ["io-util"] }
 tower = { version = "0.5", default-features = false, features = ["buffer", "retry", "timeout"] }
 tower-http = { version = "0.6", features = ["follow-redirect", "map-response-body", "trace"] }
-url = { version = "2", features = ["serde"] }
 
 [target.x86_64-unknown-linux-gnu.build-dependencies]
 getrandom-468e82937335b1c9 = { package = "getrandom", version = "0.3", default-features = false, features = ["std"] }
-libc = { version = "0.2" }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 [target.aarch64-apple-darwin.dependencies]
+aws-lc-rs = { version = "1", features = ["prebuilt-nasm"] }
 errno = { version = "0.3" }
-form_urlencoded = { version = "1" }
-libc = { version = "0.2" }
 mio = { version = "1", features = ["net", "os-ext"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 sync_wrapper = { version = "1", default-features = false, features = ["futures"] }
 tokio-util = { version = "0.7", default-features = false, features = ["io-util"] }
 tower = { version = "0.5", default-features = false, features = ["buffer", "retry", "timeout"] }
 tower-http = { version = "0.6", features = ["follow-redirect", "map-response-body", "trace"] }
-url = { version = "2", features = ["serde"] }
 
 [target.aarch64-apple-darwin.build-dependencies]
 errno = { version = "0.3" }
 getrandom-468e82937335b1c9 = { package = "getrandom", version = "0.3", default-features = false, features = ["std"] }
-libc = { version = "0.2" }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 [target.x86_64-pc-windows-msvc.dependencies]
-form_urlencoded = { version = "1" }
+aws-lc-rs = { version = "1", features = ["prebuilt-nasm"] }
 sync_wrapper = { version = "1", default-features = false, features = ["futures"] }
 tokio-util = { version = "0.7", default-features = false, features = ["io-util"] }
 tower = { version = "0.5", default-features = false, features = ["buffer", "retry", "timeout"] }
 tower-http = { version = "0.6", features = ["follow-redirect", "map-response-body", "trace"] }
-url = { version = "2", features = ["serde"] }
 windows-sys = { version = "0.61", features = ["Wdk_Foundation", "Wdk_Storage_FileSystem", "Wdk_System_IO", "Win32_Globalization", "Win32_Networking_WinSock", "Win32_Security_Authentication_Identity", "Win32_Security_Credentials", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Console", "Win32_System_IO", "Win32_System_LibraryLoader", "Win32_System_Memory", "Win32_System_Pipes", "Win32_System_SystemInformation", "Win32_System_SystemServices", "Win32_System_Threading", "Win32_System_WindowsProgramming", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell"] }
 
 [target.x86_64-pc-windows-msvc.build-dependencies]
