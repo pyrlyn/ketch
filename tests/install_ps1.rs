@@ -213,7 +213,7 @@ fn pre_picks_the_newest_cli_tag_past_desktop_releases() {
     let start = src
         .find("function Select-NewestCliTag")
         .expect("Select-NewestCliTag");
-    let end = src.find("# Parse arguments.").expect("argument parsing");
+    let end = src.find("function Install-Ketch").expect("Install-Ketch");
     let helper = &src[start..end];
     let script = format!(
         r#"
