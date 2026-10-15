@@ -776,8 +776,10 @@ impl ProgressSink for BarProgress {
             None => self.bar.set_length(0),
         }
         self.bar.set_style(style);
-        self.bar
-            .set_message(truncate(self.label.as_deref().unwrap_or(label), 28));
+        self.bar.set_message(truncate(
+            &printable(self.label.as_deref().unwrap_or(label)),
+            28,
+        ));
         match &self.group {
             // `add` gives the bar its draw target, and the group keeps the
             // bars from overwriting one another.
@@ -1619,6 +1621,22 @@ mod tests {
             .collect();
         assert_eq!(plain[1].find('x'), plain[2].find('y'), "{plain:?}");
         assert_eq!(plain[1].find('x'), Some("longer".len() + 2));
+    }
+
+    #[test]
+    fn a_download_bar_label_cannot_redraw_the_terminal() {
+        let bar = BarProgress::new();
+        bar.start(Some(10), HOSTILE);
+        let message = bar.bar.message();
+        assert!(!message.contains('\u{1b}'), "{message:?}");
+        assert!(message.contains(FILTERED), "{message:?}");
+
+        let mut named = BarProgress::new();
+        named.label = Some(HOSTILE.to_string());
+        named.start(Some(10), "asset");
+        let message = named.bar.message();
+        assert!(!message.contains('\u{1b}'), "{message:?}");
+        assert!(message.contains(FILTERED), "{message:?}");
     }
 
     #[test]
