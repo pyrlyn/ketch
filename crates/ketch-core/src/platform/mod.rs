@@ -26,7 +26,7 @@ pub mod unix;
 pub mod windows;
 
 use crate::config::Config;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::extra::ExtraPlacement;
 use crate::model::{Arch, BinSpec, CompletionShell, LinkRecord, PackageKind, TargetSpec};
 use std::path::{Path, PathBuf};
@@ -565,9 +565,175 @@ pub(crate) fn is_busy_aside_of(link_name: &str, candidate: &str) -> bool {
         .is_some_and(|(pid, stamp)| digits(pid) && digits(stamp))
 }
 
+/// A path next to `original` whose last component is that name plus `suffix`.
+///
+/// Store swaps rename `.incoming` and `.old` beside the live directory, which
+/// stays on one filesystem. One helper serves every backend: the suffix is
+/// appended as bytes, so a non-UTF-8 name is not rewritten, and a path with no
+/// file name (the root) still gets a name.
+pub(crate) fn sibling(original: &Path, suffix: &str) -> PathBuf {
+    let mut name = original
+        .file_name()
+        .map(|n| n.to_os_string())
+        .unwrap_or_else(|| std::ffi::OsString::from("pkg"));
+    name.push(suffix);
+    original.with_file_name(name)
+}
+
+/// Move `payload` to `store`, retiring a previous tree to `.old`.
+///
+/// The replacement is assembled beside the destination and swapped in last.
+/// Deleting the old directory first would mean an upgrade that fails while
+/// copying leaves no working version. `copy` runs only when the cache and the
+/// store are on different filesystems and a rename cannot cross them.
+///
+/// Returns true when it retired a previous tree. Only then may the caller
+/// finalize or restore: a `.old` found otherwise is an earlier run's leftover,
+/// and restoring it would replace the live prefix with it. `.old` stays until
+/// links succeed, so a failed place can put the working version back.
+pub(crate) fn swap_into_store(
+    payload: &Path,
+    store: &Path,
+    copy: impl FnOnce(&Path, &Path) -> Result<()>,
+) -> Result<bool> {
+    // `relink` re-runs placement over a payload that is already in the store;
+    // without this the swap below would move it out from under itself.
+    if payload == store {
+        return Ok(false);
+    }
+    if let Some(parent) = store.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
+    }
+
+    let staged = sibling(store, ".incoming");
+    let _ = fs_kit::tree::remove_any(&staged);
+    if std::fs::rename(payload, &staged).is_err() {
+        copy(payload, &staged)?;
+    }
+
+    if store.symlink_metadata().is_err() {
+        return std::fs::rename(&staged, store)
+            .map(|()| false)
+            .map_err(|e| Error::io(store, e));
+    }
+    let retired = sibling(store, ".old");
+    let _ = fs_kit::tree::remove_any(&retired);
+    std::fs::rename(store, &retired).map_err(|e| Error::io(store, e))?;
+    if let Err(e) = std::fs::rename(&staged, store) {
+        let _ = std::fs::rename(&retired, store);
+        let _ = fs_kit::tree::remove_any(&staged);
+        return Err(Error::io(store, e));
+    }
+    Ok(true)
+}
+
+/// Drop the retired previous version once placement has finished successfully.
+pub(crate) fn finalize_store_swap(store: &Path) {
+    let _ = fs_kit::tree::remove_any(&sibling(store, ".old"));
+}
+
+/// Put the version this call swapped out back, after place failed on the new tree.
+pub(crate) fn restore_retired_store(store: &Path) {
+    let retired = sibling(store, ".old");
+    if retired.symlink_metadata().is_ok() {
+        let _ = fs_kit::tree::remove_any(store);
+        let _ = std::fs::rename(&retired, store);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sibling_appends_the_suffix_to_the_file_name() {
+        let path = PathBuf::from("store").join("tool").join("1.0");
+        assert_eq!(
+            sibling(&path, ".old"),
+            PathBuf::from("store").join("tool").join("1.0.old")
+        );
+        assert_eq!(
+            sibling(&path, ".incoming"),
+            PathBuf::from("store").join("tool").join("1.0.incoming")
+        );
+    }
+
+    #[test]
+    fn sibling_of_a_nameless_path_uses_pkg() {
+        assert_eq!(sibling(Path::new(""), ".old"), PathBuf::from("pkg.old"));
+    }
+
+    #[test]
+    fn swap_into_store_of_the_same_path_does_not_retire_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = tmp.path().join("store");
+        std::fs::create_dir_all(&store).unwrap();
+        std::fs::write(store.join("tool"), b"working").unwrap();
+        let copied = std::cell::Cell::new(false);
+        let swapped = swap_into_store(&store, &store, |_, _| {
+            copied.set(true);
+            Ok(())
+        })
+        .unwrap();
+        assert!(!swapped);
+        assert!(!copied.get());
+        assert_eq!(std::fs::read(store.join("tool")).unwrap(), b"working");
+    }
+
+    #[test]
+    fn swap_into_store_retires_the_previous_tree_and_restore_puts_it_back() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = tmp.path().join("store").join("tool").join("1.0");
+        std::fs::create_dir_all(&store).unwrap();
+        std::fs::write(store.join("tool"), b"working").unwrap();
+        let payload = tmp.path().join("payload");
+        std::fs::create_dir_all(&payload).unwrap();
+        std::fs::write(payload.join("tool"), b"new").unwrap();
+        assert!(swap_into_store(&payload, &store, |_, _| {
+            Err(Error::msg("rename should stay on one filesystem"))
+        })
+        .unwrap());
+        assert_eq!(std::fs::read(store.join("tool")).unwrap(), b"new");
+        assert_eq!(
+            std::fs::read(sibling(&store, ".old").join("tool")).unwrap(),
+            b"working"
+        );
+        restore_retired_store(&store);
+        assert_eq!(std::fs::read(store.join("tool")).unwrap(), b"working");
+        assert!(!sibling(&store, ".old").exists());
+        finalize_store_swap(&store);
+    }
+
+    #[test]
+    fn swap_into_store_copies_when_the_rename_onto_the_stage_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = tmp.path().join("store").join("1.0");
+        let payload = tmp.path().join("missing-payload");
+        // A missing source fails the rename, which is the same branch a
+        // cross-filesystem rename takes before `copy` runs.
+        let swapped = swap_into_store(&payload, &store, |from, to| {
+            assert_eq!(from, payload);
+            std::fs::create_dir(to).map_err(|e| Error::io(to, e))?;
+            std::fs::write(to.join("tool"), b"copied").map_err(|e| Error::io(to, e))?;
+            Ok(())
+        })
+        .unwrap();
+        assert!(!swapped);
+        assert_eq!(std::fs::read(store.join("tool")).unwrap(), b"copied");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sibling_keeps_a_non_utf8_file_name() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+        let name = OsStr::from_bytes(&[0xff, 0xfe]);
+        let path = PathBuf::from("store").join(name);
+        let got = sibling(&path, ".old");
+        let mut expected = name.to_os_string();
+        expected.push(".old");
+        assert_eq!(got.file_name(), Some(expected.as_os_str()));
+    }
 
     #[test]
     fn only_a_pid_and_time_stamped_aside_of_the_link_is_one() {

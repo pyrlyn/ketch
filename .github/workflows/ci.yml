@@ -53,15 +53,22 @@ jobs:
     # is marked ready, and a draft must not look broken meanwhile.
     needs: config
     if: ${{ !cancelled() && github.event.pull_request.draft != true }}
-    uses: pyrlyn/ci/.github/workflows/ci-rust.yml@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
+    uses: pyrlyn/ci/.github/workflows/ci-rust.yml@ce98c614219bfad8253cfec3530565c470745ed5 # main
     # actions: write for infra's cancel-run (the first failing job cancels the run).
     permissions:
       contents: read
       actions: write
+    # Only the sccache R2 pair the workflow declares, not every repository secret.
+    secrets:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
     with:
+      sccache: true
+      nextest-archive: true
+      nextest-archive-args: --workspace --all-targets --locked
       tools: nextest
       test-command: |
-        cargo nextest run --workspace --all-targets --locked
+        cargo nextest run --archive-file "$NEXTEST_ARCHIVE" --workspace-remap .
         cargo nextest run -p ketch --all-targets --locked --features tui
       build-command: cargo build --workspace --all-targets --all-features --locked --target "$TARGET"
       # Docs-only: every job is a no-op that still reports (`rust / <target>` stay required).
@@ -447,3 +454,23 @@ jobs:
           # the pull_request jobs below against the same head.
           gh workflow run ci.yml --ref "$branch"
           gh pr comment "$PR" --body "CI dispatched on \`$branch\` (\`$head\`)."
+
+  # Fails when workspace-hack drifts from the dependency graph (cargo-hakari
+  # comes from mise.toml). Own job, so the required check names stay as they are.
+  hakari:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+        with:
+          # Only what the check needs, not every tool in mise.toml. sccache too:
+          # mise refuses a cargo: tool while the sccache in mise.toml is missing.
+          install_args: rust sccache cargo:cargo-hakari
+      - run: cargo hakari generate --diff
+      - run: cargo hakari manage-deps --dry-run
+      - run: cargo hakari verify

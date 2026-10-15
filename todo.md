@@ -19,6 +19,14 @@
 - D17. Linux: the app on the real core
 - D18. Linux: notifications, background and autostart
 - D19. Linux: packaging and release
-- B74. xz archives decompress entirely into memory
-- R12. Consolidate duplicated helpers
 - R20. File and directory helpers from `fs-kit`
+- B98. `install.ps1` closes the user's PowerShell window on error
+- B99. Extraction has no byte or entry budget
+- B102. Windows symlink materialisation can recurse forever
+- R19.1. `stats` as an optional core feature, checked alone
+- R19.2. Registry push as an optional core feature
+- R19.3. Publisher signatures as an optional core feature
+- R19.4. Archive codecs as optional core features
+- B113. Windows-reserved names pass the path guards
+- B118. An upgrade silently drops checksum verification
+- B123. Relink and rollback restore a stale `.old`

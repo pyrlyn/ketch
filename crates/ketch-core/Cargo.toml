@@ -47,7 +47,11 @@ flate2 = "1"
 bzip2 = "0.6"
 tar = "0.4"
 zip = { version = "8", default-features = false, features = ["deflate"] }
-lzma-rs = "0.3"
+# XZ is streamed. lzma-rs decoded each block into one `Vec` before writing any
+# plaintext, so a small, highly compressible archive could exhaust memory.
+# `optimization` stays off: that feature is the crate's unsafe path, and these
+# bytes are untrusted. No encoder: tests use fixed fixtures.
+lzma-rust2 = { version = "0.22", default-features = false, features = ["std", "xz"] }
 walkdir = "2"
 semver = "1"
 tempfile = "3"
@@ -77,6 +81,7 @@ tokio = { version = "1", features = ["rt"], optional = true }
 sigstore = { version = "0.14", default-features = false, features = ["verify"] }
 minisign-verify = "0.3"
 pgp = { version = "0.20", default-features = false }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 insta = "1.48"

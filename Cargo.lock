@@ -387,7 +387,7 @@ dependencies = [
  "bitflags 2.13.1",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -973,21 +973,6 @@ checksum = "5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566"
 dependencies = [
  "libc",
 ]
-
-[[package]]
-name = "crc"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5eb8a2a1cd12ab0d987a5d5e825195d372001a4094a0376319d5a0ad71c1ba0d"
-dependencies = [
- "crc-catalog",
-]
-
-[[package]]
-name = "crc-catalog"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "217698eaf96b4a3f0bc4f3662aaa55bdf913cd54d7204591faa790070c6d0853"
 
 [[package]]
 name = "crc24"
@@ -2668,15 +2653,6 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
@@ -2942,6 +2918,7 @@ dependencies = [
  "indicatif",
  "insta",
  "ketch-core",
+ "operation-icons",
  "predicates",
  "pretty_assertions",
  "proptest",
@@ -2958,6 +2935,7 @@ dependencies = [
  "trycmd",
  "unicode-width",
  "walkdir",
+ "workspace-hack",
  "zip",
 ]
 
@@ -2974,6 +2952,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2992,7 +2971,7 @@ dependencies = [
  "insta",
  "jsonschema",
  "libsqlite3-sys",
- "lzma-rs",
+ "lzma-rust2",
  "minisign-verify",
  "octocrab",
  "pathdiff",
@@ -3016,6 +2995,7 @@ dependencies = [
  "typed-path",
  "ureq",
  "walkdir",
+ "workspace-hack",
  "zip",
 ]
 
@@ -3031,6 +3011,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "uniffi",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3148,13 +3129,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "lzma-rs"
-version = "0.3.0"
+name = "lzma-rust2"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "297e814c836ae64db86b36cf2a557ba54368d03f6afcd7d947c266692f71115e"
+checksum = "7277c9742229dc25243236d578b6471a798c554512c6f6a04365ec2e87c2a3bb"
 dependencies = [
- "byteorder",
- "crc",
+ "sha2 0.11.0",
 ]
 
 [[package]]
@@ -3648,6 +3628,15 @@ name = "openssl-probe"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
+
+[[package]]
+name = "operation-icons"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee0ee8e86512fd8b912264296bb9732875d65127379bcd687e37cef6c054cc01"
+dependencies = [
+ "unicode-width",
+]
 
 [[package]]
 name = "option-ext"
@@ -4841,9 +4830,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.43"
+version = "0.23.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0283386ce02abc0151e1761d08802dfe86c173b0b494af5cbc086574e453da06"
+checksum = "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf"
 dependencies = [
  "log",
  "once_cell",
@@ -5773,7 +5762,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
@@ -6973,6 +6962,76 @@ name = "wit-bindgen"
 version = "0.57.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
+
+[[package]]
+name = "workspace-hack"
+version = "0.1.0"
+dependencies = [
+ "aho-corasick",
+ "base64 0.22.1",
+ "bit-set 0.8.0",
+ "bit-vec 0.8.0",
+ "bitflags 2.13.1",
+ "camino",
+ "clap",
+ "clap_builder",
+ "console",
+ "derive_more",
+ "derive_more-impl",
+ "either",
+ "errno",
+ "form_urlencoded",
+ "futures-channel",
+ "futures-core",
+ "futures-sink",
+ "futures-util",
+ "getrandom 0.2.17",
+ "getrandom 0.3.4",
+ "hashbrown 0.17.1",
+ "indexmap 2.14.0",
+ "itertools 0.14.0",
+ "libc",
+ "memchr",
+ "mio",
+ "num-bigint",
+ "num-iter",
+ "num-traits",
+ "pem",
+ "percent-encoding",
+ "proc-macro2",
+ "quote",
+ "regex-automata",
+ "regex-syntax",
+ "rustix",
+ "semver",
+ "serde",
+ "serde_core",
+ "serde_json",
+ "serde_spanned",
+ "smallvec",
+ "strum",
+ "syn 2.0.119",
+ "syn 3.0.4",
+ "sync_wrapper",
+ "time",
+ "tokio",
+ "tokio-util",
+ "toml 0.9.12+spec-1.1.0",
+ "toml_datetime 0.7.5+spec-1.1.0",
+ "toml_datetime 1.1.1+spec-1.1.0",
+ "toml_edit",
+ "toml_parser",
+ "toml_writer",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-core",
+ "uniffi",
+ "url",
+ "windows-sys 0.61.2",
+ "winnow 1.0.4",
+ "zeroize",
+]
 
 [[package]]
 name = "writeable"

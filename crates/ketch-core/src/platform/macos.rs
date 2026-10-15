@@ -15,6 +15,7 @@ use super::unix::{
     clear_destination, destination_available, discover_executables, link_binary, resolve_bin_specs,
     symlink, writable,
 };
+use super::{finalize_store_swap, restore_retired_store};
 use super::{AssetScore, DoctorCheck, Placement, Platform, TrustVerdict};
 use crate::config::Config;
 use crate::error::{Error, Result};
@@ -22,7 +23,6 @@ use crate::extract::archive::is_program_head;
 use crate::extract::macos::copy_tree;
 use crate::extract::Extractor;
 use crate::model::{Arch, LinkKind, LinkRecord, LinkRole, PackageKind, TargetSpec};
-use fs_kit::tree::remove_any;
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::os::unix::fs::PermissionsExt;
@@ -86,64 +86,9 @@ fn first_line(text: &str) -> String {
 // Placement helpers
 // ---------------------------------------------------------------------------
 
-/// A path next to `original`, so swapping the two is a rename that never
-/// crosses a filesystem.
-fn sibling(original: &Path, suffix: &str) -> PathBuf {
-    let mut name = original.file_name().unwrap_or_default().to_os_string();
-    name.push(suffix);
-    original.with_file_name(name)
-}
-
-/// Move the extracted payload to its final home, falling back to a copy when
-/// the cache and the store are on different filesystems.
-///
-/// The replacement is assembled beside the destination and swapped in last.
-/// Deleting the old directory first — as the obvious version does — means an
-/// upgrade that fails while copying leaves the user with no working version of
-/// a package they already had installed.
-fn move_into_store(payload: &Path, store: &Path) -> Result<()> {
-    // `relink` re-runs placement over a payload that is already in the store;
-    // without this the swap below would move it out from under itself.
-    if payload == store {
-        return Ok(());
-    }
-    if let Some(parent) = store.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
-    }
-
-    let staged = sibling(store, ".incoming");
-    let _ = remove_any(&staged);
-    if std::fs::rename(payload, &staged).is_err() {
-        copy_tree(payload, &staged)?;
-    }
-
-    if store.symlink_metadata().is_err() {
-        return std::fs::rename(&staged, store).map_err(|e| Error::io(store, e));
-    }
-    let retired = sibling(store, ".old");
-    let _ = remove_any(&retired);
-    std::fs::rename(store, &retired).map_err(|e| Error::io(store, e))?;
-    if let Err(e) = std::fs::rename(&staged, store) {
-        // Put back the version that was working before reporting the failure.
-        let _ = std::fs::rename(&retired, store);
-        let _ = remove_any(&staged);
-        return Err(Error::io(store, e));
-    }
-    // Leave `.old` until links succeed. A failed place after this swap can
-    // put the working version back; deleting it here would leave none.
-    Ok(())
-}
-
-fn finalize_store_swap(store: &Path) {
-    let _ = remove_any(&sibling(store, ".old"));
-}
-
-fn restore_retired_store(store: &Path) {
-    let retired = sibling(store, ".old");
-    if retired.symlink_metadata().is_ok() {
-        let _ = remove_any(store);
-        let _ = std::fs::rename(&retired, store);
-    }
+/// `ditto` is what copies a payload when the cache and the store differ.
+fn move_into_store(payload: &Path, store: &Path) -> Result<bool> {
+    super::swap_into_store(payload, store, copy_tree)
 }
 
 /// True when `path` sits inside *another* bundle — a helper app nested in the
@@ -348,9 +293,11 @@ impl Platform for MacOsPlatform {
         if plan.link {
             preflight_destinations(self, plan, package_dir)?;
         }
-        move_into_store(plan.payload_dir, plan.store_dir)?;
+        let swapped = move_into_store(plan.payload_dir, plan.store_dir)?;
         if !plan.link {
-            finalize_store_swap(plan.store_dir);
+            if swapped {
+                finalize_store_swap(plan.store_dir);
+            }
             return Ok(Vec::new());
         }
         let mut links = Vec::new();
@@ -431,13 +378,17 @@ impl Platform for MacOsPlatform {
         match result {
             Ok(links) => {
                 claims.discard();
-                finalize_store_swap(plan.store_dir);
+                if swapped {
+                    finalize_store_swap(plan.store_dir);
+                }
                 Ok(links)
             }
             Err(e) => {
                 let _ = super::unix::unplace(&links, &crate::report::Report::silent());
                 claims.restore();
-                restore_retired_store(plan.store_dir);
+                if swapped {
+                    restore_retired_store(plan.store_dir);
+                }
                 Err(e)
             }
         }
@@ -1086,6 +1037,49 @@ mod tests {
             .map(|e| e.unwrap().file_name())
             .collect();
         assert_eq!(leftovers, ["Tool.app"], "no aside left behind");
+    }
+
+    #[test]
+    fn a_failed_relink_keeps_the_live_prefix_over_a_stale_old_copy() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = tmp.path().join("store/tool/1.0");
+        std::fs::create_dir_all(&store).unwrap();
+        let tool = store.join("tool");
+        std::fs::write(&tool, b"#!/bin/sh\necho live\n").unwrap();
+        std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::write(store.join("README"), b"live").unwrap();
+        // Left by an earlier swap that was interrupted before its cleanup.
+        let stale = tmp.path().join("store/tool/1.0.old");
+        std::fs::create_dir_all(&stale).unwrap();
+        std::fs::write(stale.join("tool"), b"stale").unwrap();
+        let blocker = tmp.path().join("blocker");
+        std::fs::write(&blocker, b"not a folder").unwrap();
+        let extras = [crate::extra::ExtraPlacement {
+            rel_path: "README".into(),
+            dest: blocker.join("README"),
+            role: LinkRole::Man,
+        }];
+        let bin = tmp.path().join("bin");
+        let apps = tmp.path().join("Applications");
+
+        // Relink and rollback place a payload that is already the store.
+        let placed = MacOsPlatform::new().place(&Placement {
+            name: "tool",
+            version: "1.0",
+            payload_dir: &store,
+            store_dir: &store,
+            bin_dir: &bin,
+            apps_dir: &apps,
+            kind: PackageKind::Binary,
+            bin_specs: &[],
+            replacing: &[],
+            link_apps: false,
+            link: true,
+            extras: &extras,
+        });
+
+        assert!(placed.is_err(), "{placed:?}");
+        assert_eq!(std::fs::read(&tool).unwrap(), b"#!/bin/sh\necho live\n");
     }
 
     #[test]
