@@ -1,3 +1,9 @@
+### B122. Download bar labels skip the terminal filter
+
+`BarProgress::start` put the asset name on the download bar with `truncate` and no `printable`. Every other status line runs client text through `changelog::sanitize` first, which drops escapes and bidi overrides. The bar now filters the label, including one stored for a batch, and then truncates it. Callers that already pass a clean name are unchanged.
+
+Test: `a_download_bar_label_cannot_redraw_the_terminal`.
+
 ### R18. One atomic replace helper in `ketch-core`
 
 File replacements already went through `fs_kit::write`. The store swap was still three copies of the same rename: stage as `.incoming`, retire the live tree to `.old`, swap the stage in, and put `.old` back if the second rename fails. That sequence is now `swap_into_store` in `platform/mod.rs`. macOS passes `ditto`; Linux and Windows pass `copy_tree`, and the copy runs only when the rename onto the stage fails. `finalize_store_swap` and `restore_retired_store` moved with it. A payload that is already the store is not retired, and `.old` stays until placement finishes.
