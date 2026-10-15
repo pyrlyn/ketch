@@ -216,7 +216,7 @@ design-check:
 release level="patch" *flags:
     scripts/release.sh {{level}} {{flags}}
 
-check: fmt-check lint fuzz-check test lint-commits lint-shell lint-man dist-check design-check package lint-cask
+check: fmt-check lint fuzz-check core-features test lint-commits lint-shell lint-man dist-check design-check package lint-cask
 
 # $CARGO_HOME sizes (no deletes) and the build output, wherever cargo puts it
 cache:
@@ -298,6 +298,11 @@ windows-app-test:
 # stable: nothing else builds it, so `check` and CI would not notice it break.
 fuzz-check:
     RUSTFLAGS="--cfg fuzzing" cargo check --locked -p ketch -p ketch-core
+
+# ketch-core with no optional feature, with each alone, and ketch-ffi with its
+# own set: a workspace build unifies features and would hide a broken one.
+core-features:
+    scripts/core-features.sh
 
 # libFuzzer targets in fuzz/ (fuzz/README.md), on nightly and never part of `check`.
 # `just fuzz` lists them, `just fuzz <target> [secs]` runs one, `just fuzz all [secs]` each in turn.

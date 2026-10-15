@@ -73,9 +73,9 @@ New bugs and vulnerabilities from a read-only whole-project review of `main` at 
 | B117 | P3 | bug | confirmed | `changelog.rs:~99` (`from_file`), `src/cmd/query.rs:589` | The client changelog is read with an unbounded `read_to_string(...)?`: a multi-GB file or a link to `/dev/zero` exhausts memory, and a non-UTF-8 file makes `ketch changelog` fail instead of falling back to release notes. Require a regular file (`symlink_metadata`), read through `take` with a cap of a few MiB, decode lossily. |
 | B118 | P3 | vuln | suspected | `install.rs` ~1420-1465 (`verify_checksum`); `src/cmd/pkg.rs:540` | When a release that was installed checksum-verified is followed by one without checksums (or an attacker controlling the release removes them), the upgrade installs with only the generic first-use warning; `checksum_verified` is never consulted. Refuse such a downgrade unless `--yes` or an explicit flag. |
 | B119 | P3 | bug | confirmed | `shell.rs:1302-1310` (`block_span`) | It pairs the first BEGIN with the first END after it. A stray BEGIN without END (hand edit, crash mid-write) makes `splice` append a second block, and a later `unsplice` deletes every user line between the orphan BEGIN and the real END. Pair END with the nearest preceding BEGIN or refuse when marker counts differ. |
-| B120 | P3 | bug | confirmed | `shell.rs:1316-1330` (`marker_at_line_start`) | It requires `\n` or EOF right after the marker, so CRLF startup files (`profile.ps1`, `autocrlf` dotfiles) never match: every install appends another block and `self uninstall` leaves them all. Accept an optional `\r`. |
+| B120 | P3 | bug | fixed | `shell.rs` (`marker_at_line_start`, `block_span`) | A marker line may end in `\r\n` or `\r`. The span consumes that ending, so a CRLF profile is updated in place instead of gaining a second block. |
 | B121 | P3 | bug | suspected | `shell.rs:1377-1405` (`write`) | When a startup file is a dangling symlink (dotfiles repo not checked out), canonicalize fails, the raw path is used, and the temp-file rename replaces the user's symlink with a regular file. Resolve with `read_link` and write the target, or refuse. |
-| B122 | P3 | bug | confirmed | `src/ui.rs:811` (`BarProgress::start`) | The download label reaches `set_message(truncate(label, 28))` without `printable()`, unlike every other status line; safe today only because callers pass sanitised names. Wrap it in `printable()`. |
+| B122 | P3 | bug | fixed | `src/ui.rs` (`BarProgress::start`) | The download label reaches `set_message` through `printable` before it is truncated, the same filter as every other status line. |
 | B123 | P3 | bug | confirmed | `platform/{macos,unix,windows}.rs` `restore_retired_store`, from `relink`/`rollback` | In these paths `move_into_store` is a no-op and `sweep_swap_leftovers` does not run; if linking fails while a stale `<ver>.old` from an earlier interrupted swap exists, the error path deletes the live prefix and renames the stale copy over it. Restore only when this call made the swap (have `move_into_store` say so). |
 | B124 | P3 | bug | fixed | `platform/windows.rs:80-104` (`busy_aside`, `clear_for_replace`) | `tool.exe.old.<pid>-<ms>` files left when a running exe is renamed aside are never swept (only ketch's own asides are), so they pile up with every upgrade of a running tool. Sweep `*.old.*` siblings of recorded links at the start of commit, relink and uninstall. |
 | B125 | P3 | vuln | confirmed | `crates/ketch-ffi/src/callbacks.rs:128-162`; `crates/ketch-ffi/src/records.rs:238-241` | Event `detail`/`verb`/`name`/`label` and `Changelog.version` carry client asset names and tags to Swift, C# and Vala unsanitised, though the `records.rs` header says they pass through `changelog::sanitize`; GUIs get bidi overrides raw. Sanitise string fields in `From<report::Event>` and `Changelog::new`. |
@@ -85,7 +85,7 @@ New bugs and vulnerabilities from a read-only whole-project review of `main` at 
 | B129 | P3 | bug | confirmed | `desktop/macos/Ketch/Store/KetchStore.swift:135-145, 312-321` | The background update loop and window-key refresh report errors through `report`, which sets `errorMessage`; offline with the real core, a modal alert pops on every interval and focus change. Log background failures without alerting. |
 | B130 | P3 | bug | fixed | `desktop/macos/Ketch/Views/DiscoverView.swift:44-47`, `PackageDetailView.swift:59-62`; `desktop/windows/Ketch.App/Pages/DiscoverPage.xaml.cs:36-42` | Core calls ignore task cancellation, so an older, slower search or changelog reply can land after a newer one (Windows also searches on every keystroke). Tag requests and drop out-of-date replies; debounce search. |
 | B131 | P3 | bug | confirmed | `desktop/windows/Ketch.AppCore/KetchStore.cs:325-328` (`Operate`) | When an operation is already running, `Operate` returns silently: a confirmed Uninstall or a clicked Install does nothing. Set `ErrorMessage` as macOS does. |
-| B132 | P3 | bug | confirmed | `install.ps1:151, 259` | Unlike `install.sh:203-206`, `--version 0.10.0` is not given a `v` prefix, so the URL is `…/download/0.10.0/…` and 404s. Prefix `v` when missing. |
+| B132 | P3 | bug | fixed | `install.ps1` | `--version 0.10.0` is given a leading `v` before the download URL is built, the same as `install.sh`. A tag that already starts with `v` is left alone. |
 | B133 | P3 | vuln | confirmed | `install.sh:7-359` | The body is not wrapped in a function, so under `curl \| bash` a truncated download runs whatever complete lines arrived. Low impact today, but the guard is missing. Put the body in `main() { … }` and call `main "$@"` last. |
 | B134 | P3 | bug | suspected | `install.ps1:229, 263` | `[Net.ServicePointManager]::SecurityProtocol` is never set; on older Windows 10/Server, PowerShell 5.1 defaults to TLS 1.0/1.1, which GitHub rejects. OR in `Tls12` at the top. |
 | B135 | P3 | bug | confirmed | `.github/workflows/ci.yml:439-445` | `/review` dispatches with `--ref "$branch"` from the PR's `headRefName`; for a fork PR that ref is missing (the job fails) or names a base branch such as `main`, and CI runs on `main` while the bot says it ran on the PR head. Refuse when `headRepository` is not this repo, or check the dispatched ref's SHA equals the head SHA. |
@@ -116,13 +116,13 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | D17 | todo | P3 | 4 | 0% | |
 | D18 | todo | P3 | 3 | 0% | |
 | D19 | todo | P3 | 4 | 0% | |
-| B74 | todo | P3 | 3 | 0% | |
-| R12 | todo | P3 | 1 | 0% | |
+| B74 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
+| R12 | done | P3 | 1 | 100% | Cursor / grok 4.7 |
 | R20 | in progress | P2 | 3 | 90% | Claude / sonnet-5.5 |
 | B98 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | B99 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
 | B102 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
-| R18 | in progress | P2 | 3 | 70% | Claude Code / opus-5.5 |
+| R18 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
 | R19.1 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | R19.2 | in progress | P2 | 2 | 90% | Claude Code / opus-5.5 |
 | R19.3 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
@@ -506,11 +506,11 @@ Status: steps 1–6 landed in #215. `docs/ru` and `docs/uk` translate the user-f
 
 ### B74. xz archives decompress entirely into memory
 
-`crates/ketch-core/src/extract/archive.rs:400-409`: `TarXzExtractor` does `xz_decompress` into a `Vec` before tar parsing; a hostile multi-GB `.tar.xz` (checksum-valid, same publisher) is a memory-exhaustion DoS during extraction. The gz/bz2 paths already stream via `lzma-rs` readers. Done means: the xz path streams like the others. Related doc note: the plugin protocol v1 has no checksum channel at all (`source/plugin.rs:125-191` never overrides `Source::checksums`) — state the TOFU limitation in `docs/PLUGINS.md` if not already there.
+`lzma-rs` decoded each XZ block into one `Vec` before any plaintext was written (`decode::xz::read_block`), so a channel adapter around `xz_decompress` still held a hostile multi-GB block in memory. Done: `TarXzExtractor` and `XzFileExtractor` read through `lzma-rust2`'s `XzReader`, which yields plaintext as it is decoded, and refuse a block whose LZMA2 dictionary would take more than 256 MiB of decoder memory. `docs/PLUGINS.md` states that protocol v1 has no checksum subcommand, so a plugin asset without a sha256 `digest` is trust on first use.
 
 ### R12. Consolidate duplicated helpers
 
-`platform/unix.rs:46-53` and `self_update.rs:180-187` carry identical `remove_any`; `platform/unix.rs:164-170` and `platform/macos.rs:89-93` duplicate `sibling`; `source/local.rs:263-281` re-declares the GZIP/XZ/BZ2/ZIP/ustar magic constants from `extract/archive.rs:145-153`; `http.rs:60-64` keeps `Http::has_token` behind `#[allow(dead_code)]`. Done means: one implementation of each, and `has_token` is either used or gone.
+Done. `remove_any` already lives in `fs_kit::tree::remove_any` (R20); the local copies are gone. `Http::has_token` is used by the GitHub source before a draft listing, so it stays. `sibling` is one function in `platform/mod.rs`: the suffix is appended as bytes (a non-UTF-8 name is kept) and a path with no file name becomes `pkg`. The three backends call that. The GZIP/XZ/BZ2/ZIP magics and `looks_like_tar` are `pub(crate)` in `extract/archive.rs`; the local source classifies from them and still does not peek inside a compressed stream.
 
 ### R20. File and directory helpers from `fs-kit`
 
@@ -540,9 +540,7 @@ Plan: check ancestry in `materialize_symlink_as_copy` and snapshot the entry lis
 
 ### R18. One atomic replace helper in `ketch-core`
 
-Row R18 in the 2026-10-08 findings. Done: the five rename-over-temp copies use one core helper; behaviour unchanged.
-
-Plan: add the helper, switch `manifest.rs`, `shell.rs`, `state.rs` and `platform/*`. Status: the file-level copies use `replace.rs` (#315); the directory swap in `platform/*` `move_into_store` follows once #297 (B123), which changes that function, is merged. Check: the helper's unit tests and the existing suite.
+Done. File writes go through `fs_kit::write` (`replace_file` in `manifest.rs`, and the same helper the other file writers already used). The store swap is one `swap_into_store` in `platform/mod.rs`: stage beside the destination, retire the live tree to `.old`, and swap. Each backend passes its own copy (`ditto` on macOS, `copy_tree` on Linux and Windows) for the cross-filesystem case. `finalize_store_swap` and `restore_retired_store` live next to it. Behaviour is unchanged: `.old` stays until links succeed, and a path that is already the store is not retired.
 
 ### B113. Windows-reserved names pass the path guards
 

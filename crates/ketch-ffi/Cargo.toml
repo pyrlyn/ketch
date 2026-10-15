@@ -35,7 +35,8 @@ bindgen = ["uniffi/cli"]
 schema = ["dep:schemars"]
 
 [dependencies]
-ketch-core = { path = "../ketch-core" }
+# Only what the desktop apps call: their history view reads `stats`.
+ketch-core = { path = "../ketch-core", default-features = false, features = ["stats"] }
 schemars = { version = "1.2", optional = true }
 # The derive that gives the records and events the JSON shape desktop/contract
 # publishes to the Windows and Linux fakes, and that ketch-capi sends over its

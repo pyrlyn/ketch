@@ -13,6 +13,16 @@ publish = false
 [package.metadata.dist]
 dist = false
 
+# Each heavy subsystem is a feature, so a front end links only what it uses.
+# The defaults are everything: the `ketch` binary takes them as they are, and
+# `ketch-ffi` turns them off and names its own set. `scripts/core-features.sh`
+# builds the core with none of them and with each one alone.
+[features]
+default = ["stats"]
+# `stats.db`, the install history: diesel over a bundled SQLite. Without it an
+# install records nothing, and `stats::history`/`summary` do not exist.
+stats = ["dep:diesel", "dep:diesel_migrations", "dep:libsqlite3-sys"]
+
 [dependencies]
 # `shell::Shell` is a clap `ValueEnum` and `CompletionShell` maps onto
 # `clap_complete::Shell`; the command line itself lives in the binary.
@@ -34,7 +44,11 @@ flate2 = "1"
 bzip2 = "0.6"
 tar = "0.4"
 zip = { version = "8", default-features = false, features = ["deflate"] }
-lzma-rs = "0.3"
+# XZ is streamed. lzma-rs decoded each block into one `Vec` before writing any
+# plaintext, so a small, highly compressible archive could exhaust memory.
+# `optimization` stays off: that feature is the crate's unsafe path, and these
+# bytes are untrusted. No encoder: tests use fixed fixtures.
+lzma-rust2 = { version = "0.22", default-features = false, features = ["std", "xz"] }
 walkdir = "2"
 semver = "1"
 tempfile = "3"
@@ -46,12 +60,12 @@ pathdiff = "0.2"
 # parse Windows archive member paths correctly on any host (zip-slip guard)
 typed-path = "0.12"
 thiserror = "2"
-diesel = { version = "2.3", features = ["sqlite", "returning_clauses_for_sqlite_3_35"] }
-diesel_migrations = "2.3"
+diesel = { version = "2.3", features = ["sqlite", "returning_clauses_for_sqlite_3_35"], optional = true }
+diesel_migrations = { version = "2.3", optional = true }
 # `bundled` compiles SQLite into the binary. Linking the system one would make
 # ketch's single-binary promise depend on what the host happens to ship, and
 # the release builds both macOS architectures where that answer differs.
-libsqlite3-sys = { version = "0.38.2", features = ["bundled"] }
+libsqlite3-sys = { version = "0.38.2", features = ["bundled"], optional = true }
 # `ketch registry push` talks to GitHub through octocrab rather than the ureq
 # client the sources use: it needs forks, refs, contents and pull requests,
 # which octocrab already types and paginates. It is async, hence tokio for a

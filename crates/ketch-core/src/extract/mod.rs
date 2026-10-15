@@ -15,7 +15,7 @@ pub mod macos;
 
 use crate::error::{Error, Result};
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 
 /// One archive format.
@@ -53,6 +53,122 @@ pub fn extract_auto(
         }
     }
     Err(Error::UnsupportedArchive(src.to_path_buf()))
+}
+
+/// How far a compressed archive may expand relative to its own size.
+///
+/// Real release archives sit well below 20:1; a bomb sits at 1000:1 and above.
+const MAX_EXPANSION_RATIO: u64 = 100;
+
+/// Every archive may unpack at least this much, so a small archive of
+/// highly compressible files (zero-padded firmware, sparse data) still works.
+const MIN_UNPACKED_BYTES: u64 = 256 * 1024 * 1024;
+
+/// No archive unpacks past this, whatever its size.
+const MAX_UNPACKED_BYTES: u64 = 32 * 1024 * 1024 * 1024;
+
+/// No archive writes more members than this. The largest toolchains ship tens
+/// of thousands of files; millions of empty members exist only to exhaust
+/// inodes.
+const MAX_ENTRIES: u64 = 250_000;
+
+/// What one extraction may still write: bytes and entries.
+///
+/// Archive headers and compressed streams are written by someone else, so the
+/// size an archive expands to is untrusted input. One budget per extraction,
+/// charged by every extractor, keeps a small bomb from filling the disk under
+/// the ketch root.
+#[derive(Debug)]
+pub struct Budget {
+    bytes_left: u64,
+    entries_left: u64,
+    limit_bytes: u64,
+    limit_entries: u64,
+}
+
+impl Budget {
+    /// An explicit budget; tests use small ones.
+    pub fn new(limit_bytes: u64, limit_entries: u64) -> Self {
+        Budget {
+            bytes_left: limit_bytes,
+            entries_left: limit_entries,
+            limit_bytes,
+            limit_entries,
+        }
+    }
+
+    /// The budget for an archive of `compressed` bytes: a ratio of its size,
+    /// never below the floor and never above the ceiling.
+    pub fn for_compressed_len(compressed: u64) -> Self {
+        let bytes = compressed
+            .saturating_mul(MAX_EXPANSION_RATIO)
+            .clamp(MIN_UNPACKED_BYTES, MAX_UNPACKED_BYTES);
+        Budget::new(bytes, MAX_ENTRIES)
+    }
+
+    /// The budget for the archive at `src`.
+    pub fn for_archive(src: &Path) -> Result<Self> {
+        let len = std::fs::metadata(src).map_err(|e| Error::io(src, e))?.len();
+        Ok(Budget::for_compressed_len(len))
+    }
+
+    /// Charge one member (file, directory or link).
+    pub fn entry(&mut self) -> Result<()> {
+        if self.entries_left == 0 {
+            return Err(Error::msg(format!(
+                "refusing archive with more than {} entries",
+                self.limit_entries
+            )));
+        }
+        self.entries_left -= 1;
+        Ok(())
+    }
+
+    /// Charge `n` bytes about to be written.
+    pub fn bytes(&mut self, n: u64) -> Result<()> {
+        if n > self.bytes_left {
+            return Err(self.too_large());
+        }
+        self.bytes_left -= n;
+        Ok(())
+    }
+
+    fn too_large(&self) -> Error {
+        Error::msg(format!(
+            "refusing archive that unpacks to more than {}",
+            crate::text::bytes(self.limit_bytes)
+        ))
+    }
+
+    /// Wrap `inner` so every byte written through it is charged here.
+    pub fn writer<W: Write>(&mut self, inner: W) -> BudgetWriter<'_, W> {
+        BudgetWriter {
+            budget: self,
+            inner,
+        }
+    }
+}
+
+/// A writer that fails once its [`Budget`] runs out, before writing the
+/// bytes that would overrun it.
+pub struct BudgetWriter<'a, W> {
+    budget: &'a mut Budget,
+    inner: W,
+}
+
+impl<W: Write> Write for BudgetWriter<'_, W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if buf.len() as u64 > self.budget.bytes_left {
+            return Err(std::io::Error::other(self.budget.too_large().to_string()));
+        }
+        let n = self.inner.write(buf)?;
+        self.budget.bytes_left -= n as u64;
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
 }
 
 /// First 512 bytes of a file, or fewer if it is shorter.
