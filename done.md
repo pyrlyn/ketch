@@ -1,3 +1,13 @@
+### R12. Consolidate duplicated helpers
+
+`sibling` lived in three backends. Linux and Windows lossily rebuilt the file name and fell back to `pkg`; macOS appended the suffix as bytes and used an empty name when the path had none. One function in `platform/mod.rs` does both: bytes, so a non-UTF-8 name stays intact, and `pkg` when there is no file name. Store swaps still rename `.incoming` and `.old` beside the live directory.
+
+`remove_any` was already `fs_kit::tree::remove_any`. `Http::has_token` is called before a GitHub draft listing, so the unused-helper note was stale and the method stays.
+
+The local source redeclared the gzip, xz, bzip2, zip and ustar checks. Those constants and `looks_like_tar` are now `pub(crate)` on the extractors, and `looks_like_archive` uses them. It still treats a lone compressed file as an archive and does not open the stream to see whether tar follows.
+
+Tests: `sibling_appends_the_suffix_to_the_file_name`, `sibling_of_a_nameless_path_uses_pkg`, `sibling_keeps_a_non_utf8_file_name`, `archive_bytes_match_the_extractor_magics`.
+
 ### B74. xz archives decompress entirely into memory
 
 `lzma-rs` decoded each XZ block into one `Vec` (`read_block` writes the block only after it has been decompressed) before tar or a lone-file extract saw a byte. A channel in front of that writer still held the whole block. `TarXzExtractor` and `XzFileExtractor` now read `lzma-rust2`'s `XzReader`, which implements `Read` and yields plaintext as it is decoded. A block whose LZMA2 dictionary plus decoder overhead would exceed 256 MiB is refused before the dictionary is allocated; stock `xz -9` uses 64 MiB and still fits. The crate's `optimization` feature (its unsafe path) stays off, and the encoder is not a dependency: tests use fixed xz fixtures. `lzma-rs` is gone.

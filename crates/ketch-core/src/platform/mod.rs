@@ -565,9 +565,55 @@ pub(crate) fn is_busy_aside_of(link_name: &str, candidate: &str) -> bool {
         .is_some_and(|(pid, stamp)| digits(pid) && digits(stamp))
 }
 
+/// A path next to `original` whose last component is that name plus `suffix`.
+///
+/// Store swaps rename `.incoming` and `.old` beside the live directory, which
+/// stays on one filesystem. One helper serves every backend: the suffix is
+/// appended as bytes, so a non-UTF-8 name is not rewritten, and a path with no
+/// file name (the root) still gets a name.
+pub(crate) fn sibling(original: &Path, suffix: &str) -> PathBuf {
+    let mut name = original
+        .file_name()
+        .map(|n| n.to_os_string())
+        .unwrap_or_else(|| std::ffi::OsString::from("pkg"));
+    name.push(suffix);
+    original.with_file_name(name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sibling_appends_the_suffix_to_the_file_name() {
+        let path = PathBuf::from("store").join("tool").join("1.0");
+        assert_eq!(
+            sibling(&path, ".old"),
+            PathBuf::from("store").join("tool").join("1.0.old")
+        );
+        assert_eq!(
+            sibling(&path, ".incoming"),
+            PathBuf::from("store").join("tool").join("1.0.incoming")
+        );
+    }
+
+    #[test]
+    fn sibling_of_a_nameless_path_uses_pkg() {
+        assert_eq!(sibling(Path::new(""), ".old"), PathBuf::from("pkg.old"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sibling_keeps_a_non_utf8_file_name() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+        let name = OsStr::from_bytes(&[0xff, 0xfe]);
+        let path = PathBuf::from("store").join(name);
+        let got = sibling(&path, ".old");
+        let mut expected = name.to_os_string();
+        expected.push(".old");
+        assert_eq!(got.file_name(), Some(expected.as_os_str()));
+    }
 
     #[test]
     fn only_a_pid_and_time_stamped_aside_of_the_link_is_one() {

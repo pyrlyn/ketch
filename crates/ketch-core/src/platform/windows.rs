@@ -10,6 +10,7 @@
 
 use super::claim::Claims;
 use super::scoring::looks_like_build_artifact;
+use super::sibling;
 use super::{AssetScore, DoctorCheck, Placement, Platform};
 use crate::config::Config;
 use crate::error::{Error, Result};
@@ -139,14 +140,6 @@ fn copy_over(from: &Path, to: &Path) -> std::io::Result<()> {
         }
         Err(e) => Err(e),
     }
-}
-
-fn sibling(original: &Path, suffix: &str) -> PathBuf {
-    let name = original
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "pkg".into());
-    original.with_file_name(format!("{name}{suffix}"))
 }
 
 /// Move the extracted payload into the store, keeping the previous tree as
