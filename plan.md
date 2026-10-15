@@ -122,7 +122,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B98 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | B99 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
 | B102 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
-| R18 | in progress | P2 | 3 | 70% | Claude Code / opus-5.5 |
+| R18 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
 | R19.1 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | R19.2 | in progress | P2 | 2 | 90% | Claude Code / opus-5.5 |
 | R19.3 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
@@ -540,9 +540,7 @@ Plan: check ancestry in `materialize_symlink_as_copy` and snapshot the entry lis
 
 ### R18. One atomic replace helper in `ketch-core`
 
-Row R18 in the 2026-10-08 findings. Done: the five rename-over-temp copies use one core helper; behaviour unchanged.
-
-Plan: add the helper, switch `manifest.rs`, `shell.rs`, `state.rs` and `platform/*`. Status: the file-level copies use `replace.rs` (#315); the directory swap in `platform/*` `move_into_store` follows once #297 (B123), which changes that function, is merged. Check: the helper's unit tests and the existing suite.
+Done. File writes go through `fs_kit::write` (`replace_file` in `manifest.rs`, and the same helper the other file writers already used). The store swap is one `swap_into_store` in `platform/mod.rs`: stage beside the destination, retire the live tree to `.old`, and swap. Each backend passes its own copy (`ditto` on macOS, `copy_tree` on Linux and Windows) for the cross-filesystem case. `finalize_store_swap` and `restore_retired_store` live next to it. Behaviour is unchanged: `.old` stays until links succeed, and a path that is already the store is not retired.
 
 ### B113. Windows-reserved names pass the path guards
 

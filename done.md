@@ -1,3 +1,9 @@
+### R18. One atomic replace helper in `ketch-core`
+
+File replacements already went through `fs_kit::write`. The store swap was still three copies of the same rename: stage as `.incoming`, retire the live tree to `.old`, swap the stage in, and put `.old` back if the second rename fails. That sequence is now `swap_into_store` in `platform/mod.rs`. macOS passes `ditto`; Linux and Windows pass `copy_tree`, and the copy runs only when the rename onto the stage fails. `finalize_store_swap` and `restore_retired_store` moved with it. A payload that is already the store is not retired, and `.old` stays until placement finishes.
+
+Tests: `swap_into_store_of_the_same_path_does_not_retire_it`, `swap_into_store_retires_the_previous_tree_and_restore_puts_it_back`, `swap_into_store_copies_when_the_rename_onto_the_stage_fails`, plus the existing place-failure restore on Linux and macOS.
+
 ### R12. Consolidate duplicated helpers
 
 `sibling` lived in three backends. Linux and Windows lossily rebuilt the file name and fell back to `pkg`; macOS appended the suffix as bytes and used an empty name when the path had none. One function in `platform/mod.rs` does both: bytes, so a non-UTF-8 name stays intact, and `pkg` when there is no file name. Store swaps still rename `.incoming` and `.old` beside the live directory.
