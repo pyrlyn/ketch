@@ -27,7 +27,6 @@
 - R19.2. Registry push as an optional core feature
 - R19.3. Publisher signatures as an optional core feature
 - R19.4. Archive codecs as optional core features
-- R18. One atomic replace helper in `ketch-core`
 - B113. Windows-reserved names pass the path guards
 - B118. An upgrade silently drops checksum verification
 - B123. Relink and rollback restore a stale `.old`
