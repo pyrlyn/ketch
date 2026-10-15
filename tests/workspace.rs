@@ -81,8 +81,11 @@ fn both_crates_forbid_unsafe_code_through_the_workspace_lints() {
 /// Each optional subsystem of the core and the dependencies only it pulls in.
 /// A dependency listed here that is not optional, or a feature that does not
 /// name it, links it into every front end again.
-const CORE_FEATURES: &[(&str, &[&str])] =
-    &[("stats", &["diesel", "diesel_migrations", "libsqlite3-sys"])];
+const CORE_FEATURES: &[(&str, &[&str])] = &[
+    ("stats", &["diesel", "diesel_migrations", "libsqlite3-sys"]),
+    ("push", &["octocrab", "tokio"]),
+    ("trust", &["sigstore", "minisign-verify", "pgp"]),
+];
 
 #[test]
 fn each_heavy_dependency_of_the_core_is_optional_behind_its_feature() {
@@ -132,5 +135,20 @@ fn the_binary_keeps_every_core_feature_and_the_ffi_chooses_its_own() {
         get(&ffi, &["dependencies", "ketch-core", "default-features"]).and_then(|v| v.as_bool()),
         Some(false),
         "ketch-ffi names the features the desktop apps use"
+    );
+}
+
+#[test]
+fn the_desktop_apps_do_not_link_registry_push() {
+    let ffi = manifest("crates/ketch-ffi/Cargo.toml");
+    let features: Vec<&str> = get(&ffi, &["dependencies", "ketch-core", "features"])
+        .and_then(|v| v.as_array())
+        .expect("ketch-ffi names its core features")
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    assert!(
+        !features.contains(&"push"),
+        "no app pushes to the registry; octocrab and tokio stay out of ketch-ffi"
     );
 }
