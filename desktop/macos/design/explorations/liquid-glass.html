@@ -1,0 +1,554 @@
+<!doctype html>
+<!--
+  Design exploration, not a token source: direction 6 of first-screen.html
+  (Liquid glass) carried across every screen of the app, with the Appearance
+  settings live. Picking values here feeds tokens.json; nothing is generated
+  from or into this page.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ketch Liquid Glass</title>
+<style>
+:root { --page: #eef1f6; --page-2: rgba(255,255,255,.72); --ink: #15171d; --ink-2: #5d6371; --line: rgba(0,0,0,.08); color-scheme: light dark; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --page: #0c0d12; --page-2: rgba(28,30,38,.78); --ink: #eef0f5; --ink-2: #9aa1b2; --line: rgba(255,255,255,.1); } }
+:root[data-theme="dark"] { --page: #0c0d12; --page-2: rgba(28,30,38,.78); --ink: #eef0f5; --ink-2: #9aa1b2; --line: rgba(255,255,255,.1); }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif; }
+button { font: inherit; color: inherit; }
+.wrap { max-width: 1440px; margin: 0 auto; padding: 0 16px; }
+header.page { padding: 36px 0 14px; }
+header.page h1 { font: 700 28px/1.2 -apple-system, "SF Pro Display", system-ui, sans-serif; margin: 0 0 6px; letter-spacing: -0.02em; }
+header.page p { margin: 0; color: var(--ink-2); max-width: 80ch; }
+h2.part { font: 700 20px/1.2 -apple-system, "SF Pro Display", system-ui, sans-serif; margin: 34px 0 6px; letter-spacing: -0.01em; }
+p.part { margin: 0 0 16px; color: var(--ink-2); }
+
+/* Tuning bar: the same Appearance controls as the in-app Settings page, pinned while scrolling. */
+.tune { position: sticky; top: 0; z-index: 20; background: var(--page-2); border-bottom: 1px solid var(--line);
+  -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); }
+.tune .wrap { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; padding-top: 10px; padding-bottom: 10px; }
+.grp { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.grp > span { color: var(--ink-2); font-weight: 600; }
+.grp output { font: 600 11px/1 ui-monospace, "SF Mono", monospace; min-width: 34px; color: var(--ink-2); }
+.reset { border: 1px solid var(--line); background: transparent; border-radius: 99px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
+
+/* Controls shared by the tuning bar and the in-app Settings page. */
+.seg-c { display: inline-flex; padding: 2px; border-radius: 99px; background: rgba(127,127,140,.16); gap: 2px; }
+.seg-c button { border: 0; background: transparent; padding: 3px 11px; border-radius: 99px; font-size: 12px; font-weight: 500; cursor: pointer; }
+.seg-c button[aria-pressed="true"] { background: var(--page); box-shadow: 0 1px 3px rgba(0,0,0,.18); font-weight: 600; }
+.sws { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.sw { width: 20px; height: 20px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; box-shadow: 0 0 0 1px rgba(0,0,0,.14) inset; }
+.sw[aria-pressed="true"] { outline: 2px solid var(--ink); outline-offset: 2px; }
+.sw.clear { background: conic-gradient(#fff 0 25%, #d9dde5 0 50%, #fff 0 75%, #d9dde5 0) 0 0 / 8px 8px; }
+.swc { position: relative; width: 20px; height: 20px; border-radius: 50%; overflow: hidden; cursor: pointer;
+  background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); box-shadow: 0 0 0 1px rgba(0,0,0,.14) inset; }
+.swc[aria-pressed="true"] { outline: 2px solid var(--ink); outline-offset: 2px; }
+.swc input { position: absolute; inset: -6px; width: 32px; height: 32px; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+input[type="range"] { width: 120px; accent-color: var(--g-accent, #0a84ff); }
+label.chk { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+label.chk input { accent-color: var(--g-accent, #0a84ff); }
+
+/* Frames: each screen is drawn at 1180×760 and scaled to its cell, so all copies look alike. */
+.frame { position: relative; width: 100%; aspect-ratio: 1180 / 760; border-radius: 22px; overflow: hidden; }
+.stage { position: absolute; left: 0; top: 0; width: 1180px; height: 760px; transform: scale(var(--k, .5)); transform-origin: 0 0;
+  background: var(--g-wall); background-size: cover; background-position: center; perspective: 2200px; overflow: hidden;
+  color: var(--g-ink); font-size: 13px; isolation: isolate; }
+.grid { display: grid; gap: 36px 28px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr)); padding-bottom: 60px; }
+figure { margin: 0; }
+figcaption { display: flex; gap: 10px; align-items: baseline; margin: 12px 4px 0; flex-wrap: wrap; }
+figcaption b { font-weight: 600; } figcaption span { color: var(--ink-2); font-size: 13px; }
+.num { font: 600 12px/1 ui-monospace, "SF Mono", monospace; color: var(--ink-2); }
+
+/* The window. */
+.lens { box-shadow: 0 1px 1px var(--g-rim-hi) inset, 0 -1px 2px var(--g-rim-lo) inset, 0 8px 20px -12px var(--g-drop); }
+.win { position: absolute; inset: 40px 56px; border-radius: 30px; display: grid; grid-template-columns: 232px 1fr; overflow: hidden;
+  background: var(--g-glass); border: 1px solid var(--g-edge);
+  -webkit-backdrop-filter: blur(var(--g-blur)) saturate(180%); backdrop-filter: blur(var(--g-blur)) saturate(180%);
+  box-shadow: 0 0 0 .5px var(--g-rim-hi) inset, 0 2px 1px var(--g-rim-hi) inset, 0 -2px 6px var(--g-rim-lo) inset, var(--g-shadow);
+  transform: rotateX(var(--g-tx)) rotateY(var(--g-ty)); }
+@media (prefers-reduced-motion: no-preference) {
+  .win, .pop { transition: transform .7s cubic-bezier(.2,.8,.2,1); }
+  .frame:hover .win, .frame:hover .pop { transform: none; }
+}
+.side { margin: 10px; border-radius: 24px; background: var(--g-glass-hi); padding: 14px 10px 10px; display: flex; flex-direction: column; gap: 2px; }
+.lights { display: flex; gap: 7px; padding: 2px 6px 14px; }
+.lights i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; box-shadow: 0 0 0 .5px rgba(0,0,0,.15) inset; }
+.lights i:nth-child(2) { background: #febc2e; } .lights i:nth-child(3) { background: #28c840; }
+.nav { display: flex; align-items: center; gap: 10px; padding: 7px 11px; border-radius: 99px; font-weight: 500; cursor: default; }
+.proto .nav { cursor: pointer; }
+.nav svg { width: 16px; height: 16px; flex: none; opacity: .75; }
+.nav.on { background: var(--g-glass-top); box-shadow: 0 1px 0 var(--g-rim-hi) inset, 0 3px 8px -3px var(--g-drop); font-weight: 600; }
+.nav.on svg { color: var(--g-accent-ink); opacity: 1; }
+.nav .ct { margin-left: auto; font-size: 11px; font-weight: 700; min-width: 20px; text-align: center; padding: 1px 7px; border-radius: 99px; background: var(--g-accent); color: var(--g-on-accent); }
+.nav .ct.warn { background: #ff9f0a; color: #1a1200; }
+.sec { font-size: 11px; font-weight: 600; color: var(--g-ink-2); padding: 12px 11px 4px; }
+.side .fill { flex: 1; }
+.root { margin-top: 6px; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 16px; background: var(--g-glass-lo); font-size: 11.5px; }
+.root b { display: block; font-weight: 600; } .root small { color: var(--g-ink-2); }
+.root i { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(145deg, #5ac8fa, #0a84ff); flex: none; }
+
+.main { position: relative; padding: 16px 20px 14px 6px; display: flex; flex-direction: column; gap: 12px; min-width: 0; overflow: hidden; }
+.top { display: flex; align-items: center; gap: 10px; min-height: 36px; }
+.top h1 { font: 700 26px/1.1 -apple-system, "SF Pro Display", system-ui, sans-serif; letter-spacing: -0.02em; margin: 0; }
+.top .sub { color: var(--g-ink-2); font-size: 13px; }
+.sp { flex: 1; }
+.search { width: 220px; height: 34px; border-radius: 99px; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: var(--g-glass-top); color: var(--g-ink-2); }
+.search svg { width: 14px; height: 14px; }
+.btn { height: 34px; padding: 0 16px; border-radius: 99px; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; border: 0; }
+.btn.pri { background: var(--g-accent); color: var(--g-on-accent); box-shadow: 0 1px 1px rgba(255,255,255,.55) inset, 0 -1px 2px rgba(0,0,0,.12) inset, 0 6px 14px -6px var(--g-accent); }
+.btn.sec { background: var(--g-glass-top); color: var(--g-ink); }
+.btn.tint { background: var(--g-accent-soft); color: var(--g-accent-ink); }
+.btn.danger { background: #ff3b30; color: #fff; box-shadow: 0 1px 1px rgba(255,255,255,.45) inset, 0 6px 14px -6px #ff3b30; }
+.btn.sm { height: 28px; padding: 0 13px; font-size: 12px; }
+.proto .btn, .proto .row, .proto .card { cursor: pointer; }
+
+.list { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 8px 10px 8px 8px; border-radius: 20px;
+  background: var(--g-glass-lo); box-shadow: 0 .5px 0 var(--g-rim-hi) inset; }
+.t { min-width: 0; } .t b { display: block; font-size: 14px; font-weight: 600; }
+.t small { display: block; color: var(--g-ink-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill { padding: 3px 10px; border-radius: 99px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.pill.up { background: var(--g-accent-soft); color: var(--g-accent-ink); }
+.pill.ok { background: var(--g-glass-top); color: var(--g-ink-2); }
+.mono { font-family: ui-monospace, "SF Mono", monospace; font-size: 12px; }
+.icon { position: relative; width: 42px; height: 42px; border-radius: 24%; display: grid; place-items: center; flex: none;
+  font: 800 14px/1 ui-monospace, "SF Mono", monospace; color: #fff; overflow: hidden; box-shadow: 0 6px 12px -6px rgba(0,20,60,.55); }
+.icon::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: 0 1px 1px rgba(255,255,255,.6) inset;
+  background: linear-gradient(180deg, rgba(255,255,255,.42) 0%, rgba(255,255,255,0) 50%); }
+.icon.lg { width: 84px; height: 84px; font-size: 26px; box-shadow: 0 16px 26px -12px rgba(0,20,60,.6); }
+.i1 { background: linear-gradient(145deg, #ff7a59, #d6336c); } .i2 { background: linear-gradient(145deg, #3dd6c6, #1c7ed6); }
+.i3 { background: linear-gradient(145deg, #a9e34b, #2f9e44); } .i4 { background: linear-gradient(145deg, #b197fc, #6741d9); }
+.i5 { background: linear-gradient(145deg, #5c636e, #16181c); } .i6 { background: linear-gradient(145deg, #ffd43b, #f76707); }
+.i7 { background: linear-gradient(145deg, #74c0fc, #364fc7); } .i8 { background: linear-gradient(145deg, #ff8787, #c92a2a); }
+
+.foot { margin-top: auto; display: flex; align-items: center; gap: 12px; padding: 9px 10px 9px 16px; border-radius: 99px; background: var(--g-glass-hi); font-size: 12.5px; }
+.track { flex: 1; height: 6px; border-radius: 99px; background: var(--g-hair); overflow: hidden; }
+.track i { display: block; height: 100%; width: 62%; border-radius: inherit; background: var(--g-accent); }
+
+/* Discover */
+.hero { position: relative; height: 252px; flex: none; border-radius: 26px; display: grid; grid-template-columns: 1fr 1.1fr; overflow: hidden; color: #fff;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--g-accent) 55%, #00081a), var(--g-accent) 60%, color-mix(in srgb, var(--g-accent) 55%, #fff));
+  box-shadow: 0 1px 1px rgba(255,255,255,.5) inset, 0 22px 34px -22px var(--g-drop); }
+.hero .txt { padding: 22px; display: flex; flex-direction: column; justify-content: flex-end; gap: 5px; z-index: 1; }
+.eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
+.hero .title { font: 800 34px/1.02 -apple-system, "SF Pro Display", system-ui, sans-serif; letter-spacing: -0.03em; }
+.hero .blurb { opacity: .9; max-width: 30ch; }
+.hero .btn { margin-top: 10px; align-self: flex-start; background: rgba(255,255,255,.92); color: #0b1530; box-shadow: 0 1px 1px #fff inset, 0 6px 14px -6px rgba(0,0,0,.4); }
+.art { position: relative; perspective: 800px; transform-style: preserve-3d; }
+.pane { position: absolute; border-radius: 14px; padding: 12px; font: 500 11.5px/1.65 ui-monospace, "SF Mono", monospace; white-space: nowrap; overflow: hidden;
+  background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.45); color: #f2f6ff;
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: 0 1px 1px rgba(255,255,255,.6) inset, 0 18px 28px -14px rgba(0,0,0,.5); }
+.pane.p1 { inset: 14% 30% 22% 2%; transform: rotateY(-24deg) rotateX(8deg) translateZ(10px); }
+.pane.p2 { inset: 32% 6% 10% 28%; transform: rotateY(-24deg) rotateX(8deg) translateZ(60px); }
+.pane.p3 { width: 92px; height: 92px; right: 9%; top: 8%; border-radius: 24%; display: grid; place-items: center; padding: 0;
+  font: 800 30px/1 ui-monospace, "SF Mono", monospace; background: linear-gradient(145deg, #ff7a59, #d6336c); transform: rotateY(-24deg) rotateX(8deg) translateZ(110px); }
+.pane .k { opacity: .6; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { padding: 6px 13px; border-radius: 99px; background: var(--g-glass-top); font-size: 12.5px; font-weight: 500; }
+.shelf-h { display: flex; align-items: baseline; justify-content: space-between; }
+.shelf-h b { font-size: 16px; font-weight: 700; } .shelf-h span { color: var(--g-accent-ink); font-weight: 500; }
+.shelf { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+
+/* Updates */
+.banner { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 18px; background: var(--g-glass-lo); box-shadow: 0 .5px 0 var(--g-rim-hi) inset; font-size: 12.5px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.dot.warn { background: #ff9f0a; box-shadow: 0 0 0 3px rgba(255,159,10,.25); }
+.ver { display: flex; align-items: center; gap: 6px; font-family: ui-monospace, "SF Mono", monospace; font-size: 12px; color: var(--g-ink-2); }
+.ver b { color: var(--g-accent-ink); }
+
+/* Package detail */
+.dhead { display: flex; gap: 18px; align-items: center; }
+.dhead h1 { font: 700 28px/1.1 -apple-system, "SF Pro Display", system-ui, sans-serif; margin: 0 0 2px; letter-spacing: -0.02em; }
+.dhead .meta { color: var(--g-ink-2); }
+.dhead .acts { display: flex; gap: 8px; margin-top: 10px; }
+.back { color: var(--g-accent-ink); font-weight: 500; font-size: 13px; }
+.seg { display: inline-flex; padding: 3px; border-radius: 99px; background: var(--g-glass-hi); gap: 2px; align-self: flex-start; }
+.seg span { padding: 5px 16px; border-radius: 99px; font-weight: 500; font-size: 12.5px; }
+.seg span.on { background: var(--g-glass-top); font-weight: 600; box-shadow: 0 1px 0 var(--g-rim-hi) inset, 0 2px 6px -2px var(--g-drop); }
+.cols { display: grid; grid-template-columns: 1.6fr 1fr; gap: 12px; min-height: 0; }
+.card { border-radius: 22px; background: var(--g-glass-lo); box-shadow: 0 .5px 0 var(--g-rim-hi) inset; padding: 14px 16px; min-width: 0; }
+.card h3 { margin: 0 0 6px; font-size: 14px; font-weight: 700; display: flex; gap: 8px; align-items: baseline; }
+.card h3 small { color: var(--g-ink-2); font-weight: 500; font-size: 12px; }
+.card ul { margin: 0 0 10px; padding-left: 18px; } .card li { margin: 2px 0; }
+dl.kv { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; font-size: 12.5px; }
+dl.kv dt { color: var(--g-ink-2); } dl.kv dd { margin: 0; text-align: right; font-weight: 500; }
+
+/* Activity */
+.tl { display: flex; flex-direction: column; gap: 6px; }
+.ev { display: grid; grid-template-columns: 64px 30px 1fr auto; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 18px; background: var(--g-glass-lo); box-shadow: 0 .5px 0 var(--g-rim-hi) inset; }
+.ev time { color: var(--g-ink-2); font: 500 12px/1 ui-monospace, "SF Mono", monospace; }
+.badge { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: #fff; }
+.badge svg { width: 14px; height: 14px; }
+.b-ok { background: #30d158; } .b-up { background: var(--g-accent); color: var(--g-on-accent); } .b-rm { background: #8e8e93; } .b-fail { background: #ff3b30; } .b-warn { background: #ff9f0a; color: #1a1200; }
+.day { font-size: 12px; font-weight: 700; color: var(--g-ink-2); padding: 6px 4px 0; }
+
+/* Doctor */
+.sum { display: flex; gap: 8px; }
+.sum .chip b { margin-right: 4px; }
+.chk-row { display: grid; grid-template-columns: 30px 1fr auto; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 20px; background: var(--g-glass-lo); box-shadow: 0 .5px 0 var(--g-rim-hi) inset; }
+
+/* Settings */
+.form { border-radius: 22px; background: var(--g-glass-lo); box-shadow: 0 .5px 0 var(--g-rim-hi) inset; padding: 4px 16px; }
+.field { display: grid; grid-template-columns: 190px 1fr; gap: 16px; align-items: center; padding: 11px 0; }
+.field + .field { border-top: .5px solid var(--g-hair); }
+.field > div:first-child b { display: block; font-weight: 600; } .field > div:first-child small { color: var(--g-ink-2); font-size: 11.5px; }
+.stage .seg-c { background: var(--g-glass-hi); padding: 3px; }
+.stage .seg-c button { padding: 4px 14px; font-size: 12.5px; }
+.stage .seg-c button[aria-pressed="true"] { background: var(--g-glass-top); box-shadow: 0 1px 0 var(--g-rim-hi) inset, 0 2px 6px -2px var(--g-drop); }
+.stage .sw { width: 22px; height: 22px; } .stage .swc { width: 22px; height: 22px; }
+.stage .sw[aria-pressed="true"], .stage .swc[aria-pressed="true"] { outline-color: var(--g-ink); }
+.stage input[type="range"] { width: 240px; }
+.stage .grp output { color: var(--g-ink-2); }
+.note { font-size: 12px; color: var(--g-ink-2); }
+
+/* Sheet */
+.scrim { position: absolute; inset: 0; background: var(--g-scrim); display: grid; place-items: center; z-index: 5; }
+.sheet { width: 390px; border-radius: 30px; padding: 24px 24px 18px; text-align: center; background: var(--g-glass-sheet); border: 1px solid var(--g-edge);
+  -webkit-backdrop-filter: blur(calc(var(--g-blur) + 10px)) saturate(180%); backdrop-filter: blur(calc(var(--g-blur) + 10px)) saturate(180%);
+  box-shadow: 0 1px 1px var(--g-rim-hi) inset, 0 -1px 2px var(--g-rim-lo) inset, 0 40px 60px -20px rgba(0,10,40,.6); }
+.sheet .icon { margin: 0 auto 12px; }
+.sheet h3 { margin: 0 0 6px; font-size: 17px; }
+.sheet p { margin: 0 0 16px; color: var(--g-ink-2); font-size: 12.5px; }
+.sheet .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sheet .btn { justify-content: center; }
+
+/* Menu bar extra */
+.menubar { position: absolute; left: 0; right: 0; top: 0; height: 30px; display: flex; align-items: center; gap: 20px; padding: 0 18px; font-size: 13px; font-weight: 500;
+  background: var(--g-glass); -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%); color: var(--g-ink); }
+.menubar b { font-weight: 700; }
+.mb-ketch { position: relative; display: grid; place-items: center; width: 30px; height: 22px; border-radius: 6px; background: var(--g-glass-top); }
+.mb-ketch svg { width: 15px; height: 15px; }
+.mb-ketch i { position: absolute; top: -3px; right: -4px; min-width: 14px; height: 14px; border-radius: 99px; background: var(--g-accent); color: var(--g-on-accent); font: 700 9px/14px system-ui; text-align: center; font-style: normal; }
+.pop { position: absolute; right: 168px; top: 40px; width: 380px; border-radius: 28px; padding: 14px; display: flex; flex-direction: column; gap: 8px;
+  background: var(--g-glass-sheet); border: 1px solid var(--g-edge);
+  -webkit-backdrop-filter: blur(calc(var(--g-blur) + 6px)) saturate(180%); backdrop-filter: blur(calc(var(--g-blur) + 6px)) saturate(180%);
+  box-shadow: 0 1px 1px var(--g-rim-hi) inset, 0 -1px 2px var(--g-rim-lo) inset, var(--g-shadow); transform: rotateX(calc(var(--g-tx) * .6)) rotateY(calc(var(--g-ty) * -.6)); }
+.pop .ph { display: flex; align-items: center; gap: 10px; padding: 2px 4px 4px; }
+.pop .ph b { font-size: 15px; } .pop .ph small { color: var(--g-ink-2); }
+.pop .row { grid-template-columns: 34px minmax(0, 1fr) auto; padding: 6px 8px 6px 6px; border-radius: 16px; }
+.pop .icon { width: 34px; height: 34px; font-size: 12px; }
+.pop hr { border: 0; border-top: .5px solid var(--g-hair); margin: 4px 6px; width: auto; }
+.mi { padding: 6px 10px; border-radius: 10px; display: flex; justify-content: space-between; }
+.mi kbd { font: 500 12px/1 system-ui; color: var(--g-ink-2); }
+.pop .btn.pri { justify-content: center; }
+.desk-win { position: absolute; left: 60px; top: 110px; width: 560px; height: 380px; border-radius: 26px; background: var(--g-glass-lo); border: 1px solid var(--g-edge);
+  -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); opacity: .55; }
+
+@media (max-width: 560px) { input[type="range"] { width: 90px; } .tune .wrap { gap: 8px 14px; } }
+</style>
+</head>
+<body>
+<div class="tune" aria-label="Appearance"><div class="wrap" id="tune"></div></div>
+<div class="wrap">
+  <header class="page">
+    <h1>Ketch — Liquid glass, every screen</h1>
+    <p>Direction 6 from the first-screen exploration, carried across the app. The bar above and Settings → Appearance inside the app are the same controls: window tint and transparency, blur, accent and light or dark. Wallpaper and depth only stage the preview.</p>
+  </header>
+  <h2 class="part">Prototype</h2>
+  <p class="part">Click the sidebar, a package row, or Uninstall on a package page.</p>
+  <div class="frame proto" id="proto"><div class="stage"></div></div>
+  <h2 class="part">All screens</h2>
+  <p class="part">Hover a window to flatten it.</p>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const I = {
+  installed: '<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/>',
+  discover: '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/>',
+  updates: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+  activity: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  doctor: '<path d="M3 12h4l2-5 4 10 2-5h6"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  up: '<path d="M12 19V6M6.5 11.5 12 6l5.5 5.5"/>',
+  x: '<path d="M7 7l10 10M17 7 7 17"/>',
+  minus: '<path d="M6 12h12"/>',
+  warn: '<path d="M12 7v6M12 16.5v.5"/>',
+};
+const svg = (k, w = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[k]}</svg>`;
+
+const pkgs = [
+  { ab: "rg", n: "ripgrep", v: "14.1.1", to: "14.2.0", repo: "BurntSushi/ripgrep", ic: "i1" },
+  { ab: "fd", n: "fd", v: "10.2.0", repo: "sharkdp/fd", ic: "i2" },
+  { ab: "bat", n: "bat", v: "0.25.0", repo: "sharkdp/bat", ic: "i3" },
+  { ab: "jq", n: "jq", v: "1.7.1", repo: "jqlang/jq", ic: "i4" },
+  { ab: "gh", n: "gh", v: "2.63.0", to: "2.65.0", repo: "cli/cli", ic: "i5" },
+  { ab: "lg", n: "lazygit", v: "0.44.1", to: "0.45.0", repo: "jesseduffield/lazygit", ic: "i6" },
+  { ab: "Δ", n: "delta", v: "0.18.2", repo: "dandavison/delta", ic: "i7" },
+];
+const icon = (p, cls = "") => `<div class="icon ${p.ic} ${cls}">${p.ab}</div>`;
+
+/* ---------- Appearance state ---------- */
+const ACCENTS = { Blue: "#0a84ff", Purple: "#bf5af2", Pink: "#ff375f", Red: "#ff453a", Orange: "#ff9f0a", Yellow: "#ffd60a", Green: "#30d158", Graphite: "#8e8e93" };
+const TINTS = { Clear: "clear", Sky: "#7cc4ff", Mint: "#6fe3c1", Sand: "#ffc98b", Rose: "#ff9ec0", Lilac: "#b9a6ff", Smoke: "#5b6577" };
+const WALLS = {
+  Ocean: ["#00c6ff", "#0072ff", "#00e5a0", .55, "#003a8c", .5],
+  Sunset: ["#ff9a8b", "#ff6a88", "#ffc371", .5, "#6a3093", .5],
+  Forest: ["#a8e063", "#2f8f5b", "#e2f7a1", .45, "#0b3d2e", .55],
+  Night: ["#203a43", "#0f2027", "#6a11cb", .35, "#000814", .6],
+};
+const DEFAULTS = { mode: "light", accent: "#0a84ff", tint: "clear", alpha: 28, blur: 28, reduce: false, wall: "Ocean", wallColor: "#3a6ea5", depth: 9 };
+const KEY = "ketch-liquid-glass";
+let S = { ...DEFAULTS };
+try { S = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}") }; } catch (e) { /* storage blocked: defaults */ }
+
+const hex = h => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
+const lum = c => { const f = v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }; return .2126 * f(c[0]) + .7152 * f(c[1]) + .0722 * f(c[2]); };
+const wallCss = name => {
+  if (name === "Custom") { const c = hex(S.wallColor);
+    return `radial-gradient(60% 70% at 25% 20%, ${rgba(mix(c, [255,255,255], .45), 1)}, transparent 70%), radial-gradient(70% 70% at 80% 90%, ${rgba(mix(c, [0,0,0], .5), 1)}, transparent 70%), ${S.wallColor}`; }
+  const [a, b, h1, o1, h2, o2] = WALLS[name] || WALLS.Ocean;
+  const s = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 260' preserveAspectRatio='none'><defs><linearGradient id='a' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='${a}'/><stop offset='1' stop-color='${b}'/></linearGradient></defs><rect width='400' height='260' fill='url(#a)'/><path d='M0 170 Q100 110 200 160 T400 140 V260 H0Z' fill='${h1}' opacity='${o1}'/><path d='M0 205 Q120 165 240 205 T400 195 V260 H0Z' fill='${h2}' opacity='${o2}'/></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(s)}")`;
+};
+const darkNow = () => S.mode === "dark" || (S.mode === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+
+function apply() {
+  const dark = darkNow(), r = document.documentElement.style;
+  const base = dark ? [26, 30, 40] : [250, 252, 255];
+  const tinted = S.tint === "clear" ? base : mix(base, hex(S.tint), dark ? .3 : .38);
+  const a = S.reduce ? .94 : S.alpha / 100;
+  const hi = mix(tinted, dark ? [70, 76, 92] : [255, 255, 255], .35);
+  const acc = hex(S.accent);
+  const v = {
+    "--g-glass": rgba(tinted, a),
+    "--g-glass-hi": rgba(hi, S.reduce ? .97 : Math.min(1, a + .14)),
+    "--g-glass-lo": rgba(hi, S.reduce ? .9 : a * .85 + .04),
+    "--g-glass-top": dark ? rgba([255, 255, 255], S.reduce ? .16 : .14) : rgba([255, 255, 255], S.reduce ? 1 : .74),
+    "--g-glass-sheet": rgba(hi, S.reduce ? .98 : Math.min(1, a + .3)),
+    "--g-blur": (S.reduce ? 0 : S.blur) + "px",
+    "--g-ink": dark ? "#eef2f8" : "#0d1b2a",
+    "--g-ink-2": dark ? "#a3adbf" : "#4a5a70",
+    "--g-hair": dark ? "rgba(255,255,255,.12)" : "rgba(0,30,80,.1)",
+    "--g-edge": dark ? "rgba(255,255,255,.16)" : "rgba(255,255,255,.5)",
+    "--g-rim-hi": dark ? "rgba(255,255,255,.22)" : "rgba(255,255,255,.88)",
+    "--g-rim-lo": dark ? "rgba(0,0,0,.35)" : "rgba(0,40,110,.12)",
+    "--g-drop": dark ? "rgba(0,0,0,.6)" : "rgba(0,30,90,.38)",
+    "--g-shadow": dark ? "0 34px 70px -26px rgba(0,0,0,.85)" : "0 34px 70px -26px rgba(0,30,90,.6)",
+    "--g-scrim": dark ? "rgba(0,0,0,.28)" : "rgba(0,15,45,.16)",
+    "--g-accent": S.accent,
+    "--g-accent-soft": rgba(acc, dark ? .24 : .15),
+    "--g-accent-ink": dark ? rgba(mix(acc, [255, 255, 255], .3), 1) : rgba(mix(acc, [0, 0, 0], lum(acc) > .5 ? .55 : .2), 1),
+    "--g-on-accent": lum(acc) > .55 ? "#111" : "#fff",
+    "--g-tx": S.depth + "deg",
+    "--g-ty": (-S.depth * .9) + "deg",
+    "--g-wall": wallCss(S.wall),
+  };
+  for (const k in v) r.setProperty(k, v[k]);
+  sync();
+  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage blocked: session only */ }
+}
+
+/* Controls render once per container; sync() keeps every copy in step without re-rendering under a dragging pointer. */
+const seg = (key, opts) => `<div class="seg-c" role="group">${opts.map(([v, l]) => `<button type="button" data-key="${key}" data-val="${v}">${l}</button>`).join("")}</div>`;
+const swatches = (key, map, customKey = key) => `<div class="sws" role="group">${Object.entries(map).map(([l, v]) =>
+  `<button type="button" class="sw${v === "clear" ? " clear" : ""}" title="${l}" aria-label="${l}" data-key="${key}" data-val="${v}" style="${v === "clear" ? "" : `background:${v}`}"></button>`).join("")}
+  <label class="swc" title="Custom" data-custom="${key}"><input type="color" data-key="${customKey}" data-color aria-label="Custom colour"></label></div>`;
+const range = (key, min, max, unit) => `<input type="range" min="${min}" max="${max}" data-key="${key}" aria-label="${key}"><output data-out="${key}" data-unit="${unit}"></output>`;
+const check = (key, label) => `<label class="chk"><input type="checkbox" data-key="${key}">${label}</label>`;
+
+function sync() {
+  const presetAccent = Object.values(ACCENTS).includes(S.accent);
+  const presetTint = Object.values(TINTS).includes(S.tint);
+  document.querySelectorAll("[data-key]").forEach(el => {
+    const k = el.dataset.key;
+    if (el.dataset.val !== undefined) el.setAttribute("aria-pressed", String(el.dataset.val === String(S[k])));
+    else if (el.type === "checkbox") el.checked = !!S[k];
+    else if (el.type === "color") el.value = k === "accent" ? S.accent : k === "tint" ? (S.tint === "clear" ? "#ffffff" : S.tint) : S[k];
+    else if (el !== document.activeElement) el.value = S[k];
+  });
+  document.querySelectorAll("[data-custom]").forEach(el => {
+    const k = el.dataset.custom;
+    el.setAttribute("aria-pressed", String(k === "accent" ? !presetAccent : k === "tint" ? !presetTint : S.wall === "Custom"));
+    if (k === "wall") el.style.background = S.wall === "Custom" ? S.wallColor : "";
+  });
+  document.querySelectorAll("[data-out]").forEach(o => o.textContent = S[o.dataset.out] + o.dataset.unit);
+}
+function set(k, v) {
+  if (k === "wallColor") { S.wall = "Custom"; }
+  S[k] = ["alpha", "blur", "depth"].includes(k) ? Number(v) : v;
+  apply();
+}
+document.addEventListener("input", e => { const el = e.target.closest("[data-key]"); if (!el || el.dataset.val !== undefined) return; set(el.dataset.key, el.type === "checkbox" ? el.checked : el.value); });
+document.addEventListener("click", e => { const el = e.target.closest("button[data-key][data-val]"); if (el) set(el.dataset.key, el.dataset.val); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (S.mode === "auto") apply(); });
+
+document.getElementById("tune").innerHTML = `
+  <div class="grp"><span>Mode</span>${seg("mode", [["light", "Light"], ["dark", "Dark"], ["auto", "Auto"]])}</div>
+  <div class="grp"><span>Background</span>${swatches("tint", TINTS)}</div>
+  <div class="grp"><span>Transparency</span>${range("alpha", 4, 90, "%")}</div>
+  <div class="grp"><span>Blur</span>${range("blur", 0, 60, "px")}</div>
+  <div class="grp"><span>Accent</span>${swatches("accent", ACCENTS)}</div>
+  <div class="grp">${check("reduce", "Reduce transparency")}</div>
+  <div class="grp"><span>Wallpaper</span>${seg("wall", Object.keys(WALLS).map(w => [w, w]))}<label class="swc" title="Custom wallpaper" data-custom="wall"><input type="color" data-key="wallColor" aria-label="Wallpaper colour"></label></div>
+  <div class="grp"><span>Depth</span>${range("depth", 0, 16, "°")}</div>
+  <button type="button" class="reset" id="reset">Reset</button>
+  <button type="button" class="reset" id="penpot">Export .penpot</button>`;
+document.getElementById("reset").addEventListener("click", () => { S = { ...DEFAULTS }; apply(); });
+
+/* ---------- Screens ---------- */
+const NAV = [["installed", "Installed", 24], ["discover", "Discover"], ["updates", "Updates", 3], ["activity", "Activity"], ["doctor", "Doctor", 1, "warn"]];
+const side = on => `<aside class="side lens">
+  <div class="lights"><i></i><i></i><i></i></div>
+  ${NAV.map(([id, l, c, w]) => `<div class="nav${on === id ? " on" : ""}" data-go="${id}">${svg(id)}${l}${c ? `<span class="ct${w ? " " + w : ""}">${c}</span>` : ""}</div>`).join("")}
+  <div class="fill"></div>
+  <div class="nav${on === "settings" ? " on" : ""}" data-go="settings">${svg("settings")}Settings</div>
+  <div class="root"><i></i><div><b>~/.ketch</b><small>24 packages · 412 MB</small></div></div>
+</aside>`;
+const shell = (on, main, extra = "") => `<div class="win">${side(on)}<section class="main">${main}</section>${extra}</div>`;
+const head = (title, right = "", sub = "") => `<div class="top"><h1>${title}</h1>${sub ? `<span class="sub">${sub}</span>` : ""}<span class="sp"></span>${right}</div>`;
+const search = ph => `<div class="search lens">${svg("search")}${ph}</div>`;
+
+const installedMain = () => head("Installed", search("Search installed") + `<button class="btn pri" data-go="updates">Upgrade all 3</button>`) + `
+  <div class="list">${pkgs.map(p => `<div class="row" data-go="detail">${icon(p)}
+    <div class="t"><b>${p.n}</b><small>${p.repo}</small></div>
+    <span class="mono" style="color:var(--g-ink-2)">${p.v}</span>
+    ${p.to ? `<span class="pill up">${p.to} available</span>` : `<span class="pill ok">Up to date</span>`}</div>`).join("")}</div>
+  <div class="foot lens"><span>Upgrading <b>ripgrep</b> to 14.2.0 · verifying sha256</span><div class="track"><i></i></div><span class="mono">62%</span></div>`;
+
+const discoverMain = () => head("Discover", search("Search GitHub releases")) + `
+  <div class="hero">
+    <div class="txt"><span class="eyebrow">Tool of the week</span><span class="title">ripgrep 14.2</span>
+      <span class="blurb">Search a whole repository before your coffee cools.</span><button class="btn" data-go="detail">Get</button></div>
+    <div class="art">
+      <div class="pane p1"><span class="k">$</span> ketch install ripgrep<br><span class="k">resolve</span> BurntSushi/ripgrep<br><span class="k">verify</span> sha256 ok<br><span class="k">link</span> ~/.ketch/bin/rg</div>
+      <div class="pane p2">$ rg "TODO" src/<br>src/install.rs:212<br>src/ui.rs:48<br>3 matches · 4 ms</div>
+      <div class="pane p3">rg</div>
+    </div>
+  </div>
+  <div class="chips">${["Command line", "Git", "Search", "JSON & data", "Shells", "Apps", "Containers"].map(c => `<span class="chip lens">${c}</span>`).join("")}</div>
+  <div class="shelf-h"><b>Fresh releases</b><span>See all</span></div>
+  <div class="shelf">${[
+    { ab: "zx", n: "zoxide", s: "A smarter cd", ic: "i7" }, { ab: "hx", n: "helix", s: "A post-modern editor", ic: "i4" },
+    { ab: "st", n: "starship", s: "Prompt for any shell", ic: "i8" }, { ab: "yz", n: "yazi", s: "Terminal file manager", ic: "i6" },
+  ].map(p => `<div class="row" style="grid-template-columns:42px minmax(0,1fr) auto">${icon(p)}<div class="t"><b>${p.n}</b><small>${p.s}</small></div><button class="btn tint sm">Get</button></div>`).join("")}</div>`;
+
+const updatesMain = () => head("Updates", `<button class="btn pri">Update all</button>`, "3 available") + `
+  <div class="banner">${'<span class="dot warn"></span>'}<span>Another ketch is running (pid 4182). Updates start when it finishes.</span><span class="sp"></span><button class="btn sec sm lens">Retry now</button></div>
+  <div class="list">${pkgs.filter(p => p.to).map(p => `<div class="row" data-go="detail" style="grid-template-columns:42px minmax(0,1fr) auto">${icon(p)}
+    <div class="t"><b>${p.n}</b><small>${p.n === "ripgrep" ? "Faster --files on large trees; new --hyperlink-format presets" : p.n === "gh" ? "gh pr checks --watch shows required checks first" : "Custom commands get a confirmation prompt"}</small>
+      <div class="ver">${p.v} → <b>${p.to}</b> · ${p.repo}</div></div>
+    <button class="btn tint sm">Update</button></div>`).join("")}</div>
+  <div class="card"><h3>Pinned <small>held by ketch.lock</small></h3><div class="ver">bat 0.25.0 → <b>0.26.0</b> · pinned in ~/work/site/ketch.lock</div></div>`;
+
+const detailMain = () => `<span class="back" data-go="installed">‹ Installed</span>
+  <div class="dhead">${icon(pkgs[0], "lg")}<div><h1>ripgrep</h1><div class="meta">BurntSushi/ripgrep · installed 14.1.1 · 14.2.0 available</div>
+    <div class="acts"><button class="btn pri">Update to 14.2.0</button><button class="btn sec lens">Open on GitHub</button><button class="btn sec lens" data-go="sheet" style="color:#ff3b30">Uninstall</button></div></div></div>
+  <div class="seg lens"><span>Overview</span><span class="on">Changelog</span><span>Files</span></div>
+  <div class="cols">
+    <div class="card"><h3>14.2.0 <small>released 3 days ago</small></h3>
+      <ul><li>Faster <span class="mono">--files</span> on very large trees</li><li>New <span class="mono">--hyperlink-format</span> presets for more terminals</li><li>Fixed a panic on invalid UTF-8 in glob patterns</li></ul>
+      <h3>14.1.1 <small>installed</small></h3><ul><li>Fixed a regression in <span class="mono">-w</span> with look-around</li></ul></div>
+    <div class="card"><h3>Details</h3><dl class="kv">
+      <dt>Binary</dt><dd class="mono">rg</dd><dt>Linked to</dt><dd class="mono">~/.ketch/bin/rg</dd><dt>Size</dt><dd>5.8 MB</dd>
+      <dt>Asset</dt><dd class="mono">aarch64-apple-darwin</dd><dt>Checksum</dt><dd>sha256 verified</dd><dt>Source</dt><dd>GitHub releases</dd><dt>Manifest</dt><dd>registry</dd></dl></div>
+  </div>`;
+
+const EV = [
+  ["Today"],
+  ["09:41", "up", "up", "<b>ripgrep</b> upgrading 14.1.1 → 14.2.0", "running"],
+  ["09:12", "ok", "check", "<b>fd</b> 10.2.0 installed from sharkdp/fd", "4.1 MB"],
+  ["08:55", "fail", "x", "<b>helix</b> checksum mismatch, nothing was installed", "retry"],
+  ["Yesterday"],
+  ["18:20", "rm", "minus", "<b>exa</b> uninstalled, ~/.ketch/bin/exa removed", ""],
+  ["17:03", "up", "up", "<b>bat</b> upgraded 0.24.0 → 0.25.0", "4.9 MB"],
+  ["11:47", "warn", "warn", "<b>Doctor</b> ~/.ketch/bin is not on PATH in fish", "fix"],
+  ["11:40", "ok", "check", "<b>jq</b> 1.7.1 installed from jqlang/jq", "1.2 MB"],
+];
+const activityMain = () => head("Activity", search("Filter history") + `<button class="btn sec lens">Export log</button>`) + `
+  <div class="tl">${EV.map(e => e.length === 1 ? `<div class="day">${e[0]}</div>` :
+    `<div class="ev"><time>${e[0]}</time><span class="badge b-${e[1]}">${svg(e[2], 2.6)}</span><span>${e[3]}</span><span class="note">${e[4]}</span></div>`).join("")}</div>`;
+
+const CHECKS = [
+  ["ok", "check", "Bin directory exists", "~/.ketch/bin, 31 links, none dangling", ""],
+  ["warn", "warn", "Bin directory on PATH", "Present in zsh and bash; missing in fish", "Fix"],
+  ["ok", "check", "Store integrity", "24 packages, every manifest and checksum matches", ""],
+  ["ok", "check", "Shell completions", "zsh, bash and fish completions installed", ""],
+  ["ok", "check", "Man pages", "~/.local/share/man/man1, 18 pages", ""],
+  ["ok", "check", "Process lock", "Free · no other ketch is running", ""],
+  ["ok", "check", "GitHub API", "Token set · 4,872 of 5,000 requests left this hour", ""],
+];
+const doctorMain = () => head("Doctor", `<button class="btn sec lens">Run again</button><button class="btn pri">Fix all</button>`) + `
+  <div class="sum"><span class="chip lens"><b>6</b>passed</span><span class="chip lens"><b>1</b>warning</span><span class="chip lens"><b>0</b>failed</span></div>
+  <div class="list">${CHECKS.map(([k, ic, t, d, f]) => `<div class="chk-row"><span class="badge b-${k}">${svg(ic, 2.6)}</span>
+    <div class="t"><b>${t}</b><small>${d}</small></div>${f ? `<button class="btn tint sm">${f}</button>` : "<span></span>"}</div>`).join("")}</div>`;
+
+const settingsMain = () => head("Settings") + `
+  <div class="seg lens"><span>General</span><span class="on">Appearance</span><span>Sources</span><span>Advanced</span></div>
+  <div class="form">
+    <div class="field"><div><b>Appearance</b><small>Follows the system in Auto</small></div><div>${seg("mode", [["light", "Light"], ["dark", "Dark"], ["auto", "Auto"]])}</div></div>
+    <div class="field"><div><b>Background colour</b><small>Tint of the window glass</small></div><div>${swatches("tint", TINTS)}</div></div>
+    <div class="field"><div><b>Background transparency</b><small>How much of the desktop shows through</small></div><div class="grp">${range("alpha", 4, 90, "%")}</div></div>
+    <div class="field"><div><b>Background blur</b><small>Softens what shows through</small></div><div class="grp">${range("blur", 0, 60, "px")}</div></div>
+    <div class="field"><div><b>Accent colour</b><small>Buttons, badges, progress</small></div><div>${swatches("accent", ACCENTS)}</div></div>
+    <div class="field"><div><b>Reduce transparency</b><small>Also on when macOS has it on</small></div><div>${check("reduce", "Use solid backgrounds")}</div></div>
+  </div>
+  <div class="note">Changes apply at once and are kept per Mac.</div>`;
+
+const sheetHtml = () => `<div class="scrim"><div class="sheet">${icon(pkgs[5], "lg")}<h3>Uninstall lazygit?</h3>
+  <p>Removes <span class="mono">~/.ketch/bin/lazygit</span> and its store directory. Your config in <span class="mono">~/.config/lazygit</span> is kept.</p>
+  <div class="acts"><button class="btn sec lens" data-go="installed">Cancel</button><button class="btn danger" data-go="installed">Uninstall</button></div></div></div>`;
+
+const menubarHtml = () => `<div class="desk-win"></div>
+  <div class="menubar"><b>Finder</b><span>File</span><span>Edit</span><span>View</span><span>Go</span><span>Window</span><span class="sp"></span>
+    <span class="mb-ketch">${svg("installed")}<i>3</i></span><span>Wi-Fi</span><span>Thu 1 Oct 09:41</span></div>
+  <div class="pop">
+    <div class="ph"><div class="icon i7" style="width:34px;height:34px;font-size:12px">k</div><div><b>Ketch</b><br><small>3 updates · 24 installed</small></div><span class="sp"></span><button class="btn pri sm">Update all</button></div>
+    ${pkgs.filter(p => p.to).map(p => `<div class="row">${icon(p)}<div class="t"><b>${p.n}</b><small class="mono">${p.v} → ${p.to}</small></div><button class="btn tint sm">Update</button></div>`).join("")}
+    <div class="foot lens" style="margin-top:2px"><span>ripgrep</span><div class="track"><i></i></div><span class="mono">62%</span></div>
+    <hr><div class="mi">Open Ketch<kbd>⌘O</kbd></div><div class="mi">Check for updates<kbd>⌘R</kbd></div><div class="mi">Settings…<kbd>⌘,</kbd></div><hr><div class="mi">Quit Ketch<kbd>⌘Q</kbd></div>
+  </div>`;
+
+const SCREENS = {
+  installed: ["Installed", "Everything ketch manages, with update state and the running job.", () => shell("installed", installedMain())],
+  discover: ["Discover", "App Store-style front page: tool of the week, categories, fresh releases.", () => shell("discover", discoverMain())],
+  updates: ["Updates", "Pending upgrades, a pin from ketch.lock, and the busy state when another ketch holds the lock.", () => shell("updates", updatesMain())],
+  detail: ["Package", "One client app: actions, its changelog and where it lives.", () => shell("installed", detailMain())],
+  activity: ["Activity", "History from stats.db: installs, upgrades, removals and failures.", () => shell("activity", activityMain())],
+  doctor: ["Doctor", "The checks ketch doctor runs, with fixes as buttons.", () => shell("doctor", doctorMain())],
+  settings: ["Settings · Appearance", "The live controls: background colour, transparency, blur, accent.", () => shell("settings", settingsMain())],
+  sheet: ["Uninstall sheet", "A decision the core asks for, answered in a glass sheet.", () => shell("installed", installedMain(), sheetHtml())],
+  menubar: ["Menu bar extra", "Updates at a glance without opening the window.", menubarHtml],
+};
+
+const grid = document.getElementById("grid");
+grid.innerHTML = Object.entries(SCREENS).map(([id, [name, note]], i) =>
+  `<figure><div class="frame"><div class="stage" role="img" aria-label="${name} screen">${SCREENS[id][2]()}</div></div>
+   <figcaption><span class="num">0${i + 1}</span><b>${name}</b><span>${note}</span></figcaption></figure>`).join("");
+
+const proto = document.querySelector("#proto .stage");
+const go = id => { if (!SCREENS[id]) return; proto.innerHTML = SCREENS[id][2](); sync(); };
+document.getElementById("proto").addEventListener("click", e => {
+  if (e.target.closest("[data-key]")) return;
+  const t = e.target.closest("[data-go]"); if (t) go(t.dataset.go);
+});
+go("installed");
+
+const fit = () => document.querySelectorAll(".frame").forEach(f => f.style.setProperty("--k", f.clientWidth / 1180));
+new ResizeObserver(fit).observe(document.body);
+fit();
+apply();
+window.ketchMock = { get S() { return S; }, SCREENS, apply, sync };
+</script>
+<script type="module">
+import { exportPenpot } from "./penpot-export.mjs";
+const btn = document.getElementById("penpot");
+btn.addEventListener("click", async () => {
+  btn.disabled = true; btn.textContent = "Exporting…";
+  try {
+    const url = URL.createObjectURL(await exportPenpot(window.ketchMock));
+    Object.assign(document.createElement("a"), { href: url, download: "ketch-liquid-glass.penpot" }).click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    btn.textContent = "Export .penpot";
+  } catch (e) {
+    console.error(e); btn.textContent = "Export failed";
+  } finally { btn.disabled = false; }
+});
+</script>
+</body>
+</html>

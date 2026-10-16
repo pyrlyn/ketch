@@ -1,0 +1,302 @@
+<!doctype html>
+<!--
+  Design exploration, not a token source: the Discover screen in the manner of
+  the macOS App Store, in eight glass-and-depth directions. Picking one feeds
+  tokens.json; nothing is generated from or into this page.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ketch Discover</title>
+<style>
+:root { --page: #eef0f4; --ink: #15171d; --ink-2: #5d6371; color-scheme: light dark; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --page: #0c0d12; --ink: #eef0f5; --ink-2: #9aa1b2; } }
+:root[data-theme="dark"] { --page: #0c0d12; --ink: #eef0f5; --ink-2: #9aa1b2; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif; }
+header.page { max-width: 1400px; margin: 0 auto; padding: 40px 24px 8px; }
+header.page h1 { font: 700 28px/1.2 -apple-system, "SF Pro Display", system-ui, sans-serif; margin: 0 0 6px; letter-spacing: -0.02em; }
+header.page p { margin: 0; color: var(--ink-2); max-width: 72ch; }
+.grid { max-width: 1400px; margin: 0 auto; padding: 24px; display: grid; gap: 44px 32px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 640px), 1fr)); }
+figure { margin: 0; }
+figcaption { display: flex; gap: 10px; align-items: baseline; margin: 14px 4px 0; flex-wrap: wrap; }
+figcaption b { font-weight: 600; } figcaption span { color: var(--ink-2); font-size: 13px; }
+.num { font: 600 12px/1 ui-monospace, "SF Mono", monospace; color: var(--ink-2); }
+
+.stage { position: relative; border-radius: 22px; overflow: hidden; aspect-ratio: 16 / 11; perspective: 1800px;
+  display: grid; place-items: center; padding: 4.5%; isolation: isolate; }
+.stage::before, .stage::after { content: ""; position: absolute; border-radius: 50%; filter: blur(46px); z-index: -1; }
+.win { position: relative; width: 100%; height: 100%; border-radius: 20px; display: grid; grid-template-columns: 27% 1fr;
+  overflow: hidden; transform-style: preserve-3d; -webkit-backdrop-filter: blur(30px) saturate(170%); backdrop-filter: blur(30px) saturate(170%); }
+
+.side { margin: 8px; border-radius: 16px; padding: 10px 8px; display: flex; flex-direction: column; gap: 2px;
+  -webkit-backdrop-filter: blur(24px) saturate(160%); backdrop-filter: blur(24px) saturate(160%); }
+.lights { display: flex; gap: 6px; padding: 2px 4px 10px; }
+.lights i { width: 10px; height: 10px; border-radius: 50%; background: #ff5f57; }
+.lights i:nth-child(2) { background: #febc2e; } .lights i:nth-child(3) { background: #28c840; }
+.sfield { height: 24px; border-radius: 8px; display: flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 11px; margin-bottom: 8px; }
+.sfield::before { content: ""; width: 8px; height: 8px; border: 1.5px solid currentColor; border-radius: 50%; opacity: .6; }
+.nav { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 8px; font-size: 11.5px; font-weight: 500; }
+.nav .ic { width: 13px; height: 13px; border-radius: 4px; flex: none; }
+.nav .ct { margin-left: auto; font-size: 10px; font-weight: 700; min-width: 16px; text-align: center; padding: 1px 5px; border-radius: 99px; }
+.sec { font-size: 10px; font-weight: 600; opacity: .55; padding: 8px 8px 2px; }
+.me { margin-top: auto; display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: 10.5px; opacity: .8; }
+.me i { width: 20px; height: 20px; border-radius: 50%; background: linear-gradient(135deg, #8e9aaf, #4a5568); }
+
+.main { padding: 14px 16px 12px 8px; display: flex; flex-direction: column; gap: 10px; min-width: 0; overflow: hidden; transform-style: preserve-3d; }
+.main h2 { margin: 2px 0 0; font: 800 22px/1.1 -apple-system, "SF Pro Display", system-ui, sans-serif; letter-spacing: -0.025em; }
+
+.hero { position: relative; border-radius: 16px; min-height: 40%; display: grid; grid-template-columns: 1fr 1.05fr; overflow: hidden;
+  transform-style: preserve-3d; transform: translateZ(30px); }
+.hero .txt { padding: 16px; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; z-index: 1; }
+.hero .eyebrow { font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .8; }
+.hero .title { font: 800 22px/1.05 -apple-system, "SF Pro Display", system-ui, sans-serif; letter-spacing: -0.03em; }
+.hero .sub { font-size: 11.5px; opacity: .85; max-width: 26ch; }
+.hero .cta { margin-top: 8px; align-self: flex-start; }
+.art { position: relative; perspective: 700px; transform-style: preserve-3d; }
+.pane { position: absolute; border-radius: 10px; padding: 8px; font: 500 8.5px/1.6 ui-monospace, "SF Mono", monospace;
+  -webkit-backdrop-filter: blur(14px) saturate(150%); backdrop-filter: blur(14px) saturate(150%); white-space: nowrap; overflow: hidden; }
+.pane.p1 { inset: 16% 30% 22% 4%; transform: rotateY(-22deg) rotateX(8deg) translateZ(10px); }
+.pane.p2 { inset: 30% 6% 10% 28%; transform: rotateY(-22deg) rotateX(8deg) translateZ(50px); }
+.pane.p3 { width: 26%; aspect-ratio: 1; right: 8%; top: 8%; border-radius: 22%; transform: rotateY(-22deg) rotateX(8deg) translateZ(90px);
+  display: grid; place-items: center; font: 800 20px/1 ui-monospace, "SF Mono", monospace; padding: 0; }
+.pane .k { opacity: .6; } .pane .h { font-weight: 700; }
+
+.shelf-h { display: flex; align-items: baseline; justify-content: space-between; }
+.shelf-h b { font-size: 13px; font-weight: 700; letter-spacing: -0.01em; }
+.shelf-h span { font-size: 11px; font-weight: 500; }
+.shelf { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 18px; }
+.app { display: grid; grid-template-columns: 34px 1fr auto; gap: 9px; align-items: center; padding: 6px 0; min-width: 0; }
+.shelf .app:nth-child(n+3) { border-top: .5px solid var(--hair, rgba(0,0,0,.08)); }
+.icon { position: relative; width: 34px; height: 34px; border-radius: 22%; display: grid; place-items: center;
+  font: 800 12px/1 ui-monospace, "SF Mono", monospace; color: #fff; overflow: hidden; }
+.icon::after { content: ""; position: absolute; inset: 0; border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255,255,255,.45) 0%, rgba(255,255,255,0) 48%); }
+.app .t { min-width: 0; } .app .t b { display: block; font-size: 11.5px; font-weight: 600; }
+.app .t small { display: block; font-size: 10px; opacity: .6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cta { height: 22px; padding: 0 13px; border-radius: 99px; display: inline-flex; align-items: center; font-size: 11px; font-weight: 700; white-space: nowrap; }
+
+.i1 { background: linear-gradient(145deg, #ff7a59, #d6336c); } .i2 { background: linear-gradient(145deg, #3dd6c6, #1c7ed6); }
+.i3 { background: linear-gradient(145deg, #a9e34b, #2f9e44); } .i4 { background: linear-gradient(145deg, #b197fc, #6741d9); }
+.i5 { background: linear-gradient(145deg, #495057, #121416); } .i6 { background: linear-gradient(145deg, #ffd43b, #f76707); }
+
+/* 1 Classic: the App Store as it ships, light glass, system blue */
+.v1 .stage { background: linear-gradient(135deg, #dfe9f7, #c7d6ee 50%, #e9dff7); }
+.v1 .stage::before { width: 50%; height: 60%; left: -8%; top: -10%; background: #9ec5ff; opacity: .7; }
+.v1 .win { background: rgba(255,255,255,.62); color: #111; border: 1px solid rgba(255,255,255,.8);
+  box-shadow: 0 1px 0 #fff inset, 0 40px 70px -30px rgba(30,50,90,.45); transform: rotateX(6deg) rotateY(-8deg); }
+.v1 .side { background: rgba(245,247,250,.7); box-shadow: 0 0 0 .5px rgba(0,0,0,.06), 0 8px 20px -12px rgba(30,50,90,.3); }
+.v1 .sfield { background: rgba(0,0,0,.05); color: #6b7280; }
+.v1 .nav.on { background: rgba(0,0,0,.07); } .v1 .nav .ic { background: #0a84ff; } .v1 .nav .ct { background: #ff3b30; color: #fff; }
+.v1 .hero { background: linear-gradient(135deg, #0b1f4d 0%, #1e4fd8 60%, #58a6ff 100%); color: #fff; box-shadow: 0 20px 30px -18px rgba(20,50,140,.7); }
+.v1 .pane { background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.35); color: #e8f0ff; box-shadow: 0 16px 24px -12px rgba(0,0,0,.5); }
+.v1 .pane.p3 { background: linear-gradient(145deg, #ff7a59, #d6336c); color: #fff; }
+.v1 .cta { background: rgba(0,0,0,.06); color: #0a84ff; } .v1 .hero .cta { background: rgba(255,255,255,.95); color: #0a64d6; }
+.v1 .cta.up { background: #0a84ff; color: #fff; } .v1 .shelf-h span { color: #0a84ff; }
+
+/* 2 Midnight: App Store in dark, deep glass, luminous hero */
+.v2 .stage { background: radial-gradient(90% 90% at 70% 10%, #2b2f6b 0%, #0e0f1a 60%, #050507 100%); }
+.v2 .stage::before { width: 45%; height: 45%; left: 0; bottom: -10%; background: #6c5ce7; opacity: .45; }
+.v2 .win { background: rgba(28,28,34,.62); color: #f2f3f7; border: 1px solid rgba(255,255,255,.1); --hair: rgba(255,255,255,.08);
+  box-shadow: 0 1px 0 rgba(255,255,255,.12) inset, 0 50px 80px -30px #000; transform: rotateX(6deg) rotateY(9deg); }
+.v2 .side { background: rgba(255,255,255,.05); box-shadow: 0 0 0 .5px rgba(255,255,255,.08) inset; }
+.v2 .sfield { background: rgba(255,255,255,.07); color: #9aa0b4; }
+.v2 .nav { color: #c4c8d6; } .v2 .nav.on { background: rgba(255,255,255,.1); color: #fff; }
+.v2 .nav .ic { background: #5e9bff; } .v2 .nav .ct { background: #ff453a; color: #fff; }
+.v2 .hero { background: linear-gradient(135deg, #3a0ca3 0%, #7209b7 45%, #f72585 100%); color: #fff; box-shadow: 0 0 0 1px rgba(255,255,255,.1) inset, 0 24px 40px -20px #7209b7; }
+.v2 .pane { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.28); color: #fde2ff; box-shadow: 0 16px 30px -12px rgba(0,0,0,.6); }
+.v2 .pane.p3 { background: linear-gradient(145deg, #3dd6c6, #1c7ed6); color: #fff; }
+.v2 .cta { background: rgba(255,255,255,.1); color: #5e9bff; } .v2 .hero .cta { background: #fff; color: #7209b7; }
+.v2 .cta.up { background: #0a84ff; color: #fff; } .v2 .shelf-h span { color: #5e9bff; }
+
+/* 3 Spatial: everything floats, visionOS-like glass over a photo-like scene */
+.v3 .stage { background:
+  radial-gradient(60% 50% at 30% 30%, #ffd89b 0%, rgba(255,216,155,0) 70%),
+  radial-gradient(60% 60% at 80% 70%, #19547b 0%, rgba(25,84,123,0) 70%),
+  linear-gradient(160deg, #e2b0ff 0%, #9f44d3 45%, #19547b 100%); }
+.v3 .win { background: rgba(255,255,255,.16); color: #fff; border: 1px solid rgba(255,255,255,.35); --hair: rgba(255,255,255,.18);
+  box-shadow: 0 1px 1px rgba(255,255,255,.6) inset, 0 -1px 2px rgba(255,255,255,.15) inset, 0 40px 70px -25px rgba(20,0,60,.6);
+  transform: rotateX(10deg) rotateY(-14deg); border-radius: 28px; }
+.v3 .side { background: rgba(255,255,255,.14); box-shadow: 0 1px 1px rgba(255,255,255,.5) inset, 0 20px 30px -18px rgba(20,0,60,.6); transform: translateZ(40px); border-radius: 20px; }
+.v3 .sfield { background: rgba(255,255,255,.18); color: rgba(255,255,255,.8); border-radius: 99px; }
+.v3 .nav { border-radius: 99px; } .v3 .nav.on { background: rgba(255,255,255,.3); }
+.v3 .nav .ic { background: #fff; opacity: .8; } .v3 .nav .ct { background: #fff; color: #7b2cbf; }
+.v3 .hero { background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.4); color: #fff; transform: translateZ(60px);
+  box-shadow: 0 1px 1px rgba(255,255,255,.6) inset, 0 30px 40px -20px rgba(20,0,60,.6); border-radius: 22px; }
+.v3 .pane { background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.5); color: #fff; box-shadow: 0 20px 30px -12px rgba(20,0,60,.55); }
+.v3 .pane.p3 { background: linear-gradient(145deg, #ffd43b, #f76707); }
+.v3 .cta { background: rgba(255,255,255,.25); color: #fff; } .v3 .hero .cta { background: #fff; color: #7b2cbf; }
+.v3 .cta.up { background: #fff; color: #7b2cbf; } .v3 .shelf-h span { color: #fff; opacity: .85; }
+.v3 .icon { box-shadow: 0 8px 14px -6px rgba(20,0,60,.6); }
+
+/* 4 Editorial: magazine hero across the width, bold type, warm tones */
+.v4 .stage { background: linear-gradient(135deg, #fff1e6, #fde2e4 50%, #e2ece9); }
+.v4 .win { background: rgba(255,253,250,.7); color: #1d1a17; border: 1px solid rgba(255,255,255,.9); --hair: rgba(60,40,20,.1);
+  box-shadow: 0 40px 60px -30px rgba(90,50,20,.45); transform: rotateX(8deg) rotateY(6deg); }
+.v4 .side { background: rgba(255,255,255,.55); box-shadow: 0 0 0 .5px rgba(60,40,20,.08); }
+.v4 .sfield { background: rgba(60,40,20,.06); color: #8a7a6a; }
+.v4 .nav.on { background: #1d1a17; color: #fff; } .v4 .nav .ic { background: #e8590c; } .v4 .nav .ct { background: #e8590c; color: #fff; }
+.v4 .main h2 { font-size: 26px; font-family: "New York", "Iowan Old Style", Georgia, serif; font-weight: 700; }
+.v4 .hero { grid-template-columns: 1fr; min-height: 46%; background: linear-gradient(120deg, #1d1a17 0%, #4a2c1a 55%, #e8590c 130%); color: #fff7ee;
+  box-shadow: 0 24px 34px -20px rgba(90,40,10,.7); }
+.v4 .hero .txt { position: absolute; inset: 0; justify-content: flex-end; }
+.v4 .hero .title { font-family: "New York", "Iowan Old Style", Georgia, serif; font-size: 30px; font-weight: 700; }
+.v4 .art { position: absolute; inset: 0 0 0 38%; }
+.v4 .pane { background: rgba(255,240,225,.12); border: 1px solid rgba(255,240,225,.35); color: #ffe8d6; box-shadow: 0 16px 30px -12px rgba(0,0,0,.6); }
+.v4 .pane.p3 { background: linear-gradient(145deg, #ffd43b, #f76707); color: #1d1a17; }
+.v4 .cta { background: rgba(60,40,20,.07); color: #c2410c; } .v4 .hero .cta { background: #fff7ee; color: #1d1a17; }
+.v4 .cta.up { background: #e8590c; color: #fff; } .v4 .shelf-h span { color: #c2410c; }
+
+/* 5 Arcade: dark, neon-edged glass, glossy 3D icons that pop */
+.v5 .stage { background: #07060d; }
+.v5 .stage::before { width: 60%; height: 60%; left: -10%; top: -10%; background: #ff2d95; opacity: .35; }
+.v5 .stage::after { width: 60%; height: 60%; right: -15%; bottom: -20%; background: #00d4ff; opacity: .3; }
+.v5 .win { background: rgba(16,12,28,.6); color: #f4f0ff; border: 1px solid rgba(255,45,149,.35); --hair: rgba(255,255,255,.07);
+  box-shadow: 0 0 0 1px rgba(0,212,255,.15) inset, 0 0 40px -10px rgba(255,45,149,.45), 0 50px 80px -30px #000; transform: rotateX(8deg) rotateY(-10deg); }
+.v5 .side { background: rgba(255,255,255,.04); box-shadow: 0 0 0 1px rgba(255,255,255,.06) inset; }
+.v5 .sfield { background: rgba(255,255,255,.06); color: #a79fc4; }
+.v5 .nav { color: #c7c0e0; } .v5 .nav.on { background: linear-gradient(90deg, rgba(255,45,149,.3), rgba(0,212,255,.2)); color: #fff; }
+.v5 .nav .ic { background: linear-gradient(135deg, #ff2d95, #00d4ff); } .v5 .nav .ct { background: #ff2d95; color: #fff; }
+.v5 .hero { background: linear-gradient(135deg, #1a0033 0%, #4c00b0 50%, #ff2d95 110%); color: #fff;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.12) inset, 0 0 30px -6px rgba(255,45,149,.6); }
+.v5 .pane { background: rgba(0,212,255,.1); border: 1px solid rgba(0,212,255,.5); color: #b8f3ff; box-shadow: 0 0 18px -4px rgba(0,212,255,.6); }
+.v5 .pane.p3 { background: linear-gradient(145deg, #ff2d95, #8a00d4); border-color: #ff8cc8; color: #fff; box-shadow: 0 0 24px -2px #ff2d95; }
+.v5 .icon { box-shadow: 0 6px 14px -4px rgba(255,45,149,.55), 0 0 0 1px rgba(255,255,255,.2) inset; }
+.v5 .cta { background: rgba(255,255,255,.08); color: #6fe3ff; } .v5 .hero .cta { background: #fff; color: #4c00b0; }
+.v5 .cta.up { background: linear-gradient(90deg, #ff2d95, #b400ff); color: #fff; box-shadow: 0 0 14px -2px #ff2d95; } .v5 .shelf-h span { color: #6fe3ff; }
+
+/* 6 Clay: soft pastel, matte glass, puffy clay-like 3D icons */
+.v6 .stage { background: linear-gradient(135deg, #e0f4ff 0%, #f3e8ff 50%, #ffeef0 100%); }
+.v6 .win { background: rgba(255,255,255,.55); color: #2d2a4a; border: 1px solid #fff; --hair: rgba(45,42,74,.07);
+  box-shadow: 0 30px 50px -28px rgba(120,100,180,.55); transform: rotateX(12deg) rotateY(0deg); border-radius: 26px; }
+.v6 .side { background: rgba(255,255,255,.6); border-radius: 20px; box-shadow: 0 10px 20px -14px rgba(120,100,180,.5); }
+.v6 .sfield { background: #f1eefc; color: #8c86b3; border-radius: 99px; }
+.v6 .nav { border-radius: 12px; } .v6 .nav.on { background: #fff; box-shadow: 0 6px 12px -8px rgba(120,100,180,.6); }
+.v6 .nav .ic { background: #9b8cff; border-radius: 50%; } .v6 .nav .ct { background: #ff8fab; color: #fff; }
+.v6 .hero { background: linear-gradient(135deg, #b8c0ff 0%, #ffd6e0 100%); color: #2d2a4a; border-radius: 22px;
+  box-shadow: 0 -4px 10px rgba(255,255,255,.7) inset, 0 6px 14px rgba(120,100,180,.25) inset, 0 24px 34px -22px rgba(120,100,180,.8); }
+.v6 .pane { background: rgba(255,255,255,.5); border: 1px solid #fff; color: #4b4675; border-radius: 16px;
+  box-shadow: 0 -3px 8px rgba(255,255,255,.8) inset, 0 16px 24px -14px rgba(120,100,180,.7); }
+.v6 .pane.p3 { background: linear-gradient(145deg, #9b8cff, #6d5dfc); color: #fff; border-radius: 30%; }
+.v6 .icon { border-radius: 30%; box-shadow: 0 -3px 6px rgba(0,0,0,.18) inset, 0 3px 5px rgba(255,255,255,.5) inset, 0 8px 12px -6px rgba(120,100,180,.7); }
+.v6 .cta { background: #efeafd; color: #6d5dfc; } .v6 .hero .cta { background: #fff; color: #6d5dfc; box-shadow: 0 6px 12px -6px rgba(109,93,252,.6); }
+.v6 .cta.up { background: #6d5dfc; color: #fff; box-shadow: 0 6px 12px -6px rgba(109,93,252,.8); } .v6 .shelf-h span { color: #6d5dfc; }
+
+/* 7 Aqua gloss: candy-glossy controls, strong specular highlights */
+.v7 .stage { background: linear-gradient(180deg, #caf0f8 0%, #90e0ef 40%, #00b4d8 100%); }
+.v7 .stage::before { width: 60%; height: 40%; left: 20%; top: -15%; background: #fff; opacity: .7; }
+.v7 .win { background: linear-gradient(170deg, rgba(255,255,255,.8), rgba(255,255,255,.45)); color: #03324a; border: 1px solid #fff; --hair: rgba(3,50,74,.1);
+  box-shadow: 0 2px 0 #fff inset, 0 40px 60px -28px rgba(0,80,120,.6); transform: rotateX(8deg) rotateY(12deg); }
+.v7 .side { background: linear-gradient(180deg, rgba(255,255,255,.75), rgba(230,248,255,.5)); box-shadow: 0 1px 0 #fff inset, 0 0 0 .5px rgba(0,80,120,.12); }
+.v7 .sfield { background: #fff; color: #5b8aa0; box-shadow: 0 1px 2px rgba(0,60,90,.2) inset; border-radius: 99px; }
+.v7 .nav.on { background: linear-gradient(180deg, #6cd4ff, #0096c7); color: #fff; box-shadow: 0 1px 0 rgba(255,255,255,.7) inset, 0 3px 6px -2px rgba(0,100,150,.6); border-radius: 99px; }
+.v7 .nav .ic { background: #0096c7; } .v7 .nav.on .ic { background: #fff; } .v7 .nav .ct { background: #ff4d6d; color: #fff; }
+.v7 .hero { background: linear-gradient(180deg, #48cae4 0%, #0077b6 100%); color: #fff;
+  box-shadow: 0 2px 0 rgba(255,255,255,.6) inset, 0 20px 30px -18px rgba(0,80,140,.8); }
+.v7 .hero::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 45%; border-radius: 16px 16px 50% 50% / 16px 16px 20% 20%;
+  background: linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,0)); pointer-events: none; }
+.v7 .pane { background: rgba(255,255,255,.22); border: 1px solid rgba(255,255,255,.7); color: #eafaff; box-shadow: 0 1px 0 rgba(255,255,255,.8) inset, 0 14px 22px -12px rgba(0,50,90,.6); }
+.v7 .pane.p3 { background: linear-gradient(180deg, #ff8fa3, #e5383b); }
+.v7 .icon { box-shadow: 0 6px 10px -5px rgba(0,60,100,.6); }
+.v7 .icon::after { background: linear-gradient(180deg, rgba(255,255,255,.75) 0%, rgba(255,255,255,.1) 50%, rgba(255,255,255,0) 51%); }
+.v7 .cta { background: linear-gradient(180deg, #fff, #dff6ff); color: #0077b6; box-shadow: 0 1px 0 #fff inset, 0 0 0 .5px rgba(0,80,120,.25), 0 2px 4px -2px rgba(0,80,120,.5); }
+.v7 .hero .cta, .v7 .cta.up { background: linear-gradient(180deg, #6cd4ff, #0077b6); color: #fff; box-shadow: 0 1px 0 rgba(255,255,255,.7) inset, 0 3px 6px -2px rgba(0,80,140,.7); }
+.v7 .shelf-h span { color: #0077b6; }
+
+/* 8 Graphite: monochrome, premium, depth from elevation and blur only */
+.v8 .stage { background: linear-gradient(135deg, #f7f7f8, #d9d9de); }
+.v8 .stage::before { width: 40%; height: 70%; left: 10%; top: 10%; background: #8e8e98; opacity: .5; }
+.v8 .win { background: rgba(255,255,255,.55); color: #111113; border: 1px solid rgba(255,255,255,.9); --hair: rgba(0,0,0,.07);
+  box-shadow: 0 1px 0 #fff inset, 0 60px 80px -45px rgba(0,0,0,.5); transform: rotateX(6deg) rotateY(-6deg); }
+.v8 .side { background: rgba(255,255,255,.5); box-shadow: 0 0 0 .5px rgba(0,0,0,.06), 0 14px 24px -18px rgba(0,0,0,.4); }
+.v8 .sfield { background: rgba(0,0,0,.05); color: #6e6e76; }
+.v8 .nav.on { background: #111113; color: #fff; } .v8 .nav .ic { background: #111113; } .v8 .nav.on .ic { background: #fff; }
+.v8 .nav .ct { background: #111113; color: #fff; } .v8 .nav.on .ct { background: #fff; color: #111113; }
+.v8 .hero { background: linear-gradient(135deg, #1c1c1f, #3a3a40); color: #fff; box-shadow: 0 30px 40px -24px rgba(0,0,0,.7); }
+.v8 .pane { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.25); color: #e6e6ea; box-shadow: 0 18px 28px -14px rgba(0,0,0,.7); }
+.v8 .pane.p3 { background: linear-gradient(145deg, #fff, #c9c9cf); color: #111113; }
+.v8 .icon { filter: grayscale(1) contrast(1.15); box-shadow: 0 6px 10px -6px rgba(0,0,0,.5); }
+.v8 .cta { background: rgba(0,0,0,.06); color: #111113; } .v8 .hero .cta { background: #fff; color: #111113; }
+.v8 .cta.up { background: #111113; color: #fff; } .v8 .shelf-h span { color: #6e6e76; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .win { transition: transform .7s cubic-bezier(.2,.8,.2,1); }
+  figure:hover .win { transform: none; }
+}
+@media (max-width: 560px) {
+  .win { grid-template-columns: 1fr; } .side { display: none; }
+  .shelf { grid-template-columns: minmax(0, 1fr); } .shelf .app:nth-child(n+3) { display: none; }
+}
+</style>
+</head>
+<body>
+<header class="page">
+  <h1>Ketch — Discover, App Store style, eight directions</h1>
+  <p>One screen, eight materials. Floating glass sidebar, a large editorial hero with a 3D stack of glass panes, and shelves of packages with capsule Get, Update and Open buttons. Hover a window to flatten it.</p>
+</header>
+<main class="grid" id="grid"></main>
+<script>
+const variants = [
+  ["Classic", "The App Store as it ships: light glass, system blue, quiet chrome."],
+  ["Midnight", "Dark App Store: deep smoked glass and a luminous violet hero."],
+  ["Spatial", "visionOS-like: every surface floats as clear glass at its own depth."],
+  ["Editorial", "Magazine hero across the width, serif display type, warm tones."],
+  ["Arcade", "Dark with neon-edged glass and glossy icons that glow."],
+  ["Clay", "Soft pastels, matte glass, puffy clay-like 3D icons and buttons."],
+  ["Aqua gloss", "Candy-glossy controls and strong specular highlights."],
+  ["Graphite", "Monochrome and premium; depth from elevation and blur only."],
+];
+const apps = [
+  ["rg", "ripgrep", "Search code, fast", "Update", "i1"],
+  ["fd", "fd", "A friendlier find", "Get", "i2"],
+  ["bat", "bat", "cat with wings", "Open", "i3"],
+  ["jq", "jq", "Slice JSON on the command line", "Get", "i4"],
+  ["gh", "gh", "GitHub from your terminal", "Open", "i5"],
+  ["lg", "lazygit", "A terminal UI for git", "Update", "i6"],
+];
+const nav = [["Discover", 0, true], ["Installed", 24], ["Updates", 3]];
+const cats = [["Command line"], ["Developer"], ["Apps"]];
+const more = [["Activity"], ["Doctor", 1]];
+const navRow = ([t, c, on]) => `<div class="nav${on ? " on" : ""}"><span class="ic"></span>${t}${c ? `<span class="ct">${c}</span>` : ""}</div>`;
+const grid = document.getElementById("grid");
+variants.forEach(([name, note], i) => {
+  const n = i + 1;
+  const shelf = apps.slice(0, 4).map(([ab, nm, sub, act, ic]) => `
+    <div class="app"><div class="icon ${ic}">${ab}</div>
+      <div class="t"><b>${nm}</b><small>${sub}</small></div>
+      <span class="cta${act === "Update" ? " up" : ""}">${act}</span></div>`).join("");
+  grid.insertAdjacentHTML("beforeend", `
+  <figure class="v${n}">
+    <div class="stage"><div class="win" role="img" aria-label="${name}: Discover screen">
+      <aside class="side">
+        <div class="lights"><i></i><i></i><i></i></div>
+        <div class="sfield">Search</div>
+        ${nav.map(navRow).join("")}
+        <div class="sec">Categories</div>${cats.map(navRow).join("")}
+        <div class="sec">Library</div>${more.map(navRow).join("")}
+        <div class="me"><i></i>~/.ketch</div>
+      </aside>
+      <section class="main">
+        <h2>Discover</h2>
+        <div class="hero">
+          <div class="txt"><span class="eyebrow">Tool of the week</span><span class="title">ripgrep 14.2</span>
+            <span class="sub">Search a whole repository before your coffee cools.</span><span class="cta">Get</span></div>
+          <div class="art">
+            <div class="pane p1"><span class="k">$</span> ketch install ripgrep<br><span class="k">resolve</span> BurntSushi/ripgrep<br><span class="k">verify</span> sha256 ok<br><span class="k">link</span> ~/.ketch/bin/rg</div>
+            <div class="pane p2"><span class="h">$ rg "TODO" src/</span><br>src/install.rs:212<br>src/ui.rs:48<br>3 matches · 4 ms</div>
+            <div class="pane p3">rg</div>
+          </div>
+        </div>
+        <div class="shelf-h"><b>Fresh releases</b><span>See all</span></div>
+        <div class="shelf">${shelf}</div>
+      </section>
+    </div></div>
+    <figcaption><span class="num">0${n}</span><b>${name}</b><span>${note}</span></figcaption>
+  </figure>`);
+});
+</script>
+</body>
+</html>
