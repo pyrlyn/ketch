@@ -1,0 +1,365 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "dangerous-triggers",
+      "fingerprint": "a93f6bb245795441",
+      "context": "679173a66b3203d5",
+      "occurrence": 0,
+      "message": "trigger \"issue_comment\" is dangerous: it runs in the context of the default branch with a write token and secrets and can be started by anyone who can comment. check the permission of the commenter and never run code of the pull request"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "missing-timeout",
+      "fingerprint": "a136b839378802e2",
+      "context": "b7313703d0b41b9d",
+      "occurrence": 0,
+      "message": "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "4bf0c85673083470",
+      "context": "565968ced627b2b6",
+      "occurrence": 0,
+      "message": "action \"actions/checkout@v7\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "artipacked",
+      "fingerprint": "57c69929aa2328fc",
+      "context": "d752f34723cc3cb2",
+      "occurrence": 0,
+      "message": "actions/checkout leaves the GITHUB_TOKEN in the git config of the workspace, where a later step such as an artifact upload can publish it. set \"persist-credentials: false\" under \"with:\" unless a later step needs to push"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "missing-timeout",
+      "fingerprint": "006abd7d2fb3453e",
+      "context": "bb0e07d0bca72d8c",
+      "occurrence": 0,
+      "message": "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "artipacked",
+      "fingerprint": "1a40cc24e2a2a5fe",
+      "context": "c2f17c3b589c43d3",
+      "occurrence": 0,
+      "message": "actions/checkout leaves the GITHUB_TOKEN in the git config of the workspace, where a later step such as an artifact upload can publish it. set \"persist-credentials: false\" under \"with:\" unless a later step needs to push"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "missing-timeout",
+      "fingerprint": "30eda6f9019d004e",
+      "context": "fe261f0dd509035e",
+      "occurrence": 0,
+      "message": "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "artipacked",
+      "fingerprint": "f5a21dba70a35399",
+      "context": "ebd137970d54513f",
+      "occurrence": 0,
+      "message": "actions/checkout leaves the GITHUB_TOKEN in the git config of the workspace, where a later step such as an artifact upload can publish it. set \"persist-credentials: false\" under \"with:\" unless a later step needs to push"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "missing-timeout",
+      "fingerprint": "f4eb4c7c78414c13",
+      "context": "4ca8a7005d55b935",
+      "occurrence": 0,
+      "message": "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "artipacked",
+      "fingerprint": "b47886f64d618c21",
+      "context": "64fe4cbc71f1e184",
+      "occurrence": 0,
+      "message": "actions/checkout leaves the GITHUB_TOKEN in the git config of the workspace, where a later step such as an artifact upload can publish it. set \"persist-credentials: false\" under \"with:\" unless a later step needs to push"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "missing-timeout",
+      "fingerprint": "8c330015ccf66c2f",
+      "context": "4237fdf5a2e9b7e4",
+      "occurrence": 0,
+      "message": "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "artipacked",
+      "fingerprint": "f0a631bacc18ca45",
+      "context": "1b889c19d7a812c6",
+      "occurrence": 0,
+      "message": "actions/checkout leaves the GITHUB_TOKEN in the git config of the workspace, where a later step such as an artifact upload can publish it. set \"persist-credentials: false\" under \"with:\" unless a later step needs to push"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "missing-timeout",
+      "fingerprint": "3193806b7c5da321",
+      "context": "2714f810f249c158",
+      "occurrence": 0,
+      "message": "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "artipacked",
+      "fingerprint": "ab089b70530d53e2",
+      "context": "77441b25fc66779a",
+      "occurrence": 0,
+      "message": "actions/checkout leaves the GITHUB_TOKEN in the git config of the workspace, where a later step such as an artifact upload can publish it. set \"persist-credentials: false\" under \"with:\" unless a later step needs to push"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "missing-timeout",
+      "fingerprint": "12bd36b3774be149",
+      "context": "1f6a6f3f9c198467",
+      "occurrence": 0,
+      "message": "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "23696a3142924433",
+      "context": "ead485e1932f1f5e",
+      "occurrence": 0,
+      "message": "action \"actions/checkout@v7\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "artipacked",
+      "fingerprint": "cb8175896b163c10",
+      "context": "d60890f275572e85",
+      "occurrence": 0,
+      "message": "actions/checkout leaves the GITHUB_TOKEN in the git config of the workspace, where a later step such as an artifact upload can publish it. set \"persist-credentials: false\" under \"with:\" unless a later step needs to push"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "28200fe76fafdd65",
+      "context": "e45ab8dbf33befca",
+      "occurrence": 0,
+      "message": "action \"actions/setup-node@v7\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "missing-timeout",
+      "fingerprint": "730db06e88088454",
+      "context": "ff1e76983f2a6baf",
+      "occurrence": 0,
+      "message": "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "11a94327e7da5c04",
+      "context": "d094a8ae1175f0af",
+      "occurrence": 0,
+      "message": "action \"actions/checkout@v7\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "artipacked",
+      "fingerprint": "0ca2088ffd6be3d9",
+      "context": "c1d6486955624ea2",
+      "occurrence": 0,
+      "message": "actions/checkout leaves the GITHUB_TOKEN in the git config of the workspace, where a later step such as an artifact upload can publish it. set \"persist-credentials: false\" under \"with:\" unless a later step needs to push"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "missing-timeout",
+      "fingerprint": "3781be190c0b341b",
+      "context": "c0eaee11f2bf50e2",
+      "occurrence": 0,
+      "message": "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs"
+    },
+    {
+      "file": ".github/workflows/cla.yml",
+      "rule": "concurrency-limits",
+      "fingerprint": "c41f0955d93b4ce5",
+      "context": "081b2e27040f94d3",
+      "occurrence": 0,
+      "message": "workflow has no \"concurrency:\", so every run of it executes at the same time even when a newer run supersedes the older ones. add a top-level \"concurrency:\" with a \"group:\" and \"cancel-in-progress: true\". use a group per pull request such as \"${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}\", so that a new push cancels only the older runs of the same pull request and not the runs of the others"
+    },
+    {
+      "file": ".github/workflows/cla.yml",
+      "rule": "dangerous-triggers",
+      "fingerprint": "610b76a24d83b82c",
+      "context": "5935855348a187bf",
+      "occurrence": 0,
+      "message": "trigger \"pull_request_target\" is dangerous: it runs in the context of the base repository with a write token and secrets even when the pull request comes from a fork. use \"pull_request\" unless write access is required, and never check out or run code of the pull request"
+    },
+    {
+      "file": ".github/workflows/cla.yml",
+      "rule": "dangerous-triggers",
+      "fingerprint": "a93f6bb245795441",
+      "context": "679173a66b3203d5",
+      "occurrence": 0,
+      "message": "trigger \"issue_comment\" is dangerous: it runs in the context of the default branch with a write token and secrets and can be started by anyone who can comment. check the permission of the commenter and never run code of the pull request"
+    },
+    {
+      "file": ".github/workflows/release-ci-alert.yml",
+      "rule": "dangerous-triggers",
+      "fingerprint": "e1b416090046774f",
+      "context": "36b936d1654e3276",
+      "occurrence": 0,
+      "message": "trigger \"workflow_run\" is dangerous: it runs in the context of the default branch with a write token and secrets, but processes artifacts and metadata produced by a run that a fork may control. consider a reusable workflow called with \"workflow_call\" instead, and never trust the artifacts or the event payload"
+    },
+    {
+      "file": ".github/workflows/release-ci-alert.yml",
+      "rule": "workflow-run-names",
+      "fingerprint": "515c70762253a130",
+      "context": "fe8e5480cabfe055",
+      "occurrence": 0,
+      "message": "workflow \"license-check\" specified at \"workflows\" of \"workflow_run\" event is not found in the repository. a workflow is specified by its \"name:\" or its file path when it has no name"
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "rule": "excessive-permissions",
+      "fingerprint": "b96eb14dd5b1d621",
+      "context": "829eff0266c816ee",
+      "occurrence": 0,
+      "message": "\"contents: write\" is granted to every job of the workflow, which lets any of them push commits and tags and create or delete releases. set \"permissions: {}\" at the workflow level and grant \"contents: write\" only to the job which needs it"
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "rule": "unverified-download",
+      "fingerprint": "83593177056b741e",
+      "context": "b82c5ecc18ad5e20",
+      "occurrence": 0,
+      "message": "the script downloaded from \"https://github.com/axodotdev/cargo-dist/releases/download/v0.32.0/cargo-dist-installer.sh\" is run by \"sh\" without being verified, so whoever controls that server or the connection to it controls this job. if it installs a tool, mise can install it and record its checksum in mise.lock (jdx/mise-action in CI). otherwise check the checksum or signature (sha256sum -c, gpg --verify, cosign verify-blob or gh attestation verify) before running the file"
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "rule": "template-injection",
+      "fingerprint": "7651b9211cb0dc99",
+      "context": "84c9534e7e387cce",
+      "occurrence": 0,
+      "message": "\"inputs.tag\" is an input chosen by whoever runs this, which is not validated and can hold shell syntax. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks for more details"
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "rule": "unverified-download",
+      "fingerprint": "10f4d6cab0cf62b1",
+      "context": "84fb9e202fde43c8",
+      "occurrence": 0,
+      "message": "the script downloaded from \"https://sh.rustup.rs\" is run by \"sh\" without being verified, so whoever controls that server or the connection to it controls this job. if it installs a tool, mise can install it and record its checksum in mise.lock (jdx/mise-action in CI). otherwise check the checksum or signature (sha256sum -c, gpg --verify, cosign verify-blob or gh attestation verify) before running the file"
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "rule": "shellcheck",
+      "fingerprint": "5e6f650db1ae1e68",
+      "context": "47abb0d086eacf94",
+      "occurrence": 0,
+      "message": "shellcheck reported issue in this script: SC2086:info:3:30: Double quote to prevent globbing and word splitting"
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "rule": "shellcheck",
+      "fingerprint": "5d0bee5750acd9d5",
+      "context": "3edffa2c095c86bd",
+      "occurrence": 0,
+      "message": "shellcheck reported issue in this script: SC2129:style:2:1: Consider using { cmd1; cmd2; } >> file instead of individual redirects"
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "rule": "shellcheck",
+      "fingerprint": "2c00ec9c2c9e4de2",
+      "context": "329518a306f370d9",
+      "occurrence": 0,
+      "message": "shellcheck reported issue in this script: SC2129:style:5:1: Consider using { cmd1; cmd2; } >> file instead of individual redirects"
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "rule": "shellcheck",
+      "fingerprint": "18fa35d239e46c19",
+      "context": "008817e573d4b95c",
+      "occurrence": 0,
+      "message": "shellcheck reported issue in this script: SC2046:warning:3:28: Quote this to prevent word splitting"
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "rule": "shellcheck",
+      "fingerprint": "1f7f7204c813b904",
+      "context": "008817e573d4b95c",
+      "occurrence": 0,
+      "message": "shellcheck reported issue in this script: SC2012:info:3:30: Use find instead of ls to better handle non-alphanumeric filenames"
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "rule": "pipeline-without-pipefail",
+      "fingerprint": "cd4a3f379e209d9b",
+      "context": "5e49959b3155c3c0",
+      "occurrence": 0,
+      "message": "failure of \"ls\" is hidden in the pipeline \"ls artifacts/ketch-*.tar.gz | sort\" because the default shell runs \"bash -e {0}\" without pipefail. add \"set -o pipefail\" before the pipeline or use \"shell: bash\", which runs with pipefail"
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "rule": "shellcheck",
+      "fingerprint": "43706349f874f05f",
+      "context": "cb32c6f88a1ff7b4",
+      "occurrence": 0,
+      "message": "shellcheck reported issue in this script: SC2012:info:17:14: Use find instead of ls to better handle non-alphanumeric filenames"
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "rule": "pipeline-without-pipefail",
+      "fingerprint": "34cb4e313a1302ad",
+      "context": "f52c7a61d0b52228",
+      "occurrence": 0,
+      "message": "failure of \"wc\" is hidden in the pipeline \"wc -c <\\\"$f\\\" | tr -d ' '\" because the default shell runs \"bash -e {0}\" without pipefail. add \"set -o pipefail\" before the pipeline or use \"shell: bash\", which runs with pipefail"
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "rule": "pipeline-without-pipefail",
+      "fingerprint": "4ba3dd274546563d",
+      "context": "24e36d1df59a9333",
+      "occurrence": 0,
+      "message": "failure of \"sed\" is hidden in the pipeline \"sed -n '/^## Download sizes$/,$p' \\\"$RUNNER_TEMP/notes.txt\\\" |...\" because the default shell runs \"bash -e {0}\" without pipefail. add \"set -o pipefail\" before the pipeline or use \"shell: bash\", which runs with pipefail"
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "rule": "shellcheck",
+      "fingerprint": "e2fa6d6510da992c",
+      "context": "5bad00fac25b0adb",
+      "occurrence": 0,
+      "message": "shellcheck reported issue in this script: SC2086:info:24:76: Double quote to prevent globbing and word splitting"
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "rule": "secrets-inherit",
+      "fingerprint": "6ea26c4973ef0bf0",
+      "context": "4913dd2edeedc702",
+      "occurrence": 0,
+      "message": "\"secrets: inherit\" passes every secret of this workflow to the reusable workflow \"./.github/workflows/tap.yml\". list only the secrets it needs in a \"secrets:\" mapping, e.g. \"NAME: ${{ secrets.NAME }}\""
+    },
+    {
+      "file": ".github/workflows/tap.yml",
+      "rule": "missing-timeout",
+      "fingerprint": "9329a20acd35b2ae",
+      "context": "f2ae9963978e82d6",
+      "occurrence": 0,
+      "message": "\"timeout-minutes\" is not set at this job. Set it to avoid wasting runner minutes when the job hangs"
+    },
+    {
+      "file": ".github/workflows/tap.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "b9283354574f57d5",
+      "context": "efbfd008ed1f922b",
+      "occurrence": 0,
+      "message": "action \"actions/checkout@v7\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/tap.yml",
+      "rule": "pipeline-without-pipefail",
+      "fingerprint": "06e6f67888f7533d",
+      "context": "79fffd7c666611c6",
+      "occurrence": 0,
+      "message": "failure of \"shasum\" is hidden in the pipeline \"shasum -a 256 dist/ketch-aarch64-apple-darwin.tar.gz | cut -...\" because the default shell runs \"bash -e {0}\" without pipefail. add \"set -o pipefail\" before the pipeline or use \"shell: bash\", which runs with pipefail"
+    }
+  ]
+}

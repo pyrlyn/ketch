@@ -10,6 +10,9 @@ Project programs and direct packages from manifests.
 | cargo-cache | mise | `just cache` / `just cache-autoclean`; the shared cargo home fills up | https://github.com/matthiaskrgr/cargo-cache |
 | cargo-nextest | global (cargo install) | Parallel test runner | https://github.com/nextest-rs/nextest |
 | node | mise | commitlint for `just lint-commits` and the commit-msg hook, and the macOS design-token generator and checks; node-based checks live in Just and CI only | https://github.com/nodejs/node |
+| jactionlint | mise (`mise.toml` pins `github:jdx/jactionlint` 2.0.2) | Lints the workflows, composite actions and dependabot.yml (the pre-push hook and `mise x -- jactionlint`); CI lints through pyrlyn/ci | https://github.com/jdx/jactionlint |
+| hk | mise (`mise.toml` pins 2.5.0) | Runs jactionlint as a pre-push hook (`hk.pkl`) | https://github.com/jdx/hk |
+| shellcheck | mise (`mise.toml` pins 0.11.0) | Checks `run:` scripts inside jactionlint | https://github.com/koalaman/shellcheck |
 | rustc | mise (through rustup) | Rust compiler; `mise.toml` pins the one version local work, CI and release builds use | https://github.com/rust-lang/rust |
 | cargo | with rustc | Rust build and dependencies | https://github.com/rust-lang/cargo |
 | just | cargo install just / brew | Command recipes | https://github.com/casey/just |
