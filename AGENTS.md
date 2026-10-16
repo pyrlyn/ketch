@@ -77,7 +77,8 @@ its C# bindings, and the .NET test in `desktop/windows`.
 
 The Justfile wraps the same commands with `--locked`: `just fmt`, `just clippy`
 (or `just lint`), `just test`, and `just check` runs what CI runs on this
-host — format, clippy, the `cfg(fuzzing)` library (`just fuzz-check`),
+host — format, clippy, the `cfg(fuzzing)` library (`just fuzz-check`), the
+core with each optional feature alone (`just core-features`),
 `cargo nextest run --workspace --all-targets`, commitlint
 fixtures, shell syntax on `install.sh` and the release scripts, `mandoc -Tlint`
 on the generated man pages when mandoc is present, whether `release.yml` is what
@@ -222,6 +223,7 @@ differ by orders of magnitude — the cargo home is the small one. Set
 | `crates/ketch-core/src/doctor.rs` | `ketch doctor`'s checks, shared by the command and `ketch-ffi` |
 | `crates/ketch-ffi/` | the core through UniFFI: a coarse, language-neutral surface of plain records, foreign traits for `Reporter` and `Decider` passed with a cancel token to each call, and a typed `KetchError` |
 | `crates/ketch-capi/` | `ketch-ffi` as `extern "C"` functions with JSON records, for front ends no UniFFI generator reaches: the cbindgen header (`include/ketch.h`), the payload schema, the hand-written `vapi/ketch.vapi` and its Meson-built Vala test. The one crate allowed hand-written `unsafe`, scoped to `src/abi.rs` |
+| `scripts/core-features.sh` | `ketch-core` built with no optional feature, then with each alone, then `ketch-ffi` with its own set; `just core-features` |
 | `scripts/xcframework.sh` | `ketch-ffi` as an XCFramework for both macOS architectures, and its generated Swift bindings; `just xcframework` |
 | `scripts/csharp.sh` | `ketch-ffi` as a shared library and the C# bindings the pinned uniffi-bindgen-cs generates from it, into `desktop/windows/KetchCore/Generated/`; `just csharp`, `just csharp-test` |
 | `desktop/windows/` | the Windows app's C# side: `KetchCore` (the generated binding as a .NET library), its MSTest project, and `uniffi.toml` for the generator |
@@ -270,6 +272,14 @@ resolve in `cmd/`. A core item the binary calls is `pub`; everything else
 stays `pub(crate)`. The core has one version, the workspace's, because it
 reports it: `ketch-core` is `publish = false` and dist skips it, and
 `tests/workspace.rs` fails if either promise drifts.
+
+A subsystem with heavy dependencies of its own is an optional feature of the
+core, listed with them in `CORE_FEATURES` in `tests/workspace.rs`. The core's
+defaults are every feature, which is what the binary takes; `ketch-ffi` turns
+them off and names what the desktop apps use. Code behind a feature compiles
+without it: either the module is gated where it is declared, or it keeps the
+calls the pipeline makes and does nothing (as `stats::record` does). `just
+core-features` builds each feature alone.
 
 Several things write outside the ketch root. `ketch self install`, the bootstrap
 installers and the Homebrew cask each place a bootstrap binary outside it.

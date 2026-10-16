@@ -88,8 +88,12 @@ project actually publishes.
 
 `digest` is what lets ketch verify the download without extra requests. Supply
 it whenever the source knows it. Only `sha256` is compared directly against the
-download; other `algo` values are ignored and ketch falls back to checksum
-sidecars or aggregate files on the release.
+download; other `algo` values are ignored.
+
+Protocol v1 has no checksum subcommand, and a plugin source does not look up
+sidecar or aggregate checksum files. Without a sha256 `digest`, ketch records
+the hash of the bytes it downloaded and compares them to nothing the publisher
+posted (trust on first use). `require_checksums` refuses that install.
 
 ### `describe` and `search`
 
