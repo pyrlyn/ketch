@@ -131,6 +131,19 @@ jobs:
         with:
           install_args: xcodegen
 
+      # Inline copy of pyrlyn/ci's swift-cache action (pyrlyn/ci#80): re-pin to it once merged.
+      - name: Swift build cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/org.swift.swiftpm
+            desktop/macos/build
+          key: swift-app-${{ runner.os }}-${{ runner.arch }}-xcode-${{ hashFiles('desktop/macos/**/Package.resolved', 'desktop/macos/**/Package.swift', 'desktop/macos/project.yml') }}-${{ github.sha }}
+          restore-keys: |
+            swift-app-${{ runner.os }}-${{ runner.arch }}-xcode-${{ hashFiles('desktop/macos/**/Package.resolved', 'desktop/macos/**/Package.swift', 'desktop/macos/project.yml') }}-
+            swift-app-${{ runner.os }}-${{ runner.arch }}-xcode-
+
       - name: Format
         run: xcrun swift-format lint --strict -r Ketch KetchTests KetchUITests KetchCore/Package.swift KetchCore/Tests
 
@@ -170,6 +183,19 @@ jobs:
       - uses: pyrlyn/ci/.github/actions/setup-rust@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      # Inline copy of pyrlyn/ci's swift-cache action (pyrlyn/ci#80): re-pin to it once merged.
+      - name: Swift build cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/org.swift.swiftpm
+            desktop/macos/KetchCore/.build
+          key: swift-ffi-${{ runner.os }}-${{ runner.arch }}-xcode-${{ hashFiles('desktop/macos/**/Package.resolved', 'desktop/macos/**/Package.swift', 'desktop/macos/project.yml') }}-${{ github.sha }}
+          restore-keys: |
+            swift-ffi-${{ runner.os }}-${{ runner.arch }}-xcode-${{ hashFiles('desktop/macos/**/Package.resolved', 'desktop/macos/**/Package.swift', 'desktop/macos/project.yml') }}-
+            swift-ffi-${{ runner.os }}-${{ runner.arch }}-xcode-
 
       - name: XCFramework and bindings
         run: scripts/xcframework.sh --debug
