@@ -1612,6 +1612,16 @@ mod tests {
     use super::*;
     use crate::toml_file;
 
+    /// A bin or package called `nul` would install as the null device.
+    #[cfg(windows)]
+    #[test]
+    fn windows_device_names_are_not_usable_file_names() {
+        for name in ["nul", "CON", "com1.exe", "tool.", "a|b"] {
+            assert!(usable_file_name("binary name", name).is_err(), "{name}");
+        }
+        assert!(usable_file_name("binary name", "console").is_ok());
+    }
+
     #[test]
     fn a_reference_to_a_moved_repository_reads_as_its_new_name() {
         for old in [

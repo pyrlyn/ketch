@@ -527,26 +527,148 @@ pub fn validate_repo(what: &str, raw: String) -> Result<String> {
 /// Make a string safe to use as one path component. Version tags can legally
 /// contain `/` (e.g. `release/1.2`), which would otherwise escape the store.
 pub fn sanitize_component(raw: &str) -> String {
+    sanitize_component_for(raw, cfg!(windows))
+}
+
+/// [`sanitize_component`] with the Windows rules switched on or off, so both
+/// are tested on every host.
+fn sanitize_component_for(raw: &str, windows: bool) -> String {
     let cleaned: String = raw
         .chars()
         .map(|c| match c {
             '/' | '\\' | ':' | '\0' => '-',
             c if c.is_control() => '-',
             '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}' => '-',
+            c if windows && WINDOWS_FORBIDDEN.contains(&c) => '-',
             c => c,
         })
         .collect();
     let trimmed = cleaned.trim_matches(['.', ' ', '-']).to_string();
     if trimmed.is_empty() {
         "unknown".to_string()
+    } else if windows && is_dos_device_name(&trimmed) {
+        // `nul` or `con.1` would open a device rather than name a directory.
+        format!("_{trimmed}")
     } else {
         trimmed
     }
 }
 
+/// Characters Windows refuses in a file name, besides the separators and `:`
+/// that every guard here already rejects.
+const WINDOWS_FORBIDDEN: &[char] = &['<', '>', '"', '|', '?', '*'];
+
+/// True when Windows could not use `name` as one path component as written.
+///
+/// A DOS device name (`nul`, `COM1.txt`) opens the device instead of a file,
+/// and a trailing dot or space is silently dropped, so `foo.` lands on `foo`.
+/// Pure so it is tested on every host; only Windows applies it.
+pub(crate) fn windows_unusable_component(name: &str) -> bool {
+    name.ends_with(['.', ' '])
+        || name.contains(WINDOWS_FORBIDDEN)
+        || name.contains(['\\', ':'])
+        || name.chars().any(char::is_control)
+        || is_dos_device_name(name)
+}
+
+/// `CON`, `PRN`, `AUX`, `NUL`, `CONIN$`, `CONOUT$`, `COM0`-`COM9` and
+/// `LPT0`-`LPT9` (superscript 1-3 too), in any case and with any extension:
+/// Windows reads the stem before the first dot, trailing spaces dropped.
+fn is_dos_device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name).trim_end_matches(' ');
+    let upper = stem.to_ascii_uppercase();
+    if matches!(
+        upper.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+    ) {
+        return true;
+    }
+    let port = upper
+        .strip_prefix("COM")
+        .or_else(|| upper.strip_prefix("LPT"));
+    matches!(
+        port,
+        Some(
+            "0" | "1"
+                | "2"
+                | "3"
+                | "4"
+                | "5"
+                | "6"
+                | "7"
+                | "8"
+                | "9"
+                | "\u{b9}"
+                | "\u{b2}"
+                | "\u{b3}"
+        )
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn windows_device_names_and_trailing_dots_are_unusable_there() {
+        for name in [
+            "nul",
+            "NUL",
+            "con",
+            "Aux",
+            "prn",
+            "com1",
+            "COM9",
+            "lpt1",
+            "LPT0",
+            "com\u{b9}",
+            "nul.txt",
+            "con.tar.gz",
+            "NUL .txt",
+            "conin$",
+            "CONOUT$",
+            "foo.",
+            "foo ",
+            "a<b",
+            "a>b",
+            "a\"b",
+            "a|b",
+            "a?b",
+            "a*b",
+            "a:b",
+            "a\\b",
+            "a\tb",
+        ] {
+            assert!(windows_unusable_component(name), "{name:?}");
+        }
+        for name in [
+            "console", "nullable", "com10", "lpt", "aux_", "_nul", "foo.txt", ".hidden",
+        ] {
+            assert!(!windows_unusable_component(name), "{name:?}");
+        }
+    }
+
+    #[test]
+    fn sanitizing_for_windows_never_yields_an_unusable_name() {
+        for raw in [
+            "nul",
+            "CON.1",
+            "1.0|beta",
+            "v1*",
+            "a<b>",
+            "lpt\u{b2}",
+            "x. ",
+            "aux  ",
+        ] {
+            let clean = sanitize_component_for(raw, true);
+            assert!(!windows_unusable_component(&clean), "{raw:?} -> {clean:?}");
+        }
+        assert_eq!(sanitize_component_for("nul", true), "_nul");
+        assert_eq!(sanitize_component_for("1.0|beta", true), "1.0-beta");
+        // Elsewhere those are ordinary names and stay as they were.
+        assert_eq!(sanitize_component_for("nul", false), "nul");
+        assert_eq!(sanitize_component_for("1.0|beta", false), "1.0|beta");
+    }
 
     #[test]
     fn committed_config_schema_matches_config_file() {
