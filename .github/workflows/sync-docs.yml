@@ -31,7 +31,7 @@ jobs:
     # The macOS app's releases (desktop-v*, and the desktop-appcast feed) are
     # not the CLI's version: the card would read "desktop-v1.0.0".
     if: github.ref_type != 'tag' || startsWith(github.ref_name, 'v')
-    uses: pyrlyn/ci/.github/workflows/sync-docs.yml@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
+    uses: pyrlyn/ci/.github/workflows/sync-docs.yml@3a56b15773fb445bdb6838c88d382dac773ffc37 # main
     with:
       locales: ru uk
     permissions:
