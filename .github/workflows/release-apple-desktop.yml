@@ -32,8 +32,22 @@ permissions:
   contents: read
 
 jobs:
+  # pyrlyn/ci's macos-runner action reads the MACOS_RUNNER variable (unset = macos-26).
+  macos-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      value: ${{ steps.r.outputs.value }}
+    steps:
+      - id: r
+        uses: pyrlyn/ci/.github/actions/macos-runner@97fe5e56c8e5fc8980fa8d3ca7043bb9ea727f21 # main
+        with:
+          runner: ${{ vars.MACOS_RUNNER }}
+          value: '["macos-26"]'
+
   # Pinned to the pyrlyn/ci#30 merge commit (main).
   release:
+    needs: macos-runner
     permissions:
       contents: write # the desktop-v tag, its release, and the appcast release
       actions: read # notify-failure: failed job names
@@ -51,7 +65,7 @@ jobs:
         > [!WARNING]
         > Dev build: the Debug configuration, Developer ID signed and notarised, published as a prerelease.
       # The runner and Xcode CI's macos-app job builds the app with.
-      runs-on: ${{ vars.MACOS_RUNNER || 'macos-26' }}
+      runs-on: ${{ fromJSON(needs.macos-runner.outputs.value)[0] }}
       mise-install-args: xcodegen git-cliff
       # TODO(R9): crates/ketch-ffi does not exist yet, so there is no
       # XCFramework to link and the app runs on FakeKetchCore. When R9 lands:

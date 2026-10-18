@@ -22,8 +22,22 @@ permissions:
   contents: read
 
 jobs:
+  # pyrlyn/ci's macos-runner action reads the MACOS_RUNNER variable (unset = macos-latest).
+  macos-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      value: ${{ steps.r.outputs.value }}
+    steps:
+      - id: r
+        uses: pyrlyn/ci/.github/actions/macos-runner@97fe5e56c8e5fc8980fa8d3ca7043bb9ea727f21 # main
+        with:
+          runner: ${{ vars.MACOS_RUNNER }}
+          value: '["macos-latest"]'
+
   tap:
-    runs-on: ${{ vars.MACOS_RUNNER || 'macos-latest' }}
+    needs: macos-runner
+    runs-on: ${{ fromJSON(needs.macos-runner.outputs.value)[0] }}
     env:
       TAG: ${{ fromJson(inputs.plan).announcement_tag }}
     steps:
