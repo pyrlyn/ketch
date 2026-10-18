@@ -24,9 +24,11 @@ camino = { version = "1", default-features = false, features = ["serde1"] }
 clap = { version = "4", features = ["cargo", "derive", "env", "wrap_help"] }
 clap_builder = { version = "4", default-features = false, features = ["cargo", "color", "env", "std", "suggestions", "usage", "wrap_help"] }
 console = { version = "0.16", default-features = false, features = ["ansi-parsing", "std", "unicode-width"] }
+crc32fast = { version = "1" }
 derive_more = { version = "2", features = ["debug", "display", "is_variant"] }
 digest = { version = "0.11", features = ["alloc", "mac", "oid"] }
 either = { version = "1", features = ["use_std"] }
+flate2 = { version = "1", features = ["zlib-rs"] }
 form_urlencoded = { version = "1" }
 futures-channel = { version = "0.3", features = ["sink"] }
 futures-core = { version = "0.3" }
@@ -56,6 +58,7 @@ serde = { version = "1", features = ["alloc", "derive"] }
 serde_core = { version = "1", features = ["alloc"] }
 serde_json = { version = "1", features = ["alloc", "float_roundtrip", "unbounded_depth"] }
 serde_spanned = { version = "1" }
+simd-adler32 = { version = "0.3", default-features = false, features = ["std"] }
 smallvec = { version = "1", default-features = false, features = ["const_new", "write"] }
 strum = { version = "0.28", features = ["derive"] }
 subtle = { version = "2" }
@@ -114,7 +117,6 @@ tower = { version = "0.5", default-features = false, features = ["buffer", "retr
 tower-http = { version = "0.6", features = ["follow-redirect", "map-response-body", "trace"] }
 
 [target.x86_64-unknown-linux-gnu.build-dependencies]
-getrandom-468e82937335b1c9 = { package = "getrandom", version = "0.3", default-features = false, features = ["std"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 [target.aarch64-apple-darwin.dependencies]
@@ -129,11 +131,11 @@ tower-http = { version = "0.6", features = ["follow-redirect", "map-response-bod
 
 [target.aarch64-apple-darwin.build-dependencies]
 errno = { version = "0.3" }
-getrandom-468e82937335b1c9 = { package = "getrandom", version = "0.3", default-features = false, features = ["std"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 [target.x86_64-pc-windows-msvc.dependencies]
 aws-lc-rs = { version = "1", features = ["prebuilt-nasm"] }
+getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std"] }
 sync_wrapper = { version = "1", default-features = false, features = ["futures"] }
 tokio-util = { version = "0.7", default-features = false, features = ["io-util"] }
 tower = { version = "0.5", default-features = false, features = ["buffer", "retry", "timeout"] }
@@ -141,7 +143,7 @@ tower-http = { version = "0.6", features = ["follow-redirect", "map-response-bod
 windows-sys = { version = "0.61", features = ["Wdk_Foundation", "Wdk_Storage_FileSystem", "Wdk_System_IO", "Win32_Globalization", "Win32_Networking_WinSock", "Win32_Security_Authentication_Identity", "Win32_Security_Credentials", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Console", "Win32_System_IO", "Win32_System_LibraryLoader", "Win32_System_Memory", "Win32_System_Pipes", "Win32_System_SystemInformation", "Win32_System_SystemServices", "Win32_System_Threading", "Win32_System_WindowsProgramming", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell"] }
 
 [target.x86_64-pc-windows-msvc.build-dependencies]
-getrandom-468e82937335b1c9 = { package = "getrandom", version = "0.3", default-features = false, features = ["std"] }
+getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std"] }
 windows-sys = { version = "0.61", features = ["Wdk_Foundation", "Wdk_Storage_FileSystem", "Wdk_System_IO", "Win32_Globalization", "Win32_Networking_WinSock", "Win32_Security_Authentication_Identity", "Win32_Security_Credentials", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Console", "Win32_System_IO", "Win32_System_LibraryLoader", "Win32_System_Memory", "Win32_System_Pipes", "Win32_System_SystemInformation", "Win32_System_SystemServices", "Win32_System_Threading", "Win32_System_WindowsProgramming", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell"] }
 
 ### END HAKARI SECTION
