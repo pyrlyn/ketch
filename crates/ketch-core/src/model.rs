@@ -2055,6 +2055,11 @@ mod tests {
                         pattern_validators(schema_pattern::NOT_BLANK),
                     ]
                 });
+            // The schema is one text for every OS; Windows alone also refuses
+            // `<`, a trailing dot, device names and the like in a file name.
+            if cfg!(windows) {
+                proptest::prop_assume!(!crate::config::windows_unusable_component(&text));
+            }
             let base = Manifest::inferred(PackageRef::github("o/r"));
             let rust = [
                 PackageRef::parse(&text).is_some(),
