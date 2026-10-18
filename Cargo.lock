@@ -2901,7 +2901,7 @@ dependencies = [
 
 [[package]]
 name = "ketch"
-version = "0.10.0"
+version = "0.0.1"
 dependencies = [
  "assert_cmd",
  "assert_fs",
@@ -2939,7 +2939,7 @@ dependencies = [
 
 [[package]]
 name = "ketch-capi"
-version = "0.10.0"
+version = "0.0.1"
 dependencies = [
  "cbindgen",
  "jsonschema",
@@ -2955,7 +2955,7 @@ dependencies = [
 
 [[package]]
 name = "ketch-core"
-version = "0.10.0"
+version = "0.0.1"
 dependencies = [
  "bzip2",
  "clap",
@@ -2999,7 +2999,7 @@ dependencies = [
 
 [[package]]
 name = "ketch-ffi"
-version = "0.10.0"
+version = "0.0.1"
 dependencies = [
  "ketch-core",
  "pretty_assertions",

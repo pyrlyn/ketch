@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.0.1](https://github.com/pyrlyn/ketch/releases/tag/v0.0.1) - 2026-10-18
+
+### Other
+
+- version numbering restarted at 0.0.1: the earlier v0.1.0 to v0.10.0 tags and releases were removed (the entries below are kept as history)
+
 ## [0.10.0](https://github.com/pyrlyn/ketch/releases/tag/v0.10.0) - 2026-10-02
 
 ### Added
