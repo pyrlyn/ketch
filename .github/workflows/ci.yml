@@ -36,7 +36,7 @@ jobs:
       docs-only: ${{ steps.config.outputs.docs-only }}
     steps:
       - id: config
-        uses: pyrlyn/ci/.github/actions/config@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
+        uses: pyrlyn/ci/.github/actions/config@main
 
   # The shared pyrlyn/ci workflow, pinned by commit, with Rust from
   # mise.toml and a check that rustc is that pin: fmt once, then per target of
@@ -53,7 +53,7 @@ jobs:
     # is marked ready, and a draft must not look broken meanwhile.
     needs: config
     if: ${{ !cancelled() && github.event.pull_request.draft != true }}
-    uses: pyrlyn/ci/.github/workflows/ci-rust.yml@ce98c614219bfad8253cfec3530565c470745ed5 # main
+    uses: pyrlyn/ci/.github/workflows/ci-rust.yml@main
     # actions: write for infra's cancel-run (the first failing job cancels the run).
     permissions:
       contents: read
@@ -90,7 +90,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: pyrlyn/ci/.github/actions/commits@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
+      - uses: pyrlyn/ci/.github/actions/commits@main
         with:
           tool: commitlint
 
@@ -142,6 +142,7 @@ jobs:
   macos-app:
     needs: [config, macos-runner]
     if: >-
+      vars.MACOS_CI_DISABLED != 'true' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
     runs-on: ${{ fromJSON(needs.macos-runner.outputs.app)[0] }}
@@ -204,7 +205,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pyrlyn/ci/.github/actions/setup-rust@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
+      - uses: pyrlyn/ci/.github/actions/setup-rust@main
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
@@ -243,7 +244,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pyrlyn/ci/.github/actions/setup-rust@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
+      - uses: pyrlyn/ci/.github/actions/setup-rust@main
         with:
           install-args: rust dotnet cargo:https://github.com/dennisameling/uniffi-bindgen-cs
 
@@ -269,7 +270,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pyrlyn/ci/.github/actions/setup-rust@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
+      - uses: pyrlyn/ci/.github/actions/setup-rust@main
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
@@ -364,9 +365,9 @@ jobs:
         include: ${{ fromJSON(needs.macos-runner.outputs.package) }}
     # `os` stays the label in the check names; `runner` is what the job runs on.
     name: package (${{ matrix.os }}, ${{ matrix.target }})
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ vars.MACOS_CI_DISABLED == 'true' && (startsWith(matrix.os, 'macos') || startsWith(matrix.os, 'xcode')) && 'ubuntu-latest' || matrix.runner }}
     env:
-      RUN: ${{ needs.config.outputs.docs-only != 'true' }}
+      RUN: ${{ needs.config.outputs.docs-only != 'true' && !(vars.MACOS_CI_DISABLED == 'true' && (startsWith(matrix.os, 'macos') || startsWith(matrix.os, 'xcode'))) }}
     defaults:
       run:
         shell: bash
@@ -382,7 +383,7 @@ jobs:
       # scripts/release.sh against. All three at the versions mise.toml pins.
       # Before rust-cache, so the cache keys on this rustc.
       - if: env.RUN == 'true'
-        uses: pyrlyn/ci/.github/actions/setup-rust@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
+        uses: pyrlyn/ci/.github/actions/setup-rust@main
         with:
           install-args: rust cargo-dist git-cliff
 
