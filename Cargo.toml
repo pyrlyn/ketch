@@ -57,6 +57,7 @@ path = "src/main.rs"
 tui = ["dep:crossterm", "dep:ratatui"]
 
 [dependencies]
+shell-completions = { path = "../../packages/crates/rust/shell-completions" }
 ketch-core = { path = "crates/ketch-core" }
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }
 clap_complete = "4"

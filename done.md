@@ -1652,3 +1652,13 @@ The creator authorized dependency updates across the audit. Update only vulnerab
 Execution plan: reproduce the advisory audit; apply compatible package-manager updates; review the lockfile diff; run advisory regression checks and the project test/lint/format gates; publish a PR and merge only after required checks pass. No custom dependency implementation is needed. Rollback is a revert of the dependency-update commit.
 
 Validation: rustls 0.23.46 resolves its RustSec advisories; the existing rsa RUSTSEC-2023-0071 has no patched release and remains reported. The complete nextest run passed 1241 of 1242 tests; the sole failure was an unconfigured mise PowerShell shim. Re-running all 7 PowerShell tests with installed PowerShell 7.6.6 passed. Workspace clippy with warnings denied and formatting passed. Existing rustls is reused; no custom implementation or new dependency was added. Regenerated workspace-hack for the resolved graph; hakari generate --diff, manage-deps --dry-run, and verify passed.
+
+### T1. Use shared shell completion generation
+
+Use the local `shell-completions` crate in `packages/crates/rust`. Preserve rtok scripts and ketch package-name completion and installation behavior. Add `cox completions <shell>` without loading configuration, credentials, telemetry or a session.
+
+Execution plan: establish existing completion tests; extract the clap generator and Clink implementation with regression tests into the shared crate; connect consumers through local Cargo paths; update dependency inventories; run focused tests, formatting and clippy. Application-specific installation policies and ketch dynamic package lookup stay with their owners. Done when generation has one owner and the three CLI surfaces pass their checks.
+
+Validation: 11 generator unit tests and six completion integration tests passed. All five generated scripts are byte-identical to the baseline. Formatting and all-target clippy passed. The broader all-target test run stopped at the unchanged PowerShell installer version-prefix test in tests/install_ps1.rs.
+
+Reused `clap_complete` and the existing rtok Clink generator. No replacement library or custom generator was introduced. Local path dependencies resolve in the standard apps/packages layout.

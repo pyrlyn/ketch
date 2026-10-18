@@ -44,6 +44,7 @@ Project programs and direct packages from manifests.
 | bzip2 | local | https://crates.io/crates/bzip2 | Rust dependency |
 | cbindgen | local (`crates/ketch-capi`, dev) | https://github.com/mozilla/cbindgen | Generates `crates/ketch-capi/include/ketch.h`; a drift test fails when the committed header is stale |
 | clap | local | https://crates.io/crates/clap | CLI |
+| shell-completions | local | https://github.com/pyrlyn/crates/tree/main/rust/shell-completions | Shared clap shell scripts and Clink generator; local path dependency |
 | clap_complete | local | https://crates.io/crates/clap_complete | Rust dependency |
 | clap_mangen | local | https://crates.io/crates/clap_mangen | ketch's man pages, one per command (`src/man.rs`) |
 | console | local (Windows only) | https://crates.io/crates/console | Switches on virtual terminal processing so legacy conhost shows colour instead of escape codes; already in the tree through indicatif |
