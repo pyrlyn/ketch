@@ -1367,6 +1367,19 @@ mod tests {
     use super::*;
     use unicode_width::UnicodeWidthStr;
 
+    // Cargo's threaded runner shares these globals between snapshot tests.
+    fn init_test(
+        color: Option<bool>,
+        quiet: bool,
+        verbose: bool,
+    ) -> std::sync::MutexGuard<'static, ()> {
+        static SETTINGS: Mutex<()> = Mutex::new(());
+        let guard = SETTINGS.lock().unwrap();
+        init(color, quiet, verbose);
+        EMOJI.store(false, Ordering::Relaxed);
+        guard
+    }
+
     const HOSTILE: &str = "evil\u{1b}[2K\u{1b}[1;31mFAKE\u{1b}[0m";
     const FILTERED: &str = "evil[2K[1;31mFAKE[0m";
 
@@ -1377,37 +1390,37 @@ mod tests {
 
     #[test]
     fn step_detail_cannot_redraw_the_terminal() {
-        init(Some(false), false, false);
+        let _settings = init_test(Some(false), false, false);
         assert_client_text_is_filtered(&step_line("fetch", HOSTILE));
     }
 
     #[test]
     fn success_detail_cannot_redraw_the_terminal() {
-        init(Some(false), false, false);
+        let _settings = init_test(Some(false), false, false);
         assert_client_text_is_filtered(&success_line("done", HOSTILE));
     }
 
     #[test]
     fn a_warning_cannot_redraw_the_terminal() {
-        init(Some(false), false, false);
+        let _settings = init_test(Some(false), false, false);
         assert_client_text_is_filtered(&warn_line(HOSTILE));
     }
 
     #[test]
     fn a_note_cannot_redraw_the_terminal() {
-        init(Some(false), false, false);
+        let _settings = init_test(Some(false), false, false);
         assert_client_text_is_filtered(&note_line(HOSTILE));
     }
 
     #[test]
     fn debug_output_cannot_redraw_the_terminal() {
-        init(Some(false), false, true);
+        let _settings = init_test(Some(false), false, true);
         assert_client_text_is_filtered(&debug_line(HOSTILE));
     }
 
     #[test]
     fn an_error_headline_cannot_redraw_the_terminal() {
-        init(Some(false), false, false);
+        let _settings = init_test(Some(false), false, false);
         let err = crate::error::Error::msg(HOSTILE);
         let lines = error_lines(&err.to_string(), &[], None);
         assert_client_text_is_filtered(&lines[0]);
@@ -1415,7 +1428,7 @@ mod tests {
 
     #[test]
     fn error_details_cannot_redraw_the_terminal() {
-        init(Some(false), false, false);
+        let _settings = init_test(Some(false), false, false);
         let err = crate::error::Error::Command {
             cmd: "test".into(),
             status: "1".into(),
@@ -1428,7 +1441,7 @@ mod tests {
 
     #[test]
     fn an_error_hint_cannot_redraw_the_terminal() {
-        init(Some(false), false, false);
+        let _settings = init_test(Some(false), false, false);
         let err = crate::error::Error::UnknownScheme(HOSTILE.into());
         let hint = err.hint().expect("UnknownScheme carries a hint");
         let lines = error_lines(&err.to_string(), &[], Some(&hint));
@@ -1458,14 +1471,14 @@ mod tests {
 
     #[test]
     fn each_line_kind_is_painted_by_its_meaning() {
-        init(Some(true), false, true);
+        let _settings = init_test(Some(true), false, true);
         let shown = every_line_kind().join("\n").replace('\u{1b}', "\\e");
         insta::assert_snapshot!(shown);
     }
 
     #[test]
     fn each_line_kind_carries_its_icon_when_emoji_are_on() {
-        init(Some(false), false, true);
+        let _settings = init_test(Some(false), false, true);
         EMOJI.store(true, Ordering::Relaxed);
         let shown = every_line_kind().join("\n");
         EMOJI.store(false, Ordering::Relaxed);
@@ -1474,7 +1487,7 @@ mod tests {
 
     #[test]
     fn no_line_kind_carries_an_icon_when_emoji_are_off() {
-        init(Some(false), false, true);
+        let _settings = init_test(Some(false), false, true);
         EMOJI.store(false, Ordering::Relaxed);
         let shown = every_line_kind().join("\n");
         insta::assert_snapshot!(shown);
@@ -1506,7 +1519,7 @@ mod tests {
 
     #[test]
     fn text_after_the_verb_starts_in_one_column_with_or_without_an_icon() {
-        init(Some(false), false, true);
+        let _settings = init_test(Some(false), false, true);
         EMOJI.store(true, Ordering::Relaxed);
         let lines = [
             step_line("installing", "ripgrep"),
@@ -1549,7 +1562,7 @@ mod tests {
 
     #[test]
     fn no_line_kind_carries_escape_bytes_with_colour_off() {
-        init(Some(false), false, true);
+        let _settings = init_test(Some(false), false, true);
         for line in every_line_kind() {
             assert!(!line.contains('\u{1b}'), "{line:?}");
         }
@@ -1597,7 +1610,7 @@ mod tests {
 
     #[test]
     fn painted_cells_keep_their_columns_aligned() {
-        init(Some(false), false, false);
+        let _settings = init_test(Some(false), false, false);
         let rows = vec![
             vec!["a".to_string(), "x".to_string()],
             vec!["longer".to_string(), "y".to_string()],

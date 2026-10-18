@@ -38,9 +38,9 @@ getrandom-468e82937335b1c9 = { package = "getrandom", version = "0.3", default-f
 getrandom-6f8ce4dd05d13bba = { package = "getrandom", version = "0.2", default-features = false, features = ["js", "std"] }
 hashbrown = { version = "0.17" }
 indexmap = { version = "2", features = ["serde"] }
-itertools = { version = "0.14" }
+itertools = { version = "0.15" }
 memchr = { version = "2" }
-num-bigint = { version = "0.4" }
+num-bigint = { version = "0.5" }
 num-iter = { version = "0.1", default-features = false, features = ["i128", "std"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
 pem = { version = "3", features = ["serde"] }
@@ -65,7 +65,7 @@ subtle = { version = "2" }
 syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
 time = { version = "0.3", default-features = false, features = ["formatting", "local-offset", "macros", "parsing"] }
 tokio = { version = "1", features = ["io-util", "net", "rt", "sync", "time"] }
-toml = { version = "0.9", default-features = false, features = ["parse", "serde", "std"] }
+toml = { version = "1.1", default-features = false, features = ["parse", "serde", "std"] }
 toml_datetime-ca01ad9e24f5d932 = { package = "toml_datetime", version = "0.7", default-features = false, features = ["serde", "std"] }
 toml_datetime-dff4ba8e3ae991db = { package = "toml_datetime", version = "1", features = ["serde"] }
 toml_edit = { version = "0.25", features = ["serde"] }
@@ -86,7 +86,7 @@ derive_more-impl = { version = "2", features = ["debug", "display", "is_variant"
 either = { version = "1", features = ["use_std"] }
 hashbrown = { version = "0.17" }
 indexmap = { version = "2", features = ["serde"] }
-itertools = { version = "0.14" }
+itertools = { version = "0.15" }
 memchr = { version = "2" }
 proc-macro2 = { version = "1" }
 quote = { version = "1" }
@@ -99,7 +99,7 @@ serde_json = { version = "1", features = ["alloc", "float_roundtrip", "unbounded
 serde_spanned = { version = "1" }
 syn-7b89eefb6aaa9bf3 = { package = "syn", version = "3", features = ["extra-traits", "full"] }
 syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
-toml = { version = "0.9", default-features = false, features = ["parse", "serde", "std"] }
+toml = { version = "1.1", default-features = false, features = ["parse", "serde", "std"] }
 toml_datetime-ca01ad9e24f5d932 = { package = "toml_datetime", version = "0.7", default-features = false, features = ["serde", "std"] }
 toml_datetime-dff4ba8e3ae991db = { package = "toml_datetime", version = "1", features = ["serde"] }
 toml_edit = { version = "0.25", features = ["serde"] }

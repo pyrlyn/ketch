@@ -112,22 +112,46 @@ jobs:
           if ($errors) { $errors | Format-List *; exit 1 }
           ./install.ps1 --help
 
+  # Which runner the macOS jobs use: pyrlyn/ci's macos-runner action reads the MACOS_RUNNER
+  # variable (unset = the hosted labels below, xcode-27-local = the dedicated Mac).
+  macos-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      app: ${{ steps.app.outputs.value }}
+      package: ${{ steps.package.outputs.value }}
+    steps:
+      - id: app
+        uses: pyrlyn/ci/.github/actions/macos-runner@97fe5e56c8e5fc8980fa8d3ca7043bb9ea727f21 # main
+        with:
+          runner: ${{ vars.MACOS_RUNNER }}
+          value: '["macos-26"]'
+      - id: package
+        uses: pyrlyn/ci/.github/actions/macos-runner@97fe5e56c8e5fc8980fa8d3ca7043bb9ea727f21 # main
+        with:
+          runner: ${{ vars.MACOS_RUNNER }}
+          key: runner
+          value: >-
+            [{"os":"macos-latest","runner":"macos-latest","target":"aarch64-apple-darwin"},
+            {"os":"ubuntu-latest","runner":"ubuntu-latest","target":"x86_64-unknown-linux-gnu"},
+            {"os":"windows-latest","runner":"windows-latest","target":"x86_64-pc-windows-msvc"}]
+
   # The macOS app (desktop/macos) is Swift only: its own job beside the Rust
   # ones, not in front of them. XcodeGen at the mise.toml pin; the runner's
   # default Xcode (26.x on macos-26) is new enough for the macOS 26 target.
   macos-app:
-    needs: config
+    needs: [config, macos-runner]
     if: >-
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
-    runs-on: macos-26
+    runs-on: ${{ fromJSON(needs.macos-runner.outputs.app)[0] }}
     defaults:
       run:
         working-directory: desktop/macos
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           install_args: xcodegen
 
@@ -172,11 +196,11 @@ jobs:
   # would need another action. Kept cheap: the dev profile, one runner, and
   # rust-cache; it does not block the Rust jobs.
   ketch-ffi:
-    needs: config
+    needs: [config, macos-runner]
     if: >-
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
-    runs-on: macos-26
+    runs-on: ${{ fromJSON(needs.macos-runner.outputs.app)[0] }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -282,7 +306,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           install_args: dotnet
 
@@ -332,19 +356,15 @@ jobs:
   package:
     # A matrix job skipped at job level reports one check under its raw name, so the required
     # `package (<os>, <target>)` checks would wait: on a docs-only change every step is a no-op.
-    needs: config
+    needs: [config, macos-runner]
     if: ${{ !cancelled() && github.event.pull_request.draft != true }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-latest
-            target: aarch64-apple-darwin
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-    runs-on: ${{ matrix.os }}
+        include: ${{ fromJSON(needs.macos-runner.outputs.package) }}
+    # `os` stays the label in the check names; `runner` is what the job runs on.
+    name: package (${{ matrix.os }}, ${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
     env:
       RUN: ${{ needs.config.outputs.docs-only != 'true' }}
     defaults:
@@ -492,7 +512,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           # Only what the check needs, not every tool in mise.toml. sccache too:
           # mise refuses a cargo: tool while the sccache in mise.toml is missing.
