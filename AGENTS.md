@@ -77,7 +77,8 @@ its C# bindings, and the .NET test in `desktop/windows`.
 
 The Justfile wraps the same commands with `--locked`: `just fmt`, `just clippy`
 (or `just lint`), `just test`, and `just check` runs what CI runs on this
-host — format, clippy, the `cfg(fuzzing)` library (`just fuzz-check`),
+host — format, clippy, the `cfg(fuzzing)` library (`just fuzz-check`), the
+core with each optional feature alone (`just core-features`),
 `cargo nextest run --workspace --all-targets`, commitlint
 fixtures, shell syntax on `install.sh` and the release scripts, `mandoc -Tlint`
 on the generated man pages when mandoc is present, whether `release.yml` is what
@@ -112,13 +113,15 @@ mise x -- jactionlint --baseline-write # refresh the baseline after fixing findi
 mise x -- hk install --mise            # install the pre-push hook once per clone
 ```
 
-`file-backup` comes from crates.io (pinned in `Cargo.lock`). For local work
-against the sibling checkout, `just setup` writes a gitignored
-`.cargo/config.toml` with a `paths` override pointing at
-`packages/crates/file-backup`. CI and release builds never run it, so they
-always resolve the registry version. A `paths` override — not a `[patch]` —
-swaps the source without touching `Cargo.lock`, so `--locked` builds work on
-the same committed lock in both directions.
+`fs-kit` (path, atomic writes, tree copy and removal, backups) comes from
+crates.io (pinned in `Cargo.lock`, set once in the root
+`[workspace.dependencies]`). Use it for file and directory work instead of
+writing a local helper. For local work against the sibling checkout,
+`just setup` writes a gitignored `.cargo/config.toml` with a `paths` override
+pointing at `packages/crates/fs-kit`. CI and release builds never run it, so
+they always resolve the registry version. A `paths` override — not a
+`[patch]` — swaps the source without touching `Cargo.lock`, so `--locked`
+builds work on the same committed lock in both directions.
 
 Run the binary against a throwaway tree instead of your real `~/.ketch`:
 
@@ -231,6 +234,7 @@ differ by orders of magnitude — the cargo home is the small one. Set
 | `crates/ketch-core/src/doctor.rs` | `ketch doctor`'s checks, shared by the command and `ketch-ffi` |
 | `crates/ketch-ffi/` | the core through UniFFI: a coarse, language-neutral surface of plain records, foreign traits for `Reporter` and `Decider` passed with a cancel token to each call, and a typed `KetchError` |
 | `crates/ketch-capi/` | `ketch-ffi` as `extern "C"` functions with JSON records, for front ends no UniFFI generator reaches: the cbindgen header (`include/ketch.h`), the payload schema, the hand-written `vapi/ketch.vapi` and its Meson-built Vala test. The one crate allowed hand-written `unsafe`, scoped to `src/abi.rs` |
+| `scripts/core-features.sh` | `ketch-core` built with no optional feature, then with each alone, then `ketch-ffi` with its own set; `just core-features` |
 | `scripts/xcframework.sh` | `ketch-ffi` as an XCFramework for both macOS architectures, and its generated Swift bindings; `just xcframework` |
 | `scripts/csharp.sh` | `ketch-ffi` as a shared library and the C# bindings the pinned uniffi-bindgen-cs generates from it, into `desktop/windows/KetchCore/Generated/`; `just csharp`, `just csharp-test` |
 | `desktop/windows/` | the Windows app's C# side: `KetchCore` (the generated binding as a .NET library), its MSTest project, and `uniffi.toml` for the generator |
@@ -280,6 +284,14 @@ stays `pub(crate)`. The core has one version, the workspace's, because it
 reports it: `ketch-core` is `publish = false` and dist skips it, and
 `tests/workspace.rs` fails if either promise drifts.
 
+A subsystem with heavy dependencies of its own is an optional feature of the
+core, listed with them in `CORE_FEATURES` in `tests/workspace.rs`. The core's
+defaults are every feature, which is what the binary takes; `ketch-ffi` turns
+them off and names what the desktop apps use. Code behind a feature compiles
+without it: either the module is gated where it is declared, or it keeps the
+calls the pipeline makes and does nothing (as `stats::record` does). `just
+core-features` builds each feature alone.
+
 Several things write outside the ketch root. `ketch self install`, the bootstrap
 installers and the Homebrew cask each place a bootstrap binary outside it.
 `crates/ketch-core/src/platform/` links `.app` bundles into `/Applications` (or
@@ -295,9 +307,12 @@ line to cmd's `AutoRun`; `self uninstall` takes back exactly those. It edits a s
 markers, so the block can be found again, rewritten when the root moves, and
 removed without guessing which line was ketch's. It follows a symlinked
 startup file to its target before writing, because that file is very often a
-link into a dotfiles repository. On Windows `ketch path install` writes
-`HKCU\Environment\Path` via `[Environment]::SetEnvironmentVariable` so a new
-terminal sees it without a logoff; `setx` is not used, because it truncates.
+link into a dotfiles repository. On Windows `ketch path install` reads and
+writes `HKCU\Environment\Path` through `Microsoft.Win32.Registry`, unexpanded
+and with its value kind, so `%VAR%` entries keep expanding; it then sets and
+clears a throwaway variable with `[Environment]::SetEnvironmentVariable` so a
+new terminal sees the change without a logoff. `setx` is not used, because it
+truncates.
 
 ## macOS app
 
@@ -306,6 +321,16 @@ described by XcodeGen's `project.yml`; the generated `Ketch.xcodeproj` and
 `build/` are gitignored. `just macos-app` builds it unsigned for arm64 and
 x86_64, `just macos-test` runs the Swift Testing unit tests and the UI smoke
 test; the `macos-app` CI job runs the same plus `swift format lint --strict`.
+
+The macOS runner is selectable with the Actions variable `MACOS_RUNNER` (org or
+repository). Unset, the macOS jobs keep their hosted labels (`macos-26`,
+`macos-latest`); `xcode-27-local` runs them on the dedicated self-hosted Mac. The
+switch is defined once, in `pyrlyn/ci`'s `macos-runner` action (see its docs in
+`reusable-workflows.md`); `ci.yml` and `tap.yml` only
+call it in a small `macos-runner` job and read its output. The macOS targets of the
+shared `rust` job go through the same action inside `pyrlyn/ci`.
+`release-apple-desktop.yml` stays a thin caller (tests/desktop-release.sh), so it
+keeps the hosted default until pyrlyn/ci's workflow resolves the runner itself.
 It has no Rust in it and does not touch the CLI gate.
 
 Views talk to `KetchStore`, the store talks to `KetchCoreProtocol`, and
@@ -339,8 +364,8 @@ These are observed throughout; match them rather than introducing your own.
   typed `report::Event`s: `stage`, `step`, `success`, `warn`, `note`, `debug`,
   and `activity`/`download`/`batch`/`counter` handles for long work. The core
   never reads stdin: a question goes to the `decide::Decider` in `Ctx`
-  (`choose_binary`, `stop_processes`), and `NoDecider`, the default, answers
-  like a script. The binary asks through `ui::ctx_asking`, which puts
+  (`choose_binary`, `stop_processes`, `confirm_remove_leftover`), and
+  `NoDecider`, the default, answers like a script. The binary asks through `ui::ctx_asking`, which puts
   `ui::TerminalDecider` there unless `--yes` has already answered. A
   confirmation a command makes before calling the core stays in `cmd/`: it is
   the front end's own dialog, and a GUI makes its own.

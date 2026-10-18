@@ -15,7 +15,7 @@ pub mod macos;
 
 use crate::error::{Error, Result};
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 
 /// One archive format.
@@ -55,6 +55,122 @@ pub fn extract_auto(
     Err(Error::UnsupportedArchive(src.to_path_buf()))
 }
 
+/// How far a compressed archive may expand relative to its own size.
+///
+/// Real release archives sit well below 20:1; a bomb sits at 1000:1 and above.
+const MAX_EXPANSION_RATIO: u64 = 100;
+
+/// Every archive may unpack at least this much, so a small archive of
+/// highly compressible files (zero-padded firmware, sparse data) still works.
+const MIN_UNPACKED_BYTES: u64 = 256 * 1024 * 1024;
+
+/// No archive unpacks past this, whatever its size.
+const MAX_UNPACKED_BYTES: u64 = 32 * 1024 * 1024 * 1024;
+
+/// No archive writes more members than this. The largest toolchains ship tens
+/// of thousands of files; millions of empty members exist only to exhaust
+/// inodes.
+const MAX_ENTRIES: u64 = 250_000;
+
+/// What one extraction may still write: bytes and entries.
+///
+/// Archive headers and compressed streams are written by someone else, so the
+/// size an archive expands to is untrusted input. One budget per extraction,
+/// charged by every extractor, keeps a small bomb from filling the disk under
+/// the ketch root.
+#[derive(Debug)]
+pub struct Budget {
+    bytes_left: u64,
+    entries_left: u64,
+    limit_bytes: u64,
+    limit_entries: u64,
+}
+
+impl Budget {
+    /// An explicit budget; tests use small ones.
+    pub fn new(limit_bytes: u64, limit_entries: u64) -> Self {
+        Budget {
+            bytes_left: limit_bytes,
+            entries_left: limit_entries,
+            limit_bytes,
+            limit_entries,
+        }
+    }
+
+    /// The budget for an archive of `compressed` bytes: a ratio of its size,
+    /// never below the floor and never above the ceiling.
+    pub fn for_compressed_len(compressed: u64) -> Self {
+        let bytes = compressed
+            .saturating_mul(MAX_EXPANSION_RATIO)
+            .clamp(MIN_UNPACKED_BYTES, MAX_UNPACKED_BYTES);
+        Budget::new(bytes, MAX_ENTRIES)
+    }
+
+    /// The budget for the archive at `src`.
+    pub fn for_archive(src: &Path) -> Result<Self> {
+        let len = std::fs::metadata(src).map_err(|e| Error::io(src, e))?.len();
+        Ok(Budget::for_compressed_len(len))
+    }
+
+    /// Charge one member (file, directory or link).
+    pub fn entry(&mut self) -> Result<()> {
+        if self.entries_left == 0 {
+            return Err(Error::msg(format!(
+                "refusing archive with more than {} entries",
+                self.limit_entries
+            )));
+        }
+        self.entries_left -= 1;
+        Ok(())
+    }
+
+    /// Charge `n` bytes about to be written.
+    pub fn bytes(&mut self, n: u64) -> Result<()> {
+        if n > self.bytes_left {
+            return Err(self.too_large());
+        }
+        self.bytes_left -= n;
+        Ok(())
+    }
+
+    fn too_large(&self) -> Error {
+        Error::msg(format!(
+            "refusing archive that unpacks to more than {}",
+            crate::text::bytes(self.limit_bytes)
+        ))
+    }
+
+    /// Wrap `inner` so every byte written through it is charged here.
+    pub fn writer<W: Write>(&mut self, inner: W) -> BudgetWriter<'_, W> {
+        BudgetWriter {
+            budget: self,
+            inner,
+        }
+    }
+}
+
+/// A writer that fails once its [`Budget`] runs out, before writing the
+/// bytes that would overrun it.
+pub struct BudgetWriter<'a, W> {
+    budget: &'a mut Budget,
+    inner: W,
+}
+
+impl<W: Write> Write for BudgetWriter<'_, W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if buf.len() as u64 > self.budget.bytes_left {
+            return Err(std::io::Error::other(self.budget.too_large().to_string()));
+        }
+        let n = self.inner.write(buf)?;
+        self.budget.bytes_left -= n as u64;
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
 /// First 512 bytes of a file, or fewer if it is shorter.
 pub fn read_head(path: &Path) -> Result<Vec<u8>> {
     let mut file = File::open(path).map_err(|e| Error::io(path, e))?;
@@ -77,8 +193,16 @@ pub fn read_head(path: &Path) -> Result<Vec<u8>> {
 /// This is the guard against "zip slip" / tar traversal: a member named
 /// `../../../.zshrc` must never be honoured, no matter who published it.
 /// Absolute paths and `..` components are refused outright; the result is
-/// always a relative path safe to join onto the destination.
+/// always a relative path safe to join onto the destination. On Windows a
+/// component that names a device or loses a trailing dot or space is refused
+/// too.
 pub fn safe_member_path(raw: &Path) -> Result<PathBuf> {
+    safe_member_path_for(raw, cfg!(windows))
+}
+
+/// [`safe_member_path`] with the Windows rules switched on or off, so both are
+/// tested on every host.
+fn safe_member_path_for(raw: &Path, windows: bool) -> Result<PathBuf> {
     let text = raw.to_string_lossy();
     // Check the raw string before `components()`: on Windows a backslash is a
     // separator, so `a\b` would otherwise become the ordinary relative path
@@ -112,7 +236,10 @@ pub fn safe_member_path(raw: &Path) -> Result<PathBuf> {
             Component::Normal(part) => {
                 let part_text = part.to_string_lossy();
                 // NTFS stream / drive-relative crumbs that are not a full root.
-                if part_text.contains(':') || part_text.contains('\\') {
+                if part_text.contains(':')
+                    || part_text.contains('\\')
+                    || (windows && crate::config::windows_unusable_component(&part_text))
+                {
                     return Err(Error::msg(format!(
                         "refusing archive entry with unsafe name: {}",
                         raw.display()
@@ -133,6 +260,63 @@ pub fn safe_member_path(raw: &Path) -> Result<PathBuf> {
         return Err(Error::msg("refusing archive entry with an empty name"));
     }
     Ok(safe)
+}
+
+/// More links than this on one path is a loop, as the kernel decides too.
+const MAX_LINK_HOPS: u32 = 40;
+
+/// True when `path`, with every symlink along it and at its end followed,
+/// stays under `root`.
+///
+/// A link target checked on its own text cannot answer this: `L -> .` makes
+/// `N -> L/..` look one level deep while it resolves to the parent of the
+/// payload. Links are followed one component at a time rather than through
+/// `canonicalize`, so a dangling link is judged by where it would point, not
+/// waved through because it does not resolve yet. Anything that cannot be
+/// read, or loops, counts as outside.
+pub(crate) fn resolves_inside(path: &Path, root: &Path) -> bool {
+    let mut hops = 0;
+    match (resolve(root, &mut hops), resolve(path, &mut hops)) {
+        (Some(root), Some(path)) => path.starts_with(root),
+        _ => false,
+    }
+}
+
+/// `path` with every existing symlink on it followed and `..` applied, or
+/// `None` on a loop or an unreadable entry.
+fn resolve(path: &Path, hops: &mut u32) -> Option<PathBuf> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir().ok()?.join(path)
+    };
+    let mut resolved = PathBuf::new();
+    for component in absolute.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir => resolved.push(component.as_os_str()),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                resolved.pop();
+            }
+            Component::Normal(name) => {
+                let next = resolved.join(name);
+                match std::fs::symlink_metadata(&next) {
+                    Ok(meta) if meta.file_type().is_symlink() => {
+                        *hops += 1;
+                        if *hops > MAX_LINK_HOPS {
+                            return None;
+                        }
+                        let target = std::fs::read_link(&next).ok()?;
+                        resolved = resolve(&resolved.join(target), hops)?;
+                    }
+                    Ok(_) => resolved = next,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => resolved = next,
+                    Err(_) => return None,
+                }
+            }
+        }
+    }
+    Some(resolved)
 }
 
 /// If the payload is a single wrapper directory, return it.
@@ -214,6 +398,25 @@ mod tests {
             safe_member_path(Path::new("rg-14/complete/rg.1")).unwrap(),
             PathBuf::from("rg-14/complete/rg.1")
         );
+    }
+
+    #[test]
+    fn windows_device_names_and_trailing_dots_are_refused_there_only() {
+        for raw in [
+            "bin/nul",
+            "bin/NUL.exe",
+            "COM1",
+            "docs/con.txt",
+            "a/foo.",
+            "a/foo /b",
+            "x/a<b",
+        ] {
+            assert!(safe_member_path_for(Path::new(raw), true).is_err(), "{raw}");
+            assert!(safe_member_path_for(Path::new(raw), false).is_ok(), "{raw}");
+        }
+        for raw in ["bin/console", "lib/nullable.so", "com10", "./bin/tool.exe"] {
+            assert!(safe_member_path_for(Path::new(raw), true).is_ok(), "{raw}");
+        }
     }
 
     #[test]

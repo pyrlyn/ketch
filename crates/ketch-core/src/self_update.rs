@@ -174,16 +174,7 @@ fn canonical_dir(path: &Path) -> Result<PathBuf> {
         }
         std::fs::create_dir_all(path).map_err(|e| Error::io(path, e))?;
     }
-    dunce::canonicalize(path).map_err(|e| Error::io(path, e))
-}
-
-fn remove_any(path: &Path) -> std::io::Result<()> {
-    match std::fs::symlink_metadata(path) {
-        Ok(meta) if meta.is_dir() => std::fs::remove_dir_all(path),
-        Ok(_) => std::fs::remove_file(path),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e),
-    }
+    fs_kit::path::canonicalize(path).map_err(|e| Error::io(path, e))
 }
 
 /// Record a bootstrap link or copy outside `<root>/bin`, for install.sh.
@@ -249,7 +240,7 @@ fn clear_bootstrap_destination(link: &Path, recorded: &[LinkRecord]) -> Result<(
     match std::fs::symlink_metadata(link) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Ok(_) if recorded.iter().any(|record| record.link == link) => {
-            remove_any(link).map_err(|e| Error::io(link, e))
+            fs_kit::tree::remove_any(link).map_err(|e| Error::fs_kit(link, e))
         }
         Ok(_) => Err(Error::msg(format!(
             "{} already exists and was not installed by ketch for this package; move it aside first",
@@ -414,12 +405,30 @@ pub fn install_completion_script(
 /// real file rather than the link pointing at it.
 pub fn current_exe() -> Result<PathBuf> {
     let exe = std::env::current_exe()?;
-    Ok(dunce::canonicalize(&exe).unwrap_or(exe))
+    Ok(fs_kit::path::canon(&exe))
+}
+
+/// How `update` lists ketch's own releases. Without `pre` it asks for
+/// GitHub's latest release, as it always has; with it, the newest release
+/// including prereleases, chosen by the same `select_release` every package
+/// goes through, which also passes over the macOS app's `desktop-v*` tags.
+pub fn release_opts(pre: bool) -> ListOpts {
+    ListOpts {
+        include_prerelease: pre,
+        ..ListOpts::default()
+    }
 }
 
 /// Fetch the latest ketch release and install it: as an upgrade of the `ketch`
 /// package when there is one, otherwise by replacing this binary in place.
-pub fn update(cx: &Ctx<'_>, force: bool, dry_run: bool, docs: SelfDocs) -> Result<SelfUpdate> {
+/// `pre` widens "latest" to prereleases.
+pub fn update(
+    cx: &Ctx<'_>,
+    force: bool,
+    dry_run: bool,
+    pre: bool,
+    docs: SelfDocs,
+) -> Result<SelfUpdate> {
     let (cfg, report) = (cx.cfg, cx.report);
     let _lock = Lock::acquire(cx)?;
     let mut state = State::load(cfg)?;
@@ -451,7 +460,7 @@ pub fn update(cx: &Ctx<'_>, force: bool, dry_run: bool, docs: SelfDocs) -> Resul
     report.step("checking", &cfg.self_repo);
     let release = report
         .activity("checking for updates")
-        .run(|| source.resolve(&cfg.self_repo, &VersionSpec::Latest, &ListOpts::default()))?;
+        .run(|| source.resolve(&cfg.self_repo, &VersionSpec::Latest, &release_opts(pre)))?;
     let to = release.version.clone();
 
     if to <= from && !force {
@@ -834,8 +843,8 @@ pub fn uninstall_plan(cfg: &Config, keep_packages: bool, no_brew: bool) -> Resul
         powershell_profiles: crate::shell::powershell_profiles_with_block(),
         cask: (!no_brew).then(cask_dir).flatten(),
         exe: current_exe().ok().filter(|exe| {
-            let root = dunce::canonicalize(&cfg.root).unwrap_or_else(|_| cfg.root.clone());
-            let exe = dunce::canonicalize(exe).unwrap_or_else(|_| exe.clone());
+            let root = fs_kit::path::canon(&cfg.root);
+            let exe = fs_kit::path::canon(exe);
             // Windows Path::starts_with is case-sensitive; a root typed with
             // different ASCII case than the running image must still count.
             crate::platform::path_is_within(&exe, &root)
@@ -990,12 +999,16 @@ fn doskey_file_exists(cfg: &Config) -> bool {
 /// root the parent of that directory, which is the user's home in the worst
 /// case. When the root *is* the home directory, the named children (`bin`,
 /// `store`, `cache`, …) are not emptied either — they are shared with the
-/// rest of the account. A dedicated root like `~/.ketch` is still wiped.
+/// rest of the account, and neither are those of any root ketch did not
+/// create; see [`owns_root`]. A dedicated root like `~/.ketch` is still wiped.
 /// `path` is `root` or below it, compared on resolved paths where both
 /// exist: a root spelled with a Windows short name (`RUNNER~1`) must still
 /// contain the binary spelled with the long one.
 fn is_within(path: &Path, root: &Path) -> bool {
-    match (dunce::canonicalize(path), dunce::canonicalize(root)) {
+    match (
+        fs_kit::path::canonicalize(path),
+        fs_kit::path::canonicalize(root),
+    ) {
         (Ok(path), Ok(root)) => path.starts_with(root),
         _ => path.starts_with(root),
     }
@@ -1018,7 +1031,7 @@ fn remove_root_at(
     finish: impl FnOnce(&Path, &[PathBuf]) -> bool,
 ) -> (Vec<PathBuf>, bool) {
     let (cfg, report) = (cx.cfg, cx.report);
-    let wipe = home.is_none_or(|h| cfg.root != h);
+    let wipe = owns_root(cfg, home);
     let mut removed = Vec::new();
     let mut left = Vec::new();
     let dirs = [
@@ -1029,12 +1042,14 @@ fn remove_root_at(
         &cfg.plugin_dir,
         &cfg.registry_dir,
     ];
+    let marker = cfg.root_marker();
     let files = [
         &cfg.state_file,
         &cfg.stats_db,
         &cfg.config_file,
         &cfg.lock_file,
         &cfg.registry_meta,
+        &marker,
     ];
     for dir in dirs {
         remove_owned_dir(dir, wipe, &mut removed, &mut left, report);
@@ -1082,6 +1097,37 @@ fn remove_root_at(
         }
     }
     (removed, false)
+}
+
+/// Whether the named children of the root are ketch's to empty.
+///
+/// Only a root ketch created (it carries the marker) or the default
+/// `~/.ketch` qualifies: a root like `/usr/local` or `~/.local` that existed
+/// before ketch shares `bin/` and `cache/` with other programs. The home
+/// directory, or anything holding it, never does, whatever it carries.
+fn owns_root(cfg: &Config, home: Option<&Path>) -> bool {
+    match home {
+        Some(home) if contains_dir(&cfg.root, home) => false,
+        Some(home) if same_dir(&cfg.root, &home.join(".ketch")) => true,
+        _ => cfg.root_marker().is_file(),
+    }
+}
+
+/// Resolved and case-folded, so a symlink or another spelling of the same
+/// directory compares equal. Folding on a case-sensitive file system can only
+/// call two directories the same, which errs towards keeping files.
+fn folded(path: &Path) -> PathBuf {
+    let resolved = fs_kit::path::canon(path);
+    PathBuf::from(resolved.to_string_lossy().to_lowercase())
+}
+
+fn same_dir(a: &Path, b: &Path) -> bool {
+    folded(a) == folded(b)
+}
+
+/// `outer` is `inner` or one of its ancestors.
+fn contains_dir(outer: &Path, inner: &Path) -> bool {
+    folded(inner).starts_with(folded(outer))
 }
 
 fn remove_owned_dir(
@@ -1258,7 +1304,7 @@ fn mise_tool_dir_in(exe: &Path, data_dirs: &[PathBuf]) -> Option<PathBuf> {
     data_dirs.iter().find_map(|data| {
         let installs = data.join("installs");
         // The data dir may itself sit behind a symlink; `exe` is canonical.
-        let installs = dunce::canonicalize(&installs).unwrap_or(installs);
+        let installs = fs_kit::path::canon(&installs);
         if !crate::platform::path_is_strict_within(exe, &installs) {
             return None;
         }
@@ -1380,6 +1426,37 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn pre_widens_the_self_release_to_the_newest_cli_prerelease_only() {
+        let release = |tag: &str, prerelease: bool| crate::model::Release {
+            version: crate::model::Version::parse(tag),
+            tag: tag.to_string(),
+            prerelease,
+            draft: false,
+            published_at: None,
+            notes: None,
+            assets: Vec::new(),
+        };
+        let listing = vec![
+            release("desktop-v9999.0.0", false),
+            release("desktop-appcast", true),
+            release("v2.0.0-rc.1", true),
+            release("v1.0.0", false),
+        ];
+        let pick = |pre: bool| {
+            crate::source::pick(
+                "o/ketch",
+                listing.clone(),
+                &VersionSpec::Latest,
+                &release_opts(pre),
+            )
+            .map(|r| r.tag)
+            .ok()
+        };
+        assert_eq!(pick(false).as_deref(), Some("v1.0.0"));
+        assert_eq!(pick(true).as_deref(), Some("v2.0.0-rc.1"));
+    }
 
     #[test]
     fn a_caskroom_directory_is_what_says_brew_installed_ketch() {
@@ -1524,6 +1601,93 @@ mod tests {
     }
 
     #[test]
+    fn uninstall_keeps_foreign_files_under_a_root_ketch_did_not_create() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let home = tmp.path().join("home");
+        std::fs::create_dir_all(&home).expect("home");
+        // `KETCH_ROOT=/usr/local`: a shared prefix that existed before ketch.
+        let root = tmp.path().join("usr-local");
+        let cfg =
+            Config::load(Some(root.clone()), &crate::report::Report::silent()).expect("config");
+        std::fs::create_dir_all(&cfg.bin_dir).expect("bin");
+        std::fs::write(cfg.bin_dir.join("someone-elses"), b"stay").expect("bin file");
+        std::fs::create_dir_all(&cfg.cache_dir).expect("cache");
+        std::fs::write(cfg.cache_dir.join("theirs"), b"stay").expect("cache file");
+
+        remove_root_at(
+            &Ctx::new(&cfg, &Report::silent()),
+            &cfg.root,
+            Some(&home),
+            |_, _| false,
+        );
+
+        assert_eq!(
+            std::fs::read(cfg.bin_dir.join("someone-elses")).expect("kept bin file"),
+            b"stay"
+        );
+        assert_eq!(
+            std::fs::read(cfg.cache_dir.join("theirs")).expect("kept cache file"),
+            b"stay"
+        );
+    }
+
+    #[test]
+    fn uninstall_wipes_the_default_root_without_a_marker() {
+        // Roots made before the marker existed: `~/.ketch` is ketch's by name.
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let home = tmp.path().join("home");
+        let root = home.join(".ketch");
+        let cfg =
+            Config::load(Some(root.clone()), &crate::report::Report::silent()).expect("config");
+        std::fs::create_dir_all(&cfg.bin_dir).expect("bin");
+        std::fs::write(cfg.bin_dir.join("gone"), b"x").expect("bin file");
+
+        remove_root_at(
+            &Ctx::new(&cfg, &Report::silent()),
+            &cfg.root,
+            Some(&home),
+            |_, _| panic!("nothing was left to finish later"),
+        );
+
+        assert!(!root.exists(), "the default root goes whole");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn uninstall_does_not_wipe_home_reached_through_a_symlink() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let home = tmp.path().join("home");
+        std::fs::create_dir_all(&home).expect("home");
+        let link = tmp.path().join("home-link");
+        std::os::unix::fs::symlink(&home, &link).expect("symlink");
+        let cfg = Config::load(Some(link), &crate::report::Report::silent()).expect("config");
+        // Even a marker does not make the home directory ketch's to empty.
+        cfg.mark_root().expect("marker");
+        std::fs::create_dir_all(&cfg.bin_dir).expect("bin");
+        std::fs::write(cfg.bin_dir.join("keep-me"), b"stay").expect("bin file");
+
+        remove_root_at(
+            &Ctx::new(&cfg, &Report::silent()),
+            &cfg.root,
+            Some(&home),
+            |_, _| false,
+        );
+
+        assert!(home.join("bin").join("keep-me").exists());
+    }
+
+    #[test]
+    fn same_dir_folds_case_and_trailing_separators() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let home = tmp.path().join("Home");
+        std::fs::create_dir_all(&home).expect("home");
+        let shouted = tmp.path().join("HOME");
+        assert!(same_dir(&shouted, &home));
+        assert!(contains_dir(tmp.path(), &home));
+        assert!(!contains_dir(&home, tmp.path()));
+    }
+
+    #[test]
     fn uninstall_wipes_a_dedicated_root() {
         let tmp = tempfile::tempdir().expect("temp dir");
         let home = tmp.path().join("home");
@@ -1533,6 +1697,7 @@ mod tests {
             Config::load(Some(root.clone()), &crate::report::Report::silent()).expect("config");
         std::fs::create_dir_all(&cfg.bin_dir).expect("bin");
         std::fs::write(cfg.bin_dir.join("gone"), b"x").expect("bin file");
+        cfg.mark_root().expect("marker");
 
         remove_root_at(
             &Ctx::new(&cfg, &Report::silent()),
@@ -1562,6 +1727,7 @@ mod tests {
         std::fs::create_dir_all(&locked).expect("store");
         std::fs::write(locked.join("ketch"), b"running").expect("binary");
         std::fs::create_dir_all(&cfg.bin_dir).expect("bin");
+        cfg.mark_root().expect("marker");
         std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o555))
             .expect("read-only");
 
@@ -1623,6 +1789,9 @@ mod tests {
             retained: Vec::new(),
             provenance: None,
             bin_choice: None,
+            channel: Default::default(),
+            draft: false,
+            published_at: None,
         }
     }
 
@@ -1643,7 +1812,7 @@ mod tests {
         let bootstrap = tmp.path().join("bootstrap");
         record_bootstrap_link(&Ctx::new(&cfg, &Report::silent()), &mut state, &bootstrap).unwrap();
 
-        let link = dunce::canonicalize(&bootstrap)
+        let link = fs_kit::path::canonicalize(&bootstrap)
             .unwrap()
             .join(bootstrap_binary_name());
         #[cfg(unix)]
@@ -1653,8 +1822,8 @@ mod tests {
                 "the bootstrap path must follow the bin-dir binary"
             );
             assert_eq!(
-                dunce::canonicalize(std::fs::read_link(&link).unwrap()).unwrap(),
-                dunce::canonicalize(&bin).unwrap()
+                fs_kit::path::canonicalize(std::fs::read_link(&link).unwrap()).unwrap(),
+                fs_kit::path::canonicalize(&bin).unwrap()
             );
         }
         #[cfg(windows)]
@@ -1666,8 +1835,8 @@ mod tests {
         assert_eq!(pkg.links.len(), 1);
         assert_eq!(pkg.links[0].link, link);
         assert_eq!(
-            dunce::canonicalize(&pkg.links[0].target).unwrap(),
-            dunce::canonicalize(&bin).unwrap()
+            fs_kit::path::canonicalize(&pkg.links[0].target).unwrap(),
+            fs_kit::path::canonicalize(&bin).unwrap()
         );
     }
 
@@ -1841,6 +2010,7 @@ mod tests {
         let cfg = Config::load(Some(tmp.path().join(".ketch")), &Report::silent()).expect("config");
         std::fs::create_dir_all(&cfg.bin_dir).expect("bin");
         std::fs::write(cfg.bin_dir.join("ketch"), b"bin").expect("bin file");
+        cfg.mark_root().expect("marker");
         let root = cfg.root.clone();
         let lock_file = cfg.lock_file.clone();
 
@@ -1915,6 +2085,51 @@ mod tests {
         assert!(
             removed.iter().any(|p| p == &fifo),
             "the shell file was not reported removed: {removed:?}"
+        );
+    }
+
+    /// Stands in for Windows refusing to delete the running `ketch.exe`: a
+    /// directory is something `remove_file` rejects on every OS.
+    #[test]
+    fn uninstall_warns_and_finishes_when_the_running_binary_cannot_be_removed() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let cfg = Config::load(Some(tmp.path().join(".ketch")), &Report::silent()).expect("config");
+        std::fs::create_dir_all(&cfg.root).expect("root");
+        let shell = tmp.path().join(".bashrc");
+        std::fs::write(
+            &shell,
+            "# kept\n# >>> ketch >>>\nexport PATH=\"/tmp/ketch/bin:$PATH\"\n# <<< ketch <<<\n",
+        )
+        .expect("shell file");
+        let exe = tmp.path().join("ketch.exe");
+        std::fs::create_dir(&exe).expect("unremovable exe");
+
+        let plan = UninstallPlan {
+            shell_files: vec![shell.clone()],
+            exe: Some(exe.clone()),
+            ..UninstallPlan::default()
+        };
+        let recorder = std::sync::Arc::new(crate::report::Recorder::default());
+        let report = Report::shared(recorder.clone());
+        let removed = uninstall_self(&Ctx::new(&cfg, &report), &plan)
+            .expect("a binary that cannot be removed must not fail the uninstall");
+
+        assert!(
+            removed.iter().any(|p| p == &shell),
+            "the shell file was not reported removed: {removed:?}"
+        );
+        assert!(
+            !removed.iter().any(|p| p == &exe),
+            "the binary was reported removed: {removed:?}"
+        );
+        let exe_shown = exe.display().to_string();
+        assert!(
+            recorder.events().iter().any(|event| matches!(
+                event,
+                crate::report::Event::Warn { detail } if detail.contains(&exe_shown)
+            )),
+            "no warning named the binary: {:?}",
+            recorder.events()
         );
     }
 

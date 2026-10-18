@@ -13,9 +13,10 @@
 
 use ketch_core::changelog::{self, Entry, Origin};
 use ketch_core::config::Config;
-use ketch_core::listing::{self, Latest, Local, Row};
+use ketch_core::listing::{Latest, Row};
 use ketch_core::model::{InstalledPackage, Manifest, SourceInfo};
 use ketch_core::platform::{CheckStatus, DoctorCheck};
+use ketch_core::report::Report;
 use ketch_core::{info, shell, stats};
 
 /// One installed package.
@@ -99,6 +100,12 @@ pub struct InstallOptions {
     /// Fail rather than trust a download no checksum was published for.
     #[uniffi(default = false)]
     pub require_checksum: bool,
+    /// Replace a package installed against a published checksum with a
+    /// release that publishes none: the person's consent, as the CLI's
+    /// `--allow-unverified` (or `--yes`) gives it. Without it that update
+    /// fails with a verification error.
+    #[uniffi(default = false)]
+    pub allow_unverified: bool,
     /// Which of several binaries sharing the package's name to link.
     #[uniffi(default = None)]
     pub bin: Option<String>,
@@ -111,6 +118,7 @@ impl Default for InstallOptions {
             prerelease: false,
             link: true,
             require_checksum: false,
+            allow_unverified: false,
             bin: None,
         }
     }
@@ -195,15 +203,11 @@ impl Upgrade {
         let Latest::Found(found) = &row.latest else {
             return None;
         };
-        let unpinned = Local {
-            pinned: false,
-            ..local.clone()
-        };
-        listing::update_available(&unpinned, found).then(|| Upgrade {
+        row.newer(&Report::silent()).then(|| Upgrade {
             name: local.name.clone(),
-            installed: local.version.to_string(),
-            latest: found.version.to_string(),
-            tag: found.tag.clone(),
+            installed: local.build.version.to_string(),
+            latest: found.release.version.to_string(),
+            tag: found.release.tag.clone(),
             pinned: local.pinned,
             held_by: None,
         })
@@ -539,7 +543,7 @@ impl From<&Config> for Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ketch_core::listing::Found;
+    use ketch_core::listing::{Found, Local};
     use ketch_core::model::{
         LinkKind, LinkRecord, ManifestOrigin, PackageRef, RetainedVersion, TargetSpec, Version,
     };
@@ -585,6 +589,9 @@ mod tests {
             }],
             provenance: None,
             bin_choice: None,
+            channel: Default::default(),
+            draft: false,
+            published_at: None,
         }
     }
 
@@ -608,20 +615,34 @@ mod tests {
     }
 
     fn row(pinned: bool, latest: &str) -> Row {
+        let mut pkg = installed();
+        pkg.name = "rg".into();
+        pkg.source = PackageRef::github("BurntSushi/ripgrep");
+        pkg.version = Version::parse("14.0.0");
+        pkg.tag = "14.0.0".into();
+        pkg.pinned = pinned;
         let local = Local {
-            name: "rg".into(),
-            source: PackageRef::github("BurntSushi/ripgrep"),
-            version: Version::parse("14.0.0"),
-            tag: "14.0.0".into(),
+            name: pkg.name.clone(),
+            source: pkg.source.clone(),
+            build: ketch_core::install::InstalledBuild::of(&pkg),
             pinned,
             retained: Vec::new(),
             prerelease: false,
+            draft: false,
         };
         let mut rows = ketch_core::listing::merge(vec![local], Vec::new());
-        rows[0].latest = Latest::Found(Found {
-            version: Version::parse(latest),
-            tag: latest.into(),
-        });
+        rows[0].latest = Latest::Found(Found::new(
+            ketch_core::model::Release {
+                version: Version::parse(latest),
+                tag: latest.into(),
+                prerelease: false,
+                draft: false,
+                published_at: None,
+                notes: None,
+                assets: Vec::new(),
+            },
+            false,
+        ));
         rows.remove(0)
     }
 

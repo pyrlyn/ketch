@@ -78,16 +78,19 @@ pub fn install(cfg: &Config, args: InstallArgs) -> Result<()> {
             spec: PackageSpec::parse(raw),
             force: args.force,
             prerelease: args.prerelease,
+            draft: args.draft,
             link: !args.no_link,
             require_checksum: args.require_checksum || cfg.require_checksums,
             asset_override: args.asset.clone(),
             expected_sha256: None,
+            expected_published: None,
             // --name applies to the single package being installed.
             name_override: if i == 0 { name_override.clone() } else { None },
             bin: args.bin.clone(),
             locked_bin: None,
             // `--yes` has already answered the question this would ask.
             offer_update: !args.yes,
+            allow_unverified: args.allow_unverified || args.yes,
             cancel: Cancel::new(),
         })
         .collect();
@@ -200,10 +203,28 @@ pub fn uninstall(cfg: &Config, args: UninstallArgs) -> Result<()> {
         }
     }
     if !missing.is_empty() {
+        // A folder a failed uninstall left behind has no record to match, so
+        // this is the only command that will ever take it away. It is still a
+        // whole folder deleted on a name nothing resolved, so it is asked for.
+        let leftovers: Vec<(&String, std::path::PathBuf)> = missing
+            .iter()
+            .filter_map(|name| {
+                install::leftover_package_dir(cfg, &state, name).map(|dir| (*name, dir))
+            })
+            .collect();
+        if !leftovers.is_empty() {
+            let shown: Vec<String> = leftovers
+                .iter()
+                .map(|(_, dir)| dir.display().to_string())
+                .collect();
+            let question = format!("remove leftover {}?", shown.join(", "));
+            if args.yes || ui::confirm(&question, false) {
+                for (name, _) in &leftovers {
+                    install::remove_package_dir(cfg, name, crate::ui::report());
+                }
+            }
+        }
         for name in missing {
-            // A folder a failed uninstall left behind has no record to match,
-            // so this is the only command that will ever take it away.
-            install::remove_package_dir(cfg, name, crate::ui::report());
             ui::bare_error(&format!("{name}: not found"));
         }
         // Exit 4, `NotInstalled`'s code, so scripts branch the same as before.
@@ -279,7 +300,7 @@ pub fn upgrade(cfg: &Config, args: UpgradeArgs) -> Result<()> {
             continue;
         }
         ui::step("checking", &pkg.name);
-        let release = match install::latest_release(&sources, &pkg, prerelease) {
+        let release = match install::latest_release(&sources, &pkg, prerelease, args.draft) {
             Ok(r) => r,
             // An unreachable source for one package must not abandon the rest.
             Err(e) => {
@@ -290,9 +311,12 @@ pub fn upgrade(cfg: &Config, args: UpgradeArgs) -> Result<()> {
             }
         };
         checked += 1;
-        // Compare versions, not tags: a retagged release is not an upgrade,
-        // and neither is a source that briefly reports an older one.
-        if release.tag == pkg.tag || release.version <= pkg.version {
+        if !install::is_upgrade(
+            crate::ui::report(),
+            &install::InstalledBuild::of(&pkg),
+            &release,
+            &install::upgrade_opts(&pkg, prerelease, args.draft),
+        ) {
             progress.inc(1);
             continue;
         }
@@ -353,15 +377,9 @@ pub fn upgrade(cfg: &Config, args: UpgradeArgs) -> Result<()> {
 
     let reqs: Vec<InstallRequest> = plan
         .iter()
-        .map(|(pkg, release)| {
-            install::upgrade_request(
-                cfg,
-                pkg,
-                &release.tag,
-                prerelease,
-                args.bin.clone(),
-                Cancel::new(),
-            )
+        .map(|(pkg, release)| InstallRequest {
+            allow_unverified: args.allow_unverified || args.yes,
+            ..install::upgrade_request(cfg, pkg, &release.tag, args.bin.clone(), Cancel::new())
         })
         .collect();
 

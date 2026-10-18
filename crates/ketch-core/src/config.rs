@@ -39,6 +39,13 @@ pub fn current_repo(repo: &str) -> &str {
 }
 pub const USER_AGENT: &str = concat!("ketch/", env!("CARGO_PKG_VERSION"));
 
+/// The marker file's name inside the root. `install.sh` and `install.ps1`
+/// write the same name when they create the root themselves.
+pub const ROOT_MARKER: &str = ".ketch-root";
+
+const ROOT_MARKER_BODY: &str =
+    "ketch created this directory; `ketch self uninstall` removes it with everything inside.\n";
+
 /// On-disk settings. Every field optional so a partial file is valid.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
@@ -69,6 +76,8 @@ pub struct ConfigFile {
     pub log_level: Option<crate::log::Level>,
     /// How a record in the log file is written.
     pub log_format: Option<crate::log::Format>,
+    /// The largest single download, in MiB.
+    pub max_download_mib: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -110,7 +119,13 @@ pub struct Config {
     pub log_file: PathBuf,
     pub log_level: crate::log::Level,
     pub log_format: crate::log::Format,
+    /// The largest single download, in bytes. Never zero.
+    pub max_download: u64,
 }
+
+/// `max_download_mib` when neither the file nor the environment sets it: well
+/// above any command-line tool, well below a disk.
+pub const DEFAULT_MAX_DOWNLOAD_MIB: u64 = 4096;
 
 impl Config {
     /// Builds the effective configuration from command-line, environment, file, and default settings.
@@ -240,6 +255,26 @@ impl Config {
             })?),
             None => file.jobs,
         };
+        let max_download_mib = match std::env::var("KETCH_MAX_DOWNLOAD_MIB")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+        {
+            Some(v) => Some(v.trim().parse::<u64>().map_err(|_| {
+                Error::Config(format!(
+                    "KETCH_MAX_DOWNLOAD_MIB must be a whole number, not `{v}`"
+                ))
+            })?),
+            None => file.max_download_mib,
+        };
+        // Zero would refuse every download; that is a typo, not a policy.
+        if max_download_mib == Some(0) {
+            return Err(Error::Config(
+                "max_download_mib must be at least 1".to_string(),
+            ));
+        }
+        let max_download = max_download_mib
+            .unwrap_or(DEFAULT_MAX_DOWNLOAD_MIB)
+            .saturating_mul(1024 * 1024);
 
         Ok(Config {
             bin_dir: root.join("bin"),
@@ -285,13 +320,19 @@ impl Config {
             // the useful number is well above the core count. Capped anyway:
             // a hundred parallel requests is how a source starts refusing them.
             jobs: jobs.filter(|n| *n > 0).unwrap_or(4).min(16),
+            max_download,
             target: TargetSpec::host(),
             root,
         })
     }
 
     /// Create the directory layout. Safe to call repeatedly.
+    ///
+    /// A root this call creates is marked as ketch's; one that already
+    /// existed is not, because it may be a shared prefix like `/usr/local`
+    /// whose `bin/` holds other programs.
     pub fn ensure_dirs(&self) -> Result<()> {
+        let fresh = !self.root.exists();
         for dir in [
             &self.root,
             &self.bin_dir,
@@ -302,7 +343,23 @@ impl Config {
         ] {
             std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
         }
+        if fresh {
+            self.mark_root()?;
+        }
         Ok(())
+    }
+
+    /// The file that says ketch created the root, and so may empty it.
+    pub fn root_marker(&self) -> PathBuf {
+        self.root.join(ROOT_MARKER)
+    }
+
+    /// Record that the root is ketch's own. `ketch self uninstall` empties
+    /// the named children of a marked root; any other root keeps whatever
+    /// ketch did not record.
+    pub fn mark_root(&self) -> Result<()> {
+        let marker = self.root_marker();
+        std::fs::write(&marker, ROOT_MARKER_BODY).map_err(|e| Error::io(&marker, e))
     }
 
     /// Where a specific version of a package is unpacked.
@@ -328,6 +385,7 @@ impl Config {
             jobs: Some(4),
             log_level: Some(crate::log::Level::default()),
             log_format: Some(crate::log::Format::default()),
+            max_download_mib: Some(DEFAULT_MAX_DOWNLOAD_MIB),
             root: None,
         };
         format!(
@@ -469,26 +527,148 @@ pub fn validate_repo(what: &str, raw: String) -> Result<String> {
 /// Make a string safe to use as one path component. Version tags can legally
 /// contain `/` (e.g. `release/1.2`), which would otherwise escape the store.
 pub fn sanitize_component(raw: &str) -> String {
+    sanitize_component_for(raw, cfg!(windows))
+}
+
+/// [`sanitize_component`] with the Windows rules switched on or off, so both
+/// are tested on every host.
+fn sanitize_component_for(raw: &str, windows: bool) -> String {
     let cleaned: String = raw
         .chars()
         .map(|c| match c {
             '/' | '\\' | ':' | '\0' => '-',
             c if c.is_control() => '-',
             '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}' => '-',
+            c if windows && WINDOWS_FORBIDDEN.contains(&c) => '-',
             c => c,
         })
         .collect();
     let trimmed = cleaned.trim_matches(['.', ' ', '-']).to_string();
     if trimmed.is_empty() {
         "unknown".to_string()
+    } else if windows && is_dos_device_name(&trimmed) {
+        // `nul` or `con.1` would open a device rather than name a directory.
+        format!("_{trimmed}")
     } else {
         trimmed
     }
 }
 
+/// Characters Windows refuses in a file name, besides the separators and `:`
+/// that every guard here already rejects.
+const WINDOWS_FORBIDDEN: &[char] = &['<', '>', '"', '|', '?', '*'];
+
+/// True when Windows could not use `name` as one path component as written.
+///
+/// A DOS device name (`nul`, `COM1.txt`) opens the device instead of a file,
+/// and a trailing dot or space is silently dropped, so `foo.` lands on `foo`.
+/// Pure so it is tested on every host; only Windows applies it.
+pub(crate) fn windows_unusable_component(name: &str) -> bool {
+    name.ends_with(['.', ' '])
+        || name.contains(WINDOWS_FORBIDDEN)
+        || name.contains(['\\', ':'])
+        || name.chars().any(char::is_control)
+        || is_dos_device_name(name)
+}
+
+/// `CON`, `PRN`, `AUX`, `NUL`, `CONIN$`, `CONOUT$`, `COM0`-`COM9` and
+/// `LPT0`-`LPT9` (superscript 1-3 too), in any case and with any extension:
+/// Windows reads the stem before the first dot, trailing spaces dropped.
+fn is_dos_device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name).trim_end_matches(' ');
+    let upper = stem.to_ascii_uppercase();
+    if matches!(
+        upper.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+    ) {
+        return true;
+    }
+    let port = upper
+        .strip_prefix("COM")
+        .or_else(|| upper.strip_prefix("LPT"));
+    matches!(
+        port,
+        Some(
+            "0" | "1"
+                | "2"
+                | "3"
+                | "4"
+                | "5"
+                | "6"
+                | "7"
+                | "8"
+                | "9"
+                | "\u{b9}"
+                | "\u{b2}"
+                | "\u{b3}"
+        )
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn windows_device_names_and_trailing_dots_are_unusable_there() {
+        for name in [
+            "nul",
+            "NUL",
+            "con",
+            "Aux",
+            "prn",
+            "com1",
+            "COM9",
+            "lpt1",
+            "LPT0",
+            "com\u{b9}",
+            "nul.txt",
+            "con.tar.gz",
+            "NUL .txt",
+            "conin$",
+            "CONOUT$",
+            "foo.",
+            "foo ",
+            "a<b",
+            "a>b",
+            "a\"b",
+            "a|b",
+            "a?b",
+            "a*b",
+            "a:b",
+            "a\\b",
+            "a\tb",
+        ] {
+            assert!(windows_unusable_component(name), "{name:?}");
+        }
+        for name in [
+            "console", "nullable", "com10", "lpt", "aux_", "_nul", "foo.txt", ".hidden",
+        ] {
+            assert!(!windows_unusable_component(name), "{name:?}");
+        }
+    }
+
+    #[test]
+    fn sanitizing_for_windows_never_yields_an_unusable_name() {
+        for raw in [
+            "nul",
+            "CON.1",
+            "1.0|beta",
+            "v1*",
+            "a<b>",
+            "lpt\u{b2}",
+            "x. ",
+            "aux  ",
+        ] {
+            let clean = sanitize_component_for(raw, true);
+            assert!(!windows_unusable_component(&clean), "{raw:?} -> {clean:?}");
+        }
+        assert_eq!(sanitize_component_for("nul", true), "_nul");
+        assert_eq!(sanitize_component_for("1.0|beta", true), "1.0-beta");
+        // Elsewhere those are ordinary names and stay as they were.
+        assert_eq!(sanitize_component_for("nul", false), "nul");
+        assert_eq!(sanitize_component_for("1.0|beta", false), "1.0|beta");
+    }
 
     #[test]
     fn committed_config_schema_matches_config_file() {
@@ -675,6 +855,7 @@ mod tests {
         assert_eq!(file.self_repo.as_deref(), Some(SELF_REPO));
         assert_eq!(file.registry.as_deref(), Some(REGISTRY_REPO));
         assert_eq!(file.jobs, Some(4));
+        assert_eq!(file.max_download_mib, Some(DEFAULT_MAX_DOWNLOAD_MIB));
         assert_eq!(file.log_level, Some(crate::log::Level::Info));
         assert_eq!(file.log_format, Some(crate::log::Format::Text));
         assert!(file.apps_dir.is_none());
@@ -705,6 +886,7 @@ mod tests {
             "KETCH_STRIP_QUARANTINE",
             "KETCH_AUTO_UPDATE",
             "KETCH_EMOJI",
+            "KETCH_MAX_DOWNLOAD_MIB",
         ];
         let _env = CleanEnv::take(KEYS);
         let tmp = tempfile::tempdir().unwrap();
@@ -724,6 +906,30 @@ mod tests {
         assert_eq!(cfg.jobs, 4);
         assert_eq!(cfg.log_level.to_string(), "info");
         assert_eq!(cfg.log_format.to_string(), "text");
+        assert_eq!(cfg.max_download, 4096 * 1024 * 1024);
+    }
+
+    #[test]
+    fn max_download_comes_from_the_environment_over_the_file() {
+        let _lock = ENV_GUARD.lock().unwrap();
+        let _env = CleanEnv::take(&["KETCH_ROOT", "KETCH_MAX_DOWNLOAD_MIB"]);
+        let tmp = tempfile::tempdir().unwrap();
+        let load = || {
+            Config::load(
+                Some(tmp.path().to_path_buf()),
+                &crate::report::Report::silent(),
+            )
+        };
+        std::fs::write(tmp.path().join("config.toml"), "max_download_mib = 10\n").unwrap();
+        assert_eq!(load().unwrap().max_download, 10 * 1024 * 1024);
+
+        std::env::set_var("KETCH_MAX_DOWNLOAD_MIB", "3");
+        assert_eq!(load().unwrap().max_download, 3 * 1024 * 1024);
+
+        std::env::set_var("KETCH_MAX_DOWNLOAD_MIB", "lots");
+        assert!(load().is_err());
+        std::env::set_var("KETCH_MAX_DOWNLOAD_MIB", "0");
+        assert!(load().is_err());
     }
 
     #[test]
@@ -918,5 +1124,29 @@ mod tests {
     fn ketch_emoji_0_turns_them_off_over_the_file() {
         assert!(!emoji_with("emoji = true\n", Some("0")));
         assert!(emoji_with("emoji = false\n", Some("1")));
+    }
+
+    #[test]
+    fn ensure_dirs_marks_a_root_it_creates() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = Config::load(
+            Some(tmp.path().join("fresh")),
+            &crate::report::Report::silent(),
+        )
+        .unwrap();
+        cfg.ensure_dirs().unwrap();
+        assert!(cfg.root_marker().is_file());
+    }
+
+    #[test]
+    fn ensure_dirs_does_not_mark_a_root_that_already_existed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = Config::load(
+            Some(tmp.path().to_path_buf()),
+            &crate::report::Report::silent(),
+        )
+        .unwrap();
+        cfg.ensure_dirs().unwrap();
+        assert!(!cfg.root_marker().exists());
     }
 }

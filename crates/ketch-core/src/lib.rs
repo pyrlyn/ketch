@@ -25,6 +25,7 @@ pub mod doctor;
 pub mod error;
 pub mod extra;
 pub mod extract;
+pub(crate) mod fsio;
 pub mod hooks;
 pub(crate) mod http;
 pub mod import;
@@ -38,8 +39,10 @@ pub mod manifest;
 pub mod model;
 pub mod platform;
 pub mod process;
+#[cfg(feature = "push")]
 pub mod push;
 pub mod registry;
+pub mod releases;
 pub mod report;
 pub mod resolve;
 pub mod self_update;

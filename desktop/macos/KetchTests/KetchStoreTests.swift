@@ -267,6 +267,34 @@ import Testing
         #expect(store.searchResults.map(\.name) == ["jq"])
     }
 
+    @Test func aSlowerOlderSearchDoesNotReplaceANewerOne() async throws {
+        let core = FakeKetchCore()
+        core.delay("search ", by: .milliseconds(600))
+        let store = makeStore(core)
+
+        let older = Task { await store.search("") }
+        try await Task.sleep(for: .milliseconds(100))
+        await store.search("json")
+        await older.value
+
+        #expect(core.calls == ["search json", "search "])
+        #expect(store.searchResults.map(\.name) == ["jq"])
+    }
+
+    @Test func aCancelledChangelogRequestGetsNoReply() async throws {
+        let core = FakeKetchCore()
+        core.delay("changelog ripgrep", by: .milliseconds(300))
+        let store = makeStore(core)
+
+        let request = Task { await store.changelog(for: "ripgrep", from: "14.1.0", to: nil) }
+        try await Task.sleep(for: .milliseconds(50))
+        request.cancel()
+
+        #expect(await request.value == nil)
+        #expect(core.calls == ["changelog ripgrep"])
+        #expect(store.errorMessage == nil)
+    }
+
     @Test func doctorLoadsFindings() async {
         let store = makeStore()
 

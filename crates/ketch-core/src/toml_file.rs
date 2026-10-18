@@ -34,6 +34,8 @@ pub(crate) fn render<T: Serialize>(value: &T, what: impl Into<String>) -> Result
 /// Parse `text` as TOML and return it as a JSON value, for validating a file
 /// against a JSON Schema or handing it to code that works on `serde_json`.
 /// `what` names the file in either step's error.
+// Outside tests only `push` validates a file this way.
+#[cfg(any(test, feature = "push"))]
 pub(crate) fn to_json(text: &str, what: impl Into<String>) -> Result<serde_json::Value> {
     let what = what.into();
     let parsed: toml::Value = parse(text, what.as_str())?;

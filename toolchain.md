@@ -6,9 +6,11 @@ Project programs and direct packages from manifests.
 
 | Program | How to install | Why here | Source |
 | --- | --- | --- | --- |
+| sccache | mise (`sccache`, Linux and macOS; `mise.toml` `[env]` makes it the rustc wrapper where installed) | Compiler cache; CI uses a Cloudflare R2 bucket when the `R2_*` secrets exist | https://github.com/mozilla/sccache |
 | mise | brew / curl, then `mise install` | Pinned tool versions | https://github.com/jdx/mise |
 | cargo-cache | mise | `just cache` / `just cache-autoclean`; the shared cargo home fills up | https://github.com/matthiaskrgr/cargo-cache |
 | cargo-nextest | global (cargo install) | Parallel test runner | https://github.com/nextest-rs/nextest |
+| cargo-hakari | mise (`cargo:cargo-hakari`) | Keeps the `workspace-hack` crate unified so shared dependencies build once; CI runs `cargo hakari verify` | https://github.com/guppy-rs/guppy |
 | node | mise | commitlint for `just lint-commits` and the commit-msg hook, and the macOS design-token generator and checks; node-based checks live in Just and CI only | https://github.com/nodejs/node |
 | jactionlint | mise (`mise.toml` pins `github:jdx/jactionlint` 2.0.2) | Lints the workflows, composite actions and dependabot.yml (the pre-push hook and `mise x -- jactionlint`); CI lints through pyrlyn/ci | https://github.com/jdx/jactionlint |
 | hk | mise (`mise.toml` pins 2.5.0) | Runs jactionlint as a pre-push hook (`hk.pkl`) | https://github.com/jdx/hk |
@@ -45,6 +47,7 @@ Project programs and direct packages from manifests.
 | bzip2 | local | https://crates.io/crates/bzip2 | Rust dependency |
 | cbindgen | local (`crates/ketch-capi`, dev) | https://github.com/mozilla/cbindgen | Generates `crates/ketch-capi/include/ketch.h`; a drift test fails when the committed header is stale |
 | clap | local | https://crates.io/crates/clap | CLI |
+| shell-completions | local | https://crates.io/crates/shell-completions | Shared clap shell scripts and Clink generator; published dependency |
 | clap_complete | local | https://crates.io/crates/clap_complete | Rust dependency |
 | clap_mangen | local | https://crates.io/crates/clap_mangen | ketch's man pages, one per command (`src/man.rs`) |
 | console | local (Windows only) | https://crates.io/crates/console | Switches on virtual terminal processing so legacy conhost shows colour instead of escape codes; already in the tree through indicatif |
@@ -52,8 +55,8 @@ Project programs and direct packages from manifests.
 | diesel | local | https://crates.io/crates/diesel | SQLite ORM |
 | diesel_migrations | local | https://crates.io/crates/diesel_migrations | SQLite migrations |
 | dirs | local | https://crates.io/crates/dirs | Rust dependency |
-| dunce | local | https://crates.io/crates/dunce | Canonicalize without Windows UNC prefixes |
 | flate2 | local | https://crates.io/crates/flate2 | Rust dependency |
+| fs-kit | local | https://github.com/pyrlyn/crates/tree/main/fs-kit | Path identity without Windows UNC prefixes, atomic writes, tree copy and removal, backups |
 | hex | local | https://crates.io/crates/hex | Rust dependency |
 | indicatif | local | https://crates.io/crates/indicatif | Rust dependency |
 | insta | local | https://crates.io/crates/insta | Reviewed snapshots |
@@ -61,7 +64,7 @@ Project programs and direct packages from manifests.
 | libc | local (`crates/ketch-capi`) | https://github.com/rust-lang/libc | `malloc`/`free` for the strings `ketch-capi` returns, so GLib's `g_free` can release them |
 | libsqlite3-sys | local | https://crates.io/crates/libsqlite3-sys | `bundled` compiles SQLite into the binary. Linking the system one would make ketch's single-binary promise depend on what the host happens to ship, and the release builds both macOS architectures where that answer differs. |
 | libfuzzer-sys | local (`fuzz/`) | https://crates.io/crates/libfuzzer-sys | libFuzzer targets |
-| lzma-rs | local | https://crates.io/crates/lzma-rs | Rust dependency |
+| lzma-rust2 | local | https://crates.io/crates/lzma-rust2 | Streaming XZ decoder. `optimization` is off (that feature is unsafe) and the encoder is a dev-dependency only, so release builds do not link it. |
 | octocrab | local | https://crates.io/crates/octocrab | `ketch registry push` talks to GitHub through octocrab rather than the ureq client the sources use: it needs forks, refs, contents and pull requests, which octocrab already types and paginates. It is async, hence tokio for a runtime to block on; everything else in ketch stays synchronous. |
 | pathdiff | local | https://crates.io/crates/pathdiff | Relative path between two paths |
 | predicates | local | https://crates.io/crates/predicates | Rust dependency |
@@ -76,8 +79,9 @@ Project programs and direct packages from manifests.
 | sha2 | local | https://crates.io/crates/sha2 | Rust dependency |
 | tar | local | https://crates.io/crates/tar | Rust dependency |
 | tempfile | local | https://crates.io/crates/tempfile | Rust dependency |
+| operation-icons | local | https://crates.io/crates/operation-icons | Status-line verb icons and icon gutter, shared with rtok |
 | terminal_size | local | https://crates.io/crates/terminal_size | Terminal width for `ketch list remote` descriptions |
-| unicode-width | local | https://github.com/unicode-rs/unicode-width | Column width of status-line emoji icons |
+| unicode-width | local (dev) | https://github.com/unicode-rs/unicode-width | Tests: every status-line icon fills one gutter width |
 | thiserror | local | https://crates.io/crates/thiserror | Errors |
 | tokio | local | https://crates.io/crates/tokio | Async runtime |
 | uniffi | local (`crates/ketch-ffi`) | https://github.com/mozilla/uniffi-rs | Exports the core to Swift (and later other languages) as `ketch-ffi`; its `cli` feature is the in-tree `uniffi-bindgen` (`just xcframework`) |

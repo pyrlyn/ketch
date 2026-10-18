@@ -35,7 +35,17 @@ bindgen = ["uniffi/cli"]
 schema = ["dep:schemars"]
 
 [dependencies]
-ketch-core = { path = "../ketch-core" }
+# Only what the desktop apps call: their history view reads `stats`, an
+# install from them holds a manifest's `trust` table like the CLI does, and
+# unpacks every archive format the CLI does.
+ketch-core = { path = "../ketch-core", default-features = false, features = [
+    "stats",
+    "trust",
+    "gzip",
+    "xz",
+    "bzip2",
+    "zip",
+] }
 schemars = { version = "1.2", optional = true }
 # The derive that gives the records and events the JSON shape desktop/contract
 # publishes to the Windows and Linux fakes, and that ketch-capi sends over its
@@ -44,6 +54,7 @@ serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 # Proc-macro mode: the exported surface is the Rust code itself, no UDL file.
 uniffi = "0.32.2"
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"

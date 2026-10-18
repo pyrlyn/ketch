@@ -14,7 +14,6 @@ use assert_cmd::Command;
 #[cfg(windows)]
 use predicates::prelude::*;
 
-#[cfg(windows)]
 fn pwsh_bin() -> Option<std::path::PathBuf> {
     // Resolve before tests clear PATH — otherwise `Command::new("pwsh")` cannot
     // spawn even when PowerShell is installed on the runner.
@@ -59,6 +58,49 @@ fn install_ps1() -> Command {
     cmd
 }
 
+/// GitHub release tags are v-prefixed; `--version` must accept either form.
+/// The status line is printed before the download, so a missing release still
+/// shows the tag the URL will use.
+#[test]
+fn a_bare_version_is_printed_with_the_release_tag_prefix() {
+    let Some(pwsh) = pwsh_bin() else {
+        return;
+    };
+    let work = std::env::temp_dir().join(format!("ketch-ps1-ver-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&work);
+    std::fs::create_dir_all(&work).unwrap();
+    for (given, shown) in [
+        ("0.0.0-ketch-flag-probe", "v0.0.0-ketch-flag-probe"),
+        ("v0.0.0-ketch-flag-probe", "v0.0.0-ketch-flag-probe"),
+    ] {
+        let output = std::process::Command::new(&pwsh)
+            .args([
+                "-NoProfile",
+                "-File",
+                concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1"),
+                "--no-modify-path",
+                "--version",
+                given,
+                "--root",
+            ])
+            .arg(work.join("root"))
+            .env("USERPROFILE", &work)
+            .env("PROCESSOR_ARCHITECTURE", "AMD64")
+            .output()
+            .expect("pwsh");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains(&format!("Installing ketch version {shown}")),
+            "given {given}: {stdout}"
+        );
+        assert!(
+            !stdout.contains("Installing ketch version vv"),
+            "given {given}: {stdout}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&work);
+}
+
 /// Reaching the release fetch means the flags were accepted.
 #[cfg(windows)]
 fn fails_after_flag_parse() -> impl predicates::Predicate<str> {
@@ -100,11 +142,37 @@ fn the_script_prefers_system32_tar_over_git_bash_tar() {
     );
 }
 
+/// `GetEnvironmentVariable('Path','User')` expands `%VAR%`, and writing that
+/// back freezes every such entry; `setx` also truncates. The registry, read
+/// unexpanded and written with the value's kind, does neither.
 #[test]
-fn the_script_writes_path_through_dotnet_not_setx() {
+fn the_script_edits_path_unexpanded_through_the_registry_not_setx() {
     let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1"));
-    assert!(src.contains("SetEnvironmentVariable('Path'"), "{src}");
+    assert!(src.contains("'DoNotExpandEnvironmentNames'"), "{src}");
+    assert!(src.contains("$key.SetValue('Path', $next, $kind)"), "{src}");
+    assert!(!src.contains("GetEnvironmentVariable('Path'"), "{src}");
+    assert!(!src.contains("SetEnvironmentVariable('Path'"), "{src}");
     assert!(!src.contains("setx"), "{src}");
+}
+
+/// Under `irm … | iex` an `exit` closes the user's PowerShell window, so the
+/// only one left is the one that runs when the script is a file.
+#[test]
+fn the_script_exits_only_when_run_as_a_file() {
+    let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1"));
+    let exits: Vec<(usize, &str)> = src
+        .lines()
+        .enumerate()
+        .map(|(n, line)| (n, line.split('#').next().unwrap_or_default()))
+        .filter(|(_, code)| code.split_whitespace().any(|word| word == "exit"))
+        .collect();
+    assert_eq!(exits.len(), 1, "every `exit` in install.ps1: {exits:?}");
+    let (at, _) = exits[0];
+    let guard = src.lines().nth(at - 1).unwrap_or_default();
+    assert!(
+        guard.contains("if ($PSCommandPath)"),
+        "the one `exit` must be guarded by $PSCommandPath, not: {guard}"
+    );
 }
 
 /// Quoted registry PATH entries must match the unquoted bin dir (same rule as
@@ -123,6 +191,51 @@ fn the_script_parses_quoted_path_entries_like_ketch_shell() {
     assert!(
         !src.contains("$PathString -split ';'"),
         "naive -split on ';' would shatter quoted entries with a semicolon: {src}"
+    );
+}
+
+/// `--pre`'s tag choice, run under pwsh on any host that has it: the first
+/// CLI tag in GitHub's newest-first listing, prerelease or not, and never the
+/// macOS app's `desktop-v*` tags or its `desktop-appcast` feed.
+#[test]
+fn pre_picks_the_newest_cli_tag_past_desktop_releases() {
+    // A version-manager shim answers to the name without a PowerShell behind
+    // it; only a pwsh that actually starts can run the helper.
+    let Some(pwsh) = pwsh_bin().filter(|pwsh| {
+        std::process::Command::new(pwsh)
+            .args(["-NoProfile", "-Command", "exit 0"])
+            .output()
+            .is_ok_and(|out| out.status.success())
+    }) else {
+        return;
+    };
+    let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1"));
+    let start = src
+        .find("function Select-NewestCliTag")
+        .expect("Select-NewestCliTag");
+    let end = src.find("function Install-Ketch").expect("Install-Ketch");
+    let helper = &src[start..end];
+    let script = format!(
+        r#"
+{helper}
+$releases = '[{{"tag_name":"desktop-appcast","prerelease":true,"draft":false}},{{"tag_name":"desktop-v99.0.0","prerelease":false,"draft":false}},{{"tag_name":"v9.9.9-rc.1","prerelease":true,"draft":false}},{{"tag_name":"v1.0.0","prerelease":false,"draft":false}}]' | ConvertFrom-Json
+$got = Select-NewestCliTag @($releases)
+if ($got -ne 'v9.9.9-rc.1') {{
+    Write-Error "picked '$got'"
+    exit 1
+}}
+exit 0
+"#
+    );
+    let out = std::process::Command::new(pwsh)
+        .args(["-NoProfile", "-Command", &script])
+        .output()
+        .expect("run pwsh");
+    assert!(
+        out.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
     );
 }
 
@@ -224,6 +337,44 @@ fn help_describes_root_and_install_dir_without_naming_the_root() {
         .stdout(predicate::str::contains("--install-dir"))
         .stdout(predicate::str::contains("names the root").not())
         .stdout(predicate::str::contains("the root becomes its parent").not());
+}
+
+/// `irm … | iex` runs the script in the caller's session: a failure must print
+/// its message and hand the session back with its preference, variables and
+/// environment as they were, rather than closing the window.
+#[test]
+#[cfg(windows)]
+fn a_failure_under_iex_leaves_the_callers_session_running() {
+    if !pwsh_available() {
+        return;
+    }
+    let script = format!(
+        r#"
+$ErrorActionPreference = 'Continue'
+$env:PROCESSOR_ARCHITECTURE = 'ARM64'
+Remove-Item Env:PROCESSOR_ARCHITEW6432 -ErrorAction SilentlyContinue
+Remove-Item Env:KETCH_ROOT -ErrorAction SilentlyContinue
+Get-Content -Raw -LiteralPath '{}' | Invoke-Expression
+"survived exit=$LASTEXITCODE preference=$ErrorActionPreference"
+if (Get-Command Install-Ketch -ErrorAction SilentlyContinue) {{ 'leaked a function' }}
+if (Get-Variable Root -ErrorAction SilentlyContinue) {{ 'leaked a variable' }}
+if ($env:KETCH_ROOT) {{ 'leaked KETCH_ROOT' }}
+"#,
+        concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1")
+    );
+    let pwsh = pwsh_bin().expect("pwsh_available checked");
+    Command::new(pwsh)
+        .args(["-NoProfile", "-Command", &script])
+        .env(
+            "USERPROFILE",
+            std::env::temp_dir().join("ketch-ps1-iex-home"),
+        )
+        .assert()
+        .stdout(predicate::str::contains("Unsupported architecture: ARM64"))
+        .stdout(predicate::str::contains(
+            "survived exit=1 preference=Continue",
+        ))
+        .stdout(predicate::str::contains("leaked").not());
 }
 
 /// The whole script, with the network replaced by a local release tree and the

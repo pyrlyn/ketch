@@ -1,3 +1,45 @@
+### B132. `install.ps1` omits the `v` on `--version`
+
+`install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.
+
+Test: `a_bare_version_is_printed_with_the_release_tag_prefix` (runs when `pwsh` is installed; the status line is printed before the download).
+
+### B120. Shell blocks miss CRLF startup files
+
+`marker_at_line_start` treated a marker as a whole line only when the next character was `\n` or the end of the file. A PowerShell profile or an autocrlf dotfile ends the line with `\r\n`, so the block was invisible: every install appended another copy, and uninstall left them all. A marker now also ends at `\r`, and `block_span` consumes the `\r\n` or `\r` that follows the end marker.
+
+Test: `a_crlf_block_is_replaced_rather_than_appended`.
+
+### B122. Download bar labels skip the terminal filter
+
+`BarProgress::start` put the asset name on the download bar with `truncate` and no `printable`. Every other status line runs client text through `changelog::sanitize` first, which drops escapes and bidi overrides. The bar now filters the label, including one stored for a batch, and then truncates it. Callers that already pass a clean name are unchanged.
+
+Test: `a_download_bar_label_cannot_redraw_the_terminal`.
+
+### R18. One atomic replace helper in `ketch-core`
+
+File replacements already went through `fs_kit::write`. The store swap was still three copies of the same rename: stage as `.incoming`, retire the live tree to `.old`, swap the stage in, and put `.old` back if the second rename fails. That sequence is now `swap_into_store` in `platform/mod.rs`. macOS passes `ditto`; Linux and Windows pass `copy_tree`, and the copy runs only when the rename onto the stage fails. `finalize_store_swap` and `restore_retired_store` moved with it. A payload that is already the store is not retired, and `.old` stays until placement finishes.
+
+Tests: `swap_into_store_of_the_same_path_does_not_retire_it`, `swap_into_store_retires_the_previous_tree_and_restore_puts_it_back`, `swap_into_store_copies_when_the_rename_onto_the_stage_fails`, plus the existing place-failure restore on Linux and macOS.
+
+### R12. Consolidate duplicated helpers
+
+`sibling` lived in three backends. Linux and Windows lossily rebuilt the file name and fell back to `pkg`; macOS appended the suffix as bytes and used an empty name when the path had none. One function in `platform/mod.rs` does both: bytes, so a non-UTF-8 name stays intact, and `pkg` when there is no file name. Store swaps still rename `.incoming` and `.old` beside the live directory.
+
+`remove_any` was already `fs_kit::tree::remove_any`. `Http::has_token` is called before a GitHub draft listing, so the unused-helper note was stale and the method stays.
+
+The local source redeclared the gzip, xz, bzip2, zip and ustar checks. Those constants and `looks_like_tar` are now `pub(crate)` on the extractors, and `looks_like_archive` uses them. It still treats a lone compressed file as an archive and does not open the stream to see whether tar follows.
+
+Tests: `sibling_appends_the_suffix_to_the_file_name`, `sibling_of_a_nameless_path_uses_pkg`, `sibling_keeps_a_non_utf8_file_name`, `archive_bytes_match_the_extractor_magics`.
+
+### B74. xz archives decompress entirely into memory
+
+`lzma-rs` decoded each XZ block into one `Vec` (`read_block` writes the block only after it has been decompressed) before tar or a lone-file extract saw a byte. A channel in front of that writer still held the whole block. `TarXzExtractor` and `XzFileExtractor` now read `lzma-rust2`'s `XzReader`, which implements `Read` and yields plaintext as it is decoded. A block whose LZMA2 dictionary plus decoder overhead would exceed 256 MiB is refused before the dictionary is allocated; stock `xz -9` uses 64 MiB and still fits. The crate's `optimization` feature (its unsafe path) stays off, and the encoder is not a dependency: tests use fixed xz fixtures. `lzma-rs` is gone.
+
+Protocol v1 has no checksum subcommand. `docs/PLUGINS.md` (and `docs/ru`, `docs/uk`) says a plugin asset without a sha256 `digest` is trust on first use, and `require_checksums` refuses that install.
+
+Tests: `xz_plaintext_arrives_in_the_callers_buffer`, `an_xz_dictionary_over_the_memory_limit_is_refused`, `a_tar_xz_extracts_through_the_streaming_decoder`, plus the existing lone-xz and detection cases.
+
 ### B87. Local tree hash collides and skips symlinks and modes
 
 `sha256_tree` used to hash `path \0 bytes` for regular files only. `a` = `X` plus `b` = `Y` was the same digest as one file `a` = `Xb\0Y`, a symlink was invisible, and the exec bit was ignored, so a lockfile could accept a different `.app`. Each file and symlink is now one record: kind, path length, path, permission bits, payload length, and either the file bytes or the symlink's own target. A lock written before this framing does not match an unchanged bundle; `ketch lock` records the new digest. Noted in `docs/LOCKFILE.md`.
@@ -1380,3 +1422,257 @@ Check: `grep -rn "both checksums|five targets" AGENTS.md .github/workflows/tap.y
 Long steps used to sit silent until the download bar. `ui::activity` now draws a progress bar when the total is known and a spinner otherwise, in rtok's form (`{spinner:.cyan} {msg}` on stderr, 120ms tick, nothing when stderr is not a terminal). Resolve, extract, registry fetch and self-update hold one for the length of the work. `ketch list` counts packages with `counter` while `latest` is looked up. Quiet mode, a pipe and the full-screen renderer draw nothing.
 Model: Cursor / grok 4.7 · Status: done 2026-10-09 · Priority: P2 · Complexity: 3 · Files: `src/ui.rs`, `crates/ketch-core/src/install.rs`, `crates/ketch-core/src/listing.rs`
 Check: `a_known_total_is_a_bar` and `an_unknown_total_is_a_spinner` in `src/ui.rs`.
+
+## Plan 2026-10-10 — dev, prerelease and draft builds
+
+Install dev, prerelease and draft builds from GitHub releases, and show them in listings. Decided with the creator:
+
+- **dev** means a floating tag (`nightly`, `dev`, `canary`, `edge`, …) republished under the same name. Whether it moved is told by the build (publication date, asset digests), not by the version.
+- **prerelease** already works through `--pre`, `pkg@tag` and `prerelease = true` in a manifest; what is missing is remembering it.
+- **draft** is its own opt-in, `--draft`. Drafts are visible only to a token with push access, may have no tag yet, and their assets download only through the API with that token. Without such a token ketch says so instead of reporting "no releases".
+- **upgrade follows the channel** the package was installed from (stable, pre, draft, dev). A draft that was published is an upgrade to the published release; a draft that was deleted is a warning, not an error.
+- **Listings**: a new `ketch releases <pkg>`, `ketch info <pkg> --releases`, and `ketch list` marking what was installed from a non-stable channel, with `--pre`/`--draft` for its `latest` column.
+
+Out of scope until asked: source plugins (drafts and dev builds stay GitHub-only, so `PROTOCOL_VERSION` is unchanged) and the desktop apps' `ketch-ffi` surface.
+
+### M18. Release channel recorded per installed package
+
+The foundation the other three build on. An installed package remembers which channel it came from, and `upgrade`/`outdated`/`list` read it instead of only today's `--pre`/config/manifest union. Done means: `InstalledPackage` has a `channel` (`stable`, `pre`; `draft` and `dev` are added by M19 and M20), state written before it still reads as `stable`, `install --pre` or `pkg@<prerelease tag>` records `pre`, and `upgrade`/`outdated` of a `pre` package consider prereleases without `--pre`. A stable install over a `pre` one moves it back to `stable`.
+
+Execution plan:
+
+1. `crates/ketch-core/src/model.rs`: `Channel` enum (serde lowercase, default `stable`, skipped when `stable`) and the field on `InstalledPackage`.
+2. `crates/ketch-core/src/install.rs`: derive the channel from the selected `Release` (`prerelease` flag or semver prerelease) when recording state; `installed_list_opts` includes prereleases for a `pre` channel.
+3. `crates/ketch-core/src/listing.rs`: the same rule through `installed_list_opts`, so `ketch list` agrees with `outdated`.
+4. `src/cmd/query.rs` and `crates/ketch-core/src/info.rs`: `info` shows the channel and looks up `latest` by it. `list --json` waits for M21, which reworks the listing anyway.
+5. Tests: unit tests for the default, the derivation, `installed_list_opts` and `upgrade_request`; `tests/channel.rs` installs with `--pre`, checks `outdated` without `--pre` sees a newer prerelease, and that an upgrade landing on a stable release stays on `pre`.
+6. Docs: `--pre` in `docs/COMMANDS.md`, `docs/ru` and `docs/uk`.
+7. Verify: `cargo nextest run --workspace`, `cargo clippy --workspace --all-targets`, `cargo fmt --check`, and the binary against a scratch `KETCH_ROOT`.
+
+Status: done (Claude Code / opus-5.5), commits 64ba2a6 and 549c274. 1099 tests green; `install sharkdp/fd --pre` in a scratch root records `pre`, `--force` without it returns to `stable`. `upgrade_request` lost its `prerelease` parameter: the tag is exact, so only the channel matters. Known gap: `install --pre` over the same tag already installed stops at "already installed" and does not switch the channel; `--force` does.
+
+### M19. Draft releases: `--draft`
+
+`ListOpts` gains `include_draft`; the GitHub source keeps drafts when it is set and downloads their assets from the API asset URL with `Accept: application/octet-stream` and the token. `install`, `upgrade`, `outdated` and `list` take `--draft`; `pkg@tag` finds a draft by its intended tag when `--draft` is given. Selection keeps refusing drafts unless asked (`drafts_are_never_selected` stays true for the default). No token, or a token without push access, gives an error naming the reason. Channel `draft`; a published draft upgrades to the release, a deleted one warns. Plugins never receive drafts. Done means the above with unit tests on selection and an end-to-end case through the fixture source.
+
+Execution plan:
+
+1. `crates/ketch-core/src/source/mod.rs`: `ListOpts::include_draft`; `select_release` keeps refusing drafts unless it is set; `Source::supports_drafts`, false by default.
+2. `crates/ketch-core/src/source/github.rs`: with `include_draft`, check the token first (none: error naming the token variables; `permissions.push` false on the repository: error naming push access), skip the `/releases/latest` and `/releases/tags/` fast paths (neither returns drafts) and walk the listing with drafts kept. A draft's assets download from their API URL, kept only when it is on the API host, so the token never leaves it; its checksum sidecars are read the same way.
+3. `crates/ketch-core/src/model.rs`: `Channel::Draft`; `InstalledPackage::draft` records that the installed release was a draft.
+4. `crates/ketch-core/src/install.rs`: `InstallRequest::draft` (implies prereleases), refused for a source without drafts; the channel and the draft flag recorded by `commit`; `installed_list_opts` and `upgrade_request` follow `draft`; one `is_upgrade` for `upgrade` and `outdated`: a published draft under the same tag is an upgrade, a vanished draft is a warning.
+5. `src/cli.rs`, `src/cmd/pkg.rs`, `src/cmd/query.rs`: `--draft` on `install`, `upgrade` and `outdated`. `list --draft` comes with M21, which adds `--pre` to `list` and reworks its lookup; until then `list` looks up draft-channel packages without drafts.
+6. Tests: selection unit tests (default still refuses drafts), GitHub conversion and access tests, channel tests; `tests/draft.rs` through a stand-in GitHub API (the `import.rs` server moved into `tests/support`): no token, no push access, a draft install with the token only on API requests, published and deleted drafts.
+7. Docs: `docs/COMMANDS.md` in English, `docs/ru` and `docs/uk`; `bash tests/docs-i18n.sh`.
+8. Verify: fmt, clippy `-D warnings`, nextest, and the binary against a scratch root (a real draft needs a push token; reported if none is available).
+
+Status: done (Claude Code / opus-5.5). `select_release` still refuses drafts unless `ListOpts::include_draft` is set, so `drafts_are_never_selected` holds for every default path. `--draft` implies prereleases. `install::is_upgrade` is now the one rule behind `upgrade` and `outdated`. `list` keeps looking up `latest` without drafts until M21 adds `--pre`/`--draft` to it. Not done: a real draft install, since no repository the available token can push to has a draft, and creating one was not approved; the access check was run for real (no token: refused by name; token without push to `sharkdp/fd`: refused by name; token with push to `pyrlyn/ketch`: installed `v0.10.0` on channel `draft`, `outdated` checks it with the token and warns without one).
+
+Tests: `source::tests` (a draft only when asked, by latest and by exact tag), `source::github::tests` (draft assets from the API host only, published assets keep the public URL, drafts listed only when asked and with a tag, no token named before any request), `model::tests` and `install::tests` (channel, list options, upgrade request, published and deleted drafts), and `tests/draft.rs` through `tests/support/remote.rs`, the stand-in server moved out of `tests/import.rs`. 1116 tests pass; clippy `-D warnings` and fmt clean.
+
+### M20. Dev builds: floating tags
+
+A release whose tag is not a version (`nightly`, `dev`, …) installed by name, `pkg@nightly`, records channel `dev` with the tag and the build it got (publication date and asset digest). `outdated`/`upgrade` report it outdated when the same tag now points at a different build, and reinstall it. `ketch.lock` pins the build's checksum so a lock cannot silently move with the tag (row in `docs/LOCKFILE.md`). Done means tests on build comparison and an end-to-end case where the fixture republishes the tag.
+
+Execution plan:
+
+1. `crates/ketch-core/src/model.rs`: `Channel::Dev`, chosen by `Channel::of` for a release whose tag is not a version (after `draft`); `InstalledPackage::published_at`, recorded for `dev` packages only.
+2. `crates/ketch-core/src/install.rs`: `rebuilt` compares the build the tag names now with the installed one — the installed asset's digest when the source publishes one, the publication time otherwise, and an asset gone from the release is a new build. `latest_release` resolves a `dev` package's own tag; `is_upgrade` calls a new build under it an upgrade; `prepare` lets a new build under the same tag past "already installed".
+3. `crates/ketch-core/src/lockfile.rs`, `src/cmd/lock.rs`: `published` on a `dev` entry, validated; `lock --check` compares it on another target; `sync` on another target, where the hash does not apply, refuses a tag published since (`InstallRequest::expected_published`). The same target keeps the hash pin. `docs/lock.schema.json` regenerated.
+4. Tests: build comparison and lock-pin unit tests in `install.rs` and `lockfile.rs`; `tests/dev.rs` through the fixture plugin, which can now publish under a floating tag with a publication time: a republish is outdated and upgraded, a stable release is not, reinstalling the tag takes a new build, and a lock refuses the moved tag on both targets.
+5. Docs: `docs/COMMANDS.md` and `docs/LOCKFILE.md` in English, `docs/ru` and `docs/uk`.
+6. Verify: fmt, clippy `-D warnings`, nextest, and the binary against a scratch root.
+
+Status: done (Claude Code / opus-5.5). A tag that is not a version lands on `dev` whatever else was opted into, except `--draft`. `dev` packages follow their own tag, so a newer version under another tag is not an upgrade. The lock's same-target `sha256` already pinned the build; `published` covers other targets, where only the publication time is left to compare, so a tag republished in place with the same date is not caught there. Source plugins keep the protocol unchanged; a plugin release whose tag is not a version is on `dev` too, compared by the digest and date it already reports. `list` still looks up `latest` for a `dev` package (its version ordering keeps it from offering a version release as an update); M21 reworks that lookup. Checked with the real binary on `neovim/neovim@nightly` in a scratch root: installed on `dev` with its publication time, up to date, `already installed` on reinstall, `published` in `ketch.lock`, outdated and upgraded after the recorded build was rewound in the scratch state, and a cross-target `sync` refused with a lock recording an older publication time.
+
+Tests: `install::tests` (channel of a tag that is not a version, digest, date, missing date, renamed asset, a stable package ignoring builds under its tag, the lock's publication pin), `lockfile::tests` (`published` written for floating tags only, drift on another target, unprintable values refused), and `tests/dev.rs` through the fixture plugin, which can now publish under a floating tag with a publication time. 1130 tests pass; clippy `-D warnings` and fmt clean.
+
+### M21. Listing releases: `ketch releases`, `info --releases`, `list`
+
+`ketch releases <pkg>` lists a package's releases newest first with tag, version, publication day and a kind mark (`stable`, `pre`, `dev`, `draft`), and marks the installed one; `--pre` widens it to prereleases, `-n/--limit` and `--json` as elsewhere. `ketch info <pkg> --releases` prints the same table under the details and adds a `releases` array to `--json`; both go through `releases::list` and one renderer in `cmd/query.rs`. `ketch list` shows a non-stable channel after the installed version (`(pre)`), adds `channel` to `list --json`, and takes `--pre` for its `latest` column. `releases` completes installed names like `info`. `ReleaseKind::of` in `crates/ketch-core/src/releases.rs` is the one place a kind is decided: draft, then dev (a tag that does not parse as a version), then pre, then stable.
+Follow-up for M19/M20: `--draft` on `releases` and `list` waits for `ListOpts.include_draft`; the `draft` mark already renders if a source returns one, and `Channel::Draft`/`Channel::Dev` only need an arm in the channel mark and in `ReleaseKind`.
+Model: Claude Code / sonnet-5.5 · Status: done 2026-10-11 · Priority: P2 · Complexity: 3 · Files: `crates/ketch-core/src/releases.rs`, `crates/ketch-core/src/info.rs`, `crates/ketch-core/src/listing.rs`, `src/cli.rs`, `src/cmd/query.rs`, `src/complete.rs`
+Check: `cargo nextest run --workspace` (1116 passed, including `tests/releases.rs`); `ketch releases fd` against GitHub in a scratch root marks the installed tag.
+
+### M22. Drafts and dev builds in listings
+
+`ketch releases` and `info --releases` take `--draft` (drafts and prereleases, the same token and push-access errors as `install --draft`; a `draft` install lists drafts without it). `ketch list` takes `--draft` for its `latest` column, and its update decision is the one `outdated` makes for every channel: a `draft` package is offered the published release and warned about when the draft is gone, a `dev` package shows a new build under its own tag. `install::is_upgrade` is the single rule; the listing cache keys and file format change so old entries are not misread. Done means the above with unit tests on the shared rule and the cache key, end-to-end cases, and the stale M21 docs fixed in all three languages.
+
+Execution plan:
+
+1. `crates/ketch-core/src/source/mod.rs`: one `ask_for_drafts` that widens `ListOpts` for `--draft` and refuses a source without drafts by name; `install::prepare` and `releases::list` both call it, and GitHub's access check stays in `list_releases`/`resolve`.
+2. `crates/ketch-core/src/install.rs`: `InstalledBuild`, what an upgrade decision needs of an installed package; `is_upgrade` takes it and the lookup's `ListOpts`, and gains the listing's guard against a prerelease nobody asked for; `upgrade_opts` and `release_of` (latest, or a `dev` package's own tag; drafts dropped for a source without them) shared by `outdated`, `upgrade` and `list`.
+3. `crates/ketch-core/src/listing.rs`: `Local` carries the `InstalledBuild`; `Lookup` adds drafts and a `dev` tag to its key; `Found` keeps the trimmed release the rule needs (asset digests only for `dev`); the cache file carries a format number and an older one is ignored; `listing::update_available` goes, `Row::newer` calls `is_upgrade`, and `fill_latest` lets it warn once for a gone draft. `include_drafts` for `list --draft`, installed rows only.
+4. `src/cli.rs`, `src/cmd/query.rs`: `--draft` on `releases`, `info` (with `--releases`) and `list`; `crates/ketch-ffi/src/records.rs` uses `Row::newer`.
+5. Tests: the shared rule and cache key in `install.rs`/`listing.rs`; `tests/draft.rs` (`releases --draft` and `list` through the stand-in API), `tests/dev.rs` (a republish shows as an update in `list`).
+6. Docs: `docs/COMMANDS.md` (`releases`, `info`, `list`, drafts returned by GitHub, the `channel` values) in English, `docs/ru` and `docs/uk`; `bash tests/docs-i18n.sh`.
+7. Verify: fmt, clippy `-D warnings`, nextest, and the binary against a scratch root.
+
+Status: done (Claude Code / opus-5.5). `install::is_upgrade` is the one rule: it takes an `InstalledBuild` and the lookup's `ListOpts`, so `outdated`, `upgrade`, `list` and the FFI `Upgrade` record agree on every channel, including the guard against a prerelease nobody asked for, which moved there from `listing::update_available` (removed). The listing cache is format 2, keyed `source#stable|pre|draft` or `source@tag#dev`; a file without that format number is ignored and rewritten. `list --draft` widens installed rows only: a registry row would almost never have push access and would turn into `?`. A pinned package still shows no update in `list`; that stays a display rule.
+
+Tests: `listing::tests` (a dev rebuild by date and by digest, the dev lookup key and kept assets, draft/pre/stable cache keys, a draft install offered its publication, an unasked prerelease, an older cache format set aside); `tests/draft.rs` (`releases --draft` with and without a token, `info --releases --draft`, a draft install listing drafts by itself, `list` and `list --draft` agreeing with `outdated`); `tests/dev.rs` (a republish shows as an update in `list`, a plugin source refuses `releases --draft`). 1156 tests green. Binary in a scratch root: `neovim/neovim@nightly` lists as `nightly (dev)` with `latest` `nightly`, and as `(update available)` once its recorded build was made older; `releases neovim --draft` without a token stops naming the token variables; `info --releases --draft` warns with the same message and still prints the details. Not checked: a real draft (no repository with a draft and a push token at hand), and `outdated` against GitHub in that run (anonymous rate limit, HTTP 403).
+
+### B79. Restore the swapped store when placement fails
+
+Found by the 2026-10-08 cloud review: a failure after the store swap could leave state naming a tree that was not on disk. On re-check it was already fixed by 5152c87: unix, macOS and Windows `place` keep `<ver>.old` and restore it on error, so `ScopedDir` being off for the same prefix is safe.
+Model: Claude Code / opus-5.5 · Status: done 2026-10-12 (already fixed in 5152c87) · Priority: P1 · Complexity: 4
+Check: `a_failed_place_after_the_swap_restores_the_previous_store` in `platform/unix.rs` and `platform/macos.rs`.
+Also through `commit`: `install::tests::a_reinstall_whose_linking_fails_after_the_swap_puts_the_previous_store_back` (unix), an in-place reinstall whose linking fails after the swap; it fails with the restore call removed. B104 stays a separate task.
+
+### B105. Windows same-version reinstall refuses its own copied bin
+
+Found by the 2026-10-12 review: ownership of a copied bin was proven against `record.target` after the swap had changed it. On re-check it was already fixed by 13efcf9: `retired_targets` compares bin and extra copies against `<store>.old` after the swap. A Windows end-to-end test (`install`, then `install --force`) is still missing.
+Model: Claude Code / opus-5.5 · Status: done 2026-10-12 (already fixed in 13efcf9) · Priority: P2 · Complexity: 3
+Check: `retired_targets` in `platform/windows.rs`; not covered by a Windows test.
+
+### B80. A lone `.xz`/`.bz2` file fails as a tarball
+
+Found by the 2026-10-08 cloud review: `TarXzExtractor` claimed any xz stream without peeking for ustar. On re-check it was already fixed by 5152c87: detection peeks the decompressed head, and `XzFileExtractor` and `Bz2FileExtractor` are registered on all three platforms. A lone bz2 has only a detection test.
+Model: Claude Code / opus-5.5 · Status: done 2026-10-12 (already fixed in 5152c87) · Priority: P2 · Complexity: 3
+Check: the lone `.xz` extraction test in `extract/archive.rs`.
+
+### B84. Downloads have no size cap
+
+Found by the 2026-10-08 review. Done: `Http::download` aborts over a configurable cap. Plan: a `max_download` setting in `config.rs` with a sane default, enforced while streaming in `http.rs`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #301 · Priority: P2 · Complexity: 3
+Check: a test with a cap below the body size that errors and leaves no partial file.
+
+### B90. Retained versions and `prune` can delete the live store
+
+Found by the 2026-10-12 review. Done: rollback, upgrade back and `prune` never remove `pkg.prefix`, and `ScopedDir` never deletes a restored retained copy. Plan: `retain_replaced` also drops entries matching the new prefix/version; a retained prefix counts as in-place in `place`; `prune` skips `pkg.prefix`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #295 · Priority: P1 · Complexity: 4
+Check: an end-to-end test of 1.0 → rollback 0.9 → upgrade 1.0 → `prune --keep 1` with links still resolving.
+
+### B91. Uninstall of a near-miss name wipes an installed store
+
+Found by the 2026-10-12 review. Done: a leftover dir is removed only when its on-disk name is byte-equal to the request and no recorded prefix lies under it, with confirmation and `--dry-run` honoured, in the CLI and `ketch-ffi`. Plan: tighten `package_dir_candidate`/`remove_package_dir` in `install.rs`; route the confirmation through `cmd/pkg.rs`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #317 · Priority: P1 · Complexity: 3
+Check: a test where `uninstall RipGrep` on a case-insensitive store refuses and leaves `store/ripgrep`.
+
+### B92. `self uninstall` wipes children of a root ketch does not own
+
+Found by the 2026-10-12 review. Done: named children are wiped only under a root carrying a ketch marker; otherwise only recorded entries go; home is compared canonicalized and case-folded. Plan: write a marker at `self install`/root creation; `remove_root_at` checks it; fallback removes recorded entries only.
+Model: Claude Code / opus-5.5 · Status: done, merged in #307 · Priority: P1 · Complexity: 4
+Check: a test with a root holding foreign files in `bin/` and no marker, left untouched.
+
+### B93. Installers and self upgrade never see prerelease CLI releases
+
+Found by the 2026-10-12 review. The creator chose to keep publishing CLI releases as prereleases and to teach the readers an opt-in flag. Done: `install.sh --pre`, `install.ps1 --pre` and `ketch self upgrade --pre` (and `self install` where it picks a version) take the newest release including prereleases; without the flag they behave as today. Plan: reuse the release listing and `select_release` from `source/mod.rs` (the `--pre` path from M18–M22) in `self_update.rs` and the CLI flag in `cli.rs`; list `/releases` in both installers when the flag is given, skipping `desktop-v*` tags; docs and help in `docs/` (with `ru`, `uk`). The cask keeps `:github_latest` (noted, not changed).
+Model: Claude Code / opus-5.5 · Status: done, merged in #316 · Priority: P1 · Complexity: 3
+Check: a unit test of version selection with the flag, an end-to-end test of `self upgrade --pre` against the fixture source, and `tests/desktop-release.sh` still passing.
+
+### B95. Windows user PATH loses `%VAR%` entries and non-ASCII text
+
+Found by the 2026-10-12 review. Done: `shell.rs` and `install.ps1` read and write `HKCU\Environment\Path` unexpanded, keep the value kind, and decode UTF-8. Plan: switch `read_user_path`/`write_user_path` to `Microsoft.Win32.Registry` with `DoNotExpandEnvironmentNames` through the UTF-8 `powershell()` helper; same in `install.ps1`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #308 · Priority: P1 · Complexity: 4
+Check: a Windows-gated test round-tripping a `%USERPROFILE%` entry and a non-ASCII one; Windows CI.
+
+### B97. Release builds expose the signing certificate to every build script
+
+Found by the 2026-10-12 review. Done: the certificate and its password reach only the macOS signing step, and `GH_TOKEN` only where needed. Plan: patch the env in `scripts/dist-generate.sh`, regenerate `release.yml` with `just dist-generate`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #311 · Priority: P2 · Complexity: 3
+Check: the generated-file CI check passes and a grep shows no job-level `CODESIGN_*`.
+
+### B101. Read-only directory modes break extraction and removal
+
+Found by the 2026-10-12 review. Done: directory modes are applied after all members, always with `u+rwx`. Plan: defer directory modes in `extract/archive.rs`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #302 · Priority: P2 · Complexity: 3
+Check: a test with a `0o555` directory before and after its children that extracts and is removable.
+
+### B103. Installing the same name from another source replaces a package
+
+Found by the 2026-10-12 review. Done: `prepare` refuses when `existing.source` differs from `manifest.source` and points at `--name`; `ketch sync` reports it. Plan: compare in `install.rs` `prepare` and the lockfile plan.
+Model: Claude Code / opus-5.5 · Status: done, merged in #298 · Priority: P2 · Complexity: 3
+Check: an end-to-end test installing `otherowner/x` over `owner/x` that fails and leaves the first install intact.
+
+### B104. A failed placement loses the old links and app copy
+
+Found by the 2026-10-12 review. Done: occupied destinations are moved aside and restored on failure on every platform. Plan: an aside-and-restore step in `platform/unix.rs`, `macos.rs`, `windows.rs` placement, building on B79.
+Model: Claude Code / opus-5.5 · Status: done, merged in #296 · Priority: P2 · Complexity: 5
+Check: a test that fails the second link and finds the old link back.
+
+### B108. Process matching kills unrelated processes
+
+Found by the 2026-10-12 review. Done: occupants match whole arguments against exact canonical paths, preferring exe and open-fd evidence. Plan: rewrite `cmd_hits` in `process.rs`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #310 · Priority: P2 · Complexity: 3
+Check: unit tests where `…/bin/rga` and an editor with the path in its arguments are not matched.
+
+### B109. The process lock is not atomic
+
+Found by the 2026-10-12 review. Done: two processes can never both hold the lock, and one's `Drop` never deletes the other's. Plan: rework `Lock::acquire_path` in `state.rs` (temp file plus no-replace link, or an OS advisory lock).
+Model: Claude Code / opus-5.5 · Status: done, merged in #309 · Priority: P2 · Complexity: 4
+Check: a concurrent acquire test and an empty-lock-is-busy test.
+
+### B111. Discover's empty search errors on the real core
+
+Found by the 2026-10-12 review. Done: `ketch-ffi` defines what `search("")` returns, both fakes agree, and a contract scenario covers it. Plan: decide in `crates/ketch-ffi/src/lib.rs` (browse the registry), align `FakeKetchCore` in Swift and C#, add a scenario under `desktop/contract/scenarios`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #313 · Priority: P2 · Complexity: 3
+Check: the ffi unit test and the scenario.
+
+### B114. Link targets are checked lexically
+
+Found by the 2026-10-12 review. Done: every link is canonicalized after extraction and must stay under the destination. Plan: canonicalize in `finish_deferred_links` and `payload_executable_entry`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #304 · Priority: P3 · Complexity: 4
+Check: a test with `L -> .` and `N -> L/L/../../..` that is refused.
+
+### B115. DMG and PKG payloads keep escaping links
+
+Found by the 2026-10-12 review. Done: after the copy every link goes through the B114 containment check. Plan: walk the tree in `extract/macos.rs`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #305 · Priority: P3 · Complexity: 3
+Check: a macOS-gated test with a nested escaping link.
+
+### B124. Windows asides of running exes pile up
+
+Found by the 2026-10-12 review. Done: `*.old.*` siblings of recorded links are swept at commit, relink and uninstall. Plan: a sweep in `platform/windows.rs`.
+Model: Claude Code / opus-5.5 · Status: done, merged in #299 · Priority: P3 · Complexity: 3
+Check: a Windows-gated test.
+
+### B130. Stale desktop replies overwrite newer ones
+
+Found by the 2026-10-12 review. Done: out-of-date search and changelog replies are dropped, and Windows search is debounced. Plan: request tokens in the macOS views and the Windows store/page.
+Model: Claude Code / opus-5.5 · Status: done, merged in #314 · Priority: P3 · Complexity: 3
+Check: store tests in Swift and in `Ketch.AppCore.Tests`.
+
+### B76. Registry rollback can leave the registry empty
+
+Row B76 in the 2026-10-08 findings. `registry.rs` already reported a failed rollback rename, but the live registry was still gone. Done: `replace_dir` copies the aside tree back with `source::local::copy_tree` when the rename back fails; if the copy fails too, the error names all three failures and the aside is kept as the only complete copy.
+
+Status: done (Claude Code / opus-5.5). Test: `registry::tests::a_failed_rename_back_restores_the_previous_registry_by_copy`, which fails with the copy fallback removed. Not covered: the path where the copy also fails, which a unit test cannot force without more injection.
+
+### B77. A busy `ketch.exe` aborts `self uninstall`
+
+Row B77 in the 2026-10-08 findings. `self uninstall` removed the running executable with `?`, so a busy Windows `.exe` stopped the rest of the uninstall.
+
+Status: done (Claude Code / opus-5.5). The fix was already on `main` in 5152c87 (the step warns and continues) but had no test. Test: `self_update::tests::uninstall_warns_and_finishes_when_the_running_binary_cannot_be_removed`, on every OS, which fails with the old `?` restored.
+
+### T900. Update vulnerable dependencies
+
+The creator authorized dependency updates across the audit. Update only vulnerable dependencies and the resolver-required graph without weakening existing guards or advisory policy.
+
+Execution plan: reproduce the advisory audit; apply compatible package-manager updates; review the lockfile diff; run advisory regression checks and the project test/lint/format gates; publish a PR and merge only after required checks pass. No custom dependency implementation is needed. Rollback is a revert of the dependency-update commit.
+
+Validation: rustls 0.23.46 resolves its RustSec advisories; the existing rsa RUSTSEC-2023-0071 has no patched release and remains reported. The complete nextest run passed 1241 of 1242 tests; the sole failure was an unconfigured mise PowerShell shim. Re-running all 7 PowerShell tests with installed PowerShell 7.6.6 passed. Workspace clippy with warnings denied and formatting passed. Existing rustls is reused; no custom implementation or new dependency was added. Regenerated workspace-hack for the resolved graph; hakari generate --diff, manage-deps --dry-run, and verify passed.
+
+### T901. Isolate UI test settings
+
+Concurrent unit tests mutate COLOR, EMOJI and LEVEL while other tests render snapshot lines, producing mixed styles. The creator approved this narrow fix alongside the owned R6 task, whose ownership and scope remain unchanged.
+
+Execution plan: reproduce the snapshot failures with the threaded Cargo runner; use a test-only standard-library mutex guard around settings initialization and assertions; reuse existing snapshots as regression checks; repeat threaded UI tests, then run nextest, Clippy and formatting. Existing project and shared-package searches found no reusable UI test-settings guard; std::sync::Mutex already used by this module is sufficient without a dependency.
+
+Validation: the 16-thread UI run failed 7 of 29 tests before the fix. After the fix, all 29 pass, including 20 consecutive repetitions (580 test executions). All 1248 workspace nextest tests pass with installed PowerShell 7.6.6 selected for the existing installer tests. Workspace Clippy with warnings denied, cargo fmt --check and git diff --check pass. Production code and snapshot expectations are unchanged.
+
+### T1.1. Consume the published shell-completions crate
+
+Changed ketch from the sibling-local `shell-completions` path dependency to the published crates.io `shell-completions = "0.1.0"` dependency. The Cargo.lock change adds only the registry source and checksum for version 0.1.0; no dependency versions were bumped. The package archive proof confirmed the standalone release contains 623 archive entries and 5 package members.
+
+Validation: against the registry package with `--locked`, `cargo test -p ketch --lib completions` completed successfully (no matching library tests); `cargo test -p ketch --test completion` passed 6 tests. The standalone locked archive proof resolved and built ketch with 623 archive entries and 5 package members.
+
+### T1. Use shared shell completion generation
+
+Use the local `shell-completions` crate in `packages/crates/rust`. Preserve rtok scripts and ketch package-name completion and installation behavior. Add `cox completions <shell>` without loading configuration, credentials, telemetry or a session.
+
+Execution plan: establish existing completion tests; extract the clap generator and Clink implementation with regression tests into the shared crate; connect consumers through local Cargo paths; update dependency inventories; run focused tests, formatting and clippy. Application-specific installation policies and ketch dynamic package lookup stay with their owners. Done when generation has one owner and the three CLI surfaces pass their checks.
+
+Validation: 11 generator unit tests and six completion integration tests passed. All five generated scripts are byte-identical to the baseline. Formatting and all-target clippy passed. The broader all-target test run stopped at the unchanged PowerShell installer version-prefix test in tests/install_ps1.rs.
+
+Reused `clap_complete` and the existing rtok Clink generator. No replacement library or custom generator was introduced. Local path dependencies resolve in the standard apps/packages layout.

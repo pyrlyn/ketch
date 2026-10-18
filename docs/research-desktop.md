@@ -245,9 +245,6 @@ enclosure signature with the exported app's `SUPublicEDKey` through CryptoKit
   It needs asset replacement, which [immutable releases](https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/immutable-releases)
   would forbid; the repository has them off (`GET /repos/pyrlyn/ketch/immutable-releases`
   → `enabled: false`, 2026-10-01). Turning them on means moving the feed.
-- GitHub Pages (`https://pyrlyn.github.io/ketch/`, built by `pages.yml`): the
-  site build would have to fetch the feed from the newest app release on every
-  deploy, or a site deploy would drop it.
 - A file committed to `main` by the workflow: a bot push to the protected
   branch for every release.
 

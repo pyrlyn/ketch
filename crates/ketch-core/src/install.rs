@@ -17,7 +17,7 @@ use crate::error::{Error, Result};
 use crate::hooks;
 use crate::manifest::Resolver;
 use crate::model::{
-    now_unix, AssetSelector, BinSpec, InstalledPackage, LinkRecord, LocalKind, PackageRef,
+    now_unix, AssetSelector, BinSpec, Channel, InstalledPackage, LinkRecord, LocalKind, PackageRef,
     PackageSpec, Release, ReleaseAsset, RetainedVersion, TrustResult, Version, VersionSpec,
 };
 use crate::platform::{AssetScore, Placement, Platform, TrustVerdict};
@@ -35,6 +35,9 @@ pub struct InstallRequest {
     /// Reinstall even when the resolved version is already present.
     pub force: bool,
     pub prerelease: bool,
+    /// `--draft`: consider draft releases too, and prereleases with them.
+    /// Refused for a source that has no drafts.
+    pub draft: bool,
     /// Create links in the bin dir (and copy `.app`s) after unpacking.
     pub link: bool,
     /// Fail rather than record a first-seen hash when no checksum is published.
@@ -44,6 +47,10 @@ pub struct InstallRequest {
     /// SHA-256 this asset is already known to have, from a lockfile. Checked
     /// before anything is unpacked.
     pub expected_sha256: Option<String>,
+    /// When the build a lockfile recorded under a floating tag was
+    /// published. A tag that now names a build published at another time is
+    /// refused before anything is downloaded.
+    pub expected_published: Option<String>,
     /// Override the resolved package name (used by `ketch install --path --name`).
     pub name_override: Option<String>,
     /// `--bin`: which of several binaries sharing the package's name to
@@ -56,6 +63,10 @@ pub struct InstallRequest {
     /// release stops with `Error::UpdateAvailable`, so the command can ask
     /// before it updates, instead of updating on its own.
     pub offer_update: bool,
+    /// Install even when the package was installed against a published
+    /// checksum and this release publishes none (`--allow-unverified`,
+    /// `--yes`).
+    pub allow_unverified: bool,
     /// Stops this install at its next check: before the download, between
     /// chunks, and before anything is placed. Clones share one flag, so a host
     /// keeps a clone to cancel with. `Cancel::new()` never fires on its own.
@@ -69,14 +80,17 @@ impl InstallRequest {
             spec,
             force: false,
             prerelease: false,
+            draft: false,
             link: true,
             require_checksum: false,
             asset_override: None,
             expected_sha256: None,
+            expected_published: None,
             name_override: None,
             bin: None,
             locked_bin: None,
             offer_update: false,
+            allow_unverified: false,
             cancel: Cancel::new(),
         }
     }
@@ -133,6 +147,8 @@ pub struct Prepared {
     local_path: Option<PathBuf>,
     /// Carried from the request so `commit` can stop before it places anything.
     cancel: Cancel,
+    /// Decided from the request's `--pre` and the release, recorded by `commit`.
+    channel: Channel,
 }
 
 /// Run the pipeline. Mutates `state` in memory; the caller saves it, so a batch
@@ -249,7 +265,10 @@ pub fn prepare(
 
     let source = sources.for_ref(&manifest.source)?;
 
-    let opts = crate::resolve::list_opts(cfg, &manifest, req.prerelease);
+    let mut opts = crate::resolve::list_opts(cfg, &manifest, req.prerelease);
+    if req.draft {
+        opts.ask_for_drafts(source.as_ref(), &manifest.source.scheme)?;
+    }
     report.step(
         "resolving",
         &format!("{} ({})", manifest.name, manifest.source),
@@ -257,10 +276,22 @@ pub fn prepare(
     let release = report
         .activity(&format!("resolving {}", manifest.name))
         .run(|| source.resolve(&manifest.source.id, &req.spec.version, &opts))?;
+    check_published(req, &manifest.name, &release)?;
 
     // Nothing is downloaded until we know the install is actually wanted.
     let existing = state.get(&manifest.name).cloned();
     if let Some(old) = &existing {
+        // State is keyed by name alone. Another project under the same name
+        // would take over this one's links, run its update hooks and mix two
+        // sources' versions in one retained list — a replacement nobody asked
+        // for by name.
+        if !crate::manifest::same_source(&old.source, &manifest.source) {
+            return Err(Error::msg(format!(
+                "`{}` is already installed from {}; {} would replace it. \
+                 Install it under another name with --name, or uninstall `{}` first",
+                old.name, old.source, manifest.source, old.name
+            )));
+        }
         if old.pinned && !matches!(req.spec.version, VersionSpec::Exact(_)) {
             return Err(Error::Pinned {
                 name: old.name.clone(),
@@ -268,7 +299,11 @@ pub fn prepare(
             });
         }
         let unversioned = !matches!(req.spec.version, VersionSpec::Exact(_));
-        if old.tag == release.tag && !req.force {
+        // The same floating tag can name a new build, which is not "already
+        // installed" however equal the tags are.
+        let same_build =
+            old.channel != Channel::Dev || !rebuilt(&InstalledBuild::of(old), &release);
+        if old.tag == release.tag && same_build && !req.force {
             // `pkg@1.2.0` asked for that version and keeps the old message.
             return Err(if unversioned && req.offer_update {
                 Error::NoUpdate {
@@ -384,6 +419,7 @@ pub fn prepare(
                 require,
                 report,
             )?;
+            refuse_checksum_downgrade(req, existing.as_ref(), checksum_verified, &asset)?;
 
             // --- signature ------------------------------------------------------
             // Before extraction: the unpacker is the widest attack surface ketch
@@ -419,6 +455,10 @@ pub fn prepare(
     report.stage(&label, Stage::Trusting);
     let trust = check_trust(platform.as_ref(), cfg, &payload, &manifest.name, report);
 
+    // Only the request's own opt-in, not `config.toml` or the manifest: both
+    // are read again on every `upgrade`, so recording them here would keep a
+    // package on prereleases after the person switched them off.
+    let channel = Channel::of(&release, req.prerelease, req.draft);
     Ok(Prepared {
         label,
         manifest,
@@ -438,6 +478,7 @@ pub fn prepare(
         local_kind,
         local_path,
         cancel: req.cancel.clone(),
+        channel,
     })
 }
 
@@ -634,6 +675,7 @@ pub fn commit(cx: &Ctx<'_>, state: &mut State, prepared: Prepared) -> Result<Ins
         local_kind,
         local_path,
         cancel,
+        channel,
     } = prepared;
     // Before the first hook or file: later steps are short and leave the tree
     // consistent on their own, so this is the last point a stop is free.
@@ -687,8 +729,12 @@ pub fn commit(cx: &Ctx<'_>, state: &mut State, prepared: Prepared) -> Result<Ins
 
     // --- place --------------------------------------------------------------
     // Reinstalling the same version writes into the directory the current
-    // install already occupies, and failing there must not delete it.
-    let in_place = existing.as_ref().is_some_and(|p| p.prefix == store_dir);
+    // install already occupies, and failing there must not delete it. A
+    // retained copy of this version is the same: placement restores it on
+    // failure, and deleting it afterwards would lose the rollback target.
+    let in_place = existing
+        .as_ref()
+        .is_some_and(|p| p.prefix == store_dir || p.retained.iter().any(|r| r.prefix == store_dir));
     let mut orphan = ScopedDir((!in_place).then(|| store_dir.clone()));
     let extras = extra_placements(platform.as_ref(), &manifest.extra_paths)?;
     let remembered = existing.as_ref().and_then(|p| p.bin_choice.as_deref());
@@ -746,7 +792,7 @@ pub fn commit(cx: &Ctx<'_>, state: &mut State, prepared: Prepared) -> Result<Ins
         if let Err(e) = platform.unplace(&stale, report) {
             report.warn(&format!("could not remove old links for {}: {e}", old.name));
         }
-        retain_replaced(cfg, old, &store_dir, &mut retained);
+        retain_replaced(cfg, old, &store_dir, &release.version, &mut retained);
     }
 
     if let (Some(pick), crate::model::ManifestOrigin::User(path)) = (&pick, &origin) {
@@ -775,6 +821,13 @@ pub fn commit(cx: &Ctx<'_>, state: &mut State, prepared: Prepared) -> Result<Ins
         retained,
         provenance,
         bin_choice,
+        channel,
+        draft: release.draft,
+        published_at: if channel == Channel::Dev {
+            release.published_at.clone()
+        } else {
+            None
+        },
     };
     state.insert(package.clone());
     orphan.keep();
@@ -1284,7 +1337,10 @@ pub fn prune(cx: &Ctx<'_>, state: &mut State, name: &str, keep: u32) -> Result<V
         if previous.prefix.is_dir() && kept.len() < keep {
             kept.push(previous);
         } else {
-            if previous.prefix.exists() {
+            // A state file written before retention dropped the live version
+            // can still list it; the entry goes, the directory every link
+            // points into stays.
+            if previous.prefix.exists() && previous.prefix != pkg.prefix {
                 remove_store_dir(cfg, &previous.prefix, report);
             }
             dropped.push(previous.version);
@@ -1297,12 +1353,146 @@ pub fn prune(cx: &Ctx<'_>, state: &mut State, name: &str, keep: u32) -> Result<V
 }
 
 /// Newest release available for an installed package, for `outdated`/`upgrade`.
+/// `draft` widens the lookup to drafts for this run, as `prerelease` does to
+/// prereleases.
 pub fn latest_release(
     sources: &SourceRegistry,
     pkg: &InstalledPackage,
     prerelease: bool,
+    draft: bool,
 ) -> Result<Release> {
-    latest_of(sources, &pkg.source, &installed_list_opts(pkg, prerelease))
+    let build = InstalledBuild::of(pkg);
+    release_of(
+        sources,
+        &pkg.source,
+        build.followed_tag(),
+        &upgrade_opts(pkg, prerelease, draft),
+    )
+}
+
+/// The options `latest_release` looks with, which `is_upgrade` needs too: what
+/// the lookup allowed decides what may count as an upgrade.
+pub fn upgrade_opts(pkg: &InstalledPackage, prerelease: bool, draft: bool) -> ListOpts {
+    let mut opts = installed_list_opts(pkg, prerelease);
+    opts.include_draft |= draft;
+    opts.include_prerelease |= draft;
+    opts
+}
+
+/// The release an installed package is compared against: the newest under
+/// `opts`, or for a package on a floating tag that tag again, since it has no
+/// successor to look for, only a newer build under the same name. Drafts are
+/// not asked of a source that has none: across many packages, one without
+/// drafts is simply answered without them.
+pub fn release_of(
+    sources: &SourceRegistry,
+    source: &PackageRef,
+    tag: Option<&str>,
+    opts: &ListOpts,
+) -> Result<Release> {
+    let found = sources.for_ref(source)?;
+    let mut opts = opts.clone();
+    opts.include_draft &= found.supports_drafts();
+    let version = match tag {
+        Some(tag) => VersionSpec::Exact(tag.to_string()),
+        None => VersionSpec::Latest,
+    };
+    found.resolve(&source.id, &version, &opts)
+}
+
+/// What an upgrade decision needs to know of an installed package, apart from
+/// the rest of its record, so `ketch list` can carry it for every row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstalledBuild {
+    pub name: String,
+    pub version: Version,
+    pub tag: String,
+    pub channel: Channel,
+    /// The installed release was a draft.
+    pub draft: bool,
+    pub asset_name: String,
+    pub sha256: String,
+    pub published_at: Option<String>,
+}
+
+impl InstalledBuild {
+    pub fn of(pkg: &InstalledPackage) -> InstalledBuild {
+        InstalledBuild {
+            name: pkg.name.clone(),
+            version: pkg.version.clone(),
+            tag: pkg.tag.clone(),
+            channel: pkg.channel,
+            draft: pkg.draft,
+            asset_name: pkg.asset_name.clone(),
+            sha256: pkg.sha256.clone(),
+            published_at: pkg.published_at.clone(),
+        }
+    }
+
+    /// The tag a package on a floating tag keeps resolving; `None` for every
+    /// other channel, which looks for the newest release instead.
+    pub fn followed_tag(&self) -> Option<&str> {
+        (self.channel == Channel::Dev).then_some(self.tag.as_str())
+    }
+}
+
+/// Whether `latest`, found for `have` with `opts`, should replace what is
+/// installed. The one rule behind `ketch upgrade`, `ketch outdated` and
+/// `ketch list`.
+///
+/// Versions are compared, not tags: a retagged release is not an upgrade, and
+/// neither is a source that briefly reports an older one, or a prerelease
+/// `opts` did not ask for — GitHub's `latest` can be an unflagged `-rc` tag.
+/// A draft is the exception: once published, the release under its tag is
+/// what the draft was a preview of. A draft that is no longer listed was
+/// deleted or published under another tag; that is said, and is not an error.
+/// A package on a floating tag is upgraded by a new build under that tag.
+pub fn is_upgrade(
+    report: &Report,
+    have: &InstalledBuild,
+    latest: &Release,
+    opts: &ListOpts,
+) -> bool {
+    if have.draft && latest.tag == have.tag {
+        return !latest.draft;
+    }
+    if have.channel == Channel::Dev && latest.tag == have.tag {
+        return rebuilt(have, latest);
+    }
+    let unasked = !opts.include_prerelease && (latest.prerelease || latest.version.is_prerelease());
+    if latest.tag != have.tag && latest.version > have.version && !unasked {
+        return true;
+    }
+    if have.draft {
+        report.warn(&format!(
+            "{}: the draft release {} it was installed from is gone; \
+             it was deleted or published under another tag",
+            have.name, have.tag
+        ));
+    }
+    false
+}
+
+/// Whether `release`, under the tag `pkg` was installed from, is another
+/// build than the one installed.
+///
+/// The installed asset's digest decides when the source publishes one: it
+/// describes the bytes, which a republish changes even when the date does
+/// not. Without it the publication date is all there is, and a date that is
+/// missing on either side is no evidence of a new build.
+pub(crate) fn rebuilt(pkg: &InstalledBuild, release: &Release) -> bool {
+    let Some(asset) = release.assets.iter().find(|a| a.name == pkg.asset_name) else {
+        // Nightlies often stamp a date or commit into their file names, so a
+        // vanished asset is a new build rather than an incomplete release.
+        return true;
+    };
+    match &asset.digest {
+        Some(digest) if digest.algo == "sha256" => !digest.hex.eq_ignore_ascii_case(&pkg.sha256),
+        _ => matches!(
+            (&pkg.published_at, &release.published_at),
+            (Some(installed), Some(now)) if installed != now
+        ),
+    }
 }
 
 /// The request that moves installed `pkg` to the release tagged `tag`, as
@@ -1312,7 +1502,6 @@ pub fn upgrade_request(
     cfg: &Config,
     pkg: &InstalledPackage,
     tag: &str,
-    prerelease: bool,
     bin: Option<String>,
     cancel: Cancel,
 ) -> InstallRequest {
@@ -1324,18 +1513,24 @@ pub fn upgrade_request(
             version: VersionSpec::Exact(tag.to_string()),
         },
         force: true,
-        prerelease,
+        // The tag is exact, so these only carry the channel forward: an
+        // upgrade that lands on a stable release must not end prereleases, or
+        // drafts.
+        prerelease: pkg.channel == Channel::Pre,
+        draft: pkg.channel == Channel::Draft,
         // A package installed with --no-link stays unlinked.
         link: !pkg.links.is_empty(),
         require_checksum: cfg.require_checksums,
         asset_override: None,
         expected_sha256: None,
+        expected_published: None,
         // The installed name, which `--name` may have chosen. Resolving the
         // source alone would infer another and install a second copy.
         name_override: Some(pkg.name.clone()),
         bin,
         locked_bin: None,
         offer_update: false,
+        allow_unverified: false,
         cancel,
     }
 }
@@ -1346,22 +1541,15 @@ pub fn installed_list_opts(pkg: &InstalledPackage, prerelease: bool) -> ListOpts
     // A manifest that asks for prereleases got one at install time; asking for
     // `latest` without it here would then report the package as up to date
     // forever, however many prereleases it has moved through since.
+    let draft = pkg.channel == Channel::Draft;
     ListOpts {
-        include_prerelease: prerelease || pkg.manifest.as_ref().is_some_and(|m| m.prerelease),
+        include_prerelease: prerelease
+            || draft
+            || pkg.channel == Channel::Pre
+            || pkg.manifest.as_ref().is_some_and(|m| m.prerelease),
+        include_draft: draft,
         ..Default::default()
     }
-}
-
-/// The newest release of `source` under `opts`: the one lookup behind
-/// `ketch outdated`, `ketch upgrade` and `ketch list`.
-pub fn latest_of(
-    sources: &SourceRegistry,
-    source: &PackageRef,
-    opts: &ListOpts,
-) -> Result<Release> {
-    sources
-        .for_ref(source)?
-        .resolve(&source.id, &VersionSpec::Latest, opts)
 }
 
 /// Rank a release's assets for this platform, best first. Assets the platform
@@ -1467,6 +1655,29 @@ pub(crate) fn verify_checksum(
     }
 }
 
+/// Refuse to replace a package installed against a published checksum with a
+/// release that publishes none, unless the request says to.
+///
+/// Without this, a release whose checksums were removed — by its publisher or
+/// by whoever took over the repository — installs with only the first-use note,
+/// and the one check that catches a replaced asset quietly disappears. A
+/// lockfile hash is a stronger pin than either, so it stands in for consent.
+fn refuse_checksum_downgrade(
+    req: &InstallRequest,
+    existing: Option<&InstalledPackage>,
+    checksum_verified: bool,
+    asset: &ReleaseAsset,
+) -> Result<()> {
+    let dropped = !checksum_verified && existing.is_some_and(|old| old.checksum_verified);
+    if dropped && !req.allow_unverified && req.expected_sha256.is_none() {
+        return Err(Error::ChecksumDropped {
+            name: existing.map(|old| old.name.clone()).unwrap_or_default(),
+            asset: asset.name.clone(),
+        });
+    }
+    Ok(())
+}
+
 /// Apply `strip_prefix`, or unwrap the single wrapper directory most tarballs
 /// use, so the payload root is where the files actually are.
 fn payload_root(unpacked: &Path, strip: Option<usize>) -> Result<PathBuf> {
@@ -1489,6 +1700,20 @@ fn payload_root(unpacked: &Path, strip: Option<usize>) -> Result<PathBuf> {
 /// locked — and a release that changed under a tag it already published is
 /// exactly what a lockfile exists to catch. Every payload path calls it before
 /// anything is placed, so no kind of package can skip the lock.
+/// Refuse a floating tag that a lockfile pinned to one build and that now
+/// names another, before anything is downloaded. A source that does not say
+/// when a release was published leaves nothing to compare.
+fn check_published(req: &InstallRequest, name: &str, release: &Release) -> Result<()> {
+    match (&req.expected_published, &release.published_at) {
+        (Some(locked), Some(now)) if locked != now => Err(Error::msg(format!(
+            "{name}: {} now names another build (published {now}, the lockfile \
+             recorded {locked}); run `ketch lock` again to accept it",
+            release.tag
+        ))),
+        _ => Ok(()),
+    }
+}
+
 fn check_locked(req: &InstallRequest, name: &str, asset: &str, sha256: &str) -> Result<()> {
     match &req.expected_sha256 {
         Some(expected) if !expected.eq_ignore_ascii_case(sha256) => Err(Error::msg(format!(
@@ -1544,13 +1769,23 @@ fn trust_result(verdict: TrustVerdict) -> TrustResult {
 /// Record the replaced prefix instead of deleting it. Missing or out-of-store
 /// prefixes are not eligible: promising a version that is already gone is
 /// worse than keeping nothing.
+///
+/// The new version leaves the list too: upgrading back to a version kept
+/// since a rollback makes its prefix the live one, and a retained entry still
+/// naming it would let `prune` delete the store every link points into.
 fn retain_replaced(
     cfg: &Config,
     old: &InstalledPackage,
     new_prefix: &Path,
+    new_version: &Version,
     retained: &mut Vec<RetainedVersion>,
 ) {
-    retained.retain(|r| r.prefix != old.prefix && r.version != old.version);
+    retained.retain(|r| {
+        r.prefix != old.prefix
+            && r.version != old.version
+            && r.prefix != new_prefix
+            && r.version != *new_version
+    });
     if old.prefix == new_prefix {
         return;
     }
@@ -1638,6 +1873,11 @@ fn sweep_swap_leftovers(
 
 /// `store/<name>/` when `name` is one plain path component and the folder
 /// exists inside the store after symlinks resolve.
+///
+/// The folder's own name on disk must be `name` byte for byte. A file system
+/// that folds case (APFS, NTFS) or drops a trailing dot (Windows) opens
+/// `store/ripgrep` for `RipGrep` or `ripgrep.`, and a lookup by path alone
+/// would hand an installed package's folder to whoever spelled it nearly.
 fn package_dir_candidate(cfg: &Config, name: &str) -> Option<PathBuf> {
     use std::path::Component;
     let mut components = Path::new(name).components();
@@ -1650,6 +1890,28 @@ fn package_dir_candidate(cfg: &Config, name: &str) -> Option<PathBuf> {
     let dir = cfg.store_dir.join(name);
     if dir.symlink_metadata().is_err() || !is_inside_store(&cfg.store_dir, &dir) {
         return None;
+    }
+    let spelled_so = std::fs::read_dir(&cfg.store_dir)
+        .ok()?
+        .flatten()
+        .any(|entry| entry.file_name() == std::ffi::OsStr::new(name));
+    spelled_so.then_some(dir)
+}
+
+/// `store/<name>/` when it is a folder no state entry accounts for: a
+/// candidate as `remove_package_dir` takes it, holding no prefix any installed
+/// package records. What `ketch uninstall` of an unknown name may offer to
+/// remove.
+pub fn leftover_package_dir(cfg: &Config, state: &State, name: &str) -> Option<PathBuf> {
+    let dir = package_dir_candidate(cfg, name)?;
+    let recorded = state
+        .packages
+        .values()
+        .flat_map(|p| std::iter::once(&p.prefix).chain(p.retained.iter().map(|r| &r.prefix)));
+    for prefix in recorded {
+        if *prefix == dir || is_inside_store(&dir, prefix) {
+            return None;
+        }
     }
     Some(dir)
 }
@@ -1677,7 +1939,10 @@ fn is_inside_store(store: &Path, prefix: &Path) -> bool {
     // When both exist, resolve symlinks so a decoy link inside the store
     // cannot point `remove_dir_all` at an outside victim. Prefer this before
     // the lexical walk: canonicalize also folds Windows short/long names.
-    if let (Ok(store), Ok(resolved)) = (dunce::canonicalize(store), dunce::canonicalize(prefix)) {
+    if let (Ok(store), Ok(resolved)) = (
+        fs_kit::path::canonicalize(store),
+        fs_kit::path::canonicalize(prefix),
+    ) {
         return crate::platform::path_is_strict_within(&resolved, &store);
     }
     // Lexical fallback for a missing payload (idempotent uninstall). A root
@@ -2088,6 +2353,39 @@ mod tests {
     }
 
     #[test]
+    fn a_folder_holding_a_recorded_prefix_is_not_a_leftover() {
+        let root = tempfile::tempdir().unwrap();
+        let cfg = Config::load(Some(root.path().join("ketch")), &Report::silent()).unwrap();
+        cfg.ensure_dirs().unwrap();
+        let prefix = cfg.package_dir("tool", "1.0.0");
+        std::fs::create_dir_all(&prefix).unwrap();
+        let orphan = cfg.store_dir.join("ghost");
+        std::fs::create_dir_all(&orphan).unwrap();
+        let mut state = State::default();
+        // Recorded under another key, so `State::find("tool")` misses it.
+        let mut pkg = installed("renamed", "1.0.0", prefix);
+        pkg.name = "renamed".into();
+        state.insert(pkg);
+
+        assert_eq!(leftover_package_dir(&cfg, &state, "tool"), None);
+        assert_eq!(leftover_package_dir(&cfg, &state, "ghost"), Some(orphan));
+    }
+
+    #[test]
+    fn a_name_spelled_differently_on_disk_is_not_a_candidate() {
+        let root = tempfile::tempdir().unwrap();
+        let cfg = Config::load(Some(root.path().join("ketch")), &Report::silent()).unwrap();
+        cfg.ensure_dirs().unwrap();
+        let folder = cfg.store_dir.join("tool");
+        std::fs::create_dir_all(&folder).unwrap();
+
+        for name in ["TOOL", "Tool"] {
+            assert_eq!(package_dir_candidate(&cfg, name), None, "{name}");
+        }
+        assert_eq!(package_dir_candidate(&cfg, "tool"), Some(folder));
+    }
+
+    #[test]
     fn a_missing_package_folder_is_not_a_candidate() {
         let root = tempfile::tempdir().unwrap();
         let cfg = Config::load(
@@ -2166,7 +2464,44 @@ mod tests {
             retained: Vec::new(),
             provenance: None,
             bin_choice: None,
+            channel: Default::default(),
+            draft: false,
+            published_at: None,
         }
+    }
+
+    #[test]
+    fn an_unverified_release_replacing_a_verified_install_needs_consent() {
+        let spec = || PackageSpec::parse("o/r");
+        let verified = installed("r", "1.0.0", PathBuf::from("/nowhere"));
+        let unverified = InstalledPackage {
+            checksum_verified: false,
+            ..installed("r", "1.0.0", PathBuf::from("/nowhere"))
+        };
+        let next = asset("r-2.0.0.tar.gz");
+        let plain = InstallRequest::new(spec());
+
+        let refused = refuse_checksum_downgrade(&plain, Some(&verified), false, &next);
+        assert!(
+            matches!(refused, Err(Error::ChecksumDropped { ref name, .. }) if name == "r"),
+            "{refused:?}"
+        );
+        // A verified release, a fresh install and an install that was never
+        // verified lose nothing, so they are not asked about.
+        assert!(refuse_checksum_downgrade(&plain, Some(&verified), true, &next).is_ok());
+        assert!(refuse_checksum_downgrade(&plain, None, false, &next).is_ok());
+        assert!(refuse_checksum_downgrade(&plain, Some(&unverified), false, &next).is_ok());
+
+        let consented = InstallRequest {
+            allow_unverified: true,
+            ..InstallRequest::new(spec())
+        };
+        assert!(refuse_checksum_downgrade(&consented, Some(&verified), false, &next).is_ok());
+        let locked = InstallRequest {
+            expected_sha256: Some("0".repeat(64)),
+            ..InstallRequest::new(spec())
+        };
+        assert!(refuse_checksum_downgrade(&locked, Some(&verified), false, &next).is_ok());
     }
 
     #[test]
@@ -2184,17 +2519,76 @@ mod tests {
         let old = installed("tool", "1.0.0", old_prefix.clone());
 
         let mut retained = Vec::new();
-        retain_replaced(&cfg, &old, &new_prefix, &mut retained);
+        let v2 = Version::parse("2.0.0");
+        retain_replaced(&cfg, &old, &new_prefix, &v2, &mut retained);
         assert_eq!(retained.len(), 1);
         assert_eq!(retained[0].version.to_string(), "1.0.0");
         assert_eq!(retained[0].prefix, old_prefix);
         assert!(old_prefix.is_dir(), "retention must not delete the prefix");
 
-        retain_replaced(&cfg, &old, &old_prefix, &mut retained);
+        retain_replaced(&cfg, &old, &old_prefix, &old.version, &mut retained);
         assert!(
             retained.is_empty(),
             "an in-place reinstall must not retain itself"
         );
+    }
+
+    #[test]
+    fn upgrading_back_to_a_retained_version_drops_its_retained_entry() {
+        let root = tempfile::tempdir().unwrap();
+        let cfg = Config::load(Some(root.path().join("ketch")), &Report::silent()).unwrap();
+        cfg.ensure_dirs().unwrap();
+        let v1_prefix = cfg.package_dir("tool", "1.0.0");
+        let v2_prefix = cfg.package_dir("tool", "2.0.0");
+        std::fs::create_dir_all(&v1_prefix).unwrap();
+        std::fs::create_dir_all(&v2_prefix).unwrap();
+        // What a rollback from 2.0.0 to 1.0.0 leaves behind.
+        let mut rolled_back = installed("tool", "1.0.0", v1_prefix.clone());
+        let mut retained = vec![RetainedVersion::from_installed(&installed(
+            "tool",
+            "2.0.0",
+            v2_prefix.clone(),
+        ))];
+        rolled_back.retained = retained.clone();
+
+        retain_replaced(
+            &cfg,
+            &rolled_back,
+            &v2_prefix,
+            &Version::parse("2.0.0"),
+            &mut retained,
+        );
+
+        assert_eq!(retained.len(), 1, "{retained:?}");
+        assert_eq!(retained[0].prefix, v1_prefix);
+    }
+
+    #[test]
+    fn prune_never_removes_the_live_prefix_a_stale_entry_names() {
+        let root = tempfile::tempdir().unwrap();
+        let cfg = Config::load(Some(root.path().join("ketch")), &Report::silent()).unwrap();
+        cfg.ensure_dirs().unwrap();
+        let report = Report::silent();
+        let cx = Ctx::new(&cfg, &report);
+        let live = cfg.package_dir("tool", "2.0.0");
+        let old = cfg.package_dir("tool", "1.0.0");
+        std::fs::create_dir_all(&live).unwrap();
+        std::fs::create_dir_all(&old).unwrap();
+        let mut pkg = installed("tool", "2.0.0", live.clone());
+        pkg.retained = vec![
+            RetainedVersion::from_installed(&installed("tool", "1.0.0", old.clone())),
+            RetainedVersion::from_installed(&installed("tool", "2.0.0", live.clone())),
+        ];
+        let mut state = State::default();
+        state.insert(pkg);
+
+        prune(&cx, &mut state, "tool", 1).unwrap();
+
+        assert!(live.is_dir(), "the live prefix must survive");
+        assert!(old.is_dir(), "the one kept version stays");
+        let kept = &state.get("tool").unwrap().retained;
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].prefix, old);
     }
 
     #[test]
@@ -2313,6 +2707,50 @@ mod tests {
         assert_eq!(state.packages.len(), 2);
     }
 
+    #[test]
+    #[cfg(unix)]
+    fn a_reinstall_whose_linking_fails_after_the_swap_puts_the_previous_store_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let (cfg, program) = local_fixture(dir.path(), "swaptool");
+        let report = Report::silent();
+        let cx = Ctx::new(&cfg, &report);
+        let sources = SourceRegistry::load(&cx);
+        let mut state = State::default();
+        let req = local_request(&program, &Cancel::new());
+        install(&cx, &sources, &mut state, &req).unwrap();
+        let before = state.get("swaptool").cloned().expect("installed");
+        // Marks the tree state names, so a swapped-in copy cannot pass for it.
+        std::fs::write(before.prefix.join("previous"), "kept").unwrap();
+        // A local reinstall lands on the same version, so the swap goes into
+        // the prefix state already records — the case the orphan guard skips.
+        // A file where the bin dir was passes preflight (nothing occupies the
+        // link) and fails only when linking creates the dir, after the swap.
+        std::fs::remove_dir_all(&cfg.bin_dir).unwrap();
+        std::fs::write(&cfg.bin_dir, "").unwrap();
+
+        let reinstall = InstallRequest {
+            force: true,
+            ..req.clone()
+        };
+        let err = install(&cx, &sources, &mut state, &reinstall).expect_err("linking must fail");
+        // Any earlier failure would leave the store untouched and prove nothing.
+        assert!(
+            err.to_string().contains(&cfg.bin_dir.display().to_string()),
+            "{err}"
+        );
+
+        let after = state.get("swaptool").expect("state entry survives");
+        assert_eq!(after.prefix, before.prefix);
+        assert_eq!(
+            std::fs::read_to_string(before.prefix.join("previous")).unwrap(),
+            "kept",
+            "the store state names is the one that was there before"
+        );
+        let mut retired = before.prefix.clone().into_os_string();
+        retired.push(".old");
+        assert!(!Path::new(&retired).exists(), "no retired copy left behind");
+    }
+
     /// The event sequence a front end draws an install from: every stage in
     /// order, the download as one task that ends, and nothing printed.
     #[cfg(unix)]
@@ -2409,6 +2847,10 @@ mod tests {
         }
 
         fn stop_processes(&self, _occupants: &[crate::process::Occupant]) -> bool {
+            false
+        }
+
+        fn confirm_remove_leftover(&self, _path: &Path) -> bool {
             false
         }
     }
@@ -2583,5 +3025,230 @@ mod tests {
             err.contains("ships several binaries sharing its name"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn a_package_on_the_pre_channel_looks_for_prereleases_without_pre() {
+        let mut pkg = installed("tool", "1.0.0", PathBuf::from("/store/tool"));
+        assert!(!installed_list_opts(&pkg, false).include_prerelease);
+        pkg.channel = Channel::Pre;
+        assert!(installed_list_opts(&pkg, false).include_prerelease);
+    }
+
+    #[test]
+    fn an_upgrade_carries_the_channel_forward() {
+        let root = tempfile::tempdir().unwrap();
+        let cfg = Config::load(
+            Some(root.path().join("ketch")),
+            &crate::report::Report::silent(),
+        )
+        .unwrap();
+        let mut pkg = installed("tool", "1.0.0", PathBuf::from("/store/tool"));
+        let stable = upgrade_request(&cfg, &pkg, "v1.1.0", None, Cancel::new());
+        assert!(!stable.prerelease);
+        pkg.channel = Channel::Pre;
+        let pre = upgrade_request(&cfg, &pkg, "v1.1.0", None, Cancel::new());
+        assert!(
+            pre.prerelease,
+            "a stable tag must not take a pre package off pre"
+        );
+    }
+
+    #[test]
+    fn a_package_on_the_draft_channel_looks_for_drafts_and_prereleases() {
+        let mut pkg = installed("tool", "1.0.0", PathBuf::from("/store/tool"));
+        assert!(!installed_list_opts(&pkg, false).include_draft);
+        pkg.channel = Channel::Draft;
+        let opts = installed_list_opts(&pkg, false);
+        assert!(opts.include_draft && opts.include_prerelease);
+    }
+
+    #[test]
+    fn an_upgrade_keeps_a_draft_package_on_drafts() {
+        let root = tempfile::tempdir().unwrap();
+        let cfg = Config::load(
+            Some(root.path().join("ketch")),
+            &crate::report::Report::silent(),
+        )
+        .unwrap();
+        let mut pkg = installed("tool", "1.0.0", PathBuf::from("/store/tool"));
+        assert!(!upgrade_request(&cfg, &pkg, "v1.1.0", None, Cancel::new()).draft);
+        pkg.channel = Channel::Draft;
+        assert!(upgrade_request(&cfg, &pkg, "v1.1.0", None, Cancel::new()).draft);
+    }
+
+    fn tagged(tag: &str, draft: bool) -> Release {
+        Release {
+            version: Version::parse(tag),
+            tag: tag.into(),
+            draft,
+            ..release(&[])
+        }
+    }
+
+    fn upgrade_with(pkg: &InstalledPackage, latest: &Release) -> (bool, Vec<String>) {
+        let warns = Warns(Default::default());
+        let report = Report::new(warns.clone());
+        let upgrade = is_upgrade(
+            &report,
+            &InstalledBuild::of(pkg),
+            latest,
+            &upgrade_opts(pkg, false, false),
+        );
+        let said = warns.0.lock().unwrap().clone();
+        (upgrade, said)
+    }
+
+    #[test]
+    fn only_a_higher_version_under_another_tag_is_an_upgrade() {
+        let pkg = installed("tool", "1.0.0", PathBuf::from("/store/tool"));
+        assert_eq!(upgrade_with(&pkg, &tagged("v1.1.0", false)), (true, vec![]));
+        assert_eq!(
+            upgrade_with(&pkg, &tagged("v1.0.0", false)),
+            (false, vec![])
+        );
+        assert_eq!(
+            upgrade_with(&pkg, &tagged("v0.9.0", false)),
+            (false, vec![])
+        );
+    }
+
+    #[test]
+    fn a_published_draft_is_an_upgrade_under_the_same_tag() {
+        let mut pkg = installed("tool", "2.0.0", PathBuf::from("/store/tool"));
+        pkg.channel = Channel::Draft;
+        pkg.draft = true;
+        assert_eq!(upgrade_with(&pkg, &tagged("v2.0.0", true)), (false, vec![]));
+        assert_eq!(upgrade_with(&pkg, &tagged("v2.0.0", false)), (true, vec![]));
+        assert_eq!(upgrade_with(&pkg, &tagged("v2.1.0", true)), (true, vec![]));
+    }
+
+    #[test]
+    fn a_deleted_draft_is_a_warning_and_not_an_upgrade() {
+        let mut pkg = installed("tool", "2.0.0", PathBuf::from("/store/tool"));
+        pkg.channel = Channel::Draft;
+        pkg.draft = true;
+        let (upgrade, said) = upgrade_with(&pkg, &tagged("v1.0.0", false));
+        assert!(!upgrade);
+        assert_eq!(said.len(), 1, "{said:?}");
+        assert!(said[0].contains("draft release v2.0.0"), "{said:?}");
+    }
+
+    /// A `nightly` package as installed: its asset hashed to all zeros,
+    /// published at `published`.
+    fn nightly(published: Option<&str>) -> InstalledPackage {
+        let mut pkg = installed("tool", "1.0.0", PathBuf::from("/store/tool"));
+        pkg.version = Version::parse("nightly");
+        pkg.tag = "nightly".into();
+        pkg.channel = Channel::Dev;
+        pkg.published_at = published.map(str::to_string);
+        pkg
+    }
+
+    /// `nightly` as the source answers now: one asset named `name`, with
+    /// `digest` when the source publishes one.
+    fn rebuild(name: &str, digest: Option<&str>, published: Option<&str>) -> Release {
+        let mut release = tagged("nightly", false);
+        let mut file = asset(name);
+        file.digest = digest.map(crate::model::Checksum::sha256);
+        release.assets = vec![file];
+        release.published_at = published.map(str::to_string);
+        release
+    }
+
+    #[test]
+    fn a_tag_that_is_not_a_version_lands_on_dev_whatever_was_opted_into() {
+        let release = tagged("nightly", false);
+        assert_eq!(Channel::of(&release, false, false), Channel::Dev);
+        assert_eq!(Channel::of(&release, true, false), Channel::Dev);
+        assert_eq!(Channel::of(&release, false, true), Channel::Draft);
+        assert_eq!(
+            Channel::of(&tagged("v1.0.0", false), false, false),
+            Channel::Stable
+        );
+    }
+
+    #[test]
+    fn the_same_digest_under_the_tag_is_the_installed_build_whatever_its_date() {
+        let pkg = nightly(Some("2026-10-01T00:00:00Z"));
+        let same = rebuild(
+            "a.tar.gz",
+            Some(&"0".repeat(64)),
+            Some("2026-10-09T00:00:00Z"),
+        );
+        assert!(!rebuilt(&InstalledBuild::of(&pkg), &same));
+        assert_eq!(upgrade_with(&pkg, &same), (false, vec![]));
+    }
+
+    #[test]
+    fn another_digest_under_the_tag_is_a_new_build_and_an_upgrade() {
+        let pkg = nightly(Some("2026-10-01T00:00:00Z"));
+        let moved = rebuild(
+            "a.tar.gz",
+            Some(&"1".repeat(64)),
+            Some("2026-10-01T00:00:00Z"),
+        );
+        assert!(rebuilt(&InstalledBuild::of(&pkg), &moved));
+        assert_eq!(upgrade_with(&pkg, &moved), (true, vec![]));
+    }
+
+    #[test]
+    fn without_a_digest_the_publication_date_decides() {
+        let pkg = nightly(Some("2026-10-01T00:00:00Z"));
+        assert!(!rebuilt(
+            &InstalledBuild::of(&pkg),
+            &rebuild("a.tar.gz", None, Some("2026-10-01T00:00:00Z"))
+        ));
+        assert!(rebuilt(
+            &InstalledBuild::of(&pkg),
+            &rebuild("a.tar.gz", None, Some("2026-10-09T00:00:00Z"))
+        ));
+    }
+
+    #[test]
+    fn a_missing_date_on_either_side_is_no_evidence_of_a_new_build() {
+        let undated = nightly(None);
+        assert!(!rebuilt(
+            &InstalledBuild::of(&undated),
+            &rebuild("a.tar.gz", None, Some("2026-10-09T00:00:00Z"))
+        ));
+        let dated = nightly(Some("2026-10-01T00:00:00Z"));
+        assert!(!rebuilt(
+            &InstalledBuild::of(&dated),
+            &rebuild("a.tar.gz", None, None)
+        ));
+    }
+
+    #[test]
+    fn an_asset_renamed_under_the_tag_is_a_new_build() {
+        let pkg = nightly(Some("2026-10-01T00:00:00Z"));
+        assert!(rebuilt(
+            &InstalledBuild::of(&pkg),
+            &rebuild("tool-20261009.tar.gz", None, Some("2026-10-01T00:00:00Z"))
+        ));
+    }
+
+    #[test]
+    fn a_stable_package_ignores_builds_under_its_own_tag() {
+        let pkg = installed("tool", "1.0.0", PathBuf::from("/store/tool"));
+        let mut retagged = tagged("v1.0.0", false);
+        let mut file = asset("a.tar.gz");
+        file.digest = Some(crate::model::Checksum::sha256("1".repeat(64)));
+        retagged.assets = vec![file];
+        assert_eq!(upgrade_with(&pkg, &retagged), (false, vec![]));
+    }
+
+    #[test]
+    fn a_tag_the_lockfile_pinned_to_another_build_is_refused() {
+        let mut req = InstallRequest::new(PackageSpec::parse("o/r@nightly"));
+        let now = rebuild("a.tar.gz", None, Some("2026-10-09T00:00:00Z"));
+        assert!(check_published(&req, "tool", &now).is_ok());
+        req.expected_published = Some("2026-10-09T00:00:00Z".into());
+        assert!(check_published(&req, "tool", &now).is_ok());
+        req.expected_published = Some("2026-10-01T00:00:00Z".into());
+        let err = check_published(&req, "tool", &now).unwrap_err().to_string();
+        assert!(err.contains("ketch lock"), "{err}");
+        let undated = rebuild("a.tar.gz", None, None);
+        assert!(check_published(&req, "tool", &undated).is_ok());
     }
 }

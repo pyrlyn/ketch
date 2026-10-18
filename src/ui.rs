@@ -23,7 +23,6 @@ use std::collections::HashMap;
 use std::io::{IsTerminal, Write};
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Mutex;
-use unicode_width::UnicodeWidthStr;
 
 #[cfg(feature = "tui")]
 use std::sync::Arc;
@@ -332,31 +331,10 @@ pub fn tone(tone: Tone, text: &str) -> String {
     }
 }
 
-/// Icons for what a verb is doing, looked up before the [`Tone`]'s own.
-///
-/// Matched as substrings of the verb, in order, so `installing`, `installed`
-/// and `already installed` share one entry. `uninstall` comes before `install`
-/// because it contains it.
-const OPERATION_ICONS: &[(&str, &str)] = &[
-    ("uninstall", "🧹"),
-    ("remov", "🧹"),
-    ("prun", "🧹"),
-    ("install", "📦"),
-    ("upgrad", "⏫"),
-    ("updat", "⏫"),
-    ("download", "⏬"),
-    ("fetch", "⏬"),
-    ("link", "🔗"),
-    ("roll", "⏪"),
-    ("search", "🔍"),
-    ("doctor", "🩺"),
-];
-
 /// The icon a line carries: its operation's when the verb names one, else its
 /// meaning's. Work in progress and questions have no icon of their own.
 fn icon(verb: &str, kind: Tone) -> Option<&'static str> {
-    let verb = verb.to_ascii_lowercase();
-    if let Some((_, icon)) = OPERATION_ICONS.iter().find(|(key, _)| verb.contains(key)) {
+    if let Some(icon) = operation_icons::icon(verb) {
         return Some(icon);
     }
     match kind {
@@ -368,14 +346,6 @@ fn icon(verb: &str, kind: Tone) -> Option<&'static str> {
     }
 }
 
-/// Columns every icon is padded to. Every icon is one code point that is wide
-/// by default. A narrow symbol made wide by U+FE0F (`⬆️`, `⚠️`) is two columns
-/// to `unicode-width` but one to terminals that ignore the selector, which
-/// then draw the glyph over the space after it and shift the verb left. Each icon is still
-/// measured rather than assumed, so a narrower one added later pads out
-/// instead of pulling its line left.
-const ICON_WIDTH: usize = 2;
-
 /// The icon gutter in front of the verb column: the icon and a space, or as
 /// many blanks when the line has none, so lines with and without icons align.
 /// Empty when icons are off.
@@ -383,16 +353,14 @@ fn gutter(icon: Option<&str>) -> String {
     if !emoji_enabled() {
         return String::new();
     }
-    let icon = icon.unwrap_or("");
-    let pad = ICON_WIDTH.saturating_sub(UnicodeWidthStr::width(icon));
-    format!("{icon}{} ", " ".repeat(pad))
+    operation_icons::gutter(icon)
 }
 
 /// The width of the verb column, icon gutter included: where the text after
 /// the verb starts, for lines that continue under it.
 fn label_width() -> usize {
     if emoji_enabled() {
-        10 + ICON_WIDTH + 1
+        10 + operation_icons::ICON_WIDTH + 1
     } else {
         10
     }
@@ -808,8 +776,10 @@ impl ProgressSink for BarProgress {
             None => self.bar.set_length(0),
         }
         self.bar.set_style(style);
-        self.bar
-            .set_message(truncate(self.label.as_deref().unwrap_or(label), 28));
+        self.bar.set_message(truncate(
+            &printable(self.label.as_deref().unwrap_or(label)),
+            28,
+        ));
         match &self.group {
             // `add` gives the bar its draw target, and the group keeps the
             // bars from overwriting one another.
@@ -1364,6 +1334,10 @@ impl Decider for TerminalDecider {
         };
         offer(&question, false)
     }
+
+    fn confirm_remove_leftover(&self, path: &std::path::Path) -> bool {
+        offer(&format!("remove leftover {}?", path.display()), false)
+    }
 }
 
 /// The reporter every command hands the core: one [`Terminal`] for the run.
@@ -1391,6 +1365,20 @@ pub fn ctx_asking(cfg: &Config, ask: bool) -> Ctx<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use unicode_width::UnicodeWidthStr;
+
+    // Cargo's threaded runner shares these globals between snapshot tests.
+    fn init_test(
+        color: Option<bool>,
+        quiet: bool,
+        verbose: bool,
+    ) -> std::sync::MutexGuard<'static, ()> {
+        static SETTINGS: Mutex<()> = Mutex::new(());
+        let guard = SETTINGS.lock().unwrap();
+        init(color, quiet, verbose);
+        EMOJI.store(false, Ordering::Relaxed);
+        guard
+    }
 
     const HOSTILE: &str = "evil\u{1b}[2K\u{1b}[1;31mFAKE\u{1b}[0m";
     const FILTERED: &str = "evil[2K[1;31mFAKE[0m";
@@ -1402,37 +1390,37 @@ mod tests {
 
     #[test]
     fn step_detail_cannot_redraw_the_terminal() {
-        init(Some(false), false, false);
+        let _settings = init_test(Some(false), false, false);
         assert_client_text_is_filtered(&step_line("fetch", HOSTILE));
     }
 
     #[test]
     fn success_detail_cannot_redraw_the_terminal() {
-        init(Some(false), false, false);
+        let _settings = init_test(Some(false), false, false);
         assert_client_text_is_filtered(&success_line("done", HOSTILE));
     }
 
     #[test]
     fn a_warning_cannot_redraw_the_terminal() {
-        init(Some(false), false, false);
+        let _settings = init_test(Some(false), false, false);
         assert_client_text_is_filtered(&warn_line(HOSTILE));
     }
 
     #[test]
     fn a_note_cannot_redraw_the_terminal() {
-        init(Some(false), false, false);
+        let _settings = init_test(Some(false), false, false);
         assert_client_text_is_filtered(&note_line(HOSTILE));
     }
 
     #[test]
     fn debug_output_cannot_redraw_the_terminal() {
-        init(Some(false), false, true);
+        let _settings = init_test(Some(false), false, true);
         assert_client_text_is_filtered(&debug_line(HOSTILE));
     }
 
     #[test]
     fn an_error_headline_cannot_redraw_the_terminal() {
-        init(Some(false), false, false);
+        let _settings = init_test(Some(false), false, false);
         let err = crate::error::Error::msg(HOSTILE);
         let lines = error_lines(&err.to_string(), &[], None);
         assert_client_text_is_filtered(&lines[0]);
@@ -1440,7 +1428,7 @@ mod tests {
 
     #[test]
     fn error_details_cannot_redraw_the_terminal() {
-        init(Some(false), false, false);
+        let _settings = init_test(Some(false), false, false);
         let err = crate::error::Error::Command {
             cmd: "test".into(),
             status: "1".into(),
@@ -1453,7 +1441,7 @@ mod tests {
 
     #[test]
     fn an_error_hint_cannot_redraw_the_terminal() {
-        init(Some(false), false, false);
+        let _settings = init_test(Some(false), false, false);
         let err = crate::error::Error::UnknownScheme(HOSTILE.into());
         let hint = err.hint().expect("UnknownScheme carries a hint");
         let lines = error_lines(&err.to_string(), &[], Some(&hint));
@@ -1483,14 +1471,14 @@ mod tests {
 
     #[test]
     fn each_line_kind_is_painted_by_its_meaning() {
-        init(Some(true), false, true);
+        let _settings = init_test(Some(true), false, true);
         let shown = every_line_kind().join("\n").replace('\u{1b}', "\\e");
         insta::assert_snapshot!(shown);
     }
 
     #[test]
     fn each_line_kind_carries_its_icon_when_emoji_are_on() {
-        init(Some(false), false, true);
+        let _settings = init_test(Some(false), false, true);
         EMOJI.store(true, Ordering::Relaxed);
         let shown = every_line_kind().join("\n");
         EMOJI.store(false, Ordering::Relaxed);
@@ -1499,31 +1487,39 @@ mod tests {
 
     #[test]
     fn no_line_kind_carries_an_icon_when_emoji_are_off() {
-        init(Some(false), false, true);
+        let _settings = init_test(Some(false), false, true);
         EMOJI.store(false, Ordering::Relaxed);
         let shown = every_line_kind().join("\n");
         insta::assert_snapshot!(shown);
-        for (_, icon) in OPERATION_ICONS {
+        for (_, icon) in operation_icons::OPERATION_ICONS {
             assert!(!shown.contains(icon), "{shown}");
         }
     }
 
     #[test]
     fn every_icon_fills_the_same_gutter() {
-        for (_, icon) in OPERATION_ICONS {
-            assert_eq!(UnicodeWidthStr::width(*icon), ICON_WIDTH, "{icon}");
+        for (_, icon) in operation_icons::OPERATION_ICONS {
+            assert_eq!(
+                UnicodeWidthStr::width(*icon),
+                operation_icons::ICON_WIDTH,
+                "{icon}"
+            );
             assert_eq!(icon.chars().count(), 1, "{icon} needs a selector");
         }
         for kind in [Tone::Success, Tone::Warning, Tone::Error, Tone::Note] {
             let icon = icon("", kind).unwrap_or_default();
-            assert_eq!(UnicodeWidthStr::width(icon), ICON_WIDTH, "{icon}");
+            assert_eq!(
+                UnicodeWidthStr::width(icon),
+                operation_icons::ICON_WIDTH,
+                "{icon}"
+            );
             assert_eq!(icon.chars().count(), 1, "{icon} needs a selector");
         }
     }
 
     #[test]
     fn text_after_the_verb_starts_in_one_column_with_or_without_an_icon() {
-        init(Some(false), false, true);
+        let _settings = init_test(Some(false), false, true);
         EMOJI.store(true, Ordering::Relaxed);
         let lines = [
             step_line("installing", "ripgrep"),
@@ -1566,7 +1562,7 @@ mod tests {
 
     #[test]
     fn no_line_kind_carries_escape_bytes_with_colour_off() {
-        init(Some(false), false, true);
+        let _settings = init_test(Some(false), false, true);
         for line in every_line_kind() {
             assert!(!line.contains('\u{1b}'), "{line:?}");
         }
@@ -1614,7 +1610,7 @@ mod tests {
 
     #[test]
     fn painted_cells_keep_their_columns_aligned() {
-        init(Some(false), false, false);
+        let _settings = init_test(Some(false), false, false);
         let rows = vec![
             vec!["a".to_string(), "x".to_string()],
             vec!["longer".to_string(), "y".to_string()],
@@ -1638,6 +1634,22 @@ mod tests {
             .collect();
         assert_eq!(plain[1].find('x'), plain[2].find('y'), "{plain:?}");
         assert_eq!(plain[1].find('x'), Some("longer".len() + 2));
+    }
+
+    #[test]
+    fn a_download_bar_label_cannot_redraw_the_terminal() {
+        let bar = BarProgress::new();
+        bar.start(Some(10), HOSTILE);
+        let message = bar.bar.message();
+        assert!(!message.contains('\u{1b}'), "{message:?}");
+        assert!(message.contains(FILTERED), "{message:?}");
+
+        let mut named = BarProgress::new();
+        named.label = Some(HOSTILE.to_string());
+        named.start(Some(10), "asset");
+        let message = named.bar.message();
+        assert!(!message.contains('\u{1b}'), "{message:?}");
+        assert!(message.contains(FILTERED), "{message:?}");
     }
 
     #[test]

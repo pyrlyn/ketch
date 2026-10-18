@@ -41,11 +41,30 @@ package behave as before.
 Options: `--path <PATH>` installs a local file (equivalent to
 `local:<PATH>`); `--name <NAME>` sets the installed name for a single
 package; `--force/-f` reinstalls the requested version even when present;
-`--pre` considers prereleases; `--no-link` unpacks without linking onto PATH;
+`--pre` considers prereleases and keeps the package on them: later
+`upgrade`, `outdated` and `list` look for prereleases without `--pre`, and
+`info` shows `channel: pre` (an exact prerelease tag, `pkg@v2.0.0-rc.1`, does
+the same; a plain install moves the package back to stable); `--draft`
+considers GitHub draft releases too, prereleases with them, and keeps the
+package on drafts (`channel: draft`); `pkg@<tag> --draft` finds a draft by
+the tag it will get. GitHub shows drafts only to a token with push access to
+the repository (`KETCH_GITHUB_TOKEN`, `GITHUB_TOKEN`, `GH_TOKEN` or
+`github_token`), so without one `--draft` stops with that reason; a draft's
+files download through the API with the token, and are checked like any
+other. Other sources have no drafts and refuse `--draft`; `--no-link` unpacks without linking onto PATH;
 `--require-checksum` refuses releases with no published checksum;
+`--allow-unverified` replaces a package installed against a published
+checksum with a release that publishes none, which otherwise fails with exit
+6 (`--yes` allows it too);
 `--asset <NAME>` takes one release file by exact name (asks for confirmation,
 since the platform check is skipped); `-j/--jobs <N>` and `-y/--yes` control
 parallelism and prompts. Aliased as `ketch i`.
+
+A tag that is not a version (`nightly`, `dev`, `canary`, `edge`) is a
+floating tag: the project republishes it under the same name. `pkg@nightly`
+installs it on `channel: dev`, recording the build it got — the asset's
+digest and when it was published. Installing the same tag again is `already
+installed` until the tag names another build, and then it takes the new one.
 
 When a release ships several binaries sharing the package's name and no
 manifest names one, only one of them is linked: the one `--bin <NAME>` names;
@@ -94,9 +113,17 @@ ketch upgrade ripgrep fd   # just these
 ketch upgrade --dry-run    # show the plan, change nothing
 ```
 
-Options: `--pre` considers prereleases; `--force` upgrades pinned packages
+Options: `--pre` considers prereleases; `--draft` considers GitHub draft
+releases too (a package installed with `--draft` does without it). A draft
+that was published is an upgrade to the release under its tag; a draft that
+was deleted is a warning. A package on a floating tag (`channel: dev`)
+follows that tag: the tag naming another build is the upgrade, decided by the
+asset's digest, or by when the release was published when the source gives
+no digest; a newer version under another tag is not. `--force` upgrades pinned packages
 too; `--bin <NAME>` (exactly one package) picks which binary to link when the
 new release ships several sharing the package's name, as on `install`;
+`--allow-unverified` (or `-y/--yes`) accepts a release that drops the
+checksum the installed version was verified against, as on `install`;
 `-j/--jobs <N>`, `-y/--yes`. Pinned and `local:` packages are skipped unless
 forced.
 
@@ -193,7 +220,7 @@ your GitHub token when one is set.
 
 ### `ketch list`
 
-`ketch list [local|remote] [--json] [--names-only]`, aliased as `ketch ls`.
+`ketch list [local|remote] [--json] [--names-only] [--pre] [--draft]`, aliased as `ketch ls`.
 
 Show what is installed, what the registry offers, or both in one table with
 the newest version of each.
@@ -212,8 +239,12 @@ to see the registry they come from.
 **Columns.**
 
 - `package` — the name to install, upgrade or uninstall it by.
-- `installed` — the installed version. `(pinned)` means `ketch pin` holds it;
-  `(+N retained)` means N earlier versions are kept for `ketch rollback`.
+- `installed` — the installed version, followed by the channel it follows
+  when that is not stable: `(pre)` for prereleases (installed with `--pre`, or
+  from a prerelease tag), `(draft)` for GitHub drafts (installed with
+  `--draft`), `(dev)` for a floating tag such as `nightly`; a package on the
+  default stable channel carries no mark. `(pinned)` means `ketch pin` holds
+  it; `(+N retained)` means N earlier versions are kept for `ketch rollback`.
   Empty for a package that is not installed.
 - `latest` — the newest release of the package's source. `(update available)`
   follows it when that is an update for the installed version. `?` means the
@@ -230,12 +261,19 @@ On a colour terminal the marker is `●`, the name is bold, and
 `(update available)` is yellow. `CLICOLOR_FORCE=1` asks for colour even into a
 pipe; `--no-color` and `NO_COLOR` turn it off.
 
-**Update available** is decided the way `ketch outdated` decides it. `latest` is
-the newest release the package's source reports, from the same lookup
-`ketch outdated` makes: stable releases only, unless `prerelease = true` is set
-in `config.toml` or in the package's manifest. That version is compared with
+**Update available** is decided by the same rule `ketch outdated` uses, for
+every channel. `latest` is the newest release the package's source reports,
+from the same lookup `ketch outdated` makes: stable releases only, unless
+`--pre` is given, `prerelease = true` is set in `config.toml` or in the
+package's manifest, or the package is installed on the `pre` channel; drafts
+too with `--draft` or on the `draft` channel. That version is compared with
 the installed one, and only a strictly newer version counts; a release with
-the installed tag never does. A pinned package is never offered an update.
+the installed tag does not, with two exceptions. A package on the `draft`
+channel is offered the release its draft was published as, under the same
+tag, and a warning says so when that draft is gone. A package on the `dev`
+channel is looked up under its own tag, and `latest` shows that tag; a new
+build published under it is an update. A pinned package is never offered an
+update.
 
 **Pinned packages** are listed with both versions and `(pinned)`, get no
 `(update available)`, and are left out of the footer. `ketch unpin` lets them
@@ -259,21 +297,35 @@ table followed by `latest: offline` and exits 0, while `ketch list remote`,
 which has nothing to show without it, exits non-zero.
 
 Answers are cached for 10 minutes in `~/.ketch/cache/latest.json`, per source
-and per prerelease setting, so listing twice in a row asks GitHub once. Only
+and per channel asked (stable, pre, draft, or a `dev` package's own tag), so
+listing twice in a row asks GitHub once. A cache file written by an older ketch
+is ignored and replaced. Only
 answers are cached, never failures. Delete the file to ask again sooner;
 `ketch outdated` and `ketch upgrade` never read it.
 
 **`--json`** prints, for each mode:
 
-- `local` — an array of `{"name", "installed", "pinned", "retained", "source"}`,
-  with `retained` the list of versions kept for rollback.
+- `local` — an array of
+  `{"name", "installed", "channel", "pinned", "retained", "source"}`, with
+  `retained` the list of versions kept for rollback and `channel` the release
+  channel the install follows (`stable`, `pre`, `draft` or `dev`).
 - `remote` — an array of `{"name", "latest", "description", "source"}`, with
   `latest` `null` for a source that did not answer.
 - no mode — `{"packages": [...], "unreachable": [...]}`. Each package is
-  `{"name", "installed", "latest", "update_available", "pinned", "source"}`;
-  `installed` is `null` when it is not installed and `latest` is `null` when
-  it is unknown. `unreachable` names the packages whose `latest` is unknown.
+  `{"name", "installed", "channel", "latest", "update_available", "pinned",
+  "source"}`; `installed` and `channel` are `null` when it is not installed and
+  `latest` is `null` when it is unknown. `unreachable` names the packages whose `latest` is unknown.
   Offline, `packages` holds only installed packages.
+
+**`--pre`** looks for prereleases when filling the `latest` column, for every
+row, the way `ketch outdated --pre` does. It changes nothing in `ketch list
+local`, which asks no source.
+
+**`--draft`** looks for GitHub draft releases too, and prereleases with them,
+in the `latest` column of installed packages, the way `ketch outdated --draft`
+does. Registry rows are left alone: drafts are visible only with a token that
+has push access to the repository. A package whose source has no drafts is
+asked without them, and one without such a token shows `?`.
 
 **`--names-only`** prints the names alone, one per line, for each mode; it never
 touches the network.
@@ -337,27 +389,80 @@ ketch list --names-only      # every package name, one per line
 ketch list remote --json     # the registry with latest versions
 ```
 
-### `ketch outdated [--json] [--pre]`
+### `ketch outdated [--json] [--pre] [--draft]`
 
 Show installed packages that have a newer release. A source that cannot be
 reached is a warning, not a failure — unless nothing could be checked at all.
+`--draft` compares against GitHub draft releases too, as on `upgrade`. A
+package on a floating tag is outdated when its tag names another build.
 
 ```bash
 ketch outdated
 ketch outdated --json   # {"status","outdated","failed","unreachable"}
 ```
 
-### `ketch info <PKG> [--assets] [--json]`
+### `ketch info <PKG> [--assets] [--releases [--draft]] [--json]`
 
 Show details about a package, installed or not: source, description, latest
 and installed versions, links, retention, verification.
 
 ```bash
 ketch info BurntSushi/ripgrep
-ketch info rg --assets   # every release asset with its score and why
+ketch info rg --assets     # every release asset with its score and why
+ketch info rg --releases   # the same table `ketch releases` prints, below
 ```
 
+`--releases` adds the package's releases under the details, newest 20, in the
+format of `ketch releases`, and `--draft` lists drafts among them as
+`ketch releases --draft` does; with
+`--json` they are the `releases` array. A source that cannot be reached is a
+warning and the section is left out (`null` in JSON).
+
 Aliased as `ketch show`.
+
+### `ketch releases <PKG> [--pre] [--draft] [-n <LIMIT>] [--json]`
+
+List the releases a package's source has published, newest first as the source
+returns them, and mark the one that is installed. Needs the network.
+
+```text
+$ ketch releases fd -n 3
+   tag      version  published   kind
+   v10.5.0  10.5.0   2026-08-26  stable
+*  v10.4.2  10.4.2   2026-03-10  stable
+   v10.4.1  10.4.1   2026-03-08  stable
+```
+
+- `tag` and `version` — the release's tag and the version ketch reads from it
+  and compares, without the tag's spelling (`v10.4.2` reads `10.4.2`). A tag
+  that is not a version at all (`nightly`) has `-` for the version.
+- `published` — the day the source says the release was published, or `-`.
+- `kind` — `stable`; `pre`, for a release the forge flags as a prerelease or
+  whose version has a prerelease part (`2.0.0-rc.1`); `dev`, for a tag that is
+  not a version (a floating `nightly`, even when it is also flagged
+  prerelease); `draft`, for an unpublished GitHub release, listed only with
+  `--draft` or for a package installed on the `draft` channel.
+- A `*` in the first column (`●` on a colour terminal) marks the release the
+  package is installed from, when it is among those listed.
+
+Only stable releases are listed unless `--pre` is given, `prerelease = true` is
+set in `config.toml` or the package's manifest, or the package is installed on
+the `pre` or `dev` channel (GitHub flags a nightly as a prerelease); a repository that has never published a stable release lists
+its prereleases anyway. `--draft` lists GitHub drafts too, and prereleases with
+them; a package installed with `--draft` lists them without it. As with
+`ketch install --draft`, that needs a token with push access to the repository
+(`KETCH_GITHUB_TOKEN`, `GITHUB_TOKEN`, `GH_TOKEN` or `github_token`), and stops
+naming what is
+missing; other sources have no drafts and refuse it. `-n` (default 20, at least
+1) caps the list; a source may return fewer. An empty list prints `no releases`.
+
+`--json` prints an array of `{"tag", "version", "published_at", "kind",
+"installed"}`; `version` and `published_at` are `null` when unknown.
+
+```bash
+ketch releases ripgrep
+ketch releases sharkdp/fd --pre --json
+```
 
 ### `ketch why <PKG> [--json]`
 
@@ -556,8 +661,8 @@ ketch completions bash --install
 ```
 
 The bash and PowerShell scripts also complete package names: installed ones after
-`uninstall`, `upgrade`, `pin`, `unpin`, `link`, `unlink`, `info`, `why`,
-`changelog` and `rollback`, and names from the local registry copy after
+`uninstall`, `upgrade`, `pin`, `unpin`, `link`, `unlink`, `info`, `releases`,
+`why`, `changelog` and `rollback`, and names from the local registry copy after
 `install` and `search`. It asks the binary for them with the internal
 `ketch __complete <installed|registry> [PREFIX]`, which reads the state file and
 the registry already on disk and never touches the network. A `--root` earlier
@@ -608,15 +713,21 @@ the curl/PowerShell/Homebrew installers run.
 ketch self install
 ```
 
-### `ketch self upgrade [--dry-run] [--force] [--yes]`
+### `ketch self upgrade [--dry-run] [--force] [--pre] [--yes]`
 
 Upgrade ketch to the latest release. Aliased as `ketch self update`. A ketch
 installed with mise and never `self install`ed is mise's to upgrade: this
 refuses, and names `mise upgrade`.
 
+`--pre` takes the newest release, prereleases included, instead of GitHub's
+latest release. The macOS app's `desktop-v*` releases are never taken. The
+installers take the same flag: `install.sh --pre` and `install.ps1 --pre`.
+Without it nothing changes.
+
 ```bash
 ketch self upgrade
 ketch self upgrade --dry-run
+ketch self upgrade --pre
 ```
 
 ### `ketch self version`
@@ -635,6 +746,12 @@ installed with mise also asks whether to run `mise unuse -g` for its own copy;
 `--yes` answers that too.
 On Windows the running `ketch.exe` cannot delete itself, so the rest of the
 root is removed by a background process once ketch has exited.
+
+The root's own directories (`bin`, `store`, `cache`, …) are emptied only when
+ketch created the root — it then holds a `.ketch-root` marker — or the root
+is the default `~/.ketch`. A root that already existed, such as `~/.local` or
+`/usr/local`, and the home directory itself keep everything ketch did not
+record there.
 
 On Windows it also removes what ketch wrote to the registry. Today that is
 only the bin dir in the user PATH (`HKCU\Environment\Path`), written by

@@ -15,7 +15,7 @@ categories = ["command-line-utilities", "development-tools"]
 # `crates/ketch-core` holds everything the binary does besides parsing the
 # command line, so another front end can link it without clap.
 [workspace]
-members = [".", "crates/ketch-core", "crates/ketch-ffi", "crates/ketch-capi"]
+members = [".", "crates/ketch-core", "crates/ketch-ffi", "crates/ketch-capi", "workspace-hack"]
 # A bare `cargo test` or `cargo clippy` at the root covers the core too.
 default-members = [".", "crates/ketch-core", "crates/ketch-ffi", "crates/ketch-capi"]
 
@@ -24,13 +24,20 @@ default-members = [".", "crates/ketch-core", "crates/ketch-ffi", "crates/ketch-c
 # binary's. scripts/release.sh, tests/crate-version.sh and site/sync-docs.py
 # read and write this line.
 [workspace.package]
-version = "0.10.0"
+version = "0.0.1"
 edition = "2021"
 # Raised from 1.82 by Diesel 2.3, which is the floor for the statistics
 # database. Nothing else in the tree needs it.
 rust-version = "1.86"
 license = "GPL-3.0-or-later OR LicenseRef-Ketch-Royalty-free-1.0 OR LicenseRef-Ketch-Commercial"
 repository = "https://github.com/pyrlyn/ketch"
+
+# fs-kit comes from crates.io on the committed lock; local work against
+# packages/crates/fs-kit uses the `paths` override `just setup` writes. No
+# `path` or `[patch]` here: CI and release builds must resolve the registry
+# version.
+[workspace.dependencies]
+fs-kit = "0.1.0"
 
 # There is no unsafe code in ketch and there is no reason for any to appear.
 [workspace.lints.rust]
@@ -50,6 +57,7 @@ path = "src/main.rs"
 tui = ["dep:crossterm", "dep:ratatui"]
 
 [dependencies]
+shell-completions = "0.1.0"
 ketch-core = { path = "crates/ketch-core" }
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }
 clap_complete = "4"
@@ -58,27 +66,21 @@ clap_mangen = { version = "0.3", features = ["env"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"
-# canonicalize without Windows `\\?\` UNC prefixes (path compare / display)
-dunce = "1"
-# Shared file backup (`<name>.bak-<unix-seconds>`) used by `ketch config reset`.
-# Published on crates.io as `file-backup`; local development against
-# `packages/crates/file-backup` uses a `paths` override in
-# `.cargo/config.toml` (see `just setup` / `AGENTS.md`). Do not add a `path`
-# or `[patch]` here — CI and release builds must resolve this from the
-# registry on the committed lock.
-file-backup = "0.1"
+# Path identity, atomic writes, tree copy/remove and the `<name>.bak-<unix-seconds>`
+# backup `ketch config reset` takes; one pinned version for the binary and the core.
+fs-kit.workspace = true
 # Terminal rendering: `ui` draws the core's events as lines and bars, and the
 # opt-in `tui` renderer draws them full screen. The core prints nothing, so
 # none of these are its dependencies.
 indicatif = "0.18"
-# How many columns a status-line icon takes, so the verb column stays aligned.
-# Already in the tree through indicatif, so it costs the binary nothing.
-unicode-width = "0.2"
+# Status-line verb icons and the icon gutter, shared with rtok.
+operation-icons = "0.1.0"
 # The terminal width `ketch list remote` fits descriptions to. Already in the
 # tree through clap's `wrap_help`, so it costs the binary nothing.
 terminal_size = "0.4"
 crossterm = { version = "0.29", optional = true }
 ratatui = { version = "0.30", optional = true }
+workspace-hack = { version = "0.1", path = "workspace-hack" }
 
 # Legacy Windows conhost prints ANSI escapes as text until a program switches
 # on virtual terminal processing. console does that per handle without unsafe
@@ -92,6 +94,8 @@ console = { version = "0.16", default-features = false, features = ["std"] }
 walkdir = "2"
 
 [dev-dependencies]
+# The status-line tests measure that every icon fills one gutter width.
+unicode-width = "0.2"
 assert_cmd = "2"
 assert_fs = "1"
 insta = "1.48"

@@ -149,16 +149,19 @@ fn request(cfg: &Config, name: &str, plan: &Apply) -> InstallRequest {
         spec,
         force: plan.force,
         prerelease: false,
+        draft: false,
         link: true,
         require_checksum: cfg.require_checksums,
         asset_override: plan.asset.clone(),
         expected_sha256: plan.sha256.clone(),
+        expected_published: None,
         name_override: None,
         bin: None,
         locked_bin: None,
         // The version is the one the source names; asking whether to take
         // a newer one would be a different command.
         offer_update: false,
+        allow_unverified: false,
         cancel: Cancel::new(),
     }
 }

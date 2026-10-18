@@ -97,6 +97,9 @@ pub enum Error {
     #[error("no published checksum for {0}")]
     ChecksumMissing(String),
 
+    #[error("{name} was installed against a published checksum, but {asset} publishes none")]
+    ChecksumDropped { name: String, asset: String },
+
     #[error("no installable files found in {0}")]
     EmptyPayload(PathBuf),
 
@@ -156,6 +159,14 @@ impl Error {
         }
     }
 
+    /// An error from `fs-kit`. It already names the exact path that failed
+    /// (a file deep inside a copied tree), which wins over `path`; the
+    /// original error goes in as the source, so the path prints once.
+    pub fn fs_kit(path: impl AsRef<Path>, err: std::io::Error) -> Self {
+        let (at, source) = fs_kit::split(err);
+        Error::io(at.as_deref().unwrap_or(path.as_ref()), source)
+    }
+
     pub fn parse(what: impl Into<String>, detail: impl Into<String>) -> Self {
         Error::Parse {
             what: what.into(),
@@ -197,6 +208,11 @@ impl Error {
             Error::ChecksumMismatch { .. } => {
                 Some("Refusing to install. Re-run to retry the download.".to_string())
             }
+            Error::ChecksumDropped { .. } => Some(
+                "A release that stops publishing checksums may have been replaced. \
+                 Pass --allow-unverified (or --yes) to install it anyway."
+                    .to_string(),
+            ),
             Error::AlreadyInstalled { .. } | Error::NoUpdate { .. } => {
                 Some("Use --force to reinstall.".to_string())
             }
@@ -222,7 +238,9 @@ impl Error {
             | Error::NoUpdate { .. }
             | Error::UpdateAvailable { .. }
             | Error::Pinned { .. } => 5,
-            Error::ChecksumMismatch { .. } | Error::ChecksumMissing(_) => 6,
+            Error::ChecksumMismatch { .. }
+            | Error::ChecksumMissing(_)
+            | Error::ChecksumDropped { .. } => 6,
             Error::Http { .. } | Error::Network { .. } => 7,
             Error::Busy { .. } => 8,
             Error::Reported(code) => *code,
@@ -230,5 +248,21 @@ impl Error {
             Error::Cancelled => 130,
             _ => 1,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_fs_kit_error_names_the_path_that_failed_once() {
+        let dir = tempfile::tempdir().unwrap();
+        // Reading a directory as text fails on every platform.
+        let err = fs_kit::read::text_or_empty(dir.path()).unwrap_err();
+        let text = Error::fs_kit("caller-path", err).to_string();
+        let path = dir.path().display().to_string();
+        assert_eq!(text.matches(&path).count(), 1, "{text}");
+        assert!(!text.contains("caller-path"), "{text}");
     }
 }

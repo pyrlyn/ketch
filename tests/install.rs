@@ -421,6 +421,46 @@ fn uninstall_after_rollback_removes_every_retained_prefix() {
 }
 
 #[test]
+fn prune_after_upgrading_back_to_a_retained_version_keeps_the_live_store() {
+    let sandbox = Sandbox::new();
+    publish_tool(&sandbox, "1.0.0");
+    sandbox.ok(&["install", "test:testtool@1.0.0", "--yes"]);
+    publish_tool(&sandbox, "2.0.0");
+    sandbox.ok(&["upgrade", "--yes"]);
+    sandbox.ok(&["rollback", "testtool"]);
+    sandbox.ok(&["upgrade", "--yes"]);
+    let link = sandbox.bin().join("testtool");
+    assert_eq!(run(&link), "testtool 2.0.0");
+
+    sandbox.ok(&["prune", "testtool", "--keep", "1"]);
+
+    assert!(sandbox.store().join("testtool").join("2.0.0").is_dir());
+    assert_eq!(run(&link), "testtool 2.0.0");
+    let json = sandbox.ok(&["info", "testtool", "--json"]);
+    assert!(json.contains(r#""installed": "2.0.0""#), "{json}");
+}
+
+#[test]
+fn installing_the_same_name_from_another_source_is_refused() {
+    let sandbox = Sandbox::new();
+    publish_tool(&sandbox, "1.0.0");
+    sandbox.ok(&["install", "test:testtool", "--yes"]);
+    let arch = host_arch();
+    let fork = sandbox.asset(
+        &format!("fork-testtool-2.0.0-{arch}-apple-darwin.tar.gz"),
+        tool_archive("2.0.0"),
+    );
+    sandbox.publish("fork/testtool", &[Release::new("2.0.0", vec![fork])]);
+
+    let stderr = sandbox.fails(&["install", "test:fork/testtool", "--yes"]);
+
+    assert!(stderr.contains("--name"), "{stderr}");
+    assert_eq!(run(&sandbox.bin().join("testtool")), "testtool 1.0.0");
+    let json = sandbox.ok(&["info", "testtool", "--json"]);
+    assert!(json.contains(r#""installed": "1.0.0""#), "{json}");
+}
+
+#[test]
 fn a_pinned_package_is_left_where_it_is() {
     let sandbox = Sandbox::new();
     publish_tool(&sandbox, "1.0.0");
@@ -453,6 +493,50 @@ fn a_download_that_does_not_match_its_checksum_installs_nothing() {
     assert!(!sandbox.bin().join("testtool").exists());
     assert!(!sandbox.store().join("testtool").exists());
     assert!(sandbox.ok(&["list", "local"]).contains("nothing installed"));
+}
+
+/// Publish `testtool` at `version` with no checksum, as a release whose
+/// checksums were removed would look.
+fn publish_unverified_tool(sandbox: &Sandbox, version: &str) {
+    let native = sandbox
+        .asset(
+            &format!("testtool-{version}-{}-apple-darwin.tar.gz", host_arch()),
+            tool_archive(version),
+        )
+        .without_digest();
+    sandbox.publish("testtool", &[Release::new(version, vec![native])]);
+}
+
+#[test]
+fn an_upgrade_that_drops_the_checksum_is_refused_without_consent() {
+    let sandbox = Sandbox::new();
+    publish_tool(&sandbox, "1.0.0");
+    sandbox.ok(&["install", "test:testtool@1.0.0", "--yes"]);
+    publish_unverified_tool(&sandbox, "2.0.0");
+
+    // Without a terminal `upgrade` declines before it installs anything, so
+    // the exact-version install is the path that reaches the check unasked.
+    let out = sandbox.ketch(&["install", "test:testtool@2.0.0"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(6), "{stderr}");
+    assert!(stderr.contains("publishes none"), "{stderr}");
+    assert!(stderr.contains("--allow-unverified"), "{stderr}");
+    assert_eq!(run(&sandbox.bin().join("testtool")), "testtool 1.0.0");
+
+    sandbox.ok(&["install", "test:testtool@2.0.0", "--allow-unverified"]);
+    assert_eq!(run(&sandbox.bin().join("testtool")), "testtool 2.0.0");
+    assert!(sandbox.state().contains(r#""checksum_verified": false"#));
+}
+
+#[test]
+fn yes_consents_to_an_upgrade_that_drops_the_checksum() {
+    let sandbox = Sandbox::new();
+    publish_tool(&sandbox, "1.0.0");
+    sandbox.ok(&["install", "test:testtool@1.0.0", "--yes"]);
+    publish_unverified_tool(&sandbox, "2.0.0");
+
+    sandbox.ok(&["upgrade", "--yes"]);
+    assert_eq!(run(&sandbox.bin().join("testtool")), "testtool 2.0.0");
 }
 
 #[test]

@@ -8,7 +8,10 @@
 //! linking: creating a symlink needs a privilege most users do not have. Every
 //! copy is recorded so uninstall can prove identity before deleting.
 
+use super::claim::Claims;
 use super::scoring::looks_like_build_artifact;
+use super::sibling;
+use super::{finalize_store_swap, restore_retired_store};
 use super::{AssetScore, DoctorCheck, Placement, Platform};
 use crate::config::Config;
 use crate::error::{Error, Result};
@@ -20,6 +23,7 @@ use crate::model::{
     PackageKind, TargetSpec,
 };
 use crate::source::local::copy_tree;
+use fs_kit::tree::remove_any;
 use std::collections::HashSet;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -60,21 +64,12 @@ impl WindowsPlatform {
     }
 }
 
-fn remove_any(path: &Path) -> std::io::Result<()> {
-    match std::fs::symlink_metadata(path) {
-        Ok(meta) if meta.is_dir() => std::fs::remove_dir_all(path),
-        Ok(_) => std::fs::remove_file(path),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e),
-    }
-}
-
 /// Windows `ERROR_ACCESS_DENIED` (5) / `ERROR_SHARING_VIOLATION` (32), plus
 /// `PermissionDenied`. A running `.exe` typically cannot be deleted or
 /// overwritten, but it *can* be renamed aside so a fresh copy can take its path.
 fn is_busy(err: &std::io::Error) -> bool {
     err.kind() == std::io::ErrorKind::PermissionDenied
-        || matches!(err.raw_os_error(), Some(5) | Some(32))
+        || matches!(fs_kit::raw_os_error(err), Some(5) | Some(32))
 }
 
 fn busy_aside(path: &Path) -> PathBuf {
@@ -107,6 +102,36 @@ fn clear_for_replace(path: &Path) -> std::io::Result<()> {
     }
 }
 
+/// Remove the asides `clear_for_replace` left beside `links` once the
+/// executable they held has stopped.
+///
+/// A running tool upgraded in place leaves `tool.exe.old.<pid>-<ms>` behind,
+/// and nothing else will ever remove it: without this each upgrade of a tool
+/// that was running adds one more. Best effort — one still running stays for
+/// the next sweep.
+fn sweep_busy_asides(links: &[LinkRecord]) {
+    for record in links {
+        let (Some(dir), Some(name)) = (
+            record.link.parent(),
+            record.link.file_name().and_then(|n| n.to_str()),
+        ) else {
+            continue;
+        };
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let aside = entry
+                .file_name()
+                .to_str()
+                .is_some_and(|candidate| super::is_busy_aside_of(name, candidate));
+            if aside && entry.file_type().is_ok_and(|t| t.is_file()) {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
+}
+
 fn copy_over(from: &Path, to: &Path) -> std::io::Result<()> {
     match std::fs::copy(from, to) {
         Ok(_) => Ok(()),
@@ -118,52 +143,32 @@ fn copy_over(from: &Path, to: &Path) -> std::io::Result<()> {
     }
 }
 
-fn sibling(original: &Path, suffix: &str) -> PathBuf {
-    let name = original
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "pkg".into());
-    original.with_file_name(format!("{name}{suffix}"))
+/// Copies with `copy_tree` when a rename cannot cross filesystems.
+fn move_into_store(payload: &Path, store: &Path) -> Result<bool> {
+    super::swap_into_store(payload, store, copy_tree)
 }
 
-fn move_into_store(payload: &Path, store: &Path) -> Result<()> {
-    if payload == store {
-        return Ok(());
-    }
-    if let Some(parent) = store.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
-    }
-    let staged = sibling(store, ".incoming");
-    let _ = remove_any(&staged);
-    if std::fs::rename(payload, &staged).is_err() {
-        copy_tree(payload, &staged)?;
-    }
-    if store.symlink_metadata().is_err() {
-        return std::fs::rename(&staged, store).map_err(|e| Error::io(store, e));
-    }
+/// `recorded` with targets under `store` pointed at its retired copy.
+///
+/// A copy is ours only while its bytes match its target. Reinstalling into the
+/// same store path — a new build under a dev package's floating tag — has just
+/// moved the bytes those copies were made from to `.old`, so comparing against
+/// the new store would call every one of our own copies someone else's.
+fn retired_targets(recorded: &[LinkRecord], store: &Path) -> Vec<LinkRecord> {
     let retired = sibling(store, ".old");
-    let _ = remove_any(&retired);
-    std::fs::rename(store, &retired).map_err(|e| Error::io(store, e))?;
-    if let Err(e) = std::fs::rename(&staged, store) {
-        let _ = std::fs::rename(&retired, store);
-        let _ = remove_any(&staged);
-        return Err(Error::io(store, e));
+    if retired.symlink_metadata().is_err() {
+        return recorded.to_vec();
     }
-    // Leave `.old` until copies succeed. A failed place after this swap can
-    // put the working version back; deleting it here would leave none.
-    Ok(())
-}
-
-fn finalize_store_swap(store: &Path) {
-    let _ = remove_any(&sibling(store, ".old"));
-}
-
-fn restore_retired_store(store: &Path) {
-    let retired = sibling(store, ".old");
-    if retired.symlink_metadata().is_ok() {
-        let _ = remove_any(store);
-        let _ = std::fs::rename(&retired, store);
-    }
+    recorded
+        .iter()
+        .map(|record| {
+            let mut record = record.clone();
+            if let Ok(rel) = record.target.strip_prefix(store) {
+                record.target = retired.join(rel);
+            }
+            record
+        })
+        .collect()
 }
 
 fn writable(dir: &Path) -> std::result::Result<(), String> {
@@ -232,9 +237,12 @@ fn destination_available(link: &Path, recorded: &[LinkRecord]) -> Result<()> {
     }
 }
 
-fn clear_destination(link: &Path, recorded: &[LinkRecord]) -> Result<()> {
+/// Clear a destination, or explain who already has it. What was there moves
+/// aside into `claims` — a rename, which also frees the name of a running
+/// `.exe` — so a placement that fails later can put it back.
+fn clear_destination(link: &Path, recorded: &[LinkRecord], claims: &mut Claims) -> Result<()> {
     destination_available(link, recorded)?;
-    clear_for_replace(link).map_err(|e| Error::io(link, e))
+    claims.take(link)
 }
 
 /// Keep a Windows executable suffix, or add `.exe` so PATH lookup finds it.
@@ -258,20 +266,12 @@ fn payload_executable_entry(entry: &walkdir::DirEntry, root: &Path) -> Option<Pa
     if !entry.file_type().is_symlink() {
         return None;
     }
-    let target = std::fs::read_link(path).ok()?;
-    let resolved = if target.is_absolute() {
-        target
-    } else {
-        path.parent()?.join(target)
-    };
-    let rel = resolved.strip_prefix(root).ok()?;
-    if rel
-        .components()
-        .any(|c| matches!(c, std::path::Component::ParentDir))
-    {
+    // One hop is not enough: `tool -> abs` reads as inside while `abs`, or
+    // any link further along, leads out of the payload.
+    if !crate::extract::resolves_inside(path, root) {
         return None;
     }
-    std::fs::metadata(&resolved)
+    std::fs::metadata(path)
         .ok()
         .filter(|meta| meta.is_file())
         .map(|_| path.to_path_buf())
@@ -406,6 +406,7 @@ fn copy_binary(
     bin_dir: &Path,
     name: &str,
     recorded: &[LinkRecord],
+    claims: &mut Claims,
 ) -> Result<LinkRecord> {
     std::fs::create_dir_all(bin_dir).map_err(|e| Error::io(bin_dir, e))?;
     let link = bin_dir.join(name);
@@ -413,12 +414,12 @@ fn copy_binary(
     if let Ok(entries) = std::fs::read_dir(bin_dir) {
         for entry in entries.flatten() {
             if dest_key(&entry.path()) == dest_key(&link) {
-                clear_destination(&entry.path(), recorded)?;
+                clear_destination(&entry.path(), recorded, claims)?;
                 break;
             }
         }
     }
-    clear_destination(&link, recorded)?;
+    clear_destination(&link, recorded, claims)?;
     copy_over(target, &link).map_err(|e| Error::io(&link, e))?;
     Ok(LinkRecord {
         link,
@@ -432,6 +433,7 @@ pub(crate) fn link_planned_extras(
     extras: &[ExtraPlacement],
     root: &Path,
     recorded: &[LinkRecord],
+    claims: &mut Claims,
 ) -> Result<Vec<LinkRecord>> {
     let mut links = Vec::new();
     for extra in extras {
@@ -439,7 +441,7 @@ pub(crate) fn link_planned_extras(
         if let Some(parent) = extra.dest.parent() {
             std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
         }
-        clear_destination(&extra.dest, recorded)?;
+        clear_destination(&extra.dest, recorded, claims)?;
         std::fs::copy(&target, &extra.dest).map_err(|e| Error::io(&extra.dest, e))?;
         links.push(LinkRecord {
             link: extra.dest.clone(),
@@ -465,18 +467,7 @@ impl Platform for WindowsPlatform {
     }
 
     fn extractors(&self) -> Vec<Box<dyn Extractor>> {
-        use crate::extract::archive::*;
-        vec![
-            Box::new(TarGzExtractor),
-            Box::new(TarXzExtractor),
-            Box::new(TarBz2Extractor),
-            Box::new(TarExtractor),
-            Box::new(ZipExtractor),
-            Box::new(GzFileExtractor),
-            Box::new(XzFileExtractor),
-            Box::new(Bz2FileExtractor),
-            Box::new(RawBinaryExtractor),
-        ]
+        crate::extract::archive::portable_extractors()
     }
 
     fn bin_candidates(&self, payload: &Path, kind: PackageKind, package: &str) -> Vec<PathBuf> {
@@ -487,6 +478,8 @@ impl Platform for WindowsPlatform {
     }
 
     fn place(&self, plan: &Placement<'_>) -> Result<Vec<LinkRecord>> {
+        // Install, upgrade, relink and rollback all come through here.
+        sweep_busy_asides(plan.replacing);
         if plan.link {
             let found = cli_targets(self, plan.payload_dir, plan)?;
             let mut destinations = HashSet::new();
@@ -514,20 +507,37 @@ impl Platform for WindowsPlatform {
                 return Err(Error::EmptyPayload(plan.payload_dir.to_path_buf()));
             }
         }
-        move_into_store(plan.payload_dir, plan.store_dir)?;
+        let swapped = move_into_store(plan.payload_dir, plan.store_dir)?;
         if !plan.link {
-            finalize_store_swap(plan.store_dir);
+            if swapped {
+                finalize_store_swap(plan.store_dir);
+            }
             return Ok(Vec::new());
         }
+        let replacing = if swapped {
+            retired_targets(plan.replacing, plan.store_dir)
+        } else {
+            plan.replacing.to_vec()
+        };
         let mut links = Vec::new();
+        // Named like `clear_for_replace`'s asides: one a running exe keeps
+        // undeletable is then the same kind of leftover, swept the same way.
+        let mut claims = Claims::new(busy_aside);
         let result = (|| -> Result<Vec<LinkRecord>> {
             for (target, name) in cli_targets(self, plan.store_dir, plan)? {
-                links.push(copy_binary(&target, plan.bin_dir, &name, plan.replacing)?);
+                links.push(copy_binary(
+                    &target,
+                    plan.bin_dir,
+                    &name,
+                    &replacing,
+                    &mut claims,
+                )?);
             }
             links.extend(link_planned_extras(
                 plan.extras,
                 plan.store_dir,
-                plan.replacing,
+                &replacing,
+                &mut claims,
             )?);
             if links.is_empty() {
                 return Err(Error::EmptyPayload(plan.store_dir.to_path_buf()));
@@ -536,12 +546,18 @@ impl Platform for WindowsPlatform {
         })();
         match result {
             Ok(links) => {
-                finalize_store_swap(plan.store_dir);
+                claims.discard();
+                if swapped {
+                    finalize_store_swap(plan.store_dir);
+                }
                 Ok(links)
             }
             Err(e) => {
                 let _ = self.unplace(&links, &crate::report::Report::silent());
-                restore_retired_store(plan.store_dir);
+                claims.restore();
+                if swapped {
+                    restore_retired_store(plan.store_dir);
+                }
                 Err(e)
             }
         }
@@ -558,6 +574,7 @@ impl Platform for WindowsPlatform {
     }
 
     fn unplace(&self, links: &[LinkRecord], report: &crate::report::Report) -> Result<()> {
+        sweep_busy_asides(links);
         for record in links {
             if std::fs::symlink_metadata(&record.link).is_err() {
                 continue;
@@ -569,7 +586,7 @@ impl Platform for WindowsPlatform {
                 ));
                 continue;
             }
-            remove_any(&record.link).map_err(|e| Error::io(&record.link, e))?;
+            remove_any(&record.link).map_err(|e| Error::fs_kit(&record.link, e))?;
         }
         Ok(())
     }
@@ -690,6 +707,34 @@ mod tests {
     }
 
     #[test]
+    fn placing_a_new_build_into_the_same_store_path_replaces_our_copy() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = tmp.path().join("store/tool/nightly");
+        let bin = tmp.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let platform = WindowsPlatform::new();
+
+        let first = tmp.path().join("first");
+        std::fs::create_dir_all(first.join("bin")).unwrap();
+        std::fs::write(first.join("bin/tool.cmd"), cmd_body("build 1")).unwrap();
+        let placed = platform
+            .place(&placement(&first, &store, &bin, tmp.path()))
+            .unwrap();
+
+        let second = tmp.path().join("second");
+        std::fs::create_dir_all(second.join("bin")).unwrap();
+        std::fs::write(second.join("bin/tool.cmd"), cmd_body("build 2")).unwrap();
+        let mut plan = placement(&second, &store, &bin, tmp.path());
+        plan.replacing = placed.as_slice();
+        platform.place(&plan).unwrap();
+
+        assert_eq!(
+            std::fs::read(bin.join("tool.cmd")).unwrap(),
+            cmd_body("build 2")
+        );
+    }
+
+    #[test]
     fn discover_prefers_capital_bin_over_noisy_siblings() {
         let tmp = tempfile::tempdir().unwrap();
         let payload = tmp.path().join("payload");
@@ -727,6 +772,40 @@ mod tests {
         assert!(
             body.windows(4).any(|w| w == b"user"),
             "user-owned file must be left alone"
+        );
+    }
+
+    #[test]
+    fn the_sweep_removes_only_stamped_asides_of_recorded_links() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bin = tmp.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let link = bin.join("tool.exe");
+        std::fs::write(&link, b"current").unwrap();
+        for name in [
+            "tool.exe.old.4242-1700000000000",
+            "tool.exe.old.backup",
+            "other.exe.old.1-2",
+        ] {
+            std::fs::write(bin.join(name), b"x").unwrap();
+        }
+        let record = LinkRecord {
+            link: link.clone(),
+            target: tmp.path().join("store/tool/1.0/tool.exe"),
+            kind: LinkKind::CopiedFile,
+            role: LinkRole::Binary,
+        };
+
+        sweep_busy_asides(&[record]);
+
+        let mut left: Vec<String> = std::fs::read_dir(&bin)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        assert_eq!(
+            left,
+            ["other.exe.old.1-2", "tool.exe", "tool.exe.old.backup"]
         );
     }
 
@@ -827,6 +906,7 @@ mod tests {
             &bin,
             "tool.exe",
             &recorded,
+            &mut Claims::default(),
         )
         .unwrap();
         assert_eq!(got.link, link);
@@ -839,6 +919,12 @@ mod tests {
         let sharing = std::io::Error::from_raw_os_error(32);
         assert!(is_busy(&denied));
         assert!(is_busy(&sharing));
+        // `remove_any` comes from fs-kit, which wraps the OS error with its path.
+        let wrapped = std::io::Error::other(fs_kit::PathError {
+            path: PathBuf::from("ketch.exe"),
+            source: std::io::Error::from_raw_os_error(32),
+        });
+        assert!(is_busy(&wrapped));
         assert!(!is_busy(&std::io::Error::from(
             std::io::ErrorKind::NotFound
         )));
@@ -918,6 +1004,7 @@ mod tests {
             &bin,
             "tool.exe",
             &recorded,
+            &mut Claims::default(),
         )
         .unwrap();
         assert_eq!(std::fs::read(&link).unwrap(), b"v2");

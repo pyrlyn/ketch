@@ -361,6 +361,7 @@ pub fn published_range(
     let source = sources.for_ref(&manifest.source)?;
     let opts = ListOpts {
         include_prerelease: cx.cfg.prerelease || manifest.prerelease,
+        include_draft: false,
         limit: RANGE_RELEASES,
     };
     let releases = source.list_releases(&manifest.source.id, &opts)?;

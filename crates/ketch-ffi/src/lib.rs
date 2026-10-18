@@ -157,6 +157,10 @@ impl KetchCore {
     /// manifests know first, then repositories the sources find, `limit` in
     /// all. A source that cannot be reached is a warning to `reporter`; only
     /// when every one failed and nothing was found is it an error.
+    ///
+    /// An empty `query` browses: every package the registry, the built-ins
+    /// and the person's own manifests know, up to `limit`, and no source is
+    /// asked, since none can rank a repository against nothing.
     pub fn search(
         &self,
         query: String,
@@ -164,11 +168,6 @@ impl KetchCore {
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<SearchResults> {
         let query = query.trim();
-        if query.is_empty() {
-            return Err(KetchError::Other {
-                message: "nothing to search for".into(),
-            });
-        }
         let limit = usize::try_from(limit).unwrap_or(usize::MAX);
         let op = self.operation(reporter, None)?;
         let cx = op.ctx();
@@ -189,7 +188,7 @@ impl KetchCore {
 
         let rest = limit.saturating_sub(known.len());
         let mut repositories = Vec::new();
-        if rest > 0 {
+        if rest > 0 && !query.is_empty() {
             let mut unreachable = 0usize;
             for source in SourceRegistry::load(&cx).all() {
                 match source.search(query, rest) {
@@ -262,15 +261,7 @@ impl KetchCore {
         let cancel = token(cancel);
         let reqs: Vec<InstallRequest> = specs
             .iter()
-            .map(|raw| InstallRequest {
-                force: options.force,
-                prerelease: options.prerelease,
-                link: options.link,
-                require_checksum: options.require_checksum || op.cfg.require_checksums,
-                bin: options.bin.clone(),
-                cancel: cancel.clone(),
-                ..InstallRequest::new(PackageSpec::parse(raw))
-            })
+            .map(|raw| install_request(&op.cfg, &options, raw, &cancel))
             .collect();
         let outcomes = install::batch(&cx, &sources, &mut state, &reqs, op.cfg.jobs);
         let labels = reqs.iter().map(|r| r.spec.label()).collect();
@@ -321,7 +312,6 @@ impl KetchCore {
                 &op.cfg,
                 pkg,
                 &upgrade.tag,
-                op.cfg.prerelease,
                 None,
                 cancel.clone(),
             ));
@@ -336,7 +326,8 @@ impl KetchCore {
     /// is checked first, so an unknown one stops the call with `NotFound`
     /// before any installed package is removed — though, as `ketch uninstall`
     /// does, a `store/<name>/` folder a failed uninstall left behind for that
-    /// name is taken away, since nothing else ever will. `cancel` is checked
+    /// exact name, holding no recorded prefix, is taken away when `decider`
+    /// confirms it, since nothing else ever will. `cancel` is checked
     /// before each package: what was removed by then stays removed.
     pub fn uninstall(
         &self,
@@ -352,7 +343,13 @@ impl KetchCore {
         let missing: Vec<&String> = names.iter().filter(|n| state.find(n).is_none()).collect();
         if let Some(first) = missing.first() {
             for name in &missing {
-                install::remove_package_dir(&op.cfg, name, &op.report);
+                // Removing a folder is the person's call, as the CLI asks it;
+                // a host with no decider keeps it.
+                if let Some(dir) = install::leftover_package_dir(&op.cfg, &state, name) {
+                    if cx.decider.confirm_remove_leftover(&dir) {
+                        install::remove_package_dir(&op.cfg, name, &op.report);
+                    }
+                }
             }
             return Err(KetchError::NotFound {
                 name: (*first).clone(),
@@ -684,6 +681,25 @@ fn installed_names(state: &State, names: &[String]) -> Result<BTreeSet<String>> 
 
 /// The upgrades on offer for installed packages, all of them or those in
 /// `only`: `ketch list`'s lookups, cache and update rules.
+/// What `install` asks the core for one `raw` spec under `options`.
+fn install_request(
+    cfg: &Config,
+    options: &InstallOptions,
+    raw: &str,
+    cancel: &Cancel,
+) -> InstallRequest {
+    InstallRequest {
+        force: options.force,
+        prerelease: options.prerelease,
+        link: options.link,
+        require_checksum: options.require_checksum || cfg.require_checksums,
+        allow_unverified: options.allow_unverified,
+        bin: options.bin.clone(),
+        cancel: cancel.clone(),
+        ..InstallRequest::new(PackageSpec::parse(raw))
+    }
+}
+
 fn upgrades(cx: &Ctx<'_>, state: &State, only: Option<&BTreeSet<String>>) -> Result<Vec<Upgrade>> {
     let locals = state
         .iter()
@@ -940,7 +956,25 @@ mod tests {
         assert!(core
             .install(Vec::new(), InstallOptions::default(), None, None, None)
             .is_err());
-        assert!(core.search("  ".into(), 10, None).is_err());
+    }
+
+    #[test]
+    fn an_empty_search_browses_what_is_known_and_asks_no_source() {
+        let (_dir, core) = scratch();
+        let cfg = core.operation(None, None).unwrap().cfg;
+        std::fs::create_dir_all(&cfg.manifest_dir).unwrap();
+        std::fs::write(
+            cfg.manifest_dir.join("alpha.toml"),
+            "name = \"alpha\"\nsource = \"github:example/alpha\"\n",
+        )
+        .unwrap();
+        let everything = core.search("  ".into(), 1000, None).unwrap();
+        assert_eq!(everything.known[0].name, "alpha", "{everything:?}");
+        assert!(everything.known.len() > 1, "the built-ins are known too");
+        assert!(everything.repositories.is_empty(), "{everything:?}");
+
+        let first = core.search(String::new(), 1, None).unwrap();
+        assert_eq!(first.known.len(), 1);
     }
 
     #[test]
@@ -971,6 +1005,21 @@ mod tests {
     }
 
     #[test]
+    fn install_options_carry_consent_to_drop_checksum_verification() {
+        let (_dir, core) = scratch();
+        let cfg = core.operation(None, None).unwrap().cfg;
+        let cancel = Cancel::default();
+        let asked = |options: InstallOptions| {
+            install_request(&cfg, &options, "o/r", &cancel).allow_unverified
+        };
+        assert!(!asked(InstallOptions::default()));
+        assert!(asked(InstallOptions {
+            allow_unverified: true,
+            ..InstallOptions::default()
+        }));
+    }
+
+    #[test]
     fn repeated_specs_are_installed_once() {
         assert_eq!(
             distinct(vec!["a".into(), "b".into(), "a".into()]),
@@ -978,17 +1027,63 @@ mod tests {
         );
     }
 
+    /// Answers only the leftover question, with `remove`, and counts it.
+    struct Leftovers {
+        remove: bool,
+        asked: std::sync::Mutex<Vec<String>>,
+    }
+
+    impl Decider for Leftovers {
+        fn choose_binary(&self, _package: String, _candidates: Vec<String>) -> Option<u32> {
+            None
+        }
+        fn stop_processes(&self, _holders: Vec<Holder>) -> bool {
+            false
+        }
+        fn confirm_remove_leftover(&self, path: String) -> bool {
+            self.asked.lock().unwrap().push(path);
+            self.remove
+        }
+    }
+
     #[test]
-    fn uninstalling_a_name_with_no_record_takes_its_leftover_folder() {
+    fn a_leftover_folder_is_taken_only_when_the_decider_confirms() {
         let (_dir, core) = scratch();
         let store = core.operation(None, None).unwrap().cfg.store_dir;
         let leftover = store.join("ghost");
         std::fs::create_dir_all(leftover.join("1.0.0.old")).unwrap();
+        let not_found = Err(KetchError::NotFound {
+            name: "ghost".into(),
+        });
+
         assert_eq!(
             core.uninstall(vec!["ghost".into()], None, None, None),
-            Err(KetchError::NotFound {
-                name: "ghost".into()
-            })
+            not_found
+        );
+        assert!(leftover.exists(), "no decider is no consent");
+
+        let declining = Arc::new(Leftovers {
+            remove: false,
+            asked: Default::default(),
+        });
+        let decider: Arc<dyn Decider> = declining.clone();
+        assert_eq!(
+            core.uninstall(vec!["ghost".into()], None, Some(decider), None),
+            not_found
+        );
+        assert!(leftover.exists(), "a decline keeps the folder");
+        assert_eq!(
+            *declining.asked.lock().unwrap(),
+            vec![leftover.display().to_string()]
+        );
+
+        let confirming: Arc<dyn Decider> = Arc::new(Leftovers {
+            remove: true,
+            asked: Default::default(),
+        });
+        assert_eq!(
+            core.uninstall(vec!["ghost".into()], None, Some(confirming), None),
+            not_found
         );
         assert!(!leftover.exists());
     }

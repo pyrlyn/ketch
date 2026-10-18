@@ -10,8 +10,8 @@
 
 use crate::changelog::{self, Entry, Origin};
 use crate::cli::{
-    ChangelogArgs, HistoryArgs, InfoArgs, ListArgs, ListMode, OutdatedArgs, SearchArgs, StatsArgs,
-    WhyArgs,
+    ChangelogArgs, HistoryArgs, InfoArgs, ListArgs, ListMode, OutdatedArgs, ReleasesArgs,
+    SearchArgs, StatsArgs, WhyArgs,
 };
 use crate::config::Config;
 use crate::error::{Error, Result};
@@ -19,6 +19,7 @@ use crate::install;
 use crate::listing::{self, Available, Local, Row};
 use crate::manifest::Resolver;
 use crate::model::{InstalledPackage, ManifestOrigin, PackageSpec, VersionSpec};
+use crate::releases;
 use crate::source::SourceRegistry;
 use crate::state::State;
 use crate::stats;
@@ -73,7 +74,8 @@ fn list_local(cfg: &Config, args: &ListArgs) -> Result<()> {
             .map(|l| {
                 serde_json::json!({
                     "name": ui::printable(&l.name),
-                    "installed": l.version.to_string(),
+                    "installed": l.build.version.to_string(),
+                    "channel": l.build.channel.as_str(),
                     "pinned": l.pinned,
                     "retained": l.retained.iter().map(ToString::to_string).collect::<Vec<_>>(),
                     "source": l.source.to_string(),
@@ -129,6 +131,12 @@ fn list_remote(cfg: &Config, args: &ListArgs) -> Result<()> {
         ui::note(EMPTY_REGISTRY);
     }
 
+    if args.prerelease {
+        listing::include_prereleases(&mut rows);
+    }
+    if args.draft {
+        listing::include_drafts(&mut rows);
+    }
     let sources = SourceRegistry::load(&crate::ui::ctx(cfg));
     if listing::fill_latest(&crate::ui::ctx(cfg), &sources, &mut rows).offline() {
         return Err(Error::msg(
@@ -186,6 +194,12 @@ fn list_all(cfg: &Config, args: &ListArgs) -> Result<()> {
         ui::note(EMPTY_REGISTRY);
     }
 
+    if args.prerelease {
+        listing::include_prereleases(&mut rows);
+    }
+    if args.draft {
+        listing::include_drafts(&mut rows);
+    }
     let sources = SourceRegistry::load(&crate::ui::ctx(cfg));
     let offline = listing::fill_latest(&crate::ui::ctx(cfg), &sources, &mut rows).offline();
     // No source answered: the network is missing, not one package. What is
@@ -200,7 +214,8 @@ fn list_all(cfg: &Config, args: &ListArgs) -> Result<()> {
                 let local = row.local.as_ref();
                 serde_json::json!({
                     "name": ui::printable(&row.name),
-                    "installed": local.map(|l| l.version.to_string()),
+                    "installed": local.map(|l| l.build.version.to_string()),
+                    "channel": local.map(|l| l.build.channel.as_str()),
                     "latest": row.latest_version(),
                     "update_available": row.update_available(),
                     "pinned": local.is_some_and(|l| l.pinned),
@@ -223,7 +238,7 @@ fn list_all(cfg: &Config, args: &ListArgs) -> Result<()> {
         return Ok(());
     }
 
-    let marker = if ui::color_enabled() { "●" } else { "*" };
+    let marker = installed_marker();
     let cells: Vec<Vec<String>> = rows
         .iter()
         .map(|row| {
@@ -290,7 +305,7 @@ pub fn outdated(cfg: &Config, args: OutdatedArgs) -> Result<()> {
                 let i = next.fetch_add(1, Ordering::Relaxed);
                 let Some(pkg) = pkgs.get(i) else { return };
                 ui::step("checking", &pkg.name);
-                let result = install::latest_release(&sources, pkg, prerelease);
+                let result = install::latest_release(&sources, pkg, prerelease, args.draft);
                 done.lock()
                     .unwrap_or_else(|e| e.into_inner())
                     .push((i, result));
@@ -321,10 +336,12 @@ pub fn outdated(cfg: &Config, args: OutdatedArgs) -> Result<()> {
             }
         };
         checked += 1;
-        // Match `upgrade`: a retagged release is not newer, and a source that
-        // still reports the installed tag is current even if its version
-        // string somehow parses differently.
-        if release.tag == pkg.tag || release.version <= pkg.version {
+        if !install::is_upgrade(
+            crate::ui::report(),
+            &install::InstalledBuild::of(pkg),
+            &release,
+            &install::upgrade_opts(pkg, prerelease, args.draft),
+        ) {
             continue;
         }
         rows.push(vec![
@@ -391,6 +408,21 @@ pub fn info(cfg: &Config, args: InfoArgs) -> Result<()> {
         ..
     } = found;
 
+    let listed = if args.releases {
+        list_releases(
+            cfg,
+            &manifest,
+            installed.as_ref(),
+            false,
+            args.draft,
+            DEFAULT_RELEASES,
+        )
+        .map_err(|e| ui::warn(&format!("{}: {e}", manifest.name)))
+        .ok()
+    } else {
+        None
+    };
+
     let scored = match &release {
         Some(r) if args.assets => {
             let platform = crate::platform::host()?;
@@ -413,6 +445,7 @@ pub fn info(cfg: &Config, args: InfoArgs) -> Result<()> {
             "latest_tag": release.as_ref().map(|r| ui::printable(&r.tag)),
             "installed": installed.as_ref().map(|p| p.version.to_string()),
             "pinned": installed.as_ref().map(|p| p.pinned).unwrap_or(false),
+            "channel": installed.as_ref().map(|p| p.channel.as_str()),
             "publisher_trust": installed.as_ref().map(|p| p.publisher_trust()),
             "provenance": installed.as_ref().and_then(|p| p.provenance.as_ref()),
             "retained": installed.as_ref().map(|p| {
@@ -428,6 +461,7 @@ pub fn info(cfg: &Config, args: InfoArgs) -> Result<()> {
                 .or_else(|| (manifest.source.scheme == "local").then(|| "local".to_string())),
             "local_path": installed.as_ref().and_then(|p| p.local_path.as_ref()).map(|p| p.display().to_string())
                 .or_else(|| (manifest.source.scheme == "local").then(|| manifest.source.id.clone())),
+            "releases": listed.as_deref().map(releases_json),
             "assets": scored.iter().map(|s| serde_json::json!({
                 "name": ui::printable(&s.asset.name),
                 "size": s.asset.size,
@@ -490,6 +524,9 @@ pub fn info(cfg: &Config, args: InfoArgs) -> Result<()> {
                     if pkg.pinned { " (pinned)" } else { "" }
                 ),
             );
+            if !pkg.channel.is_stable() {
+                field("channel", pkg.channel.as_str().into());
+            }
             field("prefix", pkg.prefix.display().to_string());
             field("verified", pkg.publisher_trust().into());
             if let Some(p) = &pkg.provenance {
@@ -539,6 +576,11 @@ pub fn info(cfg: &Config, args: InfoArgs) -> Result<()> {
         }
     }
 
+    if let Some(entries) = &listed {
+        ui::out("");
+        print_releases(entries);
+    }
+
     if args.assets {
         ui::out("");
         if scored.is_empty() {
@@ -559,6 +601,99 @@ pub fn info(cfg: &Config, args: InfoArgs) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// How many releases `info --releases` shows; `ketch releases -n` is the way
+/// to ask for more.
+const DEFAULT_RELEASES: usize = 20;
+
+/// The first-column mark of an installed package, in `list` and in `releases`.
+fn installed_marker() -> &'static str {
+    if ui::color_enabled() {
+        "●"
+    } else {
+        "*"
+    }
+}
+
+fn list_releases(
+    cfg: &Config,
+    manifest: &crate::model::Manifest,
+    installed: Option<&InstalledPackage>,
+    prerelease: bool,
+    draft: bool,
+    limit: usize,
+) -> Result<Vec<releases::Entry>> {
+    let cx = crate::ui::ctx(cfg);
+    let sources = SourceRegistry::load(&cx);
+    releases::list(&cx, &sources, manifest, installed, prerelease, draft, limit)
+}
+
+/// `ketch releases <PKG>`: what the package's source has published, newest
+/// first, with the installed release marked.
+pub fn releases(cfg: &Config, args: ReleasesArgs) -> Result<()> {
+    let state = State::load(cfg)?;
+    let (manifest, origin, installed) =
+        crate::info::resolve(&crate::ui::ctx(cfg), &state, &args.package)?;
+    if let Some(origin) = &origin {
+        ui::debug(&format!("manifest from {}", describe_origin(origin)));
+    }
+    let entries = list_releases(
+        cfg,
+        &manifest,
+        installed.as_ref(),
+        args.prerelease,
+        args.draft,
+        args.limit as usize,
+    )?;
+    if args.json {
+        return print_json(&releases_json(&entries));
+    }
+    print_releases(&entries);
+    Ok(())
+}
+
+/// One renderer for `releases` and `info --releases`.
+fn print_releases(entries: &[releases::Entry]) {
+    if entries.is_empty() {
+        ui::out("no releases");
+        return;
+    }
+    let marker = installed_marker();
+    let cells: Vec<Vec<String>> = entries
+        .iter()
+        .map(|e| {
+            vec![
+                if e.installed { marker } else { "" }.to_string(),
+                e.tag.clone(),
+                // A tag that is not a version has no version to show.
+                // The tag column already shows the raw spelling; the version
+                // is the semver ketch compares, so `v10.4.2` reads `10.4.2`.
+                e.version
+                    .sem
+                    .as_ref()
+                    .map_or_else(|| "-".to_string(), ToString::to_string),
+                e.date().unwrap_or("-").to_string(),
+                e.kind.as_str().to_string(),
+            ]
+        })
+        .collect();
+    ui::table(&["", "tag", "version", "published", "kind"], &cells);
+}
+
+fn releases_json(entries: &[releases::Entry]) -> Vec<serde_json::Value> {
+    entries
+        .iter()
+        .map(|e| {
+            serde_json::json!({
+                "tag": ui::printable(&e.tag),
+                "version": e.version.sem.as_ref().map(ToString::to_string),
+                "published_at": json_prose(e.published_at.clone()),
+                "kind": e.kind.as_str(),
+                "installed": e.installed,
+            })
+        })
+        .collect()
 }
 
 /// Print what changed in a release.

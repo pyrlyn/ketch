@@ -4,7 +4,8 @@
 # cargo-cache is pinned in mise.toml, so `just cache` runs the same version
 # everywhere. Set CARGO_CACHE to a bare `cargo-cache` if mise is already
 # activated in your shell, or to skip mise entirely.
-cache := env("CARGO_CACHE", "mise exec -- cargo-cache")
+# ptools (pyrlyn/tools) is pinned in mise.toml; PTOOLS overrides it if mise is already activated.
+ptools := env("PTOOLS", "mise exec -- ptools")
 # cargo-dist is pinned in mise.toml too; DIST overrides it the same way.
 dist := env("DIST", "mise exec -- dist")
 
@@ -36,8 +37,9 @@ deps:
     mise install
     mise exec -- npm ci
 
+
 # local dev only (never committed, never on CI): use the sibling checkout at
-# packages/crates/file-backup instead of crates.io.
+# packages/crates/fs-kit instead of crates.io.
 #
 # This is a `paths` override, not a `[patch]`: it swaps the source without
 # touching Cargo.lock, so `--locked` builds keep working on the committed
@@ -46,23 +48,24 @@ setup:
     #!/usr/bin/env bash
     set -euo pipefail
     mkdir -p .cargo
-    # Cargo reads both `.cargo/config` and `.cargo/config.toml` (the latter
-    # wins), so a legacy `config` file must not be silently shadowed.
-    if [ -e .cargo/config.toml ] || [ -e .cargo/config ]; then
-      echo ".cargo/config.toml already exists; leaving it alone"
+    # `.cargo/config.toml` is tracked (Windows rust-lld) and pulls in the
+    # git-ignored `.cargo/config.local.toml` via `include` (cargo >= 1.93),
+    # so the local override never dirties the tracked file.
+    if [ -e .cargo/config.local.toml ]; then
+      echo ".cargo/config.local.toml already exists; leaving it alone"
     else
       printf '%s\n' \
         '# Local-only Cargo overrides, never committed.' \
         '#' \
-        '# Written by `just setup` so `file-backup` resolves to the sibling' \
-        '# checkout at `packages/crates/file-backup` instead of crates.io.' \
+        '# Written by `just setup` so `fs-kit` resolves to the sibling' \
+        '# checkout at `packages/crates/fs-kit` instead of crates.io.' \
         '# A `paths` override (not a `[patch]`): the source is swapped' \
         '# without touching Cargo.lock, so `--locked` keeps working.' \
         '# CI and release builds never run this, so they always resolve the' \
         '# pinned crates.io version from `Cargo.lock`.' \
-        'paths = ["../../packages/crates/file-backup"]' \
-        > .cargo/config.toml
-      echo "wrote .cargo/config.toml (local file-backup override)"
+        'paths = ["../../packages/crates/fs-kit"]' \
+        > .cargo/config.local.toml
+      echo "wrote .cargo/config.local.toml (local fs-kit override)"
     fi
 
 # opt in to the commit-msg hook; undo with `git config --unset core.hooksPath`
@@ -214,27 +217,23 @@ design-check:
 release level="patch" *flags:
     scripts/release.sh {{level}} {{flags}}
 
-check: fmt-check lint fuzz-check test lint-commits lint-shell lint-man dist-check design-check package lint-cask
+check: fmt-check lint fuzz-check core-features test lint-commits lint-shell lint-man dist-check design-check package lint-cask
 
 # $CARGO_HOME sizes (no deletes) and the build output, wherever cargo puts it
 cache:
-    {{cache}}
-    du -sh "$(cargo metadata --no-deps --format-version 1 | tr ',' '\n' | grep target_directory | cut -d'"' -f4)" 2>/dev/null || echo "target: (missing)"
+    {{ptools}} cache
 
 # preview what cache-autoclean would remove; read this before running it
 cache-dry-run:
-    {{cache}} --autoclean --dry-run
+    {{ptools}} cache --dry-run
 
 # drop extracted crate/git checkouts; keep archives
 cache-autoclean:
-    {{cache}} --autoclean
+    {{ptools}} cache --autoclean
 
 # Lossless cleanup of this checkout's cargo target dir (compress + dedupe); never deletes.
 swarfr:
-    #!/usr/bin/env sh
-    command -v swarfr >/dev/null || { echo "swarfr not found; install it with: ketch install swarfr"; exit 0; }
-    [ -d target ] || exit 0
-    swarfr run target || test $? -eq 2
+    {{ptools}} swarfr
 
 # The macOS app (desktop/macos). XcodeGen writes Ketch.xcodeproj from
 # project.yml; the project file and build/ are gitignored. Builds are unsigned:
@@ -297,6 +296,11 @@ windows-app-test:
 fuzz-check:
     RUSTFLAGS="--cfg fuzzing" cargo check --locked -p ketch -p ketch-core
 
+# ketch-core with no optional feature, with each alone, and ketch-ffi with its
+# own set: a workspace build unifies features and would hide a broken one.
+core-features:
+    scripts/core-features.sh
+
 # libFuzzer targets in fuzz/ (fuzz/README.md), on nightly and never part of `check`.
 # `just fuzz` lists them, `just fuzz <target> [secs]` runs one, `just fuzz all [secs]` each in turn.
 fuzz target="" secs="60":
@@ -309,3 +313,8 @@ fuzz target="" secs="60":
     for t in $targets; do
         cargo +nightly fuzz run "$t" -- -max_total_time={{secs}} -max_len=16384 -rss_limit_mb=4096
     done
+
+# Opt-in Cranelift dev build (nightly; dev profile only, never release). `just cranelift check` also works.
+cranelift *args='build':
+    rustup component add rustc-codegen-cranelift-preview --toolchain nightly
+    cargo +nightly --config .cargo/cranelift.toml {{args}}

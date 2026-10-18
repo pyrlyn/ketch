@@ -77,3 +77,82 @@ fn both_crates_forbid_unsafe_code_through_the_workspace_lints() {
         );
     }
 }
+
+/// Each optional subsystem of the core and the dependencies only it pulls in.
+/// A dependency listed here that is not optional, or a feature that does not
+/// name it, links it into every front end again.
+const CORE_FEATURES: &[(&str, &[&str])] = &[
+    ("stats", &["diesel", "diesel_migrations", "libsqlite3-sys"]),
+    ("push", &["octocrab", "tokio"]),
+    ("trust", &["sigstore", "minisign-verify", "pgp"]),
+    ("gzip", &["flate2"]),
+    ("xz", &["lzma-rust2"]),
+    ("bzip2", &["bzip2"]),
+    ("zip", &["zip"]),
+];
+
+#[test]
+fn each_heavy_dependency_of_the_core_is_optional_behind_its_feature() {
+    let core = manifest("crates/ketch-core/Cargo.toml");
+    for (feature, deps) in CORE_FEATURES {
+        let enables: Vec<&str> = get(&core, &["features", feature])
+            .and_then(|v| v.as_array())
+            .unwrap_or_else(|| panic!("ketch-core has no `{feature}` feature"))
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        for dep in *deps {
+            assert_eq!(
+                get(&core, &["dependencies", dep, "optional"]).and_then(|v| v.as_bool()),
+                Some(true),
+                "{dep} must be optional"
+            );
+            assert!(
+                enables.contains(&format!("dep:{dep}").as_str()),
+                "`{feature}` must enable {dep}"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_binary_keeps_every_core_feature_and_the_ffi_chooses_its_own() {
+    let core = manifest("crates/ketch-core/Cargo.toml");
+    let defaults: Vec<&str> = get(&core, &["features", "default"])
+        .and_then(|v| v.as_array())
+        .expect("ketch-core has default features")
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    for (feature, _) in CORE_FEATURES {
+        assert!(defaults.contains(feature), "`{feature}` must be a default");
+    }
+
+    let root = manifest("Cargo.toml");
+    assert_ne!(
+        get(&root, &["dependencies", "ketch-core", "default-features"]).and_then(|v| v.as_bool()),
+        Some(false),
+        "the CLI takes the core's defaults, which are everything"
+    );
+    let ffi = manifest("crates/ketch-ffi/Cargo.toml");
+    assert_eq!(
+        get(&ffi, &["dependencies", "ketch-core", "default-features"]).and_then(|v| v.as_bool()),
+        Some(false),
+        "ketch-ffi names the features the desktop apps use"
+    );
+}
+
+#[test]
+fn the_desktop_apps_do_not_link_registry_push() {
+    let ffi = manifest("crates/ketch-ffi/Cargo.toml");
+    let features: Vec<&str> = get(&ffi, &["dependencies", "ketch-core", "features"])
+        .and_then(|v| v.as_array())
+        .expect("ketch-ffi names its core features")
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    assert!(
+        !features.contains(&"push"),
+        "no app pushes to the registry; octocrab and tokio stay out of ketch-ffi"
+    );
+}

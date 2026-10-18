@@ -54,6 +54,42 @@ impl Info {
     }
 }
 
+/// Whether a lookup for this package should see prereleases: `extra` (a
+/// `--pre`), `config.toml`, the manifest, or an install on the `pre` channel.
+/// One rule for `info`, `ketch releases` and anything that lists beside them,
+/// so they never disagree about what "the package's releases" are.
+pub fn wants_prerelease(
+    cfg: &crate::config::Config,
+    manifest: &Manifest,
+    installed: Option<&InstalledPackage>,
+    extra: bool,
+) -> bool {
+    extra
+        || cfg.prerelease
+        || manifest.prerelease
+        // GitHub flags a nightly as a prerelease, so a dev install that did not
+        // count here would leave its own release out of `ketch releases`.
+        || installed.is_some_and(|p| {
+            matches!(
+                p.channel,
+                crate::model::Channel::Pre | crate::model::Channel::Dev
+            )
+        })
+}
+
+/// The manifest `query` names and the installed record it matches, without
+/// asking any source anything: what `ketch releases` needs before it lists.
+pub fn resolve(
+    cx: &Ctx<'_>,
+    state: &State,
+    query: &str,
+) -> Result<(Manifest, Option<ManifestOrigin>, Option<InstalledPackage>)> {
+    let installed = state.find(query).cloned();
+    let spec = PackageSpec::parse(query);
+    let (manifest, origin) = Resolver::new(cx)?.resolve_or_recorded(&spec, installed.as_ref())?;
+    Ok((manifest, origin, installed))
+}
+
 /// Everything known about `query`, a name or spec.
 ///
 /// An installed package always has an answer, even when the registry has
@@ -61,9 +97,7 @@ impl Info {
 /// costs only what it would have said: that is a warning on `cx.report`, not
 /// an error, because the rest of the answer still stands.
 pub fn gather(cx: &Ctx<'_>, state: &State, query: &str) -> Result<Info> {
-    let installed = state.find(query).cloned();
-    let spec = PackageSpec::parse(query);
-    let (manifest, origin) = Resolver::new(cx)?.resolve_or_recorded(&spec, installed.as_ref())?;
+    let (manifest, origin, installed) = resolve(cx, state, query)?;
 
     let sources = SourceRegistry::load(cx);
     let source = match sources.for_ref(&manifest.source) {
@@ -80,7 +114,7 @@ pub fn gather(cx: &Ctx<'_>, state: &State, query: &str) -> Result<Info> {
         })
     });
     let opts = ListOpts {
-        include_prerelease: cx.cfg.prerelease || manifest.prerelease,
+        include_prerelease: wants_prerelease(cx.cfg, &manifest, installed.as_ref(), false),
         ..Default::default()
     };
     let latest = source.as_ref().and_then(|s| {

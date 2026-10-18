@@ -12,7 +12,9 @@
 use crate::changelog;
 use crate::config::Config;
 use crate::error::{Error, Result};
-use crate::extract::{archive::TarGzExtractor, unwrap_single_dir, Extractor};
+use crate::extract::unwrap_single_dir;
+#[cfg(feature = "gzip")]
+use crate::extract::{archive::TarGzExtractor, Extractor};
 use crate::http::Http;
 use crate::model::{normalize_name, Manifest};
 // `Report` here is `validate`'s answer; the reporter is `reporting::Report`.
@@ -73,9 +75,15 @@ pub fn update(cx: &Ctx<'_>) -> Result<usize> {
     cx.report.stage("registry", Stage::Extracting);
     // The tarball download already drew a byte bar. Unpacking has no member
     // count ahead of time, so this is a spinner rather than a second bar.
-    cx.report
-        .activity("extracting registry")
-        .run(|| TarGzExtractor.extract(&tarball, &unpacked))?;
+    #[cfg(feature = "gzip")]
+    let unpack = || TarGzExtractor.extract(&tarball, &unpacked);
+    #[cfg(not(feature = "gzip"))]
+    let unpack = || -> Result<()> {
+        Err(Error::msg(
+            "this ketch was built without gzip, and the registry is a gzipped tarball",
+        ))
+    };
+    cx.report.activity("extracting registry").run(unpack)?;
     // GitHub wraps the tree in one `owner-repo-<sha>` directory.
     let root = unwrap_single_dir(&unpacked)?;
 
@@ -106,29 +114,9 @@ fn swap_in(cx: &Ctx<'_>, tree: &Path, repo: &str) -> Result<usize> {
              — leaving the current registry in place"
         )));
     }
-    if cfg.registry_dir.exists() {
-        // Move the working copy aside first. Deleting it before the new tree
-        // is in place would leave no registry if the second rename failed
-        // (EXDEV, EACCES, ENOSPC) or if another ketch ran in the gap.
-        let aside = aside_path(&cfg.registry_dir);
-        if aside.exists() {
-            std::fs::remove_dir_all(&aside).map_err(|e| Error::io(&aside, e))?;
-        }
-        std::fs::rename(&cfg.registry_dir, &aside).map_err(|e| Error::io(&cfg.registry_dir, e))?;
-        if let Err(e) = std::fs::rename(tree, &cfg.registry_dir) {
-            if let Err(rollback) = std::fs::rename(&aside, &cfg.registry_dir) {
-                return Err(Error::msg(format!(
-                    "failed to place the new registry at {} ({e}); \
-                     also failed to restore the previous copy ({rollback})",
-                    cfg.registry_dir.display()
-                )));
-            }
-            return Err(Error::io(&cfg.registry_dir, e));
-        }
-        let _ = std::fs::remove_dir_all(&aside);
-    } else {
-        std::fs::rename(tree, &cfg.registry_dir).map_err(|e| Error::io(&cfg.registry_dir, e))?;
-    }
+    replace_dir(&cfg.registry_dir, tree, &|from, to| {
+        std::fs::rename(from, to)
+    })?;
     write_meta(
         cfg,
         &UpdateMeta {
@@ -139,6 +127,49 @@ fn swap_in(cx: &Ctx<'_>, tree: &Path, repo: &str) -> Result<usize> {
         },
     )?;
     Ok(count)
+}
+
+/// Put `tree` at `live`, keeping the previous `live` until the new one is in.
+///
+/// `rename` is a parameter only so a test can make the renames fail; every
+/// caller passes `std::fs::rename`.
+fn replace_dir(
+    live: &Path,
+    tree: &Path,
+    rename: &dyn Fn(&Path, &Path) -> std::io::Result<()>,
+) -> Result<()> {
+    if !live.exists() {
+        return rename(tree, live).map_err(|e| Error::io(live, e));
+    }
+    // Move the working copy aside first. Deleting it before the new tree is
+    // in place would leave no registry if the second rename failed (EXDEV,
+    // EACCES, ENOSPC) or if another ketch ran in the gap.
+    let aside = aside_path(live);
+    if aside.exists() {
+        std::fs::remove_dir_all(&aside).map_err(|e| Error::io(&aside, e))?;
+    }
+    rename(live, &aside).map_err(|e| Error::io(live, e))?;
+    let Err(e) = rename(tree, live) else {
+        let _ = std::fs::remove_dir_all(&aside);
+        return Ok(());
+    };
+    if let Err(rollback) = rename(&aside, live) {
+        // Whatever stopped the rename back may not stop a copy (a rename
+        // cannot cross filesystems; a copy can), and with no live registry
+        // every later resolve falls back to the built-in tier.
+        if let Err(copy) = crate::source::local::copy_tree(&aside, live) {
+            // The aside is now the only complete copy: keep it and say where.
+            return Err(Error::msg(format!(
+                "failed to place the new registry at {} ({e}); \
+                 also failed to restore the previous copy ({rollback}; \
+                 copying it back: {copy}); it is kept at {}",
+                live.display(),
+                aside.display()
+            )));
+        }
+        let _ = std::fs::remove_dir_all(&aside);
+    }
+    Err(Error::io(live, e))
 }
 
 /// Sibling of the live registry, unique per process so a leftover aside from a
@@ -868,6 +899,31 @@ mod tests {
         std::fs::write(pkg.join("b.tar.gz"), b"b").unwrap();
         let err = fixture_payload(tmp.path(), "tool").unwrap_err().to_string();
         assert!(err.contains("more than one file"), "{err}");
+    }
+
+    #[test]
+    fn a_failed_rename_back_restores_the_previous_registry_by_copy() {
+        let tmp = tempfile::tempdir().unwrap();
+        let live = tmp.path().join("registry");
+        write(&live, "jq", "source = \"github:jqlang/jq\"\n");
+        let fresh = tmp.path().join("fresh");
+        write(&fresh, "fd", "source = \"github:sharkdp/fd\"\n");
+        // Only moving the live copy aside succeeds: placing the new tree and
+        // the rename back both fail, as across filesystems.
+        let rename = |from: &Path, to: &Path| {
+            if to == live {
+                Err(std::io::Error::other("cross-device link"))
+            } else {
+                std::fs::rename(from, to)
+            }
+        };
+
+        let err = replace_dir(&live, &fresh, &rename).unwrap_err().to_string();
+
+        assert!(err.contains("cross-device link"), "{err}");
+        assert!(live.join("jq").join(PACKAGE_FILE).is_file());
+        assert!(!aside_path(&live).exists());
+        assert!(fresh.join("fd").join(PACKAGE_FILE).is_file());
     }
 
     #[test]

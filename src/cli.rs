@@ -83,6 +83,9 @@ pub enum Command {
     #[command(visible_alias = "show")]
     Info(InfoArgs),
 
+    /// List a package's releases, newest first, and mark the installed one
+    Releases(ReleasesArgs),
+
     /// Explain how a package would be resolved, without installing it
     Why(WhyArgs),
 
@@ -196,6 +199,10 @@ pub struct InstallArgs {
     #[arg(long = "pre")]
     pub prerelease: bool,
 
+    /// Consider draft releases too (GitHub, with a token that has push access)
+    #[arg(long)]
+    pub draft: bool,
+
     /// Unpack and record the package without putting it on PATH
     #[arg(long)]
     pub no_link: bool,
@@ -203,6 +210,10 @@ pub struct InstallArgs {
     /// Refuse to install unless the release publishes a checksum
     #[arg(long)]
     pub require_checksum: bool,
+
+    /// Replace a checksum-verified install with a release that publishes no checksum
+    #[arg(long)]
+    pub allow_unverified: bool,
 
     /// Use this release asset by exact file name instead of auto-selecting
     #[arg(long, value_name = "NAME")]
@@ -242,6 +253,15 @@ pub struct ListArgs {
     #[arg(long, conflicts_with = "json")]
     pub names_only: bool,
 
+    /// Look for prereleases in the `latest` column
+    #[arg(long = "pre")]
+    pub prerelease: bool,
+
+    /// Look for drafts too in the `latest` column of installed GitHub
+    /// packages (needs a token with push access)
+    #[arg(long)]
+    pub draft: bool,
+
     /// Same as `ketch list local`. Bare `ketch list` used to mean installed
     /// only; this hidden alias gives scripts one release to move to `local`.
     #[arg(long, hide = true, conflicts_with = "mode")]
@@ -266,6 +286,10 @@ pub struct OutdatedArgs {
     /// Compare against prereleases too
     #[arg(long = "pre")]
     pub prerelease: bool,
+
+    /// Compare against draft releases too (GitHub, with a token that has push access)
+    #[arg(long)]
+    pub draft: bool,
 
     /// Packages to check at once (default: 4, or `jobs` in config.toml)
     #[arg(long, short = 'j', value_name = "N")]
@@ -307,6 +331,38 @@ pub struct InfoArgs {
     /// List the release's assets and how each one scored
     #[arg(long)]
     pub assets: bool,
+
+    /// List the package's releases under the details (see `ketch releases`)
+    #[arg(long)]
+    pub releases: bool,
+
+    /// List draft releases too (GitHub, needs a token with push access)
+    #[arg(long, requires = "releases")]
+    pub draft: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct ReleasesArgs {
+    /// An installed name, an alias, or `owner/repo`
+    #[arg(value_name = "PKG")]
+    pub package: String,
+
+    /// Emit JSON instead of a table
+    #[arg(long)]
+    pub json: bool,
+
+    /// Include prereleases
+    #[arg(long = "pre")]
+    pub prerelease: bool,
+
+    /// Include draft releases, and prereleases with them (GitHub, needs a
+    /// token with push access)
+    #[arg(long)]
+    pub draft: bool,
+
+    /// How many releases to show at most
+    #[arg(long, short = 'n', default_value_t = 20, value_parser = clap::value_parser!(u32).range(1..))]
+    pub limit: u32,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -363,9 +419,17 @@ pub struct UpgradeArgs {
     #[arg(long = "pre")]
     pub prerelease: bool,
 
+    /// Consider draft releases too (GitHub, with a token that has push access)
+    #[arg(long)]
+    pub draft: bool,
+
     /// Upgrade pinned packages too
     #[arg(long)]
     pub force: bool,
+
+    /// Upgrade a checksum-verified package to a release that publishes no checksum
+    #[arg(long)]
+    pub allow_unverified: bool,
 
     /// Which binary to link when several share the package's name (single package)
     #[arg(long, value_name = "NAME")]
@@ -647,6 +711,9 @@ pub enum SelfCommand {
         /// Reinstall even when already current
         #[arg(long, short)]
         force: bool,
+        /// Take the newest release, prereleases included
+        #[arg(long)]
+        pre: bool,
         /// Answer yes to every prompt
         #[arg(long, short = 'y')]
         yes: bool,

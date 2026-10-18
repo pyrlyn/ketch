@@ -66,6 +66,8 @@ pub struct PluginSource {
     searches: bool,
     /// Where ketch's own download of a URL the plugin hands back is noted.
     report: Report,
+    /// The configured cap on ketch's own download of such a URL.
+    max_download: u64,
 }
 
 impl PluginSource {
@@ -102,6 +104,7 @@ impl PluginSource {
             downloads: caps.download,
             searches: caps.search,
             report: report.clone(),
+            max_download: crate::config::DEFAULT_MAX_DOWNLOAD_MIB * 1024 * 1024,
         })
     }
 
@@ -166,14 +169,9 @@ impl Source for PluginSource {
             }
             // No token is ever handed to a plugin's URLs: whatever credentials
             // an asset needs must come from the plugin's own headers.
-            return Http::anonymous(&self.report).download(
-                &asset.url,
-                dest,
-                &asset.headers,
-                false,
-                progress,
-                cancel,
-            );
+            return Http::anonymous(&self.report)
+                .with_max_download(self.max_download)
+                .download(&asset.url, dest, &asset.headers, false, progress, cancel);
         }
         let dest_str = dest.to_string_lossy().to_string();
         output(&self.path, &["download", &asset.url, &dest_str])?;
@@ -237,7 +235,10 @@ pub fn discover(cx: &Ctx<'_>) -> Vec<Result<PluginSource>> {
                 continue;
             }
             seen.push(name);
-            found.push(PluginSource::probe(&path, cx.report));
+            found.push(PluginSource::probe(&path, cx.report).map(|mut plugin| {
+                plugin.max_download = cfg.max_download;
+                plugin
+            }));
         }
     }
     found

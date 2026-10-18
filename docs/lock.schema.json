@@ -41,6 +41,10 @@
         "pinned": {
           "type": "boolean"
         },
+        "published": {
+          "description": "When the build was published, for a package on a floating tag\n(`nightly`): the tag can be republished, and on another target, where\n`sha256` names a file it never downloads, this is what still tells\nthe locked build from a new one. Absent for every other package.",
+          "type": "string"
+        },
         "sha256": {
           "type": "string"
         },

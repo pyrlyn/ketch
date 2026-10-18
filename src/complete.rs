@@ -54,8 +54,8 @@ impl Kind {
 }
 
 /// Subcommands whose positional argument is a package name, and which names
-/// fit it. `why` and `info` also take names that are not installed, but the
-/// installed ones are what a user reaches for most.
+/// fit it. `why`, `info` and `releases` also take names that are not
+/// installed, but the installed ones are what a user reaches for most.
 const DYNAMIC: &[(&str, Kind)] = &[
     ("uninstall", Kind::Installed),
     ("upgrade", Kind::Installed),
@@ -64,6 +64,7 @@ const DYNAMIC: &[(&str, Kind)] = &[
     ("link", Kind::Installed),
     ("unlink", Kind::Installed),
     ("info", Kind::Installed),
+    ("releases", Kind::Installed),
     ("why", Kind::Installed),
     ("changelog", Kind::Installed),
     ("rollback", Kind::Installed),
@@ -142,10 +143,9 @@ fn is_plain(name: &str) -> bool {
 
 /// The completion script for `shell`, as `ketch completions` prints it.
 pub fn script(shell: clap_complete::Shell) -> Vec<u8> {
-    let mut command = Cli::command();
+    let command = Cli::command();
     let name = command.get_name().to_string();
-    let mut buf = Vec::new();
-    clap_complete::generate(shell, &mut command, &name, &mut buf);
+    let mut buf = shell_completions::script(shell, command);
     match shell {
         clap_complete::Shell::Bash => buf.extend_from_slice(bash_packages(&name).as_bytes()),
         clap_complete::Shell::PowerShell => {

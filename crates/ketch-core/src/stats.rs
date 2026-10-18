@@ -22,15 +22,23 @@
 //! inside the binary (`embed_migrations!`), so the single-binary promise
 //! survives: no system SQLite to find, no migration files to ship, and a fresh
 //! machine opens a working database on first write.
+//!
+//! All of that is the `stats` feature. A build without it keeps the event
+//! types and `record`, which then records nothing, so the install pipeline
+//! reads the same either way; the queries are not there to call.
 
-use crate::config::Config;
-use crate::error::{Error, Result};
 use crate::model::now_unix;
-use diesel::prelude::*;
-use diesel::sqlite::SqliteConnection;
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use std::path::Path;
+#[cfg(feature = "stats")]
+use {
+    crate::config::Config,
+    crate::error::{Error, Result},
+    diesel::prelude::*,
+    diesel::sqlite::SqliteConnection,
+    diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness},
+    std::path::Path,
+};
 
+#[cfg(feature = "stats")]
 diesel::table! {
     events (id) {
         id -> BigInt,
@@ -51,12 +59,14 @@ diesel::table! {
 }
 
 /// The schema, carried inside the binary rather than shipped beside it.
+#[cfg(feature = "stats")]
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
 /// Another ketch may be installing at the same moment. SQLite serialises
 /// writers, and the alternative to waiting is an immediate "database is
 /// locked" — a recorded install lost to a race that resolves itself in
 /// milliseconds.
+#[cfg(feature = "stats")]
 const BUSY_TIMEOUT_MS: i64 = 5_000;
 
 /// What happened to a package.
@@ -97,8 +107,8 @@ impl std::fmt::Display for Action {
 }
 
 /// One row, on its way in.
-#[derive(Debug, Insertable)]
-#[diesel(table_name = events)]
+#[derive(Debug)]
+#[cfg_attr(feature = "stats", derive(Insertable), diesel(table_name = events))]
 pub struct NewEvent<'a> {
     pub package: &'a str,
     pub action: &'a str,
@@ -116,9 +126,13 @@ pub struct NewEvent<'a> {
 }
 
 /// One row, on its way out.
-#[derive(Debug, Clone, Queryable, Selectable, serde::Serialize)]
-#[diesel(table_name = events)]
-#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(
+    feature = "stats",
+    derive(Queryable, Selectable),
+    diesel(table_name = events),
+    diesel(check_for_backend(diesel::sqlite::Sqlite))
+)]
 pub struct Event {
     pub id: i64,
     pub package: String,
@@ -187,6 +201,7 @@ impl Summary {
 /// let connection = open(std::path::Path::new("stats.sqlite"))?;
 /// # Ok::<(), Error>(())
 /// ```
+#[cfg(feature = "stats")]
 fn open(path: &Path) -> Result<SqliteConnection> {
     let parent = path.parent().unwrap_or(Path::new("."));
     std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
@@ -225,9 +240,14 @@ fn open(path: &Path) -> Result<SqliteConnection> {
 /// record(&cx, &event);
 /// ```
 pub fn record(cx: &crate::report::Ctx<'_>, event: &NewEvent<'_>) {
+    #[cfg(feature = "stats")]
     if let Err(e) = record_at(&cx.cfg.stats_db, event) {
         cx.report.warn(&format!("could not record statistics: {e}"));
     }
+    // Built without a database, there is nowhere to keep the event; the
+    // operation it describes has already succeeded either way.
+    #[cfg(not(feature = "stats"))]
+    let _ = (cx, event);
 }
 
 /// Records an event in the statistics database at the specified path.
@@ -246,6 +266,7 @@ pub fn record(cx: &crate::report::Ctx<'_>, event: &NewEvent<'_>) {
 /// # Ok(())
 /// # }
 /// ```
+#[cfg(feature = "stats")]
 pub fn record_at(path: &Path, event: &NewEvent<'_>) -> Result<()> {
     let mut conn = open(path)?;
     // Diesel binds every value as a parameter. Package names and asset names
@@ -377,6 +398,7 @@ pub fn rollback_event<'a>(
 /// # Returns
 ///
 /// The matching history events, or an error if the history cannot be read.
+#[cfg(feature = "stats")]
 pub fn history(cfg: &Config, package: Option<&str>, limit: i64) -> Result<Vec<Event>> {
     history_at(&cfg.stats_db, package, limit)
 }
@@ -395,6 +417,7 @@ pub fn history(cfg: &Config, package: Option<&str>, limit: i64) -> Result<Vec<Ev
 /// assert!(events.len() <= 20);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+#[cfg(feature = "stats")]
 pub fn history_at(path: &Path, package: Option<&str>, limit: i64) -> Result<Vec<Event>> {
     // Reading must not create the database. `ketch history` on a machine that
     // has never installed anything should answer "nothing" and leave no file
@@ -425,6 +448,7 @@ pub fn history_at(path: &Path, package: Option<&str>, limit: i64) -> Result<Vec<
 /// println!("{} events recorded", summary.events);
 /// # Ok::<(), _>(())
 /// ```
+#[cfg(feature = "stats")]
 pub fn summary(cfg: &Config) -> Result<Summary> {
     summary_at(&cfg.stats_db)
 }
@@ -442,6 +466,7 @@ pub fn summary(cfg: &Config) -> Result<Summary> {
 /// assert_eq!(summary.events, 0);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+#[cfg(feature = "stats")]
 pub fn summary_at(path: &Path) -> Result<Summary> {
     use diesel::dsl::{count, max, min, sum};
     use diesel::expression_methods::AggregateExpressionMethods;
@@ -492,6 +517,7 @@ pub fn summary_at(path: &Path) -> Result<Summary> {
 /// let error = read_err(diesel::result::Error::NotFound);
 /// assert!(error.to_string().starts_with("could not read statistics:"));
 /// ```
+#[cfg(feature = "stats")]
 fn read_err(e: diesel::result::Error) -> Error {
     Error::msg(format!("could not read statistics: {e}"))
 }
@@ -511,6 +537,7 @@ fn read_err(e: diesel::result::Error) -> Error {
 ///
 /// assert_eq!(count_of(&mut conn, Action::Install).unwrap(), 1);
 /// ```
+#[cfg(feature = "stats")]
 fn count_of(conn: &mut SqliteConnection, action: Action) -> Result<i64> {
     events::table
         .filter(events::action.eq(action.as_str()))
@@ -519,7 +546,7 @@ fn count_of(conn: &mut SqliteConnection, action: Action) -> Result<i64> {
         .map_err(read_err)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "stats"))]
 mod tests {
     use super::*;
     use crate::model::{InstalledPackage, ManifestOrigin, PackageRef, TargetSpec, Version};
@@ -569,6 +596,9 @@ mod tests {
             retained: Vec::new(),
             provenance: None,
             bin_choice: None,
+            channel: Default::default(),
+            draft: false,
+            published_at: None,
         }
     }
 

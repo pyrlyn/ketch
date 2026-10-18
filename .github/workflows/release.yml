@@ -114,10 +114,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.container && matrix.container.image || null }}
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
-      CODESIGN_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-      CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+      # CODESIGN_CERTIFICATE(+_PASSWORD): only on the macOS `Build artifacts` step
       # CODESIGN_IDENTITY: set on macOS by .github/build-setup.yml (not a secret)
     steps:
       - name: enable windows longpaths
@@ -135,7 +133,7 @@ jobs:
             echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           fi
       - name: "Install Rust from mise.toml"
-        uses: "jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492"
+        uses: "jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca"
         with:
           "cache_key_prefix": "mise-v1-release"
           "install_args": "rust"
@@ -211,6 +209,9 @@ jobs:
         run: |
           ${{ matrix.packages_install }}
       - name: Build artifacts
+        env:
+          CODESIGN_CERTIFICATE: ${{ runner.os == 'macOS' && secrets.MACOS_CERTIFICATE || '' }}
+          CODESIGN_CERTIFICATE_PASSWORD: ${{ runner.os == 'macOS' && secrets.MACOS_CERTIFICATE_PWD || '' }}
         run: |
           # Actually do builds and make zips and whatnot
           dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
@@ -502,7 +503,7 @@ jobs:
       "actions": "read"
       "issues": "write"
     steps:
-      - uses: pyrlyn/ci/.github/actions/notify-release-failure@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
+      - uses: pyrlyn/ci/.github/actions/notify-release-failure@main
         with:
           ref: ${{ inputs.tag }}
           needs: ${{ toJSON(needs) }}

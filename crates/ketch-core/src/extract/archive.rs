@@ -7,13 +7,11 @@
 //! Detection is by magic bytes, never by extension. Every entry path goes
 //! through `super::safe_member_path` before it is joined onto the destination.
 
-use super::{safe_member_path, Extractor};
+use super::{resolves_inside, safe_member_path, Budget, Extractor};
 use crate::error::{Error, Result};
 use std::fs::File;
-use std::io::{self, BufReader, Read, Write};
+use std::io::{BufReader, Read};
 use std::path::{Component, Path, PathBuf};
-use std::sync::mpsc::{self, Receiver, SyncSender};
-use std::thread;
 
 /// Permission bits taken from an untrusted archive: never setuid/setgid/sticky.
 fn payload_mode(mode: u32) -> u32 {
@@ -75,6 +73,18 @@ fn materialize_symlink_as_copy(target: &Path, link: &Path) -> Result<()> {
         return Ok(());
     }
     if resolved.is_dir() {
+        // `d -> .` or `sub/d -> ..` passes the lexical target check, yet
+        // copying it would copy the link's own directory into itself.
+        let parent = link.parent().unwrap_or_else(|| Path::new("."));
+        let source = std::fs::canonicalize(&resolved).map_err(|e| Error::io(&resolved, e))?;
+        let home = std::fs::canonicalize(parent).map_err(|e| Error::io(parent, e))?;
+        if home.starts_with(&source) {
+            return Err(Error::msg(format!(
+                "cannot materialise archive symlink {} → {}: the target is an ancestor of the link",
+                link.display(),
+                target.display()
+            )));
+        }
         copy_dir_contents(&resolved, link)?;
         return Ok(());
     }
@@ -92,62 +102,41 @@ fn materialize_symlink_as_copy(target: &Path, link: &Path) -> Result<()> {
 /// outer materialisation already flattened what the archive could express.
 #[cfg_attr(unix, allow(dead_code))]
 fn copy_dir_contents(src: &Path, dest: &Path) -> Result<()> {
-    std::fs::create_dir_all(dest).map_err(|e| Error::io(dest, e))?;
-    for entry in walkdir::WalkDir::new(src) {
-        let entry = entry.map_err(|e| Error::msg(format!("walking {}: {e}", src.display())))?;
-        let rel = pathdiff::diff_paths(entry.path(), src)
-            .filter(|r| !r.components().any(|c| matches!(c, Component::ParentDir)))
-            .ok_or_else(|| {
-                Error::msg(format!(
-                    "path {} escaped {}",
-                    entry.path().display(),
-                    src.display()
-                ))
-            })?;
-        if rel.as_os_str().is_empty() {
-            continue;
-        }
-        let target = dest.join(&rel);
-        let ft = entry.file_type();
-        if ft.is_dir() {
-            std::fs::create_dir_all(&target).map_err(|e| Error::io(&target, e))?;
-        } else if ft.is_symlink() {
-            // Nested links inside a materialised directory are left out: creating
-            // them would re-enter the Windows privilege problem this path exists
-            // to avoid, and following them could escape the payload root.
-            continue;
-        } else {
-            if let Some(parent) = target.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
-            }
-            std::fs::copy(entry.path(), &target).map_err(|e| Error::io(&target, e))?;
-        }
-    }
-    Ok(())
+    // Nested links inside a materialised directory are left out: creating
+    // them would re-enter the Windows privilege problem this path exists
+    // to avoid, and following them could escape the payload root.
+    fs_kit::tree::copy_tree(src, dest, fs_kit::tree::Links::Skip).map_err(|e| Error::fs_kit(src, e))
 }
 
 /// `.tar.gz` / `.tgz`
+#[cfg(feature = "gzip")]
 pub struct TarGzExtractor;
 
 /// `.tar.xz` / `.txz`
+#[cfg(feature = "xz")]
 pub struct TarXzExtractor;
 
 /// `.tar.bz2`
+#[cfg(feature = "bzip2")]
 pub struct TarBz2Extractor;
 
 /// Uncompressed `.tar`
 pub struct TarExtractor;
 
 /// `.zip`
+#[cfg(feature = "zip")]
 pub struct ZipExtractor;
 
 /// `.gz` wrapping a single file rather than a tar stream.
+#[cfg(feature = "gzip")]
 pub struct GzFileExtractor;
 
 /// `.xz` wrapping a single file rather than a tar stream.
+#[cfg(feature = "xz")]
 pub struct XzFileExtractor;
 
 /// `.bz2` wrapping a single file rather than a tar stream.
+#[cfg(feature = "bzip2")]
 pub struct Bz2FileExtractor;
 
 /// A bare executable published with no container at all.
@@ -155,13 +144,17 @@ pub struct Bz2FileExtractor;
 /// Must be last in the extractor list: it accepts anything the others refused.
 pub struct RawBinaryExtractor;
 
-const GZIP_MAGIC: &[u8] = &[0x1f, 0x8b];
-const XZ_MAGIC: &[u8] = &[0xfd, b'7', b'z', b'X', b'Z', 0x00];
-const BZ2_MAGIC: &[u8] = b"BZh";
-const ZIP_MAGIC: &[u8] = &[b'P', b'K', 0x03, 0x04];
+/// Gzip header. The local source classifies from these same bytes.
+pub(crate) const GZIP_MAGIC: &[u8] = &[0x1f, 0x8b];
+/// XZ header. The local source classifies from these same bytes.
+pub(crate) const XZ_MAGIC: &[u8] = &[0xfd, b'7', b'z', b'X', b'Z', 0x00];
+/// bzip2 header. The local source classifies from these same bytes.
+pub(crate) const BZ2_MAGIC: &[u8] = b"BZh";
+/// ZIP local-file header. The local source classifies from these same bytes.
+pub(crate) const ZIP_MAGIC: &[u8] = &[b'P', b'K', 0x03, 0x04];
 
 /// The `ustar` marker tar writes at offset 257 of every header block.
-fn looks_like_tar(head: &[u8]) -> bool {
+pub(crate) fn looks_like_tar(head: &[u8]) -> bool {
     head.len() >= 262 && &head[257..262] == b"ustar"
 }
 
@@ -169,6 +162,7 @@ fn looks_like_tar(head: &[u8]) -> bool {
 ///
 /// This is what separates `tool.tar.gz` from `tool.gz` when the publisher named
 /// the file wrongly, which happens often enough to matter.
+#[cfg(feature = "gzip")]
 fn gzip_inner_head(path: &Path) -> Vec<u8> {
     let Ok(file) = File::open(path) else {
         return Vec::new();
@@ -177,19 +171,16 @@ fn gzip_inner_head(path: &Path) -> Vec<u8> {
     read_head_of(&mut decoder, 512)
 }
 
+#[cfg(feature = "xz")]
 fn xz_inner_head(path: &Path) -> Vec<u8> {
     let Ok(file) = File::open(path) else {
         return Vec::new();
     };
-    let mut reader = BufReader::new(file);
-    let mut out = CapWrite {
-        buf: Vec::new(),
-        cap: 512,
-    };
-    let _ = lzma_rs::xz_decompress(&mut reader, &mut out);
-    out.buf
+    let mut decoder = xz_reader(file);
+    read_head_of(&mut decoder, 512)
 }
 
+#[cfg(feature = "bzip2")]
 fn bz2_inner_head(path: &Path) -> Vec<u8> {
     let Ok(file) = File::open(path) else {
         return Vec::new();
@@ -198,90 +189,30 @@ fn bz2_inner_head(path: &Path) -> Vec<u8> {
     read_head_of(&mut decoder, 512)
 }
 
-/// Collects a prefix of decompressed bytes, then errors so the decoder stops.
-struct CapWrite {
-    buf: Vec<u8>,
-    cap: usize,
+#[cfg(feature = "xz")]
+/// Decoder memory ceiling for one XZ block, in KiB.
+///
+/// `lzma_rust2::get_memory_usage` is 104 KiB of decoder overhead plus the
+/// LZMA2 dictionary. 256 MiB therefore admits a dictionary of about 256 MiB,
+/// which covers stock `xz -9` (64 MiB) and refuses a multi-gigabyte dictionary
+/// before it is allocated. The plaintext itself is not buffered: [`xz_reader`]
+/// yields it as it is decoded. The previous decoder held each whole block in
+/// one `Vec` before tar saw a byte.
+#[cfg(feature = "xz")]
+const XZ_MEM_LIMIT_KIB: u32 = 256 * 1024;
+
+#[cfg(feature = "xz")]
+fn xz_reader(file: File) -> lzma_rust2::XzReader<BufReader<File>> {
+    xz_reader_limited(file, XZ_MEM_LIMIT_KIB)
 }
 
-impl Write for CapWrite {
-    fn write(&mut self, data: &[u8]) -> io::Result<usize> {
-        if self.buf.len() >= self.cap {
-            return Err(io::Error::new(io::ErrorKind::WriteZero, "head filled"));
-        }
-        let take = (self.cap - self.buf.len()).min(data.len());
-        self.buf.extend_from_slice(&data[..take]);
-        Ok(take)
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
+#[cfg(feature = "xz")]
+fn xz_reader_limited(file: File, mem_limit_kib: u32) -> lzma_rust2::XzReader<BufReader<File>> {
+    // Concatenated streams are what `xz` writes when two archives are appended.
+    lzma_rust2::XzReader::new_mem_limit(BufReader::new(file), true, mem_limit_kib)
 }
 
-/// Stream xz plaintext as `Read` so unpacking never holds the whole file in RAM.
-fn xz_reader(file: File) -> impl Read {
-    let (tx, rx): (SyncSender<io::Result<Vec<u8>>>, Receiver<_>) = mpsc::sync_channel(2);
-    thread::spawn(move || {
-        let mut input = BufReader::new(file);
-        let mut output = ChannelWrite(tx.clone());
-        if let Err(e) = lzma_rs::xz_decompress(&mut input, &mut output) {
-            let _ = tx.send(Err(io::Error::new(io::ErrorKind::InvalidData, e)));
-        }
-    });
-    ChannelRead {
-        rx,
-        buf: Vec::new(),
-        at: 0,
-    }
-}
-
-struct ChannelWrite(SyncSender<io::Result<Vec<u8>>>);
-
-impl Write for ChannelWrite {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if buf.is_empty() {
-            return Ok(0);
-        }
-        self.0
-            .send(Ok(buf.to_vec()))
-            .map_err(|e| io::Error::new(io::ErrorKind::BrokenPipe, e))?;
-        Ok(buf.len())
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-struct ChannelRead {
-    rx: Receiver<io::Result<Vec<u8>>>,
-    buf: Vec<u8>,
-    at: usize,
-}
-
-impl Read for ChannelRead {
-    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
-        loop {
-            if self.at < self.buf.len() {
-                let n = (self.buf.len() - self.at).min(out.len());
-                out[..n].copy_from_slice(&self.buf[self.at..self.at + n]);
-                self.at += n;
-                return Ok(n);
-            }
-            match self.rx.recv() {
-                Ok(Ok(next)) => {
-                    self.buf = next;
-                    self.at = 0;
-                    if self.buf.is_empty() {
-                        continue;
-                    }
-                }
-                Ok(Err(e)) => return Err(e),
-                Err(_) => return Ok(0),
-            }
-        }
-    }
-}
-
+#[cfg(any(feature = "gzip", feature = "xz", feature = "bzip2"))]
 fn read_head_of<R: Read>(reader: &mut R, want: usize) -> Vec<u8> {
     let mut buffer = vec![0u8; want];
     let mut filled = 0;
@@ -391,7 +322,7 @@ fn ensure_parent(dest: &Path, out: &Path) -> Result<()> {
 /// Symlinks and hard links are deferred until every regular member is on disk:
 /// Windows materialisation copies the target file, and tar/zip often list the
 /// link before the file it points at.
-fn unpack_tar<R: Read>(reader: R, dest: &Path) -> Result<()> {
+fn unpack_tar<R: Read>(reader: R, dest: &Path, budget: &mut Budget) -> Result<()> {
     use tar::EntryType;
 
     let mut archive = tar::Archive::new(reader);
@@ -400,6 +331,7 @@ fn unpack_tar<R: Read>(reader: R, dest: &Path) -> Result<()> {
 
     let mut deferred_symlinks: Vec<(PathBuf, PathBuf)> = Vec::new();
     let mut deferred_hardlinks: Vec<(PathBuf, PathBuf)> = Vec::new();
+    let mut deferred_dir_modes: Vec<(PathBuf, u32)> = Vec::new();
 
     for entry in archive.entries().map_err(|e| Error::io(dest, e))? {
         let mut entry = entry.map_err(|e| Error::io(dest, e))?;
@@ -415,11 +347,17 @@ fn unpack_tar<R: Read>(reader: R, dest: &Path) -> Result<()> {
         }
         let safe = safe_member_path(&raw)?;
         let out = dest.join(&safe);
+        budget.entry()?;
 
         match kind {
             EntryType::Directory => {
-                ensure_parent(dest, &out)?;
-                unpack_member(&mut entry, &out)?;
+                // Created here, its mode set only once everything is written:
+                // a 0555 directory listed before its children would refuse
+                // them, and one listed after would refuse removal later.
+                walk_inside(dest, &out, true)?;
+                if let Ok(mode) = entry.header().mode() {
+                    deferred_dir_modes.push((out, mode));
+                }
             }
             EntryType::Symlink => {
                 let target = entry
@@ -449,6 +387,9 @@ fn unpack_tar<R: Read>(reader: R, dest: &Path) -> Result<()> {
                 deferred_hardlinks.push((out, safe_target));
             }
             EntryType::Regular | EntryType::Continuous | EntryType::GNUSparse => {
+                // `size()` is the unpacked size, sparse holes included, so it
+                // is charged before a byte reaches the disk.
+                budget.bytes(entry.size())?;
                 ensure_parent(dest, &out)?;
                 unpack_member(&mut entry, &out)?;
             }
@@ -456,7 +397,19 @@ fn unpack_tar<R: Read>(reader: R, dest: &Path) -> Result<()> {
             _ => continue,
         }
     }
-    finish_deferred_links(dest, deferred_hardlinks, deferred_symlinks)
+    finish_deferred_links(dest, deferred_hardlinks, deferred_symlinks)?;
+    apply_dir_modes(deferred_dir_modes)
+}
+
+/// Set directory modes after every member is on disk, deepest first, always
+/// leaving the owner `rwx`: ketch has to be able to remove its own store on
+/// uninstall and upgrade, whatever the archive asked for.
+fn apply_dir_modes(mut dirs: Vec<(PathBuf, u32)>) -> Result<()> {
+    dirs.sort_by_key(|(path, _)| std::cmp::Reverse(path.components().count()));
+    for (path, mode) in dirs {
+        set_unix_mode(&path, payload_mode(mode) | 0o700)?;
+    }
+    Ok(())
 }
 
 fn unpack_member<R: Read>(entry: &mut tar::Entry<'_, R>, out: &Path) -> Result<()> {
@@ -482,8 +435,22 @@ fn finish_deferred_links(
         walk_inside(dest, &source, false)?;
         write_hardlink(&source, &out)?;
     }
+    let mut written = Vec::with_capacity(symlinks.len());
     for (out, target) in symlinks {
         write_symlink(&target, &out)?;
+        written.push((out, target));
+    }
+    // Only now, with every link in place, does a target mean what the kernel
+    // will make of it: a later link can reroute an earlier one.
+    for (out, target) in written {
+        let is_link = std::fs::symlink_metadata(&out).is_ok_and(|m| m.file_type().is_symlink());
+        if is_link && !resolves_inside(&out, dest) {
+            return Err(Error::msg(format!(
+                "refusing archive link {} -> {} that resolves outside the target directory",
+                out.display(),
+                target.display()
+            )));
+        }
     }
     Ok(())
 }
@@ -504,6 +471,7 @@ fn write_hardlink(source: &Path, out: &Path) -> Result<()> {
     }
 }
 
+#[cfg(feature = "gzip")]
 impl Extractor for TarGzExtractor {
     fn id(&self) -> &str {
         "tar.gz"
@@ -513,10 +481,15 @@ impl Extractor for TarGzExtractor {
     }
     fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
         let file = File::open(src).map_err(|e| Error::io(src, e))?;
-        unpack_tar(flate2::read::GzDecoder::new(BufReader::new(file)), dest)
+        unpack_tar(
+            flate2::read::GzDecoder::new(BufReader::new(file)),
+            dest,
+            &mut Budget::for_archive(src)?,
+        )
     }
 }
 
+#[cfg(feature = "xz")]
 impl Extractor for TarXzExtractor {
     fn id(&self) -> &str {
         "tar.xz"
@@ -526,10 +499,11 @@ impl Extractor for TarXzExtractor {
     }
     fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
         let file = File::open(src).map_err(|e| Error::io(src, e))?;
-        unpack_tar(xz_reader(file), dest)
+        unpack_tar(xz_reader(file), dest, &mut Budget::for_archive(src)?)
     }
 }
 
+#[cfg(feature = "bzip2")]
 impl Extractor for TarBz2Extractor {
     fn id(&self) -> &str {
         "tar.bz2"
@@ -539,7 +513,11 @@ impl Extractor for TarBz2Extractor {
     }
     fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
         let file = File::open(src).map_err(|e| Error::io(src, e))?;
-        unpack_tar(bzip2::read::BzDecoder::new(BufReader::new(file)), dest)
+        unpack_tar(
+            bzip2::read::BzDecoder::new(BufReader::new(file)),
+            dest,
+            &mut Budget::for_archive(src)?,
+        )
     }
 }
 
@@ -552,10 +530,11 @@ impl Extractor for TarExtractor {
     }
     fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
         let file = File::open(src).map_err(|e| Error::io(src, e))?;
-        unpack_tar(BufReader::new(file), dest)
+        unpack_tar(BufReader::new(file), dest, &mut Budget::for_archive(src)?)
     }
 }
 
+#[cfg(feature = "zip")]
 impl Extractor for ZipExtractor {
     fn id(&self) -> &str {
         "zip"
@@ -564,64 +543,82 @@ impl Extractor for ZipExtractor {
         head.starts_with(ZIP_MAGIC)
     }
     fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
-        let file = File::open(src).map_err(|e| Error::io(src, e))?;
-        let mut zip = zip::ZipArchive::new(BufReader::new(file))
-            .map_err(|e| Error::parse(src.display().to_string(), e.to_string()))?;
-
-        let mut deferred_symlinks: Vec<(PathBuf, PathBuf)> = Vec::new();
-
-        for index in 0..zip.len() {
-            let mut entry = zip
-                .by_index(index)
-                .map_err(|e| Error::parse(src.display().to_string(), e.to_string()))?;
-            let name = entry.name().to_string();
-            // Finder metadata, not payload.
-            if name.starts_with("__MACOSX/") || name.ends_with("/.DS_Store") {
-                continue;
-            }
-            let safe = safe_member_path(Path::new(&name))?;
-            let out = dest.join(&safe);
-
-            if entry.is_dir() || name.ends_with('/') {
-                walk_inside(dest, &out, true)?;
-                continue;
-            }
-            let mode = entry.unix_mode();
-            ensure_parent(dest, &out)?;
-
-            // Zip stores a symlink as a regular member whose body is the target.
-            if mode.is_some_and(|m| m & 0o170000 == 0o120000) {
-                let mut target = String::new();
-                entry
-                    .read_to_string(&mut target)
-                    .map_err(|e| Error::io(&out, e))?;
-                let target = PathBuf::from(target.trim());
-                check_link_target(&safe, &target)?;
-                deferred_symlinks.push((out, target));
-                continue;
-            }
-
-            let mut file = File::create(&out).map_err(|e| Error::io(&out, e))?;
-            std::io::copy(&mut entry, &mut file).map_err(|e| Error::io(&out, e))?;
-            drop(file);
-            // Without this, every binary in a zip lands non-executable.
-            if let Some(mode) = mode {
-                set_unix_mode(&out, payload_mode(mode))?;
-            }
-            // A zip written on Windows — Java's `ZipOutputStream`, .NET, Gradle
-            // distributions — marks every member 0644 or carries no unix mode
-            // at all. Placement only links files it can run, so from the
-            // outside that payload looks like it contains nothing. The bytes
-            // are the evidence left: a program header says the file is one.
-            if is_program_head(&crate::extract::read_head(&out).unwrap_or_default()) {
-                #[cfg(unix)]
-                crate::platform::unix::ensure_executable(&out)?;
-            }
-        }
-        finish_deferred_links(dest, Vec::new(), deferred_symlinks)
+        unpack_zip(src, dest, &mut Budget::for_archive(src)?)
     }
 }
 
+/// The longest symlink target a zip member may carry; the body is read into
+/// memory, and no real path is longer.
+#[cfg(feature = "zip")]
+const MAX_ZIP_LINK_TARGET: u64 = 4096;
+
+#[cfg(feature = "zip")]
+fn unpack_zip(src: &Path, dest: &Path, budget: &mut Budget) -> Result<()> {
+    let file = File::open(src).map_err(|e| Error::io(src, e))?;
+    let mut zip = zip::ZipArchive::new(BufReader::new(file))
+        .map_err(|e| Error::parse(src.display().to_string(), e.to_string()))?;
+
+    let mut deferred_symlinks: Vec<(PathBuf, PathBuf)> = Vec::new();
+
+    for index in 0..zip.len() {
+        let mut entry = zip
+            .by_index(index)
+            .map_err(|e| Error::parse(src.display().to_string(), e.to_string()))?;
+        let name = entry.name().to_string();
+        // Finder metadata, not payload.
+        if name.starts_with("__MACOSX/") || name.ends_with("/.DS_Store") {
+            continue;
+        }
+        let safe = safe_member_path(Path::new(&name))?;
+        let out = dest.join(&safe);
+        budget.entry()?;
+
+        if entry.is_dir() || name.ends_with('/') {
+            walk_inside(dest, &out, true)?;
+            continue;
+        }
+        let mode = entry.unix_mode();
+        ensure_parent(dest, &out)?;
+
+        // Zip stores a symlink as a regular member whose body is the target.
+        if mode.is_some_and(|m| m & 0o170000 == 0o120000) {
+            let mut target = String::new();
+            (&mut entry)
+                .take(MAX_ZIP_LINK_TARGET + 1)
+                .read_to_string(&mut target)
+                .map_err(|e| Error::io(&out, e))?;
+            if target.len() as u64 > MAX_ZIP_LINK_TARGET {
+                return Err(Error::msg(format!(
+                    "refusing archive link {} with an over-long target",
+                    safe.display()
+                )));
+            }
+            let target = PathBuf::from(target.trim());
+            check_link_target(&safe, &target)?;
+            deferred_symlinks.push((out, target));
+            continue;
+        }
+
+        let file = File::create(&out).map_err(|e| Error::io(&out, e))?;
+        std::io::copy(&mut entry, &mut budget.writer(file)).map_err(|e| Error::io(&out, e))?;
+        // Without this, every binary in a zip lands non-executable.
+        if let Some(mode) = mode {
+            set_unix_mode(&out, payload_mode(mode))?;
+        }
+        // A zip written on Windows — Java's `ZipOutputStream`, .NET, Gradle
+        // distributions — marks every member 0644 or carries no unix mode
+        // at all. Placement only links files it can run, so from the
+        // outside that payload looks like it contains nothing. The bytes
+        // are the evidence left: a program header says the file is one.
+        if is_program_head(&crate::extract::read_head(&out).unwrap_or_default()) {
+            #[cfg(unix)]
+            crate::platform::unix::ensure_executable(&out)?;
+        }
+    }
+    finish_deferred_links(dest, Vec::new(), deferred_symlinks)
+}
+
+#[cfg(feature = "gzip")]
 impl Extractor for GzFileExtractor {
     fn id(&self) -> &str {
         "gz"
@@ -630,37 +627,38 @@ impl Extractor for GzFileExtractor {
         head.starts_with(GZIP_MAGIC) && !looks_like_tar(&gzip_inner_head(path))
     }
     fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
-        let stem = src
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "payload".to_string());
-        let stem = stem.strip_suffix(".gz").unwrap_or(&stem).to_string();
-        let out = dest.join(safe_member_path(Path::new(&stem))?);
-
         let file = File::open(src).map_err(|e| Error::io(src, e))?;
-        let mut decoder = flate2::read::GzDecoder::new(BufReader::new(file));
-        let mut written = File::create(&out).map_err(|e| Error::io(&out, e))?;
-        std::io::copy(&mut decoder, &mut written).map_err(|e| Error::io(&out, e))?;
-        drop(written);
-        // A lone gzipped file in a release is a program; nothing else is
-        // published this way.
-        set_unix_mode(&out, 0o755)
+        extract_lone_file(
+            flate2::read::GzDecoder::new(BufReader::new(file)),
+            src,
+            dest,
+            ".gz",
+            &mut Budget::for_archive(src)?,
+        )
     }
 }
 
-fn extract_lone_file<D: Read>(mut decoder: D, src: &Path, dest: &Path, suffix: &str) -> Result<()> {
+#[cfg(any(feature = "gzip", feature = "xz", feature = "bzip2"))]
+fn extract_lone_file<D: Read>(
+    mut decoder: D,
+    src: &Path,
+    dest: &Path,
+    suffix: &str,
+    budget: &mut Budget,
+) -> Result<()> {
     let stem = src
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "payload".to_string());
     let stem = stem.strip_suffix(suffix).unwrap_or(&stem).to_string();
     let out = dest.join(safe_member_path(Path::new(&stem))?);
-    let mut written = File::create(&out).map_err(|e| Error::io(&out, e))?;
-    std::io::copy(&mut decoder, &mut written).map_err(|e| Error::io(&out, e))?;
-    drop(written);
+    budget.entry()?;
+    let written = File::create(&out).map_err(|e| Error::io(&out, e))?;
+    std::io::copy(&mut decoder, &mut budget.writer(written)).map_err(|e| Error::io(&out, e))?;
     set_unix_mode(&out, 0o755)
 }
 
+#[cfg(feature = "xz")]
 impl Extractor for XzFileExtractor {
     fn id(&self) -> &str {
         "xz"
@@ -670,10 +668,17 @@ impl Extractor for XzFileExtractor {
     }
     fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
         let file = File::open(src).map_err(|e| Error::io(src, e))?;
-        extract_lone_file(xz_reader(file), src, dest, ".xz")
+        extract_lone_file(
+            xz_reader(file),
+            src,
+            dest,
+            ".xz",
+            &mut Budget::for_archive(src)?,
+        )
     }
 }
 
+#[cfg(feature = "bzip2")]
 impl Extractor for Bz2FileExtractor {
     fn id(&self) -> &str {
         "bz2"
@@ -688,6 +693,7 @@ impl Extractor for Bz2FileExtractor {
             src,
             dest,
             ".bz2",
+            &mut Budget::for_archive(src)?,
         )
     }
 }
@@ -696,8 +702,11 @@ impl Extractor for RawBinaryExtractor {
     fn id(&self) -> &str {
         "raw"
     }
-    fn detect(&self, _path: &Path, _head: &[u8]) -> bool {
-        true
+    fn detect(&self, _path: &Path, head: &[u8]) -> bool {
+        // An archive whose codec this build left out is not a bare program:
+        // copied as one, it would install as an executable nobody can run.
+        // Refused here, it reads as an unsupported format.
+        !is_container_head(head)
     }
     fn extract(&self, src: &Path, dest: &Path) -> Result<()> {
         let name = src
@@ -708,6 +717,39 @@ impl Extractor for RawBinaryExtractor {
         std::fs::copy(src, &out).map_err(|e| Error::io(&out, e))?;
         set_unix_mode(&out, 0o755)
     }
+}
+
+/// True when the first bytes open a compressed stream or a zip. Every one of
+/// them is claimed by its codec's extractor when that codec is built in.
+fn is_container_head(head: &[u8]) -> bool {
+    [GZIP_MAGIC, XZ_MAGIC, BZ2_MAGIC, ZIP_MAGIC]
+        .iter()
+        .any(|magic| head.starts_with(magic))
+}
+
+/// Every format this build unpacks on any OS, most specific first. A codec
+/// left out of the build is left out here, and its files are then refused as
+/// unsupported. `RawBinaryExtractor` accepts what the others refused, so it
+/// stays last.
+pub fn portable_extractors() -> Vec<Box<dyn Extractor>> {
+    vec![
+        #[cfg(feature = "gzip")]
+        Box::new(TarGzExtractor),
+        #[cfg(feature = "xz")]
+        Box::new(TarXzExtractor),
+        #[cfg(feature = "bzip2")]
+        Box::new(TarBz2Extractor),
+        Box::new(TarExtractor),
+        #[cfg(feature = "zip")]
+        Box::new(ZipExtractor),
+        #[cfg(feature = "gzip")]
+        Box::new(GzFileExtractor),
+        #[cfg(feature = "xz")]
+        Box::new(XzFileExtractor),
+        #[cfg(feature = "bzip2")]
+        Box::new(Bz2FileExtractor),
+        Box::new(RawBinaryExtractor),
+    ]
 }
 
 /// True when the first bytes are a Mach-O image, an ELF image, or a `#!` line.
@@ -739,8 +781,9 @@ pub fn is_program_head(head: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(any(feature = "gzip", feature = "bzip2", feature = "zip"))]
     use std::io::Write;
-    #[cfg(unix)]
+    #[cfg(all(unix, any(feature = "gzip", feature = "zip")))]
     use std::os::unix::fs::PermissionsExt;
 
     #[cfg(unix)]
@@ -788,11 +831,77 @@ mod tests {
         std::fs::create_dir_all(&dest).unwrap();
 
         assert!(
-            unpack_tar(&archive[..], &dest).is_err(),
+            unpack_tar(&archive[..], &dest, &mut unlimited()).is_err(),
             "an entry named through a planted symlink must be refused"
         );
         // Member 2 would have been created here had the link been followed.
         assert!(!dest.join("e").exists(), "the symlink was resolved anyway");
+    }
+
+    /// Each target passes the lexical check alone; through `L -> .` they
+    /// all resolve above the payload.
+    #[cfg(unix)]
+    #[test]
+    fn a_link_routed_through_an_earlier_link_is_refused() {
+        for (name, target) in [("N", "L/.."), ("N", "L/L/../.."), ("sub/N", "../L/L/../..")] {
+            let mut builder = tar::Builder::new(Vec::new());
+            symlink_entry(&mut builder, "L", ".");
+            symlink_entry(&mut builder, name, target);
+            let archive = builder.into_inner().unwrap();
+
+            let outer = tempfile::tempdir().unwrap();
+            let dest = outer.path().join("dest");
+            std::fs::create_dir_all(&dest).unwrap();
+            let err = unpack_tar(&archive[..], &dest, &mut unlimited()).unwrap_err();
+            assert!(
+                err.to_string().contains("resolves outside"),
+                "{target}: {err}"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolves_inside_follows_every_link_and_judges_dangling_ones_by_their_target() {
+        let outer = tempfile::tempdir().unwrap();
+        let root = outer.path().join("root");
+        std::fs::create_dir_all(root.join("bin")).unwrap();
+        std::fs::write(root.join("bin/tool"), b"x").unwrap();
+        let link = |name: &str, target: &str| {
+            std::os::unix::fs::symlink(target, root.join(name)).unwrap();
+            root.join(name)
+        };
+
+        assert!(crate::extract::resolves_inside(
+            &link("alias", "bin/tool"),
+            &root
+        ));
+        assert!(crate::extract::resolves_inside(
+            &link("dangling", "bin/missing"),
+            &root
+        ));
+        link("self", ".");
+        assert!(crate::extract::resolves_inside(
+            &root.join("self/self/bin/tool"),
+            &root
+        ));
+        assert!(!crate::extract::resolves_inside(
+            &link("up", "self/.."),
+            &root
+        ));
+        assert!(!crate::extract::resolves_inside(
+            &link("gone", "self/../nothing"),
+            &root
+        ));
+        assert!(!crate::extract::resolves_inside(
+            &link("abs", "/etc/passwd"),
+            &root
+        ));
+        link("loop-a", "loop-b");
+        assert!(!crate::extract::resolves_inside(
+            &link("loop-b", "loop-a"),
+            &root
+        ));
     }
 
     #[test]
@@ -813,6 +922,30 @@ mod tests {
         let err = materialize_symlink_as_copy(Path::new("missing"), &link).unwrap_err();
         assert!(err.to_string().contains("cannot materialise"), "{err}");
         assert!(std::fs::symlink_metadata(&link).is_err());
+    }
+
+    /// A directory link to its own ancestor would be copied into itself while
+    /// the copy walks it: endless recursion, or a full disk.
+    #[test]
+    fn materialize_symlink_as_copy_refuses_a_link_to_its_own_ancestor() {
+        let dest = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dest.path().join("sub")).unwrap();
+        std::fs::write(dest.path().join("sub/file"), b"x").unwrap();
+
+        for (link, target) in [
+            ("d", "."),
+            ("sub/d", ".."),
+            ("sub/d", "."),
+            ("sub/d", "../sub"),
+        ] {
+            let link = dest.path().join(link);
+            let err = materialize_symlink_as_copy(Path::new(target), &link).unwrap_err();
+            assert!(err.to_string().contains("ancestor"), "{target}: {err}");
+            assert!(
+                std::fs::symlink_metadata(&link).is_err(),
+                "{target}: nothing written"
+            );
+        }
     }
 
     #[test]
@@ -851,7 +984,7 @@ mod tests {
         let archive = builder.into_inner().unwrap();
 
         let dest = tempfile::tempdir().unwrap();
-        unpack_tar(&archive[..], dest.path()).unwrap();
+        unpack_tar(&archive[..], dest.path(), &mut unlimited()).unwrap();
         let alias = dest.path().join("bin/tool-alias");
         assert!(alias.symlink_metadata().unwrap().file_type().is_symlink());
         assert_eq!(std::fs::read(&alias).unwrap(), b"hi");
@@ -899,12 +1032,13 @@ mod tests {
         let archive = builder.into_inner().unwrap();
 
         let dest = tempfile::tempdir().unwrap();
-        unpack_tar(&archive[..], dest.path()).unwrap();
+        unpack_tar(&archive[..], dest.path(), &mut unlimited()).unwrap();
         let alias = dest.path().join("bin/tool-alias");
         assert!(alias.symlink_metadata().unwrap().file_type().is_symlink());
         assert_eq!(std::fs::read(&alias).unwrap(), b"hi");
     }
 
+    #[cfg(feature = "gzip")]
     fn tar_gz_with(entries: &[(&str, &[u8], u32)]) -> Vec<u8> {
         let mut builder = tar::Builder::new(Vec::new());
         for (name, body, mode) in entries {
@@ -920,6 +1054,7 @@ mod tests {
         encoder.finish().unwrap()
     }
 
+    #[cfg(feature = "gzip")]
     #[cfg(unix)]
     #[test]
     fn extracts_a_tar_gz_and_keeps_the_executable_bit() {
@@ -938,6 +1073,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "bzip2")]
     #[cfg(unix)]
     #[test]
     fn bzip2_archives_use_the_same_traversal_guard_as_tar() {
@@ -973,6 +1109,7 @@ mod tests {
         assert!(!outer.path().join("e").exists());
     }
 
+    #[cfg(feature = "gzip")]
     #[test]
     fn detection_separates_tar_gz_from_a_lone_gz() {
         let dir = tempfile::tempdir().unwrap();
@@ -992,58 +1129,150 @@ mod tests {
         assert!(GzFileExtractor.detect(&plain, &head));
     }
 
-    fn xz_bytes(plain: &[u8]) -> Vec<u8> {
-        let mut out = Vec::new();
-        lzma_rs::xz_compress(&mut &plain[..], &mut out).unwrap();
-        out
-    }
+    // Fixed xz bytes, so the crate does not link an encoder.
+    // `XZ_ZS` is 64 KiB of `z`. The tar fixtures are GNU tar, then xz.
+    const XZ_HELLO: &[u8] = &[
+        0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, 0x00, 0x04, 0xe6, 0xd6, 0xb4, 0x46, 0x02, 0x00, 0x21,
+        0x01, 0x0c, 0x00, 0x00, 0x00, 0x8f, 0x98, 0x41, 0x9c, 0x01, 0x00, 0x04, 0x68, 0x65, 0x6c,
+        0x6c, 0x6f, 0x00, 0x00, 0x00, 0x00, 0xb1, 0x37, 0xb9, 0xdb, 0xe5, 0xda, 0x1e, 0x9b, 0x00,
+        0x01, 0x1d, 0x05, 0xb8, 0x2d, 0x80, 0xaf, 0x1f, 0xb6, 0xf3, 0x7d, 0x01, 0x00, 0x00, 0x00,
+        0x00, 0x04, 0x59, 0x5a,
+    ];
+    const XZ_ELF: &[u8] = &[
+        0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, 0x00, 0x04, 0xe6, 0xd6, 0xb4, 0x46, 0x02, 0x00, 0x21,
+        0x01, 0x0c, 0x00, 0x00, 0x00, 0x8f, 0x98, 0x41, 0x9c, 0x01, 0x00, 0x0b, 0x7f, 0x45, 0x4c,
+        0x46, 0x20, 0x70, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x00, 0xaa, 0x9a, 0xe3, 0x12, 0x49,
+        0xa9, 0x88, 0x0f, 0x00, 0x01, 0x24, 0x0c, 0xa6, 0x18, 0xd8, 0xd8, 0x1f, 0xb6, 0xf3, 0x7d,
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x04, 0x59, 0x5a,
+    ];
+    const XZ_ELF_LONG: &[u8] = &[
+        0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, 0x00, 0x04, 0xe6, 0xd6, 0xb4, 0x46, 0x02, 0x00, 0x21,
+        0x01, 0x0c, 0x00, 0x00, 0x00, 0x8f, 0x98, 0x41, 0x9c, 0x01, 0x00, 0x19, 0x7f, 0x45, 0x4c,
+        0x46, 0x20, 0x61, 0x6e, 0x64, 0x20, 0x74, 0x68, 0x65, 0x6e, 0x20, 0x73, 0x6f, 0x6d, 0x65,
+        0x20, 0x70, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x00, 0x00, 0x00, 0x0f, 0xae, 0x65, 0x08,
+        0xe0, 0x4d, 0xef, 0x35, 0x00, 0x01, 0x32, 0x1a, 0x20, 0x18, 0x94, 0x30, 0x1f, 0xb6, 0xf3,
+        0x7d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x04, 0x59, 0x5a,
+    ];
+    const XZ_ZS: &[u8] = &[
+        0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, 0x00, 0x04, 0xe6, 0xd6, 0xb4, 0x46, 0x02, 0x00, 0x21,
+        0x01, 0x0c, 0x00, 0x00, 0x00, 0x8f, 0x98, 0x41, 0x9c, 0xe0, 0xff, 0xff, 0x00, 0x4c, 0x5d,
+        0x00, 0x3d, 0x6f, 0xfb, 0xbf, 0xfe, 0xa3, 0xb1, 0x5e, 0xe5, 0xf8, 0x3f, 0xb2, 0xaa, 0x26,
+        0x55, 0xf8, 0x68, 0x70, 0x41, 0x70, 0x15, 0x0f, 0x8d, 0xfd, 0x1e, 0x4c, 0x1b, 0x8a, 0x42,
+        0xb7, 0x19, 0xf4, 0x69, 0x18, 0x71, 0xae, 0x66, 0x23, 0x8a, 0x8a, 0x4d, 0x2f, 0xa3, 0x0d,
+        0xd9, 0x7f, 0xa6, 0xe3, 0x8c, 0x23, 0x11, 0x53, 0xe0, 0x59, 0x18, 0xc5, 0x75, 0x8a, 0xe2,
+        0x77, 0xf8, 0xb6, 0x94, 0x7f, 0x0c, 0x6a, 0xc0, 0xde, 0x74, 0x49, 0x64, 0x5c, 0x9e, 0x3a,
+        0xd1, 0x00, 0x00, 0x7a, 0x6b, 0x16, 0xe2, 0x53, 0xfc, 0x55, 0xf4, 0x00, 0x01, 0x68, 0x80,
+        0x80, 0x04, 0x00, 0x00, 0x9f, 0xf7, 0x44, 0x7c, 0xb1, 0xc4, 0x67, 0xfb, 0x02, 0x00, 0x00,
+        0x00, 0x00, 0x04, 0x59, 0x5a,
+    ];
+    const TAR_XZ_XY: &[u8] = &[
+        0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, 0x00, 0x04, 0xe6, 0xd6, 0xb4, 0x46, 0x02, 0x00, 0x21,
+        0x01, 0x0c, 0x00, 0x00, 0x00, 0x8f, 0x98, 0x41, 0x9c, 0xe0, 0x27, 0xff, 0x00, 0x53, 0x5d,
+        0x00, 0x3c, 0x00, 0x33, 0x50, 0x18, 0x68, 0x89, 0x82, 0xed, 0xa7, 0x80, 0x69, 0xfa, 0xda,
+        0x6d, 0xf2, 0xb6, 0xa6, 0xdf, 0x1c, 0xb3, 0x2e, 0x68, 0x7b, 0x3f, 0x5c, 0xc9, 0x74, 0xb0,
+        0x80, 0x5e, 0x33, 0xe5, 0xdb, 0xdb, 0x53, 0x85, 0x77, 0x31, 0x99, 0xbc, 0x6b, 0xa8, 0x37,
+        0xba, 0x2c, 0xf5, 0x12, 0x13, 0x43, 0x9a, 0x41, 0x01, 0xb1, 0xfd, 0x5f, 0x96, 0x31, 0xee,
+        0x46, 0x14, 0xba, 0xbd, 0x68, 0x37, 0xd6, 0x91, 0xe7, 0x2c, 0x21, 0x3b, 0x33, 0xa3, 0x50,
+        0xf5, 0x53, 0x12, 0xd5, 0xbb, 0x6e, 0x91, 0x1e, 0x00, 0x00, 0x00, 0xc7, 0x86, 0x01, 0x61,
+        0x5e, 0x8e, 0x01, 0x66, 0x00, 0x01, 0x6f, 0x80, 0x50, 0x00, 0x00, 0x00, 0x62, 0xd6, 0x1c,
+        0x40, 0xb1, 0xc4, 0x67, 0xfb, 0x02, 0x00, 0x00, 0x00, 0x00, 0x04, 0x59, 0x5a,
+    ];
+    const TAR_XZ_TOOL: &[u8] = &[
+        0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, 0x00, 0x04, 0xe6, 0xd6, 0xb4, 0x46, 0x02, 0x00, 0x21,
+        0x01, 0x0c, 0x00, 0x00, 0x00, 0x8f, 0x98, 0x41, 0x9c, 0xe0, 0x27, 0xff, 0x00, 0x61, 0x5d,
+        0x00, 0x31, 0x1a, 0x4a, 0x1b, 0x09, 0xc0, 0xf4, 0x11, 0x24, 0x36, 0xe9, 0x67, 0x13, 0x0d,
+        0x68, 0xbe, 0x2b, 0xe8, 0xa7, 0x00, 0x0c, 0x72, 0xe7, 0xde, 0x92, 0x42, 0xd6, 0x8a, 0x91,
+        0xe0, 0xc7, 0x0c, 0xd6, 0xd2, 0xe6, 0x96, 0x4c, 0x29, 0xfa, 0x2f, 0xf7, 0xd1, 0xc9, 0xc7,
+        0x11, 0x34, 0x16, 0x8a, 0xdd, 0xa2, 0xaa, 0x65, 0x49, 0xb2, 0x88, 0x27, 0xdb, 0x38, 0x1b,
+        0x58, 0x29, 0x26, 0x43, 0x87, 0x7f, 0x81, 0xa7, 0x84, 0x55, 0xa3, 0xae, 0xb1, 0xb8, 0x98,
+        0x31, 0x65, 0x7a, 0x2d, 0x3f, 0xb0, 0x94, 0x8d, 0xdc, 0xf9, 0xfe, 0x9a, 0x99, 0x68, 0x40,
+        0xde, 0x94, 0xbe, 0x91, 0xc3, 0xde, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x37, 0xbf, 0x4f,
+        0x3b, 0xe0, 0x61, 0x83, 0x33, 0x00, 0x01, 0x7d, 0x80, 0x50, 0x00, 0x00, 0x00, 0xf2, 0x75,
+        0x02, 0x0e, 0xb1, 0xc4, 0x67, 0xfb, 0x02, 0x00, 0x00, 0x00, 0x00, 0x04, 0x59, 0x5a,
+    ];
 
-    fn tar_xz_with(entries: &[(&str, &[u8], u32)]) -> Vec<u8> {
-        let mut builder = tar::Builder::new(Vec::new());
-        for (name, body, mode) in entries {
-            let mut header = tar::Header::new_gnu();
-            header.set_size(body.len() as u64);
-            header.set_mode(*mode);
-            header.set_cksum();
-            builder.append_data(&mut header, name, *body).unwrap();
+    #[cfg(feature = "xz")]
+    #[test]
+    fn xz_plaintext_arrives_in_the_callers_buffer() {
+        let plain = vec![b'z'; 64 * 1024];
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("payload.xz");
+        std::fs::write(&src, XZ_ZS).unwrap();
+        let mut decoder = xz_reader(File::open(&src).unwrap());
+        let mut got = Vec::new();
+        let mut buf = [0u8; 32];
+        loop {
+            let n = decoder.read(&mut buf).unwrap();
+            if n == 0 {
+                break;
+            }
+            assert!(n <= buf.len());
+            got.extend_from_slice(&buf[..n]);
         }
-        xz_bytes(&builder.into_inner().unwrap())
+        assert_eq!(got, plain);
     }
 
+    #[cfg(feature = "xz")]
+    #[test]
+    fn an_xz_dictionary_over_the_memory_limit_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("payload.xz");
+        std::fs::write(&src, XZ_HELLO).unwrap();
+        let mut decoder = xz_reader_limited(File::open(&src).unwrap(), 1);
+        let err = decoder.read(&mut [0u8; 16]).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::OutOfMemory);
+    }
+
+    #[cfg(feature = "xz")]
+    #[test]
+    fn a_tar_xz_extracts_through_the_streaming_decoder() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("tool.tar.xz");
+        std::fs::write(&src, TAR_XZ_TOOL).unwrap();
+        let dest = dir.path().join("out");
+        std::fs::create_dir_all(&dest).unwrap();
+        TarXzExtractor.extract(&src, &dest).unwrap();
+        assert_eq!(std::fs::read(dest.join("bin/tool")).unwrap(), b"payload");
+    }
+
+    #[cfg(feature = "xz")]
     #[test]
     fn detection_separates_tar_xz_from_a_lone_xz() {
         let dir = tempfile::tempdir().unwrap();
 
         let tarball = dir.path().join("a.xz");
-        std::fs::write(&tarball, tar_xz_with(&[("x", b"y", 0o644)])).unwrap();
+        std::fs::write(&tarball, TAR_XZ_XY).unwrap();
         let head = crate::extract::read_head(&tarball).unwrap();
         assert!(TarXzExtractor.detect(&tarball, &head));
         assert!(!XzFileExtractor.detect(&tarball, &head));
 
         let plain = dir.path().join("jq.xz");
-        std::fs::write(&plain, xz_bytes(b"\x7fELF and then some payload")).unwrap();
+        std::fs::write(&plain, XZ_ELF_LONG).unwrap();
         let head = crate::extract::read_head(&plain).unwrap();
         assert!(!TarXzExtractor.detect(&plain, &head));
         assert!(XzFileExtractor.detect(&plain, &head));
     }
 
+    #[cfg(feature = "xz")]
     #[test]
     fn a_lone_xz_file_is_extracted_as_the_program() {
         let dir = tempfile::tempdir().unwrap();
         let src = dir.path().join("jq.xz");
-        std::fs::write(&src, xz_bytes(b"\x7fELF payload")).unwrap();
+        std::fs::write(&src, XZ_ELF).unwrap();
         let dest = dir.path().join("out");
         std::fs::create_dir_all(&dest).unwrap();
         XzFileExtractor.extract(&src, &dest).unwrap();
         assert_eq!(std::fs::read(dest.join("jq")).unwrap(), b"\x7fELF payload");
     }
 
+    #[cfg(feature = "bzip2")]
     fn bz2_bytes(plain: &[u8]) -> Vec<u8> {
         let mut encoder = bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::fast());
         encoder.write_all(plain).unwrap();
         encoder.finish().unwrap()
     }
 
+    #[cfg(feature = "bzip2")]
     #[test]
     fn detection_separates_tar_bz2_from_a_lone_bz2() {
         let dir = tempfile::tempdir().unwrap();
@@ -1079,6 +1308,7 @@ mod tests {
     /// A zip the way Windows tools write one: every member 0644, with no
     /// execute bit anywhere. Gradle and Maven `-bin.zip` distributions are
     /// these.
+    #[cfg(feature = "zip")]
     #[cfg(unix)]
     fn write_zip_with_mode(path: &std::path::Path, members: &[(&str, &[u8], u32)]) {
         let file = std::fs::File::create(path).unwrap();
@@ -1092,6 +1322,7 @@ mod tests {
         writer.finish().unwrap();
     }
 
+    #[cfg(feature = "zip")]
     #[cfg(unix)]
     #[test]
     fn a_program_in_a_zip_without_an_execute_bit_still_comes_out_runnable() {
@@ -1124,6 +1355,7 @@ mod tests {
         assert_eq!(mode, 0o644);
     }
 
+    #[cfg(feature = "gzip")]
     #[cfg(unix)]
     fn tar_gz_with_dir(name: &str, mode: u32) -> Vec<u8> {
         let mut builder = tar::Builder::new(Vec::new());
@@ -1141,6 +1373,7 @@ mod tests {
         encoder.finish().unwrap()
     }
 
+    #[cfg(feature = "gzip")]
     #[cfg(unix)]
     #[test]
     fn tar_directory_members_keep_mode() {
@@ -1157,6 +1390,66 @@ mod tests {
         assert_eq!(mode, 0o700);
     }
 
+    #[cfg(feature = "gzip")]
+    #[cfg(unix)]
+    fn tar_with_read_only_dir(dir_first: bool) -> Vec<u8> {
+        let mut builder = tar::Builder::new(Vec::new());
+        let dir = |builder: &mut tar::Builder<Vec<u8>>| {
+            let mut header = tar::Header::new_gnu();
+            header.set_entry_type(tar::EntryType::Directory);
+            header.set_size(0);
+            header.set_mode(0o555);
+            header.set_cksum();
+            builder
+                .append_data(&mut header, "ro/", &[] as &[u8])
+                .unwrap();
+        };
+        if dir_first {
+            dir(&mut builder);
+        }
+        let mut header = tar::Header::new_gnu();
+        header.set_size(2);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, "ro/file", &b"hi"[..])
+            .unwrap();
+        if !dir_first {
+            dir(&mut builder);
+        }
+        builder.into_inner().unwrap()
+    }
+
+    /// Nix and some reproducible tarballs mark directories 0555. Applied as
+    /// written, the mode either stops the children from being written or
+    /// leaves a tree nothing can remove.
+    #[cfg(feature = "gzip")]
+    #[cfg(unix)]
+    #[test]
+    fn a_read_only_directory_extracts_and_stays_removable_in_either_order() {
+        for dir_first in [true, false] {
+            let outer = tempfile::tempdir().unwrap();
+            let dest = outer.path().join("dest");
+            std::fs::create_dir_all(&dest).unwrap();
+
+            unpack_tar(
+                &tar_with_read_only_dir(dir_first)[..],
+                &dest,
+                &mut unlimited(),
+            )
+            .unwrap_or_else(|e| panic!("dir_first={dir_first}: {e}"));
+            assert_eq!(std::fs::read(dest.join("ro/file")).unwrap(), b"hi");
+            let mode = std::fs::metadata(dest.join("ro"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, 0o755, "dir_first={dir_first}: owner always gets rwx");
+            std::fs::remove_dir_all(&dest).unwrap_or_else(|e| panic!("dir_first={dir_first}: {e}"));
+        }
+    }
+
+    #[cfg(feature = "gzip")]
     #[cfg(unix)]
     #[test]
     fn setuid_bits_from_an_archive_are_dropped() {
@@ -1174,12 +1467,163 @@ mod tests {
         assert_eq!(mode, 0o755);
     }
 
+    // Only the Unix-only tar tests use it; Windows would flag it as dead code.
+    #[cfg(unix)]
+    fn unlimited() -> Budget {
+        Budget::new(u64::MAX, u64::MAX)
+    }
+
+    #[cfg(feature = "gzip")]
+    fn gz_bytes(plain: &[u8]) -> Vec<u8> {
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        encoder.write_all(plain).unwrap();
+        encoder.finish().unwrap()
+    }
+
+    #[cfg(feature = "gzip")]
+    #[test]
+    fn a_lone_gzip_bomb_stops_at_the_budget() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("tool.gz");
+        std::fs::write(&src, gz_bytes(&vec![0u8; 4 << 20])).unwrap();
+        let dest = dir.path().join("out");
+        std::fs::create_dir_all(&dest).unwrap();
+
+        let file = File::open(&src).unwrap();
+        let decoder = flate2::read::GzDecoder::new(BufReader::new(file));
+        let err = extract_lone_file(decoder, &src, &dest, ".gz", &mut Budget::new(1 << 20, 10))
+            .unwrap_err();
+        assert!(err.to_string().contains("unpacks to more than"), "{err}");
+        let written = std::fs::metadata(dest.join("tool")).map_or(0, |m| m.len());
+        assert!(written <= 1 << 20, "wrote {written} bytes past the budget");
+    }
+
+    #[test]
+    fn a_tar_member_larger_than_the_budget_is_refused_before_it_is_written() {
+        let mut builder = tar::Builder::new(Vec::new());
+        let body = vec![0u8; 2 << 20];
+        let mut header = tar::Header::new_gnu();
+        header.set_size(body.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder.append_data(&mut header, "big", &body[..]).unwrap();
+        let archive = builder.into_inner().unwrap();
+
+        let dest = tempfile::tempdir().unwrap();
+        let err = unpack_tar(&archive[..], dest.path(), &mut Budget::new(1 << 20, 10)).unwrap_err();
+        assert!(err.to_string().contains("unpacks to more than"), "{err}");
+        assert!(!dest.path().join("big").exists());
+    }
+
+    #[test]
+    fn a_tar_with_too_many_members_is_refused() {
+        let mut builder = tar::Builder::new(Vec::new());
+        for i in 0..20 {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(0);
+            header.set_mode(0o644);
+            header.set_cksum();
+            builder
+                .append_data(&mut header, format!("f{i}"), &[] as &[u8])
+                .unwrap();
+        }
+        let archive = builder.into_inner().unwrap();
+
+        let dest = tempfile::tempdir().unwrap();
+        let err =
+            unpack_tar(&archive[..], dest.path(), &mut Budget::new(u64::MAX, 10)).unwrap_err();
+        assert!(err.to_string().contains("more than 10 entries"), "{err}");
+    }
+
+    #[cfg(feature = "zip")]
+    #[test]
+    fn a_zip_with_too_many_members_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("many.zip");
+        let mut writer = zip::ZipWriter::new(File::create(&src).unwrap());
+        for i in 0..20 {
+            writer
+                .start_file(format!("f{i}"), zip::write::SimpleFileOptions::default())
+                .unwrap();
+        }
+        writer.finish().unwrap();
+        let dest = dir.path().join("out");
+        std::fs::create_dir_all(&dest).unwrap();
+
+        let err = unpack_zip(&src, &dest, &mut Budget::new(u64::MAX, 10)).unwrap_err();
+        assert!(err.to_string().contains("more than 10 entries"), "{err}");
+    }
+
+    #[cfg(feature = "zip")]
+    #[test]
+    fn a_zip_bomb_stops_at_the_budget() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("bomb.zip");
+        let mut writer = zip::ZipWriter::new(File::create(&src).unwrap());
+        writer
+            .start_file("zeros", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(&vec![0u8; 4 << 20]).unwrap();
+        writer.finish().unwrap();
+        let dest = dir.path().join("out");
+        std::fs::create_dir_all(&dest).unwrap();
+
+        let err = unpack_zip(&src, &dest, &mut Budget::new(1 << 20, 10)).unwrap_err();
+        assert!(err.to_string().contains("unpacks to more than"), "{err}");
+        let written = std::fs::metadata(dest.join("zeros")).map_or(0, |m| m.len());
+        assert!(written <= 1 << 20, "wrote {written} bytes past the budget");
+    }
+
+    #[test]
+    fn the_budget_scales_with_the_archive_between_a_floor_and_a_ceiling() {
+        let tiny = Budget::for_compressed_len(1);
+        let mid = Budget::for_compressed_len(1 << 30);
+        let huge = Budget::for_compressed_len(u64::MAX);
+        assert_eq!(tiny.limit_bytes, 256 << 20);
+        assert_eq!(mid.limit_bytes, 32 << 30);
+        assert_eq!(Budget::for_compressed_len(10 << 20).limit_bytes, 1000 << 20);
+        assert_eq!(huge.limit_bytes, 32 << 30);
+    }
+
     fn macho_match_32bit_only(head: &[u8]) -> bool {
         head.len() >= 4
             && matches!(
                 u32::from_be_bytes([head[0], head[1], head[2], head[3]]),
                 0xfeed_face | 0xcefa_edfe
             )
+    }
+
+    #[test]
+    fn a_compressed_file_is_never_taken_for_a_bare_program() {
+        let path = Path::new("tool");
+        for magic in [GZIP_MAGIC, XZ_MAGIC, BZ2_MAGIC, ZIP_MAGIC] {
+            let head = [magic, b"rest of the stream"].concat();
+            assert!(!RawBinaryExtractor.detect(path, &head), "{magic:?}");
+        }
+        assert!(RawBinaryExtractor.detect(path, b"\x7fELF\x02\x01\x01"));
+        assert!(RawBinaryExtractor.detect(path, b"#!/bin/sh\n"));
+    }
+
+    #[cfg(not(any(feature = "gzip", feature = "xz", feature = "bzip2", feature = "zip")))]
+    #[test]
+    fn an_archive_whose_codec_is_left_out_is_unsupported() {
+        let dir = tempfile::tempdir().unwrap();
+        for magic in [GZIP_MAGIC, XZ_MAGIC, BZ2_MAGIC, ZIP_MAGIC] {
+            let src = dir.path().join("tool.archive");
+            std::fs::write(&src, [magic, b"rest of the stream"].concat()).unwrap();
+            let dest = dir.path().join("out");
+            let result = crate::extract::extract_auto(
+                &src,
+                &dest,
+                &portable_extractors(),
+                &crate::report::Report::silent(),
+            );
+            assert!(
+                matches!(result, Err(Error::UnsupportedArchive(_))),
+                "{magic:?}: {result:?}"
+            );
+            assert!(!dest.join("tool.archive").exists());
+        }
     }
 
     #[test]

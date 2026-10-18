@@ -16,8 +16,11 @@ Options:
                           package)
   -f, --force             Reinstall even when the requested version is already present
       --pre               Consider prereleases when resolving `latest`
+      --draft             Consider draft releases too (GitHub, with a token that has push access)
       --no-link           Unpack and record the package without putting it on PATH
       --require-checksum  Refuse to install unless the release publishes a checksum
+      --allow-unverified  Replace a checksum-verified install with a release that publishes no
+                          checksum
       --asset <NAME>      Use this release asset by exact file name instead of auto-selecting
   -j, --jobs <N>          Packages to work on at once (default: 4, or `jobs` in config.toml)
   -y, --yes               Answer yes to every prompt
@@ -41,19 +44,23 @@ Arguments:
   [NAME]...  Packages to upgrade. Empty means every unpinned package
 
 Options:
-      --dry-run     Report what would change without touching anything
-      --pre         Consider prereleases
-      --force       Upgrade pinned packages too
-      --bin <NAME>  Which binary to link when several share the package's name (single package)
-  -j, --jobs <N>    Packages to work on at once (default: 4, or `jobs` in config.toml)
-  -y, --yes         Answer yes to every prompt
-      --root <DIR>  ketch root directory (default: ~/.ketch)
-  -v, --verbose     Show what ketch is doing, including every request
-  -q, --quiet       Only print errors and requested data
-      --no-color    Never emit ANSI colour
-      --no-emoji    Never put an emoji icon in front of a status line
-  -h, --help        Print help
-  -V, --version     Print version
+      --dry-run           Report what would change without touching anything
+      --pre               Consider prereleases
+      --draft             Consider draft releases too (GitHub, with a token that has push access)
+      --force             Upgrade pinned packages too
+      --allow-unverified  Upgrade a checksum-verified package to a release that publishes no
+                          checksum
+      --bin <NAME>        Which binary to link when several share the package's name (single
+                          package)
+  -j, --jobs <N>          Packages to work on at once (default: 4, or `jobs` in config.toml)
+  -y, --yes               Answer yes to every prompt
+      --root <DIR>        ketch root directory (default: ~/.ketch)
+  -v, --verbose           Show what ketch is doing, including every request
+  -q, --quiet             Only print errors and requested data
+      --no-color          Never emit ANSI colour
+      --no-emoji          Never put an emoji icon in front of a status line
+  -h, --help              Print help
+  -V, --version           Print version
 
 ```
 

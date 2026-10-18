@@ -25,6 +25,7 @@ ketch-ffi = { path = "../ketch-ffi" }
 libc = "0.2.189"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 # The header's drift test; the library alone, without its CLI.

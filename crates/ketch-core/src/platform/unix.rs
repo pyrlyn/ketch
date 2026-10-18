@@ -6,17 +6,23 @@
 //! backends. macOS-only app placement stays in `macos.rs`.
 #![cfg(unix)]
 
+use super::claim::Claims;
 use super::Platform;
 use crate::error::{Error, Result};
 use crate::extra::ExtraPlacement;
 use crate::model::{glob_match, glob_preferred, BinSpec, LinkKind, LinkRecord, LinkRole};
+use fs_kit::tree::remove_any;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 #[cfg(target_os = "linux")]
 use super::scoring::looks_like_build_artifact;
+#[cfg(all(target_os = "linux", test))]
+use super::sibling;
 #[cfg(target_os = "linux")]
 use super::Placement;
+#[cfg(target_os = "linux")]
+use super::{finalize_store_swap, restore_retired_store};
 #[cfg(target_os = "linux")]
 use crate::model::PackageKind;
 #[cfg(target_os = "linux")]
@@ -40,17 +46,6 @@ pub(crate) const NOISE_DIRS: &[&str] = &[
     "resources",
     "plugins",
 ];
-
-/// Remove whatever is at `path` — file, symlink or directory — treating "it
-/// was not there" as success.
-pub(crate) fn remove_any(path: &Path) -> std::io::Result<()> {
-    match std::fs::symlink_metadata(path) {
-        Ok(meta) if meta.is_dir() => std::fs::remove_dir_all(path),
-        Ok(_) => std::fs::remove_file(path),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e),
-    }
-}
 
 /// Add the bits a program needs to run, leaving every other bit alone.
 ///
@@ -127,10 +122,16 @@ pub(crate) fn is_ours(link: &Path, owned: &Path, recorded: &[LinkRecord]) -> boo
     target.starts_with(owned)
 }
 
-/// Clear a destination, or explain who already has it.
-pub(crate) fn clear_destination(link: &Path, owned: &Path, recorded: &[LinkRecord]) -> Result<()> {
+/// Clear a destination, or explain who already has it. What was there moves
+/// aside into `claims`, so a placement that fails later can put it back.
+pub(crate) fn clear_destination(
+    link: &Path,
+    owned: &Path,
+    recorded: &[LinkRecord],
+    claims: &mut Claims,
+) -> Result<()> {
     destination_available(link, owned, recorded)?;
-    remove_any(link).map_err(|e| Error::io(link, e))
+    claims.take(link)
 }
 
 pub(crate) fn destination_available(
@@ -160,67 +161,10 @@ pub(crate) fn writable(dir: &Path) -> std::result::Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// Linux copies with the local-source tree copy when a rename cannot cross filesystems.
 #[cfg(target_os = "linux")]
-pub(crate) fn sibling(original: &Path, suffix: &str) -> PathBuf {
-    let name = original
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "pkg".into());
-    original.with_file_name(format!("{name}{suffix}"))
-}
-
-/// Move the extracted payload to its final home, falling back to a copy when
-/// the cache and the store are on different filesystems.
-///
-/// The replacement is assembled beside the destination and swapped in last.
-/// Deleting the old directory first would mean an upgrade that fails while
-/// copying leaves the user with no working version of a package they already
-/// had installed.
-#[cfg(target_os = "linux")]
-pub(crate) fn move_into_store(payload: &Path, store: &Path) -> Result<()> {
-    if payload == store {
-        return Ok(());
-    }
-    if let Some(parent) = store.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
-    }
-
-    let staged = sibling(store, ".incoming");
-    let _ = remove_any(&staged);
-    if std::fs::rename(payload, &staged).is_err() {
-        copy_tree(payload, &staged)?;
-    }
-
-    if store.symlink_metadata().is_err() {
-        return std::fs::rename(&staged, store).map_err(|e| Error::io(store, e));
-    }
-    let retired = sibling(store, ".old");
-    let _ = remove_any(&retired);
-    std::fs::rename(store, &retired).map_err(|e| Error::io(store, e))?;
-    if let Err(e) = std::fs::rename(&staged, store) {
-        let _ = std::fs::rename(&retired, store);
-        let _ = remove_any(&staged);
-        return Err(Error::io(store, e));
-    }
-    // Leave `.old` until links succeed. A failed place after this swap can
-    // put the working version back; deleting it here would leave none.
-    Ok(())
-}
-
-/// Drop the retired previous version once placement has finished successfully.
-#[cfg(target_os = "linux")]
-pub(crate) fn finalize_store_swap(store: &Path) {
-    let _ = remove_any(&sibling(store, ".old"));
-}
-
-/// Put the version we swapped out back, after place failed on the new tree.
-#[cfg(target_os = "linux")]
-pub(crate) fn restore_retired_store(store: &Path) {
-    let retired = sibling(store, ".old");
-    if retired.symlink_metadata().is_ok() {
-        let _ = remove_any(store);
-        let _ = std::fs::rename(&retired, store);
-    }
+pub(crate) fn move_into_store(payload: &Path, store: &Path) -> Result<bool> {
+    super::swap_into_store(payload, store, copy_tree)
 }
 
 /// Keep a payload symlink if its target is a regular file inside the tree.
@@ -232,20 +176,12 @@ fn payload_executable_entry(entry: &walkdir::DirEntry, root: &Path) -> Option<Pa
     if !entry.file_type().is_symlink() {
         return None;
     }
-    let target = std::fs::read_link(path).ok()?;
-    let resolved = if target.is_absolute() {
-        target
-    } else {
-        path.parent()?.join(target)
-    };
-    let rel = resolved.strip_prefix(root).ok()?;
-    if rel
-        .components()
-        .any(|c| matches!(c, std::path::Component::ParentDir))
-    {
+    // One hop is not enough: `tool -> abs` reads as inside while `abs`, or
+    // any link further along, leads out of the payload.
+    if !crate::extract::resolves_inside(path, root) {
         return None;
     }
-    std::fs::metadata(&resolved)
+    std::fs::metadata(path)
         .ok()
         .filter(|meta| meta.is_file())
         .map(|_| path.to_path_buf())
@@ -359,10 +295,11 @@ pub(crate) fn link_binary(
     name: &str,
     owned: &Path,
     recorded: &[LinkRecord],
+    claims: &mut Claims,
 ) -> Result<LinkRecord> {
     std::fs::create_dir_all(bin_dir).map_err(|e| Error::io(bin_dir, e))?;
     let link = bin_dir.join(name);
-    clear_destination(&link, owned, recorded)?;
+    clear_destination(&link, owned, recorded, claims)?;
     ensure_executable(target)?;
     symlink(target, &link)?;
     Ok(LinkRecord {
@@ -437,12 +374,15 @@ pub(crate) fn place_cli(platform: &dyn Platform, plan: &Placement<'_>) -> Result
         preflight_cli(platform, plan, package_dir)?;
         preflight_extras(plan, package_dir)?;
     }
-    move_into_store(plan.payload_dir, plan.store_dir)?;
+    let swapped = move_into_store(plan.payload_dir, plan.store_dir)?;
     if !plan.link {
-        finalize_store_swap(plan.store_dir);
+        if swapped {
+            finalize_store_swap(plan.store_dir);
+        }
         return Ok(Vec::new());
     }
     let mut links = Vec::new();
+    let mut claims = Claims::default();
     let result = (|| -> Result<Vec<LinkRecord>> {
         for (target, name) in cli_targets(platform, plan.store_dir, plan)? {
             links.push(link_binary(
@@ -451,6 +391,7 @@ pub(crate) fn place_cli(platform: &dyn Platform, plan: &Placement<'_>) -> Result
                 &name,
                 package_dir,
                 plan.replacing,
+                &mut claims,
             )?);
         }
         links.extend(link_planned_extras(
@@ -458,6 +399,7 @@ pub(crate) fn place_cli(platform: &dyn Platform, plan: &Placement<'_>) -> Result
             plan.store_dir,
             package_dir,
             plan.replacing,
+            &mut claims,
         )?);
         if links.is_empty() {
             return Err(Error::EmptyPayload(plan.store_dir.to_path_buf()));
@@ -466,12 +408,18 @@ pub(crate) fn place_cli(platform: &dyn Platform, plan: &Placement<'_>) -> Result
     })();
     match result {
         Ok(links) => {
-            finalize_store_swap(plan.store_dir);
+            claims.discard();
+            if swapped {
+                finalize_store_swap(plan.store_dir);
+            }
             Ok(links)
         }
         Err(e) => {
             let _ = unplace(&links, &crate::report::Report::silent());
-            restore_retired_store(plan.store_dir);
+            claims.restore();
+            if swapped {
+                restore_retired_store(plan.store_dir);
+            }
             Err(e)
         }
     }
@@ -490,7 +438,7 @@ pub(crate) fn unplace(links: &[LinkRecord], report: &crate::report::Report) -> R
             ));
             continue;
         }
-        remove_any(&record.link).map_err(|e| Error::io(&record.link, e))?;
+        remove_any(&record.link).map_err(|e| Error::fs_kit(&record.link, e))?;
     }
     Ok(())
 }
@@ -517,6 +465,7 @@ pub(crate) fn link_planned_extras(
     root: &Path,
     owned: &Path,
     recorded: &[LinkRecord],
+    claims: &mut Claims,
 ) -> Result<Vec<LinkRecord>> {
     let mut links = Vec::new();
     for extra in extras {
@@ -524,7 +473,7 @@ pub(crate) fn link_planned_extras(
         if let Some(parent) = extra.dest.parent() {
             std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
         }
-        clear_destination(&extra.dest, owned, recorded)?;
+        clear_destination(&extra.dest, owned, recorded, claims)?;
         symlink(&target, &extra.dest)?;
         links.push(LinkRecord {
             link: extra.dest.clone(),
@@ -555,6 +504,34 @@ mod tests {
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].0.file_name().unwrap(), "rtok");
         assert_eq!(got[0].1, "rtok");
+    }
+
+    #[test]
+    fn a_payload_link_routed_through_another_link_out_of_the_tree_is_not_a_program() {
+        let outer = tempfile::tempdir().unwrap();
+        let root = outer.path().join("payload");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(outer.path().join("outside"), b"#!/bin/sh\n").unwrap();
+        std::fs::write(root.join("inside"), b"#!/bin/sh\n").unwrap();
+        std::os::unix::fs::symlink(".", root.join("L")).unwrap();
+        // Planted by a payload no extractor checked (a DMG or PKG copy): one
+        // hop reads `abs`, which is inside, and stops there.
+        std::os::unix::fs::symlink(outer.path().join("outside"), root.join("abs")).unwrap();
+        std::os::unix::fs::symlink("abs", root.join("escape")).unwrap();
+        std::os::unix::fs::symlink("L/inside", root.join("alias")).unwrap();
+
+        let entry_for = |name: &str| {
+            walkdir::WalkDir::new(&root)
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .find(|e| e.file_name() == name)
+                .unwrap()
+        };
+        assert_eq!(payload_executable_entry(&entry_for("escape"), &root), None);
+        assert_eq!(
+            payload_executable_entry(&entry_for("alias"), &root),
+            Some(root.join("alias"))
+        );
     }
 
     #[test]
@@ -739,7 +716,7 @@ mod tests {
 
         assert!(!is_ours(&link, &owned, &recorded));
         assert!(destination_available(&link, &owned, &recorded).is_err());
-        assert!(clear_destination(&link, &owned, &recorded).is_err());
+        assert!(clear_destination(&link, &owned, &recorded, &mut Claims::default()).is_err());
         assert!(link.is_file(), "the user's file must survive");
     }
 
@@ -761,7 +738,7 @@ mod tests {
         }];
 
         assert!(!is_ours(&link, &owned, &recorded));
-        assert!(clear_destination(&link, &owned, &recorded).is_err());
+        assert!(clear_destination(&link, &owned, &recorded, &mut Claims::default()).is_err());
     }
 
     #[test]
@@ -791,7 +768,7 @@ mod tests {
         std::fs::create_dir_all(link.parent().unwrap()).unwrap();
         std::os::unix::fs::symlink(&target, &link).unwrap();
 
-        clear_destination(&link, &owned, &[]).unwrap();
+        clear_destination(&link, &owned, &[], &mut Claims::default()).unwrap();
         assert!(
             std::fs::symlink_metadata(&link).is_err(),
             "owned symlink should be gone"
@@ -803,7 +780,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let (owned, link) = prepare_destination(&tmp, Occupant::RegularFile);
 
-        assert!(clear_destination(&link, &owned, &[]).is_err());
+        assert!(clear_destination(&link, &owned, &[], &mut Claims::default()).is_err());
         assert!(link.is_file(), "must not be deleted");
     }
 

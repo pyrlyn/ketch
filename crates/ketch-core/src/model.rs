@@ -555,7 +555,7 @@ impl Checksum {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReleaseAsset {
     pub name: String,
     pub url: String,
@@ -571,7 +571,7 @@ pub struct ReleaseAsset {
     pub headers: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Release {
     pub version: Version,
     pub tag: String,
@@ -903,7 +903,9 @@ impl Manifest {
                 usable_file_name("binary name", name)?;
             }
             if let Some(path) = &spec.path {
-                contained_path("binary path", path)?;
+                // A binary path is a glob: `*` and `?` are wildcards here, not
+                // the characters Windows forbids in a file name.
+                contained_path("binary path", path, &path.replace(['*', '?'], "_"))?;
             }
             if spec.name.is_none() && spec.path.is_none() {
                 return Err(Error::msg(
@@ -912,7 +914,7 @@ impl Manifest {
             }
         }
         for path in &self.extra_paths {
-            contained_path("extra path", path.as_rel_path())?;
+            contained_path("extra path", path.as_rel_path(), path.as_rel_path())?;
             crate::extra::classify(path)?;
         }
         // Each level costs a directory listing of the payload, and no real
@@ -1125,8 +1127,10 @@ pub(crate) fn usable_file_name(what: &str, value: &str) -> Result<()> {
 }
 
 /// Reject a path that would reach outside the payload it is relative to.
-fn contained_path(what: &str, value: &str) -> Result<()> {
-    crate::extract::safe_member_path(std::path::Path::new(value))
+///
+/// `value` is what the message shows; `checked` is what is tested.
+fn contained_path(what: &str, value: &str, checked: &str) -> Result<()> {
+    crate::extract::safe_member_path(std::path::Path::new(checked))
         .map(|_| ())
         .map_err(|_| Error::msg(format!("{what} `{value}` must stay inside the package")))
 }
@@ -1251,6 +1255,64 @@ impl LinkRole {
     }
 }
 
+/// Which stream of releases an installed package follows. `upgrade`,
+/// `outdated` and `list` look for its next release in the same stream, so a
+/// package someone opted into prereleases for keeps getting them without
+/// `--pre` on every run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Channel {
+    /// Published, non-prerelease releases. The default so state written
+    /// before channels existed still reads as stable.
+    #[default]
+    Stable,
+    /// Prereleases as well as stable releases.
+    Pre,
+    /// Drafts as well as prereleases and stable releases. Only GitHub has
+    /// drafts, and they need a token with push access to see.
+    Draft,
+    /// One floating tag that is not a version (`nightly`, `dev`, `canary`),
+    /// republished under the same name. It is followed by its tag, and a new
+    /// build under that tag is the upgrade.
+    Dev,
+}
+
+impl Channel {
+    /// The channel an install lands on: `draft` when the person opted into
+    /// drafts, `dev` when the tag is not a version, `pre` when they opted into
+    /// prereleases or picked one by tag, `stable` otherwise. Opting in counts
+    /// even when the newest release happened to be stable, or the next upgrade
+    /// would quietly drop them.
+    pub fn of(release: &Release, include_prerelease: bool, include_draft: bool) -> Channel {
+        if include_draft || release.draft {
+            Channel::Draft
+        } else if release.version.sem.is_none() {
+            // No version to compare against a later one: the tag itself is
+            // what the package follows, whatever else was opted into.
+            Channel::Dev
+        } else if include_prerelease || release.prerelease || release.version.is_prerelease() {
+            Channel::Pre
+        } else {
+            Channel::Stable
+        }
+    }
+
+    /// True for the default channel, used to keep old-looking JSON.
+    pub fn is_stable(&self) -> bool {
+        matches!(self, Self::Stable)
+    }
+
+    /// The lowercase name state and `--json` output use.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Stable => "stable",
+            Self::Pre => "pre",
+            Self::Draft => "draft",
+            Self::Dev => "dev",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkRecord {
     /// The path we created and are responsible for removing.
@@ -1315,6 +1377,20 @@ pub struct InstalledPackage {
     /// before it existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bin_choice: Option<String>,
+    /// The release stream this package follows. Absent on stable packages and
+    /// on state written before channels existed.
+    #[serde(default, skip_serializing_if = "Channel::is_stable")]
+    pub channel: Channel,
+    /// The installed release was a draft. Its tag can later name the
+    /// published release, which is then an upgrade although the tag is the
+    /// same. Absent on everything else.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub draft: bool,
+    /// When the installed build was published, for a package on `dev`: with
+    /// the asset's digest, it is how a tag that now names another build is
+    /// told apart from the one installed. Absent on every other channel.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub published_at: Option<String>,
 }
 
 impl InstalledPackage {
@@ -1539,6 +1615,16 @@ pub fn glob_preferred<'a>(
 mod tests {
     use super::*;
     use crate::toml_file;
+
+    /// A bin or package called `nul` would install as the null device.
+    #[cfg(windows)]
+    #[test]
+    fn windows_device_names_are_not_usable_file_names() {
+        for name in ["nul", "CON", "com1.exe", "tool.", "a|b"] {
+            assert!(usable_file_name("binary name", name).is_err(), "{name}");
+        }
+        assert!(usable_file_name("binary name", "console").is_ok());
+    }
 
     #[test]
     fn a_reference_to_a_moved_repository_reads_as_its_new_name() {
@@ -1969,6 +2055,11 @@ mod tests {
                         pattern_validators(schema_pattern::NOT_BLANK),
                     ]
                 });
+            // The schema is one text for every OS; Windows alone also refuses
+            // `<`, a trailing dot, device names and the like in a file name.
+            if cfg!(windows) {
+                proptest::prop_assume!(!crate::config::windows_unusable_component(&text));
+            }
             let base = Manifest::inferred(PackageRef::github("o/r"));
             let rust = [
                 PackageRef::parse(&text).is_some(),
@@ -1994,5 +2085,57 @@ mod tests {
                 }
             }
         }
+    }
+
+    fn release_tagged(tag: &str, prerelease: bool) -> Release {
+        Release {
+            version: Version::parse(tag),
+            tag: tag.into(),
+            prerelease,
+            draft: false,
+            published_at: None,
+            notes: None,
+            assets: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_stable_release_installed_without_pre_is_on_the_stable_channel() {
+        assert_eq!(
+            Channel::of(&release_tagged("v1.2.0", false), false, false),
+            Channel::Stable
+        );
+    }
+
+    #[test]
+    fn opting_into_prereleases_keeps_them_even_when_the_newest_is_stable() {
+        assert_eq!(
+            Channel::of(&release_tagged("v1.2.0", false), true, false),
+            Channel::Pre
+        );
+    }
+
+    #[test]
+    fn a_prerelease_by_flag_or_by_version_puts_the_package_on_pre() {
+        assert_eq!(
+            Channel::of(&release_tagged("v1.2.0", true), false, false),
+            Channel::Pre
+        );
+        assert_eq!(
+            Channel::of(&release_tagged("v2.0.0-rc.1", false), false, false),
+            Channel::Pre
+        );
+    }
+
+    #[test]
+    fn opting_into_drafts_puts_the_package_on_draft_whatever_it_landed_on() {
+        assert_eq!(
+            Channel::of(&release_tagged("v1.2.0", false), false, true),
+            Channel::Draft
+        );
+        let mut draft = release_tagged("v2.0.0", false);
+        draft.draft = true;
+        assert_eq!(Channel::of(&draft, true, false), Channel::Draft);
+        assert_eq!(Channel::Draft.as_str(), "draft");
     }
 }
