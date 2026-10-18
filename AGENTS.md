@@ -310,6 +310,15 @@ described by XcodeGen's `project.yml`; the generated `Ketch.xcodeproj` and
 `build/` are gitignored. `just macos-app` builds it unsigned for arm64 and
 x86_64, `just macos-test` runs the Swift Testing unit tests and the UI smoke
 test; the `macos-app` CI job runs the same plus `swift format lint --strict`.
+
+The macOS runner is selectable with the repository variable `MACOS_RUNNER`
+(Settings → Secrets and variables → Actions → Variables). Unset, the macOS jobs
+here (`macos-app`, the macOS `package` entry, the second Swift job in `ci.yml`,
+`tap.yml`, and the `runs-on` input of `release-apple-desktop.yml`) keep their
+hosted labels (`macos-26`, `macos-latest`). Set it to `xcode-27-local` to run
+them on the dedicated self-hosted Mac (labels `self-hosted, macOS, ARM64,
+xcode-27-local`). The macOS targets of the shared `rust` job are chosen inside
+`pyrlyn/ci` (`ci-rust.yml`, default `xcode-27`) and do not follow this variable.
 It has no Rust in it and does not touch the CLI gate.
 
 Views talk to `KetchStore`, the store talks to `KetchCoreProtocol`, and

@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   tap:
-    runs-on: macos-latest
+    runs-on: ${{ vars.MACOS_RUNNER || 'macos-latest' }}
     env:
       TAG: ${{ fromJson(inputs.plan).announcement_tag }}
     steps:

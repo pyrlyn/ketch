@@ -120,7 +120,7 @@ jobs:
     if: >-
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
-    runs-on: macos-26
+    runs-on: ${{ vars.MACOS_RUNNER || 'macos-26' }}
     defaults:
       run:
         working-directory: desktop/macos
@@ -176,7 +176,7 @@ jobs:
     if: >-
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
-    runs-on: macos-26
+    runs-on: ${{ vars.MACOS_RUNNER || 'macos-26' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -344,7 +344,8 @@ jobs:
             target: x86_64-unknown-linux-gnu
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-    runs-on: ${{ matrix.os }}
+    # Only the macOS entry follows MACOS_RUNNER; matrix.os stays the label, so the check names do not change.
+    runs-on: ${{ matrix.os == 'macos-latest' && (vars.MACOS_RUNNER || matrix.os) || matrix.os }}
     env:
       RUN: ${{ needs.config.outputs.docs-only != 'true' }}
     defaults:

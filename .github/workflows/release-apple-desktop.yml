@@ -51,7 +51,7 @@ jobs:
         > [!WARNING]
         > Dev build: the Debug configuration, Developer ID signed and notarised, published as a prerelease.
       # The runner and Xcode CI's macos-app job builds the app with.
-      runs-on: macos-26
+      runs-on: ${{ vars.MACOS_RUNNER || 'macos-26' }}
       mise-install-args: xcodegen git-cliff
       # TODO(R9): crates/ketch-ffi does not exist yet, so there is no
       # XCFramework to link and the app runs on FakeKetchCore. When R9 lands:
