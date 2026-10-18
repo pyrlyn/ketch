@@ -2045,6 +2045,9 @@ mod tests {
     proptest::proptest! {
         #[test]
         fn schema_patterns_agree_with_the_rust_checks(text in tricky_text()) {
+            // The schema is host-neutral; on Windows ketch also refuses names that are
+            // only unusable there (`*`, `nul`, a trailing dot), which no JSON Schema pattern states.
+            proptest::prop_assume!(!cfg!(windows) || !crate::config::windows_unusable_component(&text));
             static PATTERNS: std::sync::LazyLock<[[jsonschema::Validator; 2]; 4]> =
                 std::sync::LazyLock::new(|| {
                     [
