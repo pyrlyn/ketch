@@ -102,6 +102,17 @@ The commit-msg hook is opt-in via `just hooks`: commitlint then runs on every
 `git commit`, rejecting a malformed subject outright and letting merge and
 revert subjects through.
 
+jactionlint and hk are pinned in `mise.toml`. `.github/jactionlint.yaml` applies
+the default profile and the baseline `.github/jactionlint-baseline.json`.
+`hk.pkl` runs jactionlint as a pre-push hook, installed through git config, so
+it runs alongside the `.githooks` commit-msg hook:
+
+```bash
+mise x -- jactionlint                  # lint workflows, composite actions, dependabot.yml
+mise x -- jactionlint --baseline-write # refresh the baseline after fixing findings
+mise x -- hk install --mise            # install the pre-push hook once per clone
+```
+
 `fs-kit` (path, atomic writes, tree copy and removal, backups) comes from
 crates.io (pinned in `Cargo.lock`, set once in the root
 `[workspace.dependencies]`). Use it for file and directory work instead of
