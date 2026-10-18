@@ -38,7 +38,7 @@ getrandom-468e82937335b1c9 = { package = "getrandom", version = "0.3", default-f
 getrandom-6f8ce4dd05d13bba = { package = "getrandom", version = "0.2", default-features = false, features = ["js", "std"] }
 hashbrown = { version = "0.17" }
 indexmap = { version = "2", features = ["serde"] }
-itertools = { version = "0.14" }
+itertools = { version = "0.15" }
 memchr = { version = "2" }
 num-bigint = { version = "0.5" }
 num-iter = { version = "0.1", default-features = false, features = ["i128", "std"] }
@@ -86,7 +86,7 @@ derive_more-impl = { version = "2", features = ["debug", "display", "is_variant"
 either = { version = "1", features = ["use_std"] }
 hashbrown = { version = "0.17" }
 indexmap = { version = "2", features = ["serde"] }
-itertools = { version = "0.14" }
+itertools = { version = "0.15" }
 memchr = { version = "2" }
 proc-macro2 = { version = "1" }
 quote = { version = "1" }
