@@ -49,12 +49,13 @@ jobs:
       dry-run: ${{ inputs.dry-run }}
       release-untagged-head: ${{ inputs.release-untagged-head }}
       # Every release is a dev build (Cargo `dev` profile, see [profile.dist] in
-      # Cargo.toml), published as a prerelease. This repository's decision, not pyrlyn/ci's.
-      prerelease: true
+      # Cargo.toml), published as a regular release so `/releases/latest`, install.sh and
+      # `ketch self upgrade` find it (B93). This repository's decision, not pyrlyn/ci's.
+      prerelease: false
       release-title-suffix: " (dev build)"
       release-notes-header: |-
         > [!WARNING]
-        > Dev build: compiled with the Cargo `dev` profile (unoptimized, with debug info) and published as a prerelease.
+        > Dev build: compiled with the Cargo `dev` profile (unoptimized, with debug info).
       release-script: scripts/release.sh
       # Explicit although it is pyrlyn/ci's default: tests/release-workflows.sh asserts it.
       release-workflows: release.yml
