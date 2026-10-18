@@ -363,6 +363,7 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.macos-runner.outputs.package) }}
     # `os` stays the label in the check names; `runner` is what the job runs on.
+    name: package (${{ matrix.os }}, ${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
     env:
       RUN: ${{ needs.config.outputs.docs-only != 'true' }}
