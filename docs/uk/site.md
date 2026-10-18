@@ -18,7 +18,7 @@ lang: uk
 pyrlyn/landing (main) as content/projects/ketch.md on every change to main and on every v*
 tag; front matter follows CONTENT_CONTRACT.md in that repository.
 Sources (checked 2026-10-14): README.md and the clap CLI in src/cli.rs; version from the latest
-GitHub release (v0.10.0); accent is the dark-theme --accent in site/DESIGN.md. -->
+GitHub release (v0.0.1); accent is the dark-theme --accent in site/DESIGN.md. -->
 
 
 ## Огляд
