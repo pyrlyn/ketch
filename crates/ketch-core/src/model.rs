@@ -1125,8 +1125,11 @@ pub(crate) fn usable_file_name(what: &str, value: &str) -> Result<()> {
 }
 
 /// Reject a path that would reach outside the payload it is relative to.
+///
+/// A manifest path may be a glob (`rtok*`), so the Windows file-name rules are
+/// off here; the member that the glob matches is checked with them at extraction.
 fn contained_path(what: &str, value: &str) -> Result<()> {
-    crate::extract::safe_member_path(std::path::Path::new(value))
+    crate::extract::safe_member_path_for(std::path::Path::new(value), false)
         .map(|_| ())
         .map_err(|_| Error::msg(format!("{what} `{value}` must stay inside the package")))
 }
