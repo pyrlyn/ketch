@@ -37,7 +37,7 @@ repository = "https://github.com/pyrlyn/ketch"
 # `path` or `[patch]` here: CI and release builds must resolve the registry
 # version.
 [workspace.dependencies]
-fs-kit = { path = "../../packages/crates/rust/fs-kit" }
+fs-kit = "0.1.0"
 
 # There is no unsafe code in ketch and there is no reason for any to appear.
 [workspace.lints.rust]
@@ -73,7 +73,7 @@ fs-kit.workspace = true
 # none of these are its dependencies.
 indicatif = "0.18"
 # Status-line verb icons and the icon gutter, shared with rtok.
-operation-icons = { path = "../../packages/crates/rust/operation-icons" }
+operation-icons = "0.1.0"
 # The terminal width `ketch list remote` fits descriptions to. Already in the
 # tree through clap's `wrap_help`, so it costs the binary nothing.
 terminal_size = "0.4"
