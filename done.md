@@ -1652,3 +1652,11 @@ The creator authorized dependency updates across the audit. Update only vulnerab
 Execution plan: reproduce the advisory audit; apply compatible package-manager updates; review the lockfile diff; run advisory regression checks and the project test/lint/format gates; publish a PR and merge only after required checks pass. No custom dependency implementation is needed. Rollback is a revert of the dependency-update commit.
 
 Validation: rustls 0.23.46 resolves its RustSec advisories; the existing rsa RUSTSEC-2023-0071 has no patched release and remains reported. The complete nextest run passed 1241 of 1242 tests; the sole failure was an unconfigured mise PowerShell shim. Re-running all 7 PowerShell tests with installed PowerShell 7.6.6 passed. Workspace clippy with warnings denied and formatting passed. Existing rustls is reused; no custom implementation or new dependency was added. Regenerated workspace-hack for the resolved graph; hakari generate --diff, manage-deps --dry-run, and verify passed.
+
+### T901. Isolate UI test settings
+
+Concurrent unit tests mutate COLOR, EMOJI and LEVEL while other tests render snapshot lines, producing mixed styles. The creator approved this narrow fix alongside the owned R6 task, whose ownership and scope remain unchanged.
+
+Execution plan: reproduce the snapshot failures with the threaded Cargo runner; use a test-only standard-library mutex guard around settings initialization and assertions; reuse existing snapshots as regression checks; repeat threaded UI tests, then run nextest, Clippy and formatting. Existing project and shared-package searches found no reusable UI test-settings guard; std::sync::Mutex already used by this module is sufficient without a dependency.
+
+Validation: the 16-thread UI run failed 7 of 29 tests before the fix. After the fix, all 29 pass, including 20 consecutive repetitions (580 test executions). All 1248 workspace nextest tests pass with installed PowerShell 7.6.6 selected for the existing installer tests. Workspace Clippy with warnings denied, cargo fmt --check and git diff --check pass. Production code and snapshot expectations are unchanged.
