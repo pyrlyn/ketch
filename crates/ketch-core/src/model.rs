@@ -903,7 +903,9 @@ impl Manifest {
                 usable_file_name("binary name", name)?;
             }
             if let Some(path) = &spec.path {
-                contained_path("binary path", path)?;
+                // A binary path is a glob: `*` and `?` are wildcards here, not
+                // the characters Windows forbids in a file name.
+                contained_path("binary path", path, &path.replace(['*', '?'], "_"))?;
             }
             if spec.name.is_none() && spec.path.is_none() {
                 return Err(Error::msg(
@@ -912,7 +914,7 @@ impl Manifest {
             }
         }
         for path in &self.extra_paths {
-            contained_path("extra path", path.as_rel_path())?;
+            contained_path("extra path", path.as_rel_path(), path.as_rel_path())?;
             crate::extra::classify(path)?;
         }
         // Each level costs a directory listing of the payload, and no real
@@ -1125,8 +1127,10 @@ pub(crate) fn usable_file_name(what: &str, value: &str) -> Result<()> {
 }
 
 /// Reject a path that would reach outside the payload it is relative to.
-fn contained_path(what: &str, value: &str) -> Result<()> {
-    crate::extract::safe_member_path(std::path::Path::new(value))
+///
+/// `value` is what the message shows; `checked` is what is tested.
+fn contained_path(what: &str, value: &str, checked: &str) -> Result<()> {
+    crate::extract::safe_member_path(std::path::Path::new(checked))
         .map(|_| ())
         .map_err(|_| Error::msg(format!("{what} `{value}` must stay inside the package")))
 }
@@ -2051,6 +2055,11 @@ mod tests {
                         pattern_validators(schema_pattern::NOT_BLANK),
                     ]
                 });
+            // The schema is one text for every OS; Windows alone also refuses
+            // `<`, a trailing dot, device names and the like in a file name.
+            if cfg!(windows) {
+                proptest::prop_assume!(!crate::config::windows_unusable_component(&text));
+            }
             let base = Manifest::inferred(PackageRef::github("o/r"));
             let rust = [
                 PackageRef::parse(&text).is_some(),

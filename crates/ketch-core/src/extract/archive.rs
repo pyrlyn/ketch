@@ -1191,6 +1191,7 @@ mod tests {
         0x02, 0x0e, 0xb1, 0xc4, 0x67, 0xfb, 0x02, 0x00, 0x00, 0x00, 0x00, 0x04, 0x59, 0x5a,
     ];
 
+    #[cfg(feature = "xz")]
     #[test]
     fn xz_plaintext_arrives_in_the_callers_buffer() {
         let plain = vec![b'z'; 64 * 1024];
@@ -1211,6 +1212,7 @@ mod tests {
         assert_eq!(got, plain);
     }
 
+    #[cfg(feature = "xz")]
     #[test]
     fn an_xz_dictionary_over_the_memory_limit_is_refused() {
         let dir = tempfile::tempdir().unwrap();
@@ -1221,6 +1223,7 @@ mod tests {
         assert_eq!(err.kind(), std::io::ErrorKind::OutOfMemory);
     }
 
+    #[cfg(feature = "xz")]
     #[test]
     fn a_tar_xz_extracts_through_the_streaming_decoder() {
         let dir = tempfile::tempdir().unwrap();
@@ -1470,12 +1473,14 @@ mod tests {
         Budget::new(u64::MAX, u64::MAX)
     }
 
+    #[cfg(feature = "gzip")]
     fn gz_bytes(plain: &[u8]) -> Vec<u8> {
         let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
         encoder.write_all(plain).unwrap();
         encoder.finish().unwrap()
     }
 
+    #[cfg(feature = "gzip")]
     #[test]
     fn a_lone_gzip_bomb_stops_at_the_budget() {
         let dir = tempfile::tempdir().unwrap();
@@ -1530,6 +1535,7 @@ mod tests {
         assert!(err.to_string().contains("more than 10 entries"), "{err}");
     }
 
+    #[cfg(feature = "zip")]
     #[test]
     fn a_zip_with_too_many_members_is_refused() {
         let dir = tempfile::tempdir().unwrap();
@@ -1548,6 +1554,7 @@ mod tests {
         assert!(err.to_string().contains("more than 10 entries"), "{err}");
     }
 
+    #[cfg(feature = "zip")]
     #[test]
     fn a_zip_bomb_stops_at_the_budget() {
         let dir = tempfile::tempdir().unwrap();
