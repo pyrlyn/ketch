@@ -202,7 +202,7 @@ pub fn safe_member_path(raw: &Path) -> Result<PathBuf> {
 
 /// [`safe_member_path`] with the Windows rules switched on or off, so both are
 /// tested on every host.
-pub(crate) fn safe_member_path_for(raw: &Path, windows: bool) -> Result<PathBuf> {
+fn safe_member_path_for(raw: &Path, windows: bool) -> Result<PathBuf> {
     let text = raw.to_string_lossy();
     // Check the raw string before `components()`: on Windows a backslash is a
     // separator, so `a\b` would otherwise become the ordinary relative path

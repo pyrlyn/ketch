@@ -25,15 +25,15 @@ version="$(awk '/^\[(package|workspace\.package)\]/ { in_pkg = 1; next }
 # Only the CLI's tags: the macOS app is tagged desktop-v* in the same
 # repository, with a version of its own.
 tag="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n 1)"
-# No tag at all: the very first release (v0.0.1) is still to be cut; the changelog entry below is the check.
+# No tag yet: the first release (v0.0.1) is still to be cut by bump.yml, which
+# writes the CHANGELOG.md entry in the same commit. Nothing to compare.
+if [ -z "$tag" ]; then
+    echo "crate-version: $version, no v* tag yet (first release is still to be cut)"
+    exit 0
+fi
 
 grep -q "^\#\# \[$version\](.*releases/tag/v$version)" CHANGELOG.md \
     || { echo "crate-version: CHANGELOG.md has no [$version] entry linked to releases/tag/v$version" >&2; exit 1; }
-
-if [ -z "$tag" ]; then
-    echo "crate-version: $version has a changelog entry and no tag exists yet (first release)"
-    exit 0
-fi
 
 if [ "$tag" = "v$version" ]; then
     echo "crate-version: $version matches $tag with a changelog entry"

@@ -37,7 +37,7 @@ repository = "https://github.com/pyrlyn/ketch"
 # `path` or `[patch]` here: CI and release builds must resolve the registry
 # version.
 [workspace.dependencies]
-fs-kit = "0.1"
+fs-kit = "0.1.0"
 
 # There is no unsafe code in ketch and there is no reason for any to appear.
 [workspace.lints.rust]

@@ -13,4 +13,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- version numbering restarted at 0.0.1: the earlier v0.1.0 to v0.10.0 tags and releases were removed (their changelog entries were dropped; the history is in git)
+- versioning restarts at 0.0.1; the entries of the earlier 0.1.0 to 0.10.0 numbering were removed and remain in the git history of this file
