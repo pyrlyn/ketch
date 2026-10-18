@@ -24,7 +24,7 @@ default-members = [".", "crates/ketch-core", "crates/ketch-ffi", "crates/ketch-c
 # binary's. scripts/release.sh, tests/crate-version.sh and site/sync-docs.py
 # read and write this line.
 [workspace.package]
-version = "0.10.0"
+version = "0.0.1"
 edition = "2021"
 # Raised from 1.82 by Diesel 2.3, which is the floor for the statistics
 # database. Nothing else in the tree needs it.
@@ -37,7 +37,7 @@ repository = "https://github.com/pyrlyn/ketch"
 # `path` or `[patch]` here: CI and release builds must resolve the registry
 # version.
 [workspace.dependencies]
-fs-kit = "0.1"
+fs-kit = "0.1.0"
 
 # There is no unsafe code in ketch and there is no reason for any to appear.
 [workspace.lints.rust]

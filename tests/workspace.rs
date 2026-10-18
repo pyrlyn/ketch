@@ -85,6 +85,10 @@ const CORE_FEATURES: &[(&str, &[&str])] = &[
     ("stats", &["diesel", "diesel_migrations", "libsqlite3-sys"]),
     ("push", &["octocrab", "tokio"]),
     ("trust", &["sigstore", "minisign-verify", "pgp"]),
+    ("gzip", &["flate2"]),
+    ("xz", &["lzma-rust2"]),
+    ("bzip2", &["bzip2"]),
+    ("zip", &["zip"]),
 ];
 
 #[test]

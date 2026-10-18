@@ -7,7 +7,7 @@ install_alternatives:
   - 'irm https://raw.githubusercontent.com/pyrlyn/ketch/main/install.ps1 | iex'
   - 'brew install --cask pyrlyn/tap/ketch'
   - 'mise use -g github:pyrlyn/ketch'
-version: "0.10.0"
+version: "0.0.1"
 accent: "#3DDCB0"
 accentLight: "#0F6F5C"
 order: 2

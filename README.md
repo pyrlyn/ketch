@@ -188,6 +188,7 @@ is resolved.
 | --- | --- |
 | [docs/COMMANDS.md](docs/COMMANDS.md) | Every command: what it does, and one working example |
 | [docs/GUIDE.md](docs/GUIDE.md) | The store, rollback, history, lockfiles, PATH and resolution |
+| [docs/COOKBOOK.md](docs/COOKBOOK.md) | Runnable recipes: a sandbox root, upgrade and rollback, pins, lockfile sync |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | `~/.ketch/config.toml`: every key and its environment variable |
 | [docs/MANIFESTS.md](docs/MANIFESTS.md) | The package config: every field, and when you need one |
 | [docs/REGISTRY.md](docs/REGISTRY.md) | The registry layout, and how to add a package to it |

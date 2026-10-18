@@ -2903,7 +2903,7 @@ dependencies = [
 
 [[package]]
 name = "ketch"
-version = "0.10.0"
+version = "0.0.1"
 dependencies = [
  "assert_cmd",
  "assert_fs",
@@ -2941,7 +2941,7 @@ dependencies = [
 
 [[package]]
 name = "ketch-capi"
-version = "0.10.0"
+version = "0.0.1"
 dependencies = [
  "cbindgen",
  "jsonschema",
@@ -2957,7 +2957,7 @@ dependencies = [
 
 [[package]]
 name = "ketch-core"
-version = "0.10.0"
+version = "0.0.1"
 dependencies = [
  "bzip2",
  "clap",
@@ -3001,7 +3001,7 @@ dependencies = [
 
 [[package]]
 name = "ketch-ffi"
-version = "0.10.0"
+version = "0.0.1"
 dependencies = [
  "ketch-core",
  "pretty_assertions",
@@ -5762,7 +5762,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
