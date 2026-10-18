@@ -1653,6 +1653,12 @@ Execution plan: reproduce the advisory audit; apply compatible package-manager u
 
 Validation: rustls 0.23.46 resolves its RustSec advisories; the existing rsa RUSTSEC-2023-0071 has no patched release and remains reported. The complete nextest run passed 1241 of 1242 tests; the sole failure was an unconfigured mise PowerShell shim. Re-running all 7 PowerShell tests with installed PowerShell 7.6.6 passed. Workspace clippy with warnings denied and formatting passed. Existing rustls is reused; no custom implementation or new dependency was added. Regenerated workspace-hack for the resolved graph; hakari generate --diff, manage-deps --dry-run, and verify passed.
 
+### T1.1. Consume the published shell-completions crate
+
+Changed ketch from the sibling-local `shell-completions` path dependency to the published crates.io `shell-completions = "0.1.0"` dependency. The Cargo.lock change adds only the registry source and checksum for version 0.1.0; no dependency versions were bumped. The package archive proof confirmed the standalone release contains 623 archive entries and 5 package members.
+
+Validation: against the registry package with `--locked`, `cargo test -p ketch --lib completions` completed successfully (no matching library tests); `cargo test -p ketch --test completion` passed 6 tests. The standalone locked archive proof resolved and built ketch with 623 archive entries and 5 package members.
+
 ### T1. Use shared shell completion generation
 
 Use the local `shell-completions` crate in `packages/crates/rust`. Preserve rtok scripts and ketch package-name completion and installation behavior. Add `cox completions <shell>` without loading configuration, credentials, telemetry or a session.
