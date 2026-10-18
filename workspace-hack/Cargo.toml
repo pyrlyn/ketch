@@ -65,7 +65,7 @@ subtle = { version = "2" }
 syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
 time = { version = "0.3", default-features = false, features = ["formatting", "local-offset", "macros", "parsing"] }
 tokio = { version = "1", features = ["io-util", "net", "rt", "sync", "time"] }
-toml = { version = "0.9", default-features = false, features = ["parse", "serde", "std"] }
+toml = { version = "1.1", default-features = false, features = ["parse", "serde", "std"] }
 toml_datetime-ca01ad9e24f5d932 = { package = "toml_datetime", version = "0.7", default-features = false, features = ["serde", "std"] }
 toml_datetime-dff4ba8e3ae991db = { package = "toml_datetime", version = "1", features = ["serde"] }
 toml_edit = { version = "0.25", features = ["serde"] }
@@ -99,7 +99,7 @@ serde_json = { version = "1", features = ["alloc", "float_roundtrip", "unbounded
 serde_spanned = { version = "1" }
 syn-7b89eefb6aaa9bf3 = { package = "syn", version = "3", features = ["extra-traits", "full"] }
 syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
-toml = { version = "0.9", default-features = false, features = ["parse", "serde", "std"] }
+toml = { version = "1.1", default-features = false, features = ["parse", "serde", "std"] }
 toml_datetime-ca01ad9e24f5d932 = { package = "toml_datetime", version = "0.7", default-features = false, features = ["serde", "std"] }
 toml_datetime-dff4ba8e3ae991db = { package = "toml_datetime", version = "1", features = ["serde"] }
 toml_edit = { version = "0.25", features = ["serde"] }
