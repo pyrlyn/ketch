@@ -1660,3 +1660,19 @@ Concurrent unit tests mutate COLOR, EMOJI and LEVEL while other tests render sna
 Execution plan: reproduce the snapshot failures with the threaded Cargo runner; use a test-only standard-library mutex guard around settings initialization and assertions; reuse existing snapshots as regression checks; repeat threaded UI tests, then run nextest, Clippy and formatting. Existing project and shared-package searches found no reusable UI test-settings guard; std::sync::Mutex already used by this module is sufficient without a dependency.
 
 Validation: the 16-thread UI run failed 7 of 29 tests before the fix. After the fix, all 29 pass, including 20 consecutive repetitions (580 test executions). All 1248 workspace nextest tests pass with installed PowerShell 7.6.6 selected for the existing installer tests. Workspace Clippy with warnings denied, cargo fmt --check and git diff --check pass. Production code and snapshot expectations are unchanged.
+
+### T1.1. Consume the published shell-completions crate
+
+Changed ketch from the sibling-local `shell-completions` path dependency to the published crates.io `shell-completions = "0.1.0"` dependency. The Cargo.lock change adds only the registry source and checksum for version 0.1.0; no dependency versions were bumped. The package archive proof confirmed the standalone release contains 623 archive entries and 5 package members.
+
+Validation: against the registry package with `--locked`, `cargo test -p ketch --lib completions` completed successfully (no matching library tests); `cargo test -p ketch --test completion` passed 6 tests. The standalone locked archive proof resolved and built ketch with 623 archive entries and 5 package members.
+
+### T1. Use shared shell completion generation
+
+Use the local `shell-completions` crate in `packages/crates/rust`. Preserve rtok scripts and ketch package-name completion and installation behavior. Add `cox completions <shell>` without loading configuration, credentials, telemetry or a session.
+
+Execution plan: establish existing completion tests; extract the clap generator and Clink implementation with regression tests into the shared crate; connect consumers through local Cargo paths; update dependency inventories; run focused tests, formatting and clippy. Application-specific installation policies and ketch dynamic package lookup stay with their owners. Done when generation has one owner and the three CLI surfaces pass their checks.
+
+Validation: 11 generator unit tests and six completion integration tests passed. All five generated scripts are byte-identical to the baseline. Formatting and all-target clippy passed. The broader all-target test run stopped at the unchanged PowerShell installer version-prefix test in tests/install_ps1.rs.
+
+Reused `clap_complete` and the existing rtok Clink generator. No replacement library or custom generator was introduced. Local path dependencies resolve in the standard apps/packages layout.
