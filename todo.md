@@ -1,7 +1,6 @@
 # ketch — todo
 
 - B60. Windows self-update leaves `ketch.exe.old` behind
-- B65. Binary selection regression test
 - R3. Cross-platform CI
 - M17. `ketch import`: a package from winget, Homebrew or a Linux repository
 - R5. Workspace split: `ketch-core` library crate
