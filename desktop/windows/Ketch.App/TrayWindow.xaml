@@ -1,0 +1,55 @@
+<!--
+  Copyright (c) 2026 Ivan Tugay
+  SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<Window
+    x:Class="KetchApp.TrayWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Ketch">
+    <!-- Acrylic is the transient surface; the main window keeps Mica. -->
+    <Window.SystemBackdrop>
+        <AcrylicBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid x:Name="Root" Padding="16" RowSpacing="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Ketch" />
+        <TextBlock
+            x:Name="Summary"
+            Grid.Row="1"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Style="{StaticResource CaptionTextBlockStyle}" />
+        <StackPanel x:Name="Rows" Grid.Row="2" Spacing="4" />
+
+        <StackPanel Grid.Row="3" Spacing="4">
+            <TextBlock x:Name="ActivityText" Style="{StaticResource CaptionTextBlockStyle}" Visibility="Collapsed" />
+            <ProgressBar x:Name="Progress" Maximum="1" Visibility="Collapsed" />
+            <Button x:Name="Cancel" HorizontalAlignment="Stretch" Click="OnCancel" Content="Cancel" Visibility="Collapsed" />
+        </StackPanel>
+
+        <Button
+            x:Name="UpdateAll"
+            Grid.Row="4"
+            VerticalAlignment="Top"
+            HorizontalAlignment="Stretch"
+            Click="OnUpdateAll"
+            Content="Update all"
+            Style="{StaticResource AccentButtonStyle}" />
+
+        <StackPanel Grid.Row="5" Spacing="4">
+            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Click="OnOpen" Content="Open Ketch" />
+            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Click="OnCheck" Content="Check for updates" />
+            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Click="OnSettings" Content="Settings" />
+            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Click="OnQuit" Content="Quit Ketch" />
+        </StackPanel>
+    </Grid>
+</Window>

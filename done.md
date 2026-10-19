@@ -1,3 +1,15 @@
+### D13. Windows: tray icon, notifications, start at login, links
+
+The Windows counterparts of the macOS menu-bar extra. WinUI has no tray control, so the icon is `Shell_NotifyIcon` on a message-only window, and the panel is a borderless Acrylic window that lists pending upgrades, the running operation, Update all (with the same confirmation as the Updates page), Open, Check, Settings and Quit. Closing the main window hides it while the icon is on; Quit removes the icon and leaves.
+
+Update notices use `AppNotificationManager`, which works unpackaged: `Register` runs before the process reads its activation, and a click opens Updates. Which upgrades count is the macOS rule (held packages never count, a package is new by `name@version`, control characters are stripped) in `UpdateNotices`, posted once from `KetchStore` after a refresh. Notices stay off until Settings turns them on.
+
+Start at login and the `ketch` protocol go through `ActivationRegistrationManager` (`RegisterForStartupActivation`, `RegisterForProtocolActivation`), with an empty executable path so the current process is what Windows starts. A second process hands its activation to the first via `AppInstance` and exits. A `ketch://` link only opens a package page: the fake core tells a package page from any other action, the same split as the macOS fake, and the real grammar stays in `ketch_core::link` for the D12 adapter (`package_for_link`).
+
+Each of the four switches can be turned off in Settings. They persist in `%LOCALAPPDATA%\ketch\settings.json`, so an unpackaged app and an MSIX share one file. A broken file loads the defaults rather than stopping the app.
+
+Tests: `UpdateNoticesTests`, `AppSettingsTests`, `LinkAndNoticeTests` (`dotnet test` on `Ketch.AppCore.Tests`). The WinUI project compiles in the `ketch-win-app` job; this machine is Linux, so the icon, the toast and the registrations were not run here.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.
