@@ -266,6 +266,7 @@ differ by orders of magnitude — the cargo home is the small one. Set
 | `desktop/macos/DESIGN.md` | the macOS app's design system in the DESIGN.md format; its front matter is generated |
 | `desktop/design/` | `tokens.json`, the one source of design tokens, and `build.mjs`, which generates `generated/Tokens.swift` (macOS), `generated/KetchTokens.xaml` (Windows), `generated/ketch-tokens.css` (Linux), the macOS DESIGN.md front matter and `preview.html`'s CSS (`just design-tokens`) |
 | `.github/workflows/release-apple-desktop.yml` | the macOS app's release: a thin caller of pyrlyn/ci `release-apple-desktop.yml` (signed, notarised `.dmg` under a `desktop-v*` tag, and its Sparkle appcast) |
+| `.github/workflows/release-windows-desktop.yml` | the Windows app's release: dispatch-only, signed MSIX and unpackaged zip under a `desktop-windows-v*` tag, never `/releases/latest` |
 | `desktop/cliff.toml` | the app's release notes: commits under `desktop/` and `crates/ketch-ffi/` since the last `desktop-v*` tag |
 
 The rule that keeps `cmd/` thin: anything touching the install tree belongs in
@@ -703,6 +704,45 @@ stop before building:
 The ketch-ffi XCFramework (R9) does not exist yet: the caller's
 `pre-build-command` is empty (marked `TODO(R9)`), so a release made before R9
 ships the app on `FakeKetchCore`.
+
+### Windows app releases
+
+The app in `desktop/windows/` is released from this repository by
+`.github/workflows/release-windows-desktop.yml`. Tags are
+`desktop-windows-vX.Y.Z`, never `vX.Y.Z` and never `desktop-v*`, and the
+version is the workflow's input. The run is dispatch-only. It creates the
+tag itself, after both artifacts exist, rather than running because a tag
+was pushed.
+
+**No app release is ever the latest release.** The same rule as the macOS
+app: `install.sh`, `install.ps1` and `ketch self upgrade` follow
+`/releases/latest`. The workflow publishes with `--latest=false` and
+`--prerelease`, then reads `/releases/latest` back and restores the previous
+release if the pointer moved onto `desktop-windows-v*`. `select_release`
+drops that tag when any real version tag is in the list. `cliff.toml`,
+`tests/crate-version.sh`, `scripts/release.sh` and `scripts/tap-release-version.sh`
+already ignore a tag that does not start with `v`.
+
+To cut one: Actions → release-windows-desktop → Run workflow on `main` with
+the version, or
+`gh workflow run release-windows-desktop.yml --ref main -f version=X.Y.Z`.
+The version must be plain `X.Y.Z`, each part at most 65535, and above the
+last `desktop-windows-v*` tag. The run publishes an x64 unpackaged
+self-contained zip and an x64 MSIX. The MSIX manifest is generated on the
+runner so the unpackaged `dotnet build` in CI stays `WindowsPackageType=None`,
+and it declares `unvirtualizedResources` because ketch writes the real
+`HKCU\Environment\Path`. A failed run before the publish step creates
+nothing.
+
+Signing secrets, required, and not the Apple Developer ID pair (that
+certificate cannot sign an MSIX, and this job must not receive it):
+
+- `WINDOWS_CERTIFICATE` — a code-signing pfx, base64.
+- `WINDOWS_CERTIFICATE_PWD` — its password.
+
+Both are step env. The job stops before building when either is missing.
+`tests/desktop_windows_release.py` (in `just lint-shell`) checks the
+workflow stays dispatch-only, names those secrets, and does not print them.
 
 ## Documentation translations
 

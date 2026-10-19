@@ -24,6 +24,13 @@
 /site/content/docs/plan.md
 /site/content/docs/contributing.md
 site/__pycache__/
+**/__pycache__/
+
+# Written on the Windows release runner by scripts/windows_desktop_release.py.
+# The unpackaged project in git has no packaging manifest.
+/desktop/windows/Ketch.App/Package.appxmanifest
+/desktop/windows/Ketch.App/Assets/
+/desktop/windows/Ketch.App/AppPackages/
 
 # insta: pending snapshots and their run log, never committed
 *.pending-snap
