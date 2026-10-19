@@ -1,3 +1,9 @@
+### R17. Windows PATH helpers in one module
+
+The Windows PATH, PowerShell profile and cmd AutoRun helpers were compiled on every OS and silenced with `allow(dead_code)`. They now live in `shell::windows`, which a Windows build and every test build include and a non-Windows binary leaves out. `windows_path_key` is still what `doctor` and `process` use to compare paths on Windows.
+
+Test: the existing `shell::tests` path, profile and AutoRun cases.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.

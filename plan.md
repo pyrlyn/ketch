@@ -24,7 +24,7 @@ New bugs, dead code and moves from a read-only Cursor cloud review of `main` at 
 | R14 | P2 | dead code | confirmed | `scripts/b32_patch.py:8` | The script opens `src/self_update.rs`, which has moved, and nothing references it. Delete it. |
 | R15 | P2 | dead code | confirmed | root `Cargo.toml:61` (`dirs`); `manifest.rs:137-148` (`Resolver::aliases`); `model.rs:596-599` (`Release::asset`); `platform/mod.rs:49-50` (`Placement::version`); `model.rs:329-331` | Drop the unused root `dirs` dependency, `Resolver::aliases` (or wire it to `__complete`/search), `Release::asset` and the never-read `Placement::version`; remove the stale `allow(dead_code)` on `PackageSpec::raw` (read at `state.rs:162`). |
 | R16 | P2 | dead code | confirmed | `fuzz/seed.sh:42` | The seed script reads `$root/src/builtin.toml`; the file is `crates/ketch-core/src/builtin.toml`. Fix the path. |
-| R17 | P2 | dead code | confirmed | `shell.rs:561-1092` | 23 `cfg_attr(not(windows), allow(dead_code))` on the Windows PATH helpers. Put them in one `#[cfg(any(windows, test))]` module. |
+| R17 | P2 | dead code | fixed | `shell.rs` `mod windows` | The Windows PATH, profile and AutoRun helpers live in one `#[cfg(any(windows, test))]` module, so a non-Windows binary does not compile them. |
 | R18 | P2 | move | confirmed | `manifest.rs:342-353` (`replace_file`), `shell.rs:1401`, `state.rs`, `platform/*` `move_into_store` | The same rename-over-temp appears five times. Make it one `ketch-core` helper (R12 covers the other duplicates); use a shared `atomic-replace` crate only if it exists. |
 | R19 | P2 | move | suspected | `crates/ketch-core/Cargo.toml:49-66` | `stats` + diesel, `push` + octocrab/tokio, `trust` + sigstore/pgp and the `extract` codecs are always in core, so every desktop/FFI link pays for them (issue #222). Make them optional crates or features. |
 
@@ -130,6 +130,13 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B113 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B118 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B123 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
+| R17 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
+
+### R17. Windows PATH helpers in one module
+
+Row R17 in the 2026-10-08 findings. The Windows PATH, PowerShell profile and cmd AutoRun helpers were compiled into every binary with `allow(dead_code)`. They now live in `shell::windows`, included on Windows and in tests, and left out of a non-Windows binary. `windows_path_key` stays reachable from `doctor` and `process` on Windows.
+
+Status: done. See `done.md`.
 
 ### Ketch audit
 

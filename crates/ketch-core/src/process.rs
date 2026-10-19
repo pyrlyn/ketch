@@ -89,9 +89,13 @@ fn unique_keys(paths: &[PathBuf]) -> Vec<(PathBuf, String)> {
 
 fn path_key(p: &Path) -> String {
     let p = fs_kit::path::canon(p);
-    if cfg!(windows) {
+    // See `doctor::same_binary`: the helper is not in a non-Windows binary.
+    #[cfg(windows)]
+    {
         crate::shell::windows_path_key(&p)
-    } else {
+    }
+    #[cfg(not(windows))]
+    {
         p.to_string_lossy().into_owned()
     }
 }

@@ -350,9 +350,14 @@ pub fn store_ketch_link(cfg: &Config) -> PathBuf {
 pub fn same_binary(a: &Path, b: &Path) -> bool {
     let left = fs_kit::path::canon(a);
     let right = fs_kit::path::canon(b);
-    if cfg!(windows) {
+    // `cfg` rather than `cfg!`: the key helper is absent from a non-Windows
+    // binary, and both arms of `cfg!` are still type-checked.
+    #[cfg(windows)]
+    {
         shell::windows_path_key(&left) == shell::windows_path_key(&right)
-    } else {
+    }
+    #[cfg(not(windows))]
+    {
         left == right
     }
 }
