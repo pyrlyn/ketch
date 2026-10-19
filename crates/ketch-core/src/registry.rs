@@ -228,7 +228,9 @@ pub fn check_tree(dir: &Path) -> Report {
         if !is_package_file(&path) {
             errors.push(ValidationError {
                 path: path.display().to_string(),
-                message: format!("`{PACKAGE_FILE}` must be a regular file, not a symlink"),
+                message: format!(
+                    "`{PACKAGE_FILE}` must be a regular file in a real folder, not a symlink"
+                ),
             });
             continue;
         }
@@ -453,7 +455,8 @@ fn load_dir(dir: &Path, report: &reporting::Report) -> Vec<(Manifest, PathBuf)> 
             .to_string();
         if !is_package_file(&path) {
             report.warn(&format!(
-                "ignoring registry package `{}`: `{PACKAGE_FILE}` is not a regular file",
+                "ignoring registry package `{}`: `{PACKAGE_FILE}` is not a regular file \
+                 in a real folder",
                 changelog::sanitize(&name)
             ));
             continue;
@@ -495,8 +498,17 @@ fn candidate_package_dirs(dir: &Path) -> Vec<PathBuf> {
 /// never validated while the run still passes. The fetched registry is guarded
 /// on the way in (`extract::check_link_target`), so this covers the trees that
 /// arrive as files: a checkout, a working copy, registry CI.
+///
+/// The folder is held to the same rule. `symlink_metadata` only declines to
+/// follow the last component, so a folder that is itself a link would pass
+/// the file check while every byte comes from wherever the link points — and,
+/// in a fetched tree, a link to a sibling folder would publish that package a
+/// second time under the link's name.
 fn is_package_file(path: &Path) -> bool {
-    std::fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_file())
+    let real_folder = path.parent().is_some_and(|folder| {
+        std::fs::symlink_metadata(folder).is_ok_and(|meta| meta.file_type().is_dir())
+    });
+    real_folder && std::fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_file())
 }
 
 /// Rules a registry entry must pass beyond [`Manifest::validate`].
@@ -826,6 +838,39 @@ mod tests {
             "{}",
             report.errors[0].path
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlinked_package_folder_is_neither_read_nor_loaded() {
+        // The link is the folder, not the file: `ketch.toml` under it is a
+        // regular file, so only a check on the folder itself catches it.
+        let tmp = tempfile::tempdir().unwrap();
+        let outside = tmp.path().join("outside");
+        write(&outside, "secret", "source = \"github:a/secret\"\n");
+        let tree = tmp.path().join("tree");
+        write(&tree, "good", "source = \"github:a/b\"\n");
+        std::os::unix::fs::symlink(outside.join("secret"), tree.join("alias")).unwrap();
+
+        let report = check_tree(&tree);
+        assert_eq!(report.packages, 1, "{:?}", report.errors);
+        assert_eq!(report.errors.len(), 1, "{:?}", report.errors);
+        assert!(
+            report.errors[0].message.contains("not a symlink"),
+            "{}",
+            report.errors[0].message
+        );
+        assert!(
+            Path::new(&report.errors[0].path).ends_with("alias/ketch.toml"),
+            "{}",
+            report.errors[0].path
+        );
+
+        let names: Vec<String> = load_dir(&tree, &reporting::Report::silent())
+            .into_iter()
+            .map(|(m, _)| m.name)
+            .collect();
+        assert_eq!(names, ["good"]);
     }
 
     #[test]
