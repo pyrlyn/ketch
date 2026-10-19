@@ -1,3 +1,9 @@
+### R19.3. Publisher signatures as an optional core feature
+
+sigstore, minisign-verify and pgp are the `trust` feature of `ketch-core` (default on, so the CLI still verifies). A build without it still checks a policy's shape and still calls `verify`. That call cannot satisfy the policy: `require` refuses the install, `warn` installs on the checksum and says so, and a key the verifier would ignore is still refused. `ketch-ffi` keeps `trust` on. `scripts/core-features.sh` is what builds the core without the feature and runs `without_verifiers`.
+
+Tests: `a_required_signature_refuses_the_install`, `a_warn_policy_installs_on_the_checksum_alone`, `keys_a_verifier_ignores_are_still_refused`.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.
