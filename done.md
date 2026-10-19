@@ -1,3 +1,7 @@
+### B65. Binary selection regression test
+
+`tests/bin_choice.rs` publishes one archive that contains `rtok` and `rtok-hook` and asserts the link is `rtok`. That is the case the Windows alphabetical sort got wrong, where `rtok-hook.exe` sorted before `rtok.exe`. The test is not gated by OS. `without_a_terminal_an_ambiguous_release_fails_and_names_the_candidates` covers a release that has no binary named like the package.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.

@@ -98,7 +98,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | # | Status | Priority | Complexity | Readiness | Agent |
 | --- | --- | --- | --- | --- | --- |
 | B60 | in progress | P3 | 1 | 80% | Cursor / grok 4.7 |
-| B65 | in progress | P0 | 2 | 0% | Cursor / grok 4.7 high |
+| B65 | done | P0 | 2 | 100% | Cursor / grok 4.7 |
 | R3 | in progress | P1 | 3 | 67% | Cursor / grok 4.7 high |
 | M17 | in progress | P2 | 4 | 95% | Cursor / grok 4.7 |
 | R5 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
@@ -220,6 +220,8 @@ Item 2 stays with B64. Item 1 is B65, which closes with B64's `tests/bin_choice.
 Add a fixture with two similarly named binaries (for example `rtok` and `rtok-hook`) and assert the intended one is chosen on every OS: macOS, Windows and Linux. This is the test that would have caught the Windows alphabetical-sort bug, where `rtok hook` was selected instead of the intended binary.
 
 Note for the owner: B64's branch `b64-bin-name` already adds `tests/bin_choice.rs` with `rtok`, `rtok-hook` and `other-tool` fixtures, not gated by OS. Reuse or extend it once B64 merges instead of writing a second fixture.
+
+Status: done. `the_binary_named_like_the_package_is_linked_and_its_helper_is_not` publishes `rtok` and `rtok-hook` in one archive and asserts the package name is what gets linked. The test is not gated by OS, so the Windows sort that preferred `rtok-hook.exe` is covered on every host. See `done.md`.
 
 ### Priorities
 
