@@ -283,7 +283,9 @@ file_sha256() {
 }
 
 echo "Verifying checksum..."
-EXPECTED_HASH="$(grep "${TARBALL_NAME}" SHA256SUMS | awk '{print $1}' || true)"
+# The exact name, in text or binary (`*name`) mode: `grep` would also match
+# `<tarball>.sig` or `-debug` lines, and two hashes never equal the one we have.
+EXPECTED_HASH="$(awk -v n="${TARBALL_NAME}" '$2 == n || $2 == "*" n { print $1; exit }' SHA256SUMS)"
 ACTUAL_HASH="$(file_sha256 ketch.tar.gz)"
 
 if [ -z "${EXPECTED_HASH}" ]; then

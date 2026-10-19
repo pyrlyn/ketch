@@ -259,6 +259,33 @@ exit 0
         );
     }
 
+    /// `SHA256SUMS` may also list files whose names contain the tarball's —
+    /// a signature, a debug build. The lookup takes the tarball's own line;
+    /// a substring match would collect two hashes and fail every install.
+    #[test]
+    fn a_checksum_list_naming_the_tarball_inside_longer_names_still_verifies() {
+        let release = StubRelease::new();
+        let sums = release.dir.child("SHA256SUMS");
+        let listed = std::fs::read_to_string(sums.path()).unwrap();
+        let decoys: String = listed
+            .lines()
+            .filter_map(|line| line.split_once("  "))
+            .map(|(_, name)| {
+                format!(
+                    "{}  {name}.sig\n{}  x{name}\n",
+                    "0".repeat(64),
+                    "1".repeat(64)
+                )
+            })
+            .collect();
+        sums.write_str(&format!("{decoys}{listed}")).unwrap();
+        let work = TempDir::new().unwrap();
+        let root = work.child("root");
+
+        run(&release, &work, &[Path::new("--root"), root.path()]).success();
+        root.child("bin/ketch").assert(predicate::path::is_file());
+    }
+
     /// The listing as the ketch repository has it: the macOS app's releases
     /// newest, then a CLI prerelease that `/releases/latest` never returns.
     const LISTING_WITH_A_PRERELEASE: &str = r#"[{"tag_name":"desktop-appcast","prerelease":true},{"tag_name":"desktop-v99.0.0","prerelease":false},{"tag_name":"v9.9.9","prerelease":true,"body":"a, b"},{"tag_name":"v1.0.0","prerelease":false}]"#;
