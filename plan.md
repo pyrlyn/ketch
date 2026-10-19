@@ -22,7 +22,7 @@ New bugs, dead code and moves from a read-only Cursor cloud review of `main` at 
 | B87 | P2 | bug | fixed | `source/local.rs` `sha256_tree` | The local tree hash framed only `path\0bytes`. It now frames kind, path, permission bits and length, and hashes a symlink's target. A lock from before this framing does not match until `ketch lock`. |
 | B88 | P2 | bug | suspected | `process.rs:461-494` | After `offer_to_stop`, ketch waits 200 ms before `/F`; the install can still hit a locked `.exe`. Wait, with a bound, until the pid is gone. |
 | R14 | P2 | dead code | confirmed | `scripts/b32_patch.py:8` | The script opens `src/self_update.rs`, which has moved, and nothing references it. Delete it. |
-| R15 | P2 | dead code | confirmed | root `Cargo.toml:61` (`dirs`); `manifest.rs:137-148` (`Resolver::aliases`); `model.rs:596-599` (`Release::asset`); `platform/mod.rs:49-50` (`Placement::version`); `model.rs:329-331` | Drop the unused root `dirs` dependency, `Resolver::aliases` (or wire it to `__complete`/search), `Release::asset` and the never-read `Placement::version`; remove the stale `allow(dead_code)` on `PackageSpec::raw` (read at `state.rs:162`). |
+| R15 | P2 | dead code | fixed | root `Cargo.toml:61` (`dirs`); `manifest.rs:137-148` (`Resolver::aliases`); `model.rs:596-599` (`Release::asset`); `platform/mod.rs:49-50` (`Placement::version`); `model.rs:329-331` | Drop the unused root `dirs` dependency, `Resolver::aliases` (or wire it to `__complete`/search), `Release::asset` and the never-read `Placement::version`; remove the stale `allow(dead_code)` on `PackageSpec::raw` (read at `state.rs:162`). |
 | R16 | P2 | dead code | confirmed | `fuzz/seed.sh:42` | The seed script reads `$root/src/builtin.toml`; the file is `crates/ketch-core/src/builtin.toml`. Fix the path. |
 | R17 | P2 | dead code | confirmed | `shell.rs:561-1092` | 23 `cfg_attr(not(windows), allow(dead_code))` on the Windows PATH helpers. Put them in one `#[cfg(any(windows, test))]` module. |
 | R18 | P2 | move | confirmed | `manifest.rs:342-353` (`replace_file`), `shell.rs:1401`, `state.rs`, `platform/*` `move_into_store` | The same rename-over-temp appears five times. Make it one `ketch-core` helper (R12 covers the other duplicates); use a shared `atomic-replace` crate only if it exists. |
@@ -130,6 +130,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B113 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B118 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B123 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
+| R15 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
 
 ### Ketch audit
 
@@ -553,6 +554,12 @@ Plan: one check shared by `safe_member_path`, `sanitize_component` and `usable_f
 Row B118 in the 2026-10-12 findings. Done: a package installed checksum-verified refuses an unverified upgrade unless `--yes` or an explicit flag.
 
 Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in `cli.rs`. Check: an end-to-end test of both paths.
+
+### R15. Drop the unread placement version and registry alias list
+
+Row R15 in the 2026-10-08 findings. `Placement::version` was carried into every place call and never read. `Resolver::aliases` had no caller.
+
+Done: both are gone. The root `dirs` dependency, `Release::asset` and the stale `allow(dead_code)` on `PackageSpec::raw` were already gone.
 
 ### B123. Relink and rollback restore a stale `.old`
 
