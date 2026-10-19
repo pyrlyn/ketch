@@ -403,6 +403,7 @@ jobs:
           sh tests/ci-yml-triggers.sh
           sh tests/desktop-release.sh
           sh tests/docs-i18n.sh
+          sh tests/commit-msg-breaking.sh
 
       # src/lib.rs and the core's fuzz entry points exist only under
       # cfg(fuzzing), which no other build sets; checked on stable here so they
