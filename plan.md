@@ -120,7 +120,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | R12 | done | P3 | 1 | 100% | Cursor / grok 4.7 |
 | R20 | in progress | P2 | 3 | 90% | Claude / sonnet-5.5 |
 | B98 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
-| B99 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
+| B99 | done | P2 | 4 | 100% | Cursor / grok 4.7 |
 | B102 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | R18 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
 | R19.1 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
@@ -531,6 +531,8 @@ Plan: wrap `install.ps1`; keep `--help` and arguments working. Check: a Pester-f
 Row B99 in the 2026-10-12 findings. Done: one shared budget (bytes, entries, ratio plus ceiling) bounds every extractor.
 
 Plan: a budget type in `extract/`, threaded through zip, tar and lone-file extractors. Check: tests with a small gzip bomb and a many-entry zip that fail with a clear error.
+
+Status: done. The budget and its tests are on main. Landed in #300. See `done.md`.
 
 ### B102. Windows symlink materialisation can recurse forever
 
