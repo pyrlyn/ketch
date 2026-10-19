@@ -379,6 +379,8 @@ their shell — so a manifest from those tiers that carries `hooks` is refused
 at install, before anything is placed, with a message saying which file to
 copy where. Copying it to your manifest directory is the opt-in: it becomes
 yours, and it wins over the registry's copy from then on.
+`ketch registry validate` refuses a registry package with `hooks` outright,
+so one never reaches the registry.
 
 ## What ketch checks
 

