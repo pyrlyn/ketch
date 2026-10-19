@@ -7,10 +7,11 @@
 # CLI's installers follow /releases/latest. This holds both sides apart:
 #
 # - release-apple-desktop.yml is dispatch-only and a thin caller of the
-#   org-level pyrlyn/ci release-apple-desktop.yml, pinned by commit SHA,
-#   with exactly the org secrets it needs, by name, and the desktop-v tag
-#   prefix; that workflow checks the version, the secrets and the placeholder
-#   Sparkle key, and creates every release with make_latest=false;
+#   org-level pyrlyn/ci release-apple-desktop.yml at @main (the no-pinned-ci
+#   check rejects a SHA), with exactly the org secrets it needs, by name, and
+#   the desktop-v tag prefix; that workflow checks the version, the secrets
+#   and the placeholder Sparkle key, and creates every release with
+#   make_latest=false;
 # - the CLI's release tooling never takes a desktop-v tag for its own.
 set -eu
 
@@ -38,7 +39,7 @@ triggers="$(ruby -ryaml -e 'w = YAML.load_file(ARGV[0]); puts (w["on"] || w[true
 [ "$triggers" = workflow_dispatch ] || fail "release-apple-desktop.yml runs on '$triggers', not only workflow_dispatch"
 need "$wf" 'version:' 'the version input'
 
-# No local release steps: one job, the infra reusable workflow, pinned by SHA,
+# No local release steps: one job, the infra reusable workflow at @main,
 # with the org secrets and the inputs that keep app releases apart from the CLI.
 ruby -ryaml -e '
   w = YAML.load_file(ARGV[0])
@@ -47,7 +48,7 @@ ruby -ryaml -e '
   job = jobs["release"]
   abort "local steps in the release job" if job.key?("steps")
   uses = job["uses"].to_s
-  abort "not the infra workflow: #{uses}" unless uses =~ %r{\Apyrlyn/ci/\.github/workflows/release-apple-desktop\.yml@[0-9a-f]{40}\z}
+  abort "not the infra workflow: #{uses}" unless uses == "pyrlyn/ci/.github/workflows/release-apple-desktop.yml@main"
   want = %w[MACOS_CERTIFICATE MACOS_CERTIFICATE_PWD APPSTORE_CONNECT_KEY APPSTORE_CONNECT_KEY_ID APPSTORE_CONNECT_ISSUER_ID SPARKLE_ED_PRIVATE_KEY]
   secrets = job["secrets"]
   abort "secrets must be passed by name, not #{secrets.inspect}" unless secrets.is_a?(Hash)
