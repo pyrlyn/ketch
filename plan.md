@@ -99,7 +99,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | --- | --- | --- | --- | --- | --- |
 | B60 | in progress | P3 | 1 | 80% | Cursor / grok 4.7 |
 | B65 | in progress | P0 | 2 | 0% | Cursor / grok 4.7 high |
-| R3 | in progress | P1 | 3 | 67% | Cursor / grok 4.7 high |
+| R3 | done | P1 | 3 | 100% | Cursor / grok 4.7 |
 | M17 | in progress | P2 | 4 | 95% | Cursor / grok 4.7 |
 | R5 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
 | R6 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
@@ -214,6 +214,8 @@ Do not add a second cache. `jdx/mise-action` already caches the toolchain, and `
 - Windows `check-windows`: 815 MB restored, and the restore itself was 2m52s of a 5m56s job. Another target cache would pay that download again.
 
 Item 2 stays with B64. Item 1 is B65, which closes with B64's `tests/bin_choice.rs`.
+
+Status: done. `ci.yml` jobs `check`, `check-linux`, `check-windows` and `package`, and `verify.yml`, already run lint and the full suite on macOS, Linux and Windows. `tests/bin_choice.rs` links `rtok` and not `rtok-hook` on every OS, reuses a remembered choice, and writes the chosen `bin` into a user manifest (`a_user_manifest_gets_the_chosen_binary_written_into_it`). A second cache was rejected: `jdx/mise-action` caches the toolchain and `Swatinem/rust-cache` caches `target/`; on Windows the restore was already most of the job.
 
 ### B65. Binary selection regression test
 
