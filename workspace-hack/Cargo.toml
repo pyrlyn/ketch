@@ -16,9 +16,8 @@ publish = false
 ### BEGIN HAKARI SECTION
 [dependencies]
 aho-corasick = { version = "1" }
+aws-lc-rs = { version = "1", features = ["prebuilt-nasm"] }
 base64 = { version = "0.22" }
-bit-set = { version = "0.8" }
-bit-vec = { version = "0.8" }
 bitflags = { version = "2", default-features = false, features = ["std"] }
 camino = { version = "1", default-features = false, features = ["serde1"] }
 clap = { version = "4", features = ["cargo", "derive", "env", "wrap_help"] }
@@ -34,18 +33,16 @@ futures-channel = { version = "0.3", features = ["sink"] }
 futures-core = { version = "0.3" }
 futures-sink = { version = "0.3" }
 futures-util = { version = "0.3", features = ["channel", "io", "sink"] }
-getrandom-468e82937335b1c9 = { package = "getrandom", version = "0.3", default-features = false, features = ["std"] }
 getrandom-6f8ce4dd05d13bba = { package = "getrandom", version = "0.2", default-features = false, features = ["js", "std"] }
 hashbrown = { version = "0.17" }
 indexmap = { version = "2", features = ["serde"] }
-itertools = { version = "0.15" }
+itertools = { version = "0.14" }
 memchr = { version = "2" }
-num-bigint = { version = "0.5" }
+num-bigint = { version = "0.4" }
 num-iter = { version = "0.1", default-features = false, features = ["i128", "std"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
 pem = { version = "3", features = ["serde"] }
 percent-encoding = { version = "2" }
-ppv-lite86 = { version = "0.2", default-features = false, features = ["simd", "std"] }
 proc-macro2 = { version = "1" }
 quote = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-onepass", "dfa-search", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
@@ -65,7 +62,7 @@ subtle = { version = "2" }
 syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
 time = { version = "0.3", default-features = false, features = ["formatting", "local-offset", "macros", "parsing"] }
 tokio = { version = "1", features = ["io-util", "net", "rt", "sync", "time"] }
-toml = { version = "1.1", default-features = false, features = ["parse", "serde", "std"] }
+toml = { version = "0.9", default-features = false, features = ["parse", "serde", "std"] }
 toml_datetime-ca01ad9e24f5d932 = { package = "toml_datetime", version = "0.7", default-features = false, features = ["serde", "std"] }
 toml_datetime-dff4ba8e3ae991db = { package = "toml_datetime", version = "1", features = ["serde"] }
 toml_edit = { version = "0.25", features = ["serde"] }
@@ -86,7 +83,7 @@ derive_more-impl = { version = "2", features = ["debug", "display", "is_variant"
 either = { version = "1", features = ["use_std"] }
 hashbrown = { version = "0.17" }
 indexmap = { version = "2", features = ["serde"] }
-itertools = { version = "0.15" }
+itertools = { version = "0.14" }
 memchr = { version = "2" }
 proc-macro2 = { version = "1" }
 quote = { version = "1" }
@@ -99,7 +96,7 @@ serde_json = { version = "1", features = ["alloc", "float_roundtrip", "unbounded
 serde_spanned = { version = "1" }
 syn-7b89eefb6aaa9bf3 = { package = "syn", version = "3", features = ["extra-traits", "full"] }
 syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
-toml = { version = "1.1", default-features = false, features = ["parse", "serde", "std"] }
+toml = { version = "0.9", default-features = false, features = ["parse", "serde", "std"] }
 toml_datetime-ca01ad9e24f5d932 = { package = "toml_datetime", version = "0.7", default-features = false, features = ["serde", "std"] }
 toml_datetime-dff4ba8e3ae991db = { package = "toml_datetime", version = "1", features = ["serde"] }
 toml_edit = { version = "0.25", features = ["serde"] }
@@ -108,7 +105,7 @@ toml_writer = { version = "1" }
 winnow = { version = "1", features = ["simd"] }
 
 [target.x86_64-unknown-linux-gnu.dependencies]
-aws-lc-rs = { version = "1", features = ["prebuilt-nasm"] }
+getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std", "sys_rng"] }
 mio = { version = "1", features = ["net", "os-ext"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 sync_wrapper = { version = "1", default-features = false, features = ["futures"] }
@@ -117,11 +114,12 @@ tower = { version = "0.5", default-features = false, features = ["buffer", "retr
 tower-http = { version = "0.6", features = ["follow-redirect", "map-response-body", "trace"] }
 
 [target.x86_64-unknown-linux-gnu.build-dependencies]
+getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std", "sys_rng"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 [target.aarch64-apple-darwin.dependencies]
-aws-lc-rs = { version = "1", features = ["prebuilt-nasm"] }
 errno = { version = "0.3" }
+getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std", "sys_rng"] }
 mio = { version = "1", features = ["net", "os-ext"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 sync_wrapper = { version = "1", default-features = false, features = ["futures"] }
@@ -131,11 +129,11 @@ tower-http = { version = "0.6", features = ["follow-redirect", "map-response-bod
 
 [target.aarch64-apple-darwin.build-dependencies]
 errno = { version = "0.3" }
+getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std", "sys_rng"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 [target.x86_64-pc-windows-msvc.dependencies]
-aws-lc-rs = { version = "1", features = ["prebuilt-nasm"] }
-getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std"] }
+getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std", "sys_rng"] }
 sync_wrapper = { version = "1", default-features = false, features = ["futures"] }
 tokio-util = { version = "0.7", default-features = false, features = ["io-util"] }
 tower = { version = "0.5", default-features = false, features = ["buffer", "retry", "timeout"] }
@@ -143,7 +141,7 @@ tower-http = { version = "0.6", features = ["follow-redirect", "map-response-bod
 windows-sys = { version = "0.61", features = ["Wdk_Foundation", "Wdk_Storage_FileSystem", "Wdk_System_IO", "Win32_Globalization", "Win32_Networking_WinSock", "Win32_Security_Authentication_Identity", "Win32_Security_Credentials", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Console", "Win32_System_IO", "Win32_System_LibraryLoader", "Win32_System_Memory", "Win32_System_Pipes", "Win32_System_SystemInformation", "Win32_System_SystemServices", "Win32_System_Threading", "Win32_System_WindowsProgramming", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell"] }
 
 [target.x86_64-pc-windows-msvc.build-dependencies]
-getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std"] }
+getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std", "sys_rng"] }
 windows-sys = { version = "0.61", features = ["Wdk_Foundation", "Wdk_Storage_FileSystem", "Wdk_System_IO", "Win32_Globalization", "Win32_Networking_WinSock", "Win32_Security_Authentication_Identity", "Win32_Security_Credentials", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Console", "Win32_System_IO", "Win32_System_LibraryLoader", "Win32_System_Memory", "Win32_System_Pipes", "Win32_System_SystemInformation", "Win32_System_SystemServices", "Win32_System_Threading", "Win32_System_WindowsProgramming", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell"] }
 
 ### END HAKARI SECTION
