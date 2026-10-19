@@ -1358,10 +1358,24 @@ fn mentions(text: &str, bin_dir: &str) -> bool {
         })
 }
 
-/// Byte range of the ketch block, markers and trailing newline included.
+/// Byte range of one ketch block, markers and trailing newline included.
+///
+/// The END is paired with the nearest BEGIN before it. Pairing the first
+/// BEGIN with the first END after it would treat a stray BEGIN — a crash
+/// mid-write, or a hand edit — as the start of the real block, and `unsplice`
+/// would delete every user line in between. A count mismatch is not a reason
+/// to pretend the block is absent: `splice` would then append a second one.
 fn block_span(text: &str) -> Option<(usize, usize)> {
-    let start = marker_at_line_start(text, BEGIN, 0)?;
-    let end_line = marker_at_line_start(text, END, start + BEGIN.len())?;
+    let begins = marker_positions(text, BEGIN);
+    let ends = marker_positions(text, END);
+    let (start, end_line) = ends.iter().find_map(|&end_line| {
+        let start = begins
+            .iter()
+            .rev()
+            .find(|&&begin| begin < end_line)
+            .copied()?;
+        Some((start, end_line))
+    })?;
     let mut end = end_line + END.len();
     // CRLF profiles (PowerShell, autocrlf dotfiles) end the marker line with
     // `\r\n`. Consuming only `\n` would leave the `\r` and, before the match
@@ -1373,6 +1387,17 @@ fn block_span(text: &str) -> Option<(usize, usize)> {
         end += 1;
     }
     Some((start, end))
+}
+
+/// Every whole-line occurrence of `marker`, in order.
+fn marker_positions(text: &str, marker: &str) -> Vec<usize> {
+    let mut from = 0;
+    let mut found = Vec::new();
+    while let Some(at) = marker_at_line_start(text, marker, from) {
+        found.push(at);
+        from = at + marker.len();
+    }
+    found
 }
 
 /// Offset of `marker` where it occupies a whole line, at or after `from`.
@@ -1531,6 +1556,35 @@ mod tests {
     ) {
         assert_eq!(quote_posix(dir), posix);
         assert_eq!(quote_fish(dir), fish);
+    }
+
+    #[test]
+    fn an_orphan_begin_is_not_paired_with_a_later_end() {
+        let user = "export PATH=\"$HOME/bin:$PATH\"\n";
+        let text = format!("{BEGIN}\n{user}{BEGIN}\n# real\n{END}\n");
+        let (start, end) = block_span(&text).expect("the real block");
+        let span = &text[start..end];
+        assert!(!span.contains("export PATH"), "{span:?}");
+        assert!(span.contains("# real"), "{span:?}");
+
+        let rewritten = splice(&text, &zsh_block()).expect("rewrite the real block");
+        assert!(rewritten.contains(user), "{rewritten:?}");
+        assert_eq!(rewritten.matches(END).count(), 1, "{rewritten:?}");
+
+        let removed = unsplice(&rewritten).expect("take the real block back");
+        assert!(removed.contains(user), "{removed:?}");
+    }
+
+    #[test]
+    fn a_stray_begin_without_an_end_keeps_the_lines_under_it() {
+        let text = format!("{BEGIN}\nexport PATH=\"/keep\"\n");
+        let rewritten = splice(&text, &zsh_block()).expect("append a real block");
+        assert!(
+            rewritten.contains("export PATH=\"/keep\"\n"),
+            "{rewritten:?}"
+        );
+        let removed = unsplice(&rewritten).expect("take the real block back");
+        assert!(removed.contains("export PATH=\"/keep\"\n"), "{removed:?}");
     }
 
     #[test]

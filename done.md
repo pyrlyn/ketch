@@ -1,3 +1,9 @@
+### B119. A stray shell marker swallows the lines above the real block
+
+`block_span` paired the first `# >>> ketch >>>` with the first `# <<< ketch <<<` after it. A begin marker left by a crash or a hand edit, with no end of its own, made that span include the lines the user had written underneath it, and taking the block out deleted them. The end marker is now paired with the nearest begin marker before it. A file that has a stray begin and no complete block still gains one, and removing that block leaves the stray line and the text under it.
+
+Test: `an_orphan_begin_is_not_paired_with_a_later_end`, `a_stray_begin_without_an_end_keeps_the_lines_under_it`.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.
