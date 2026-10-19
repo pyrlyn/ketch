@@ -133,14 +133,32 @@ public sealed partial class MainWindow : Window
         {
             while (App.Store.PendingChoice is { } || App.Store.PendingStop is { })
             {
-                if (App.Store.PendingChoice is { } choice)
+                try
                 {
-                    var picked = await Dialogs.ChooseBinaryAsync(Root, choice);
-                    App.Store.AnswerChoice(picked);
+                    if (App.Store.PendingChoice is { } choice)
+                    {
+                        var picked = await Dialogs.ChooseBinaryAsync(Root, choice);
+                        App.Store.AnswerChoice(picked);
+                    }
+                    else if (App.Store.PendingStop is { } stop)
+                    {
+                        App.Store.AnswerStop(await Dialogs.StopProcessesAsync(Root, stop));
+                    }
                 }
-                else if (App.Store.PendingStop is { } stop)
+                catch (Exception)
                 {
-                    App.Store.AnswerStop(await Dialogs.StopProcessesAsync(Root, stop));
+                    // WinUI allows one ContentDialog. A confirm already on screen
+                    // makes ShowAsync throw, and the core thread is blocked in
+                    // its wait until this question is answered.
+                    if (App.Store.PendingChoice is not null)
+                    {
+                        App.Store.AnswerChoice(null);
+                    }
+
+                    if (App.Store.PendingStop is not null)
+                    {
+                        App.Store.AnswerStop(false);
+                    }
                 }
             }
         }
