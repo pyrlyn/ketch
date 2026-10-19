@@ -1,3 +1,9 @@
+### B118. An upgrade silently drops checksum verification
+
+A package installed against a published checksum used to accept a later release that published none, with only the first-use warning. `refuse_checksum_downgrade` now refuses that upgrade. `--allow-unverified` or `--yes` consents, and a lockfile hash stands in for consent because it is a stronger pin than either.
+
+Tests: `an_upgrade_that_drops_the_checksum_is_refused_without_consent`, `yes_consents_to_an_upgrade_that_drops_the_checksum`.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.
