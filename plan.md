@@ -98,7 +98,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | # | Status | Priority | Complexity | Readiness | Agent |
 | --- | --- | --- | --- | --- | --- |
 | B60 | in progress | P3 | 1 | 80% | Cursor / grok 4.7 |
-| B65 | in progress | P0 | 2 | 0% | Cursor / grok 4.7 high |
+| B65 | done | P0 | 2 | 100% | Cursor / grok 4.7 |
 | R3 | in progress | P1 | 3 | 67% | Cursor / grok 4.7 high |
 | M17 | in progress | P2 | 4 | 95% | Cursor / grok 4.7 |
 | R5 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
@@ -220,6 +220,8 @@ Item 2 stays with B64. Item 1 is B65, which closes with B64's `tests/bin_choice.
 Add a fixture with two similarly named binaries (for example `rtok` and `rtok-hook`) and assert the intended one is chosen on every OS: macOS, Windows and Linux. This is the test that would have caught the Windows alphabetical-sort bug, where `rtok hook` was selected instead of the intended binary.
 
 Note for the owner: B64's branch `b64-bin-name` already adds `tests/bin_choice.rs` with `rtok`, `rtok-hook` and `other-tool` fixtures, not gated by OS. Reuse or extend it once B64 merges instead of writing a second fixture.
+
+Status: done. `tests/bin_choice.rs` is not gated by OS, so the macOS, Linux and Windows jobs all run it. `the_binary_named_like_the_package_is_linked_and_its_helper_is_not` installs a release that ships `rtok` and `rtok-hook` and links only `rtok`. `the_exact_name_wins_in_windows_sort_order` in `crates/ketch-core/src/bin_choice.rs` is the case where `rtok-hook.exe` sorts before `rtok.exe`.
 
 ### Priorities
 
