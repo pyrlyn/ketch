@@ -112,7 +112,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | D12 | todo | P3 | 4 | 0% | |
 | D13 | todo | P3 | 3 | 0% | |
 | D14 | todo | P3 | 4 | 0% | |
-| D16 | todo | P3 | 5 | 0% | |
+| D16 | done | P3 | 5 | 100% | Cursor / grok 4.7 |
 | D17 | todo | P3 | 4 | 0% | |
 | D18 | todo | P3 | 3 | 0% | |
 | D19 | todo | P3 | 4 | 0% | |
@@ -447,9 +447,7 @@ Settings persistence differs between the two: an MSIX has `ApplicationData`, an 
 
 ### D16. Linux: Vala + GTK 4 app shell on a fake core
 
-The Linux app's screens in Vala with GTK 4 and libadwaita, following the GNOME HIG, built before the C ABI is ready. GTK 4 + libadwaita over KDE and Blueprint for the markup were decided by the creator (2026-10-01, open decisions 1 and 2). Research: sections 3b, 3c and 5.
-
-Done when a Meson project builds a libadwaita app with the common screens in an `AdwNavigationSplitView` that adapts to narrow windows, Blueprint files (pinned as a Meson subproject) for the UI, `AdwAlertDialog`, `AdwBanner` and toasts for decisions, busy and finished work, dark and high-contrast styles, all on a fake core reading D4's fixtures, with a Linux CI job that builds and runs its tests.
+Done. `desktop/linux` is a Meson project: a GLib core library (the contract in ketch-capi's shape, a fake that replays `desktop/contract/scenarios`, and the store) and a libadwaita app over it. The window is an `AdwNavigationSplitView` that collapses on a narrow breakpoint; Blueprint 0.22.2 (pinned wrap) is the markup. `AdwAlertDialog` asks the binary, process and uninstall questions, `AdwBanner` shows busy and the running operation, `AdwToast` reports finished work. Light, dark and high contrast come from libadwaita plus the token stylesheet's media queries (libadwaita 1.8). An empty search browses (`search-browse`). `just linux-app-test` runs the library tests; the `ketch-linux-app` job builds the app on Ubuntu 26.04. See `done.md`.
 
 ### D17. Linux: the app on the real core
 
