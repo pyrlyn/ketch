@@ -1355,6 +1355,30 @@ mod tests {
         assert_eq!(mode, 0o644);
     }
 
+    /// The link body is the target, read into memory. A compressed member
+    /// whose body is longer than any real path must not be inflated whole.
+    #[cfg(feature = "zip")]
+    #[cfg(unix)]
+    #[test]
+    fn an_overlong_zip_symlink_target_is_refused() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("links.zip");
+        let file = std::fs::File::create(&archive).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        // `unix_permissions` drops the file-type bits, so the symlink has to
+        // be written with `add_symlink`, which is what puts `S_IFLNK` back.
+        let target = "a".repeat((super::MAX_ZIP_LINK_TARGET as usize) + 1);
+        writer
+            .add_symlink("link", &target, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.finish().unwrap();
+        let dest = tmp.path().join("out");
+        std::fs::create_dir_all(&dest).unwrap();
+        let err = ZipExtractor.extract(&archive, &dest).unwrap_err();
+        assert!(err.to_string().contains("over-long"), "{err}");
+        assert!(!dest.join("link").exists());
+    }
+
     #[cfg(feature = "gzip")]
     #[cfg(unix)]
     fn tar_gz_with_dir(name: &str, mode: u32) -> Vec<u8> {

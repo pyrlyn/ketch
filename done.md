@@ -1,3 +1,9 @@
+### B100. Zip symlink targets are read without a bound
+
+A zip symlink's target is the member body. It was read with an unbounded `read_to_string`, so a small, highly compressed member could expand to gigabytes. The read now stops at 4 KiB plus one byte and refuses anything longer.
+
+Test: `an_overlong_zip_symlink_target_is_refused`.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.
