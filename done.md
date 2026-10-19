@@ -1,3 +1,7 @@
+### R19.1. `stats` as an optional core feature, checked alone
+
+`stats` is a cargo feature of `ketch-core`: diesel, diesel_migrations and libsqlite3-sys are optional, and `stats::record` returns without writing when the feature is off. `scripts/core-features.sh` builds the core with no optional feature and then with each one alone, plus `ketch-ffi` on its own set. `just core-features` and the CI step run that script. Landed in #319.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.

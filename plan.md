@@ -123,7 +123,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B99 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
 | B102 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | R18 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
-| R19.1 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
+| R19.1 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
 | R19.2 | in progress | P2 | 2 | 90% | Claude Code / opus-5.5 |
 | R19.3 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | R19.4 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
@@ -569,6 +569,8 @@ Split into R19.1–R19.4 below (#319–#322, stacked in that order). Plan: one s
 ### R19.1. `stats` as an optional core feature, checked alone
 
 diesel, diesel_migrations and libsqlite3-sys behind `stats`; `stats::record` does nothing without it. Adds `scripts/core-features.sh`, `just core-features` and a CI step that build the core with no features and with each alone (#319).
+
+Status: done. The feature, the script and the CI step are on main. See `done.md`.
 
 ### R19.2. Registry push as an optional core feature
 
