@@ -136,13 +136,17 @@ impl Config {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use ketch::config::Config;
-    ///
+    /// ```
+    /// use ketch_core::config::Config;
     /// use ketch_core::report::Report;
     ///
-    /// let config = Config::load(None, &Report::silent()).unwrap();
+    /// let root = std::env::temp_dir().join("ketch-doctest-config-load");
+    /// let _ = std::fs::remove_dir_all(&root);
+    /// let config = Config::load(Some(root.clone()), &Report::silent())?;
     /// assert!(config.root.is_absolute());
+    /// assert!(config.root.ends_with("ketch-doctest-config-load"));
+    /// # let _ = std::fs::remove_dir_all(&root);
+    /// # Ok::<(), ketch_core::error::Error>(())
     /// ```
     pub fn load(root_override: Option<PathBuf>, report: &Report) -> Result<Self> {
         // A variable that is set but empty means "unset" here, as it does for

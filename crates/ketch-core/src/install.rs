@@ -171,24 +171,26 @@ pub fn install(
 ///
 /// # Examples
 ///
-/// ```ignore
-/// # use crate::config::Config;
-/// # use crate::install::{commit, prepare, InstallRequest, Installed};
-/// # use crate::model::PackageSpec;
-/// # use crate::source::SourceRegistry;
-/// # use crate::state::State;
-/// # use crate::report::{Ctx, Report};
-/// # let report = Report::silent();
-/// # let cfg: Config = Config::load(None, &report)?;
-/// # let cx = Ctx::new(&cfg, &report);
-/// # let sources: SourceRegistry = SourceRegistry::load(&cx);
-/// # let mut state: State = State::default();
-/// # let request: InstallRequest = InstallRequest::new(PackageSpec::parse("ripgrep"));
-/// # let progress = report.download("ripgrep");
+/// Does not run here: resolving `ripgrep` talks to GitHub.
+///
+/// ```no_run
+/// use ketch_core::config::Config;
+/// use ketch_core::install::{commit, prepare, InstallRequest};
+/// use ketch_core::model::PackageSpec;
+/// use ketch_core::report::{Ctx, Report};
+/// use ketch_core::source::SourceRegistry;
+/// use ketch_core::state::State;
+///
+/// let report = Report::silent();
+/// let cfg = Config::load(None, &report)?;
+/// let cx = Ctx::new(&cfg, &report);
+/// let sources = SourceRegistry::load(&cx);
+/// let mut state = State::default();
+/// let request = InstallRequest::new(PackageSpec::parse("ripgrep"));
+/// let progress = report.download("ripgrep");
 /// let prepared = prepare(&cx, &sources, &state, &request, &progress)?;
-/// let installed = commit(&cx, &mut state, prepared)?;
-/// # let _: Installed = installed;
-/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// let _installed = commit(&cx, &mut state, prepared)?;
+/// Ok::<(), ketch_core::error::Error>(())
 /// ```
 ///
 /// # Errors
@@ -640,14 +642,26 @@ fn extra_placements(
 ///
 /// # Examples
 ///
-/// ```ignore
-/// let mut state = todo!();
-/// let cx = todo!();
-/// let prepared = todo!();
+/// `prepared` is what [`prepare`] returned. Same network caveat as that example.
 ///
-/// let installed = commit(&cx, &mut state, prepared)?;
-/// # let _: Installed = installed;
-/// # Ok::<(), anyhow::Error>(())
+/// ```no_run
+/// use ketch_core::config::Config;
+/// use ketch_core::install::{commit, prepare, InstallRequest};
+/// use ketch_core::model::PackageSpec;
+/// use ketch_core::report::{Ctx, Report};
+/// use ketch_core::source::SourceRegistry;
+/// use ketch_core::state::State;
+///
+/// let report = Report::silent();
+/// let cfg = Config::load(None, &report)?;
+/// let cx = Ctx::new(&cfg, &report);
+/// let sources = SourceRegistry::load(&cx);
+/// let mut state = State::default();
+/// let request = InstallRequest::new(PackageSpec::parse("ripgrep"));
+/// let progress = report.download("ripgrep");
+/// let prepared = prepare(&cx, &sources, &state, &request, &progress)?;
+/// let _installed = commit(&cx, &mut state, prepared)?;
+/// Ok::<(), ketch_core::error::Error>(())
 /// ```
 ///
 /// # Errors
@@ -957,10 +971,21 @@ fn recorded_hooks(pkg: &InstalledPackage) -> Result<Option<&crate::model::Hooks>
 ///
 /// # Examples
 ///
-/// ```ignore
-/// let removed = uninstall(&config, &mut state, "example")?;
+/// Does not run here: it removes whatever `example` is in the real ketch root.
+///
+/// ```no_run
+/// use ketch_core::config::Config;
+/// use ketch_core::install::uninstall;
+/// use ketch_core::report::{Ctx, Report};
+/// use ketch_core::state::State;
+///
+/// let report = Report::silent();
+/// let cfg = Config::load(None, &report)?;
+/// let cx = Ctx::new(&cfg, &report);
+/// let mut state = State::load(&cfg)?;
+/// let removed = uninstall(&cx, &mut state, "example")?;
 /// assert_eq!(removed.name, "example");
-/// # Ok::<(), anyhow::Error>(())
+/// Ok::<(), ketch_core::error::Error>(())
 /// ```
 pub fn uninstall(cx: &Ctx<'_>, state: &mut State, name: &str) -> Result<InstalledPackage> {
     let (cfg, report) = (cx.cfg, cx.report);

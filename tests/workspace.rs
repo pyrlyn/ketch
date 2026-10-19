@@ -156,3 +156,37 @@ fn the_desktop_apps_do_not_link_registry_push() {
         "no app pushes to the registry; octocrab and tokio stay out of ketch-ffi"
     );
 }
+
+/// The move into `ketch-core` left doc examples as `ignore`, so they stopped
+/// compiling and nothing noticed. A new one would do the same.
+#[test]
+fn core_examples_are_not_marked_ignore() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("crates");
+    let mut ignored = Vec::new();
+    fn visit(dir: &Path, ignored: &mut Vec<String>) {
+        let entries = std::fs::read_dir(dir).expect("crates tree is readable");
+        for entry in entries {
+            let entry = entry.expect("crates entry");
+            let path = entry.path();
+            if path.is_dir() {
+                visit(&path, ignored);
+                continue;
+            }
+            if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("source is readable");
+            for (n, line) in text.lines().enumerate() {
+                if line.trim_start().contains("```ignore") {
+                    ignored.push(format!("{}:{}", path.display(), n + 1));
+                }
+            }
+        }
+    }
+    visit(&root, &mut ignored);
+    assert!(
+        ignored.is_empty(),
+        "rewrite ignored examples so they compile:\n{}",
+        ignored.join("\n")
+    );
+}
