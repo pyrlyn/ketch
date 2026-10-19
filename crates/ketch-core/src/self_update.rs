@@ -110,19 +110,19 @@ pub fn install_self(
             if let Some(dir) = link_dir {
                 record_bootstrap_link(cx, &mut state, dir)?;
             }
-            expose_self_docs(cx, &mut state, docs)?;
-            state.save(cfg)?;
+            // The new binary is the package of record even when a user-owned
+            // man page or completion blocks the docs links (B107).
+            save_then_expose_docs(cx, &mut state, docs)?;
             Ok(out)
         })(),
         Err(Error::AlreadyInstalled { name, version }) => {
             if let Some(dir) = link_dir {
                 record_bootstrap_link(cx, &mut state, dir)?;
             }
-            if let Err(e) = expose_self_docs(cx, &mut state, docs) {
-                report.warn(&format!("could not install man page and completions: {e}"));
-            } else if let Err(e) = state.save(cfg) {
-                report.warn(&format!("could not record man page and completions: {e}"));
+            if let Err(e) = state.save(cfg) {
+                report.warn(&format!("could not record the installed package: {e}"));
             }
+            expose_docs_best_effort(cx, &mut state, docs);
             Err(Error::AlreadyInstalled { name, version })
         }
         Err(e) => Err(e),
@@ -279,6 +279,27 @@ fn create_bootstrap_link(link: &Path, target: &Path) -> Result<LinkRecord> {
         },
         role: LinkRole::Binary,
     })
+}
+
+/// Persist `state`, then link man pages and completions.
+///
+/// The save comes first so a docs failure cannot leave the new binary on disk
+/// while `state.json` still names the old one. Linking the docs is a warning;
+/// their link records are saved when that step succeeds.
+fn save_then_expose_docs(cx: &Ctx<'_>, state: &mut State, docs: SelfDocs) -> Result<()> {
+    state.save(cx.cfg)?;
+    expose_docs_best_effort(cx, state, docs);
+    Ok(())
+}
+
+/// Link man pages and completions, warning instead of failing the install.
+fn expose_docs_best_effort(cx: &Ctx<'_>, state: &mut State, docs: SelfDocs) {
+    let (cfg, report) = (cx.cfg, cx.report);
+    if let Err(e) = expose_self_docs(cx, state, docs) {
+        report.warn(&format!("could not install man page and completions: {e}"));
+    } else if let Err(e) = state.save(cfg) {
+        report.warn(&format!("could not record man page and completions: {e}"));
+    }
 }
 
 /// Generate ketch's man page and completions into the store prefix and link
@@ -493,8 +514,7 @@ pub fn update(
         req.force = force;
         req.require_checksum = true;
         install::install(cx, &sources, &mut state, &req)?;
-        expose_self_docs(cx, &mut state, docs)?;
-        state.save(cfg)?;
+        save_then_expose_docs(cx, &mut state, docs)?;
         return Ok(SelfUpdate {
             from,
             to,
@@ -1793,6 +1813,67 @@ mod tests {
             draft: false,
             published_at: None,
         }
+    }
+
+    fn blocked_man_page(_dir: &Path) -> Result<Vec<PathBuf>> {
+        Err(Error::msg(
+            "destination already exists and was not installed by ketch",
+        ))
+    }
+
+    fn empty_completion(_shell: clap_complete::Shell) -> Vec<u8> {
+        Vec::new()
+    }
+
+    #[test]
+    fn a_docs_failure_still_records_the_new_package() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = Config::load(
+            Some(tmp.path().join("root")),
+            &crate::report::Report::silent(),
+        )
+        .unwrap();
+        let prefix = cfg.store_dir.join(SELF_NAME).join("2.0.0");
+        std::fs::create_dir_all(&prefix).unwrap();
+
+        let mut previous = State::load(&cfg).unwrap();
+        previous.insert(installed_ketch(prefix.clone()));
+        previous.save(&cfg).unwrap();
+
+        let mut upgraded = State::load(&cfg).unwrap();
+        upgraded.get_mut(SELF_NAME).unwrap().version = Version::parse("2.0.0");
+        let recorder = std::sync::Arc::new(crate::report::Recorder::default());
+        let report = Report::shared(recorder.clone());
+        save_then_expose_docs(
+            &Ctx::new(&cfg, &report),
+            &mut upgraded,
+            SelfDocs {
+                man_pages: blocked_man_page,
+                completion: empty_completion,
+            },
+        )
+        .unwrap();
+
+        let saved = State::load(&cfg).unwrap();
+        assert_eq!(
+            saved.get(SELF_NAME).unwrap().version,
+            Version::parse("2.0.0"),
+            "the new version is recorded even though the docs could not be linked"
+        );
+        let warnings: Vec<String> = recorder
+            .events()
+            .into_iter()
+            .filter_map(|event| match event {
+                crate::report::Event::Warn { detail } => Some(detail),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            warnings
+                .iter()
+                .any(|detail| detail.contains("could not install man page and completions")),
+            "{warnings:?}"
+        );
     }
 
     #[test]

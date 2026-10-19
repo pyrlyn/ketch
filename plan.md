@@ -60,7 +60,7 @@ New bugs and vulnerabilities from a read-only whole-project review of `main` at 
 | B104 | P2 | bug | fixed | `platform/unix.rs:131, 473`; `platform/macos.rs:263, 430`; `platform/windows.rs:404, 543` | Placement clears each occupied destination (old symlink, copied `/Applications/X.app`, Windows bin copy) right before writing the new one; on a later failure only the new links are unplaced and the store restored, so the old version's links and app copy are gone while state still records them. A `copy_tree` of a large `.app` failing on a full disk loses the working app and leaves an unrecorded half copy. Move occupied destinations aside and restore them on failure. Adjacent to B79, which covers only the store. |
 | B105 | P2 | bug | confirmed | `platform/windows.rs:198-203` (`still_placed`, `CopiedFile`), `:404` (`copy_binary`) | Ownership of a copied bin is proven by `same_contents(link, record.target)`. On a same-version reinstall the swap changes `record.target` first, so `copy_binary`'s second `destination_available` reports "already exists and was not installed by ketch": `ketch sync` cannot repair a drifted payload and `--force` reinstalls fail (extras too). Decide ownership once in preflight, or compare against `<store>.old`. |
 | B106 | P2 | bug | confirmed | `platform/windows.rs:328`; `model.rs:1462` (`glob_match`) | A manifest `bin.path` written with `/` (`bin/tool.exe`) is matched against `rel.to_string_lossy()`, which uses `\` on Windows; `glob_match` does not normalise separators, so any manifest with a directory in `bin.path` fails with "payload does not contain it". Normalise both sides to `/`, add a Windows test, and check `extra::resolve_under`. |
-| B107 | P2 | bug | confirmed | `self_update.rs:113` (`install_self`), `:402`, `:487` (`update`) | `expose_self_docs(...)?` runs after the new version is placed but before `state.save`. A user-owned completion or man file at the destination makes `clear_destination` fail: the new binary is on disk, `state.json` names the old one, and every later self upgrade repeats it. The `AlreadyInstalled` branch already warns instead. Save state first and make docs exposure a warning everywhere. |
+| B107 | P2 | bug | fixed | `self_update.rs:113` (`install_self`), `:402`, `:487` (`update`) | `expose_self_docs(...)?` runs after the new version is placed but before `state.save`. A user-owned completion or man file at the destination makes `clear_destination` fail: the new binary is on disk, `state.json` names the old one, and every later self upgrade repeats it. The `AlreadyInstalled` branch already warns instead. Save state first and make docs exposure a warning everywhere. |
 | B108 | P2 | bug | fixed | `process.rs:323-342` (`cmd_hits`) | A process counts as an occupant when its command line contains the path as a plain substring. Upgrading `rg` with `--yes` SIGTERMs, then SIGKILLs, a running `…/bin/rga`, `…/rg-helper`, or any editor or shell whose arguments mention the path (Linux, Windows). Match whole NUL-split arguments against exact canonical paths and prefer exe and open-fd evidence. Separate from B88. |
 | B109 | P2 | vuln | fixed | `state.rs:235-276` (`Lock::acquire_path`) | `create_new` and the pid write are not atomic: a second process that reads the still-empty file calls it stale and renames the live lock away. Two processes that judged one dead pid stale can each rename, the second over the first's fresh lock. Both then run, and the first `Drop` deletes the other's lock. Write the pid to a temp file and link it into place without replace, treat an empty lock as busy unless old, re-read before renaming, or use an OS advisory lock. |
 | B110 | P2 | vuln | confirmed | `desktop/macos/Ketch/Store/KetchStore.swift:197-211`; `Views/PackageDetailView.swift:127` | Client release notes are parsed as inline Markdown into `Text(AttributedString)`, which keeps `.link` runs clickable through the default `openURL` for any scheme: `[Release notes](zoommtg://…)` or a phishing `https` link is one click away. Strip `.link` attributes or install an `openURL` handler that allows only `https`. |
@@ -130,6 +130,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B113 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B118 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B123 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
+| B107 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
 
 ### Ketch audit
 
@@ -553,6 +554,12 @@ Plan: one check shared by `safe_member_path`, `sanitize_component` and `usable_f
 Row B118 in the 2026-10-12 findings. Done: a package installed checksum-verified refuses an unverified upgrade unless `--yes` or an explicit flag.
 
 Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in `cli.rs`. Check: an end-to-end test of both paths.
+
+### B107. Record the new ketch before linking its docs
+
+Row B107 in the 2026-10-12 findings. `self install` and `self upgrade` saved state only after man pages and completions were linked, so a user-owned file at that destination left the new binary on disk and `state.json` on the previous version. Every later upgrade then repeated the failure.
+
+Done: both paths save the package first. A docs failure is a warning, as the already-installed path already did, and the doc links are saved afterwards when they succeed. `completions --install` still returns the error: that command's only result is the docs.
 
 ### B123. Relink and rollback restore a stale `.old`
 
