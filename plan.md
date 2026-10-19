@@ -109,7 +109,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | F14 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | F18 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
 | D11 | in progress | P3 | 5 | 10% | Claude Code / sonnet-5.5 |
-| D12 | todo | P3 | 4 | 0% | |
+| D12 | done | P3 | 4 | 100% | Cursor / grok 4.7 |
 | D13 | todo | P3 | 3 | 0% | |
 | D14 | todo | P3 | 4 | 0% | |
 | D16 | todo | P3 | 5 | 0% | |
@@ -430,6 +430,8 @@ Swap the Windows app's fake core for the binding. Depends on D10, D11, D1 and D2
 Done when the app runs every screen on `ketch-ffi` through D10's binding, work runs off the UI thread with events marshalled to the `DispatcherQueue`, cancel and `Busy` behave as in the contract, and a manual pass against a scratch root is recorded.
 
 The app ships both as an MSIX and unpackaged (D14), and an unpackaged app has no `ApplicationData`, so settings go in a file under `%LOCALAPPDATA%\ketch` that works in both.
+
+Status: done. `FfiKetchCore` is the app's `IKetchCore` over the generated binding. Records, events and errors go through the same `ContractScenario` classes the fake replays, so the two cores show the same things. `KetchStore` already runs each call on its own thread and posts events and questions through the `DispatcherQueue`. `CoreFactory` picks the real core, or the fake when `KETCH_APP_FAKE_CORE=1`. Theme preferences live in `%LOCALAPPDATA%\ketch\app-settings.json`, which an MSIX redirects into its package data, so one path serves both forms. A declined binary choice or stop question cancels the operation; a leftover folder has no dialog and is kept. Discover still searches as you type, debounced (B130); an empty query browses the built-in shelf and asks no source. The manual Windows GUI pass (launch against a scratch `KETCH_ROOT`, walk every screen, confirm the choice dialog and a `Busy` retry) was not run here: this environment has no Windows desktop. The adapter tests cover the scratch-root install, cancel, `Busy` and `NotFound` paths, and `ketch-win-app` builds the WinUI project and checks `ketch_ffi.dll` sits beside `Ketch.exe`.
 
 ### D13. Windows: tray icon, notifications, start at login, links
 

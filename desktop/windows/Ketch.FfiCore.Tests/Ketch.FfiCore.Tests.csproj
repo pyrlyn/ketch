@@ -1,0 +1,24 @@
+<!--
+  Copyright (c) 2026 Ivan Tugay
+  SPDX-License-Identifier: GPL-3.0-or-later
+
+  FfiKetchCore against the real core on a scratch root, and its mappings:
+  `just windows-ffi-test`, and the ketch-win-app job on Windows CI. Needs the
+  native library and bindings from `just csharp`; runs on any OS that builds them.
+-->
+<Project Sdk="MSTest.Sdk/4.4.1">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The recording reporter and scripted decider the fake's tests use. -->
+    <Compile Include="../Ketch.AppCore.Tests/Support.cs" Link="Support.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Ketch.FfiCore/Ketch.FfiCore.csproj" />
+  </ItemGroup>
+</Project>

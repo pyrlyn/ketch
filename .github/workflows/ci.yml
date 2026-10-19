@@ -290,10 +290,14 @@ jobs:
           meson test -C target/capi-meson --print-errorlogs
 
   # The Windows app: the fake core and store tested against the contract
-  # scenarios, then the WinUI 3 project built with the .NET SDK alone (the
-  # runner's Visual Studio is not used: the XAML compiler and the Windows SDK
-  # build tools come from the Microsoft.WindowsAppSDK package). The tests run
-  # on any OS; only the build needs Windows. The .NET SDK is a mise.toml pin.
+  # scenarios, the adapter onto ketch-ffi (FfiKetchCore) against the real core
+  # on a scratch root, then the WinUI 3 project built with the .NET SDK alone
+  # (the runner's Visual Studio is not used: the XAML compiler and the Windows
+  # SDK build tools come from the Microsoft.WindowsAppSDK package) with
+  # ketch_ffi.dll beside it. The tests run on any OS; only the build needs
+  # Windows. The .NET SDK and the binding generator are mise.toml pins. The
+  # library is the debug build the tests use; a release builds the `ffi`
+  # profile (`just csharp`).
   ketch-win-app:
     needs: config
     if: >-
@@ -307,15 +311,45 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      - uses: pyrlyn/ci/.github/actions/setup-rust@main
         with:
-          install_args: dotnet
+          install-args: rust dotnet cargo:https://github.com/dennisameling/uniffi-bindgen-cs
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Library and bindings
+        working-directory: .
+        run: scripts/csharp.sh --debug
 
       - name: App core tests
         run: dotnet test --project Ketch.AppCore.Tests
 
+      - name: Adapter tests
+        run: dotnet test --project Ketch.FfiCore.Tests
+
       - name: Build the WinUI app
         run: dotnet build Ketch.App/Ketch.App.csproj -c Release -p:Platform=x64
+
+      # The app cannot start without the core: every Ketch.exe the build wrote
+      # has the library beside it.
+      - name: The core ships beside the app
+        run: |
+          python - <<'PY'
+          import pathlib
+          import sys
+
+          apps = list(pathlib.Path("Ketch.App/bin").rglob("Ketch.exe"))
+          if not apps:
+              print("the build wrote no Ketch.exe", file=sys.stderr)
+              sys.exit(1)
+          missing = [app for app in apps if not (app.parent / "ketch_ffi.dll").is_file()]
+          if missing:
+              print(
+                  "ketch_ffi.dll is missing beside " + ", ".join(map(str, missing)),
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          PY
 
   # The design tokens: every generated copy (Swift, XAML, GTK CSS, DESIGN.md,
   # preview.html) is what desktop/design/build.mjs writes from tokens.json, DESIGN.md passes

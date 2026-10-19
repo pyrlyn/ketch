@@ -4,7 +4,8 @@
 
   ketch-ffi for C#: the bindings uniffi-bindgen-cs generates and the native
   library they load, both written into Generated/ by scripts/csharp.sh
-  (`just csharp`). The Windows app references this project.
+  (`just csharp`). Ketch.FfiCore, the Windows app's adapter, references this
+  project, and the library reaches the app's output through it.
 -->
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
