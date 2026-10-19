@@ -119,9 +119,11 @@ plugin does not search.
 Only called when `capabilities.download` is `true`. Write the asset to `<dest>`
 and exit `0`.
 
-When `download` is `false`, ketch fetches `asset.url` itself, sending
-`asset.headers` and **no ketch credentials** — a plugin's URLs never receive the
-user's GitHub token. Put whatever credentials your assets need in `headers`.
+When `download` is `false`, ketch fetches `asset.url` itself. The URL must be
+`https`, or `http` on `127.0.0.1` or `localhost`. ketch sends `asset.headers`
+except `Authorization` and hop-by-hop names, and **no ketch credentials** — a
+plugin's URLs never receive the user's GitHub token. Put whatever credentials
+your assets need in `headers` under a name other than `Authorization`.
 
 Either way ketch hashes the file that actually lands on disk. A plugin does not
 get to assert the checksum of its own download.
@@ -137,6 +139,12 @@ A plugin is a third-party executable run on the user's behalf, so:
   killed.
 - **a broken plugin is a warning, not a failure.** Discovery reports it and
   every other source keeps working.
+- **asset URLs ketch fetches are `https`, or `http` only on loopback.**
+  Anything else is refused.
+- **`Authorization` and hop-by-hop headers are not sent.** Names such as
+  `Connection`, `Transfer-Encoding` and `Keep-Alive` are dropped, and so is
+  any name a `Connection` value lists. Put a private token under another
+  header name.
 
 ## A minimal example
 
