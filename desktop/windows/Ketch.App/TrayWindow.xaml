@@ -9,7 +9,7 @@
     Title="Ketch">
     <!-- Acrylic is the transient surface; the main window keeps Mica. -->
     <Window.SystemBackdrop>
-        <AcrylicBackdrop />
+        <DesktopAcrylicBackdrop />
     </Window.SystemBackdrop>
 
     <Grid x:Name="Root" Padding="16" RowSpacing="8">
