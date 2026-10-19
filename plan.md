@@ -86,7 +86,7 @@ New bugs and vulnerabilities from a read-only whole-project review of `main` at 
 | B130 | P3 | bug | fixed | `desktop/macos/Ketch/Views/DiscoverView.swift:44-47`, `PackageDetailView.swift:59-62`; `desktop/windows/Ketch.App/Pages/DiscoverPage.xaml.cs:36-42` | Core calls ignore task cancellation, so an older, slower search or changelog reply can land after a newer one (Windows also searches on every keystroke). Tag requests and drop out-of-date replies; debounce search. |
 | B131 | P3 | bug | confirmed | `desktop/windows/Ketch.AppCore/KetchStore.cs:325-328` (`Operate`) | When an operation is already running, `Operate` returns silently: a confirmed Uninstall or a clicked Install does nothing. Set `ErrorMessage` as macOS does. |
 | B132 | P3 | bug | fixed | `install.ps1` | `--version 0.10.0` is given a leading `v` before the download URL is built, the same as `install.sh`. A tag that already starts with `v` is left alone. |
-| B133 | P3 | vuln | confirmed | `install.sh:7-359` | The body is not wrapped in a function, so under `curl \| bash` a truncated download runs whatever complete lines arrived. Low impact today, but the guard is missing. Put the body in `main() { … }` and call `main "$@"` last. |
+| B133 | P3 | vuln | fixed | `install.sh:7-359` | The body is not wrapped in a function, so under `curl \| bash` a truncated download runs whatever complete lines arrived. Low impact today, but the guard is missing. Put the body in `main() { … }` and call `main "$@"` last. |
 | B134 | P3 | bug | suspected | `install.ps1:229, 263` | `[Net.ServicePointManager]::SecurityProtocol` is never set; on older Windows 10/Server, PowerShell 5.1 defaults to TLS 1.0/1.1, which GitHub rejects. OR in `Tls12` at the top. |
 | B135 | P3 | bug | confirmed | `.github/workflows/ci.yml:439-445` | `/review` dispatches with `--ref "$branch"` from the PR's `headRefName`; for a fork PR that ref is missing (the job fails) or names a base branch such as `main`, and CI runs on `main` while the bot says it ran on the PR head. Refuse when `headRepository` is not this repo, or check the dispatched ref's SHA equals the head SHA. |
 | B136 | P3 | bug | confirmed | `Justfile:147` (`lint-cask`) | `just check` writes `cask/Casks/ketch.rb` into the repo root and `cask/` is not ignored, so `scripts/release.sh --local` then stops at its clean-tree check (`release.sh:94`). Write it under `target/` or ignore `/cask/`. |
@@ -130,6 +130,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B113 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B118 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B123 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
+| B133 | done | P3 | 2 | 100% | Cursor / grok 4.7 |
 
 ### Ketch audit
 
@@ -559,6 +560,10 @@ Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in
 Row B123 in the 2026-10-12 findings. Done: the store is restored only when this call made the swap.
 
 Plan: have `move_into_store` report the swap; `restore_retired_store` uses it. Check: a test with a stale `.old` and a failing link that keeps the live prefix.
+
+### B133. `install.sh` runs as it is downloaded
+
+Row B133 in the 2026-10-12 findings. Done: the body is `main`, called on the last line. A truncated `curl | bash` defines the function and never calls it. `tests/install_truncation.py` drops that call and expects silence.
 
 ### R19. Heavy subsystems out of the always-built core
 
