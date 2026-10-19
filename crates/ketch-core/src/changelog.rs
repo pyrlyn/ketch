@@ -24,6 +24,7 @@ use crate::manifest::Resolver;
 use crate::model::{InstalledPackage, PackageSpec, Release, Version, VersionSpec};
 use crate::report::Ctx;
 use crate::source::{ListOpts, SourceRegistry};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 /// File names worth looking for, most conventional first.
@@ -41,6 +42,10 @@ const NAMES: &[&str] = &[
 
 /// Directories a project might tuck it into, relative to the payload root.
 const SUBDIRS: &[&str] = &["", "doc", "docs", "share/doc"];
+
+/// A changelog is prose. A few MiB covers every real one; past that, or when
+/// the path is a link or a device, the notes on the release are the answer.
+const MAX_BYTES: u64 = 4 * 1024 * 1024;
 
 /// Where a changelog came from, so the caller can say so.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,8 +101,13 @@ pub fn find_file(prefix: &Path) -> Option<PathBuf> {
 
 /// Read a changelog file and take the section for `version`, or the whole file
 /// when no section matches.
+///
+/// The file is untrusted client prose. It has to be a regular file, and only
+/// the first [`MAX_BYTES`] are considered: a link to a device or a multi-GB
+/// file must not be read in full. Bytes that are not UTF-8 are kept, with the
+/// replacement character, so a non-UTF-8 file is still a changelog.
 pub fn from_file(path: &Path, version: Option<&str>) -> Result<Entry> {
-    let raw = std::fs::read_to_string(path).map_err(|e| crate::error::Error::io(path, e))?;
+    let raw = read_text(path, MAX_BYTES)?;
     let text = sanitize(&raw);
     let (heading, body) = match version.and_then(|v| section(&text, v)) {
         Some(found) => found,
@@ -108,6 +118,31 @@ pub fn from_file(path: &Path, version: Option<&str>) -> Result<Entry> {
         heading,
         body,
     })
+}
+
+/// The bytes of a regular file, lossily decoded, refusing anything past `max`.
+fn read_text(path: &Path, max: u64) -> Result<String> {
+    // `symlink_metadata` does not follow a link, so a changelog that points at
+    // `/dev/zero` or another file is refused before it is opened.
+    let meta = std::fs::symlink_metadata(path).map_err(|e| Error::io(path, e))?;
+    if !meta.file_type().is_file() {
+        return Err(Error::msg(format!(
+            "{} is not a regular file",
+            path.display()
+        )));
+    }
+    let file = std::fs::File::open(path).map_err(|e| Error::io(path, e))?;
+    let mut bytes = Vec::new();
+    file.take(max + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| Error::io(path, e))?;
+    if bytes.len() as u64 > max {
+        return Err(Error::msg(format!(
+            "{} is larger than {max} bytes, which is more than a changelog",
+            path.display()
+        )));
+    }
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 /// The notes a release published, if it published any.
@@ -692,5 +727,34 @@ ketch install demo@1.2.2
             versions(&between(&releases, None, None, true)),
             ["1.3.0", "1.2.0-rc.1", "1.0.1"]
         );
+    }
+
+    #[test]
+    fn a_non_utf8_changelog_is_read_instead_of_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("CHANGELOG.md");
+        std::fs::write(&path, b"## 1.0.0\n\ncafe \xff tea\n").unwrap();
+        let entry = from_file(&path, Some("1.0.0")).unwrap();
+        assert_eq!(entry.heading.as_deref(), Some("## 1.0.0"));
+        assert!(entry.body.contains("cafe \u{FFFD} tea"), "{}", entry.body);
+    }
+
+    #[test]
+    fn a_changelog_past_the_cap_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("CHANGELOG.md");
+        std::fs::write(&path, vec![b'a'; 9]).unwrap();
+        let err = read_text(&path, 8).unwrap_err();
+        assert!(err.to_string().contains("larger than 8 bytes"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_changelog_symlink_is_not_a_regular_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("CHANGELOG.md");
+        std::os::unix::fs::symlink("/dev/zero", &path).unwrap();
+        let err = from_file(&path, Some("1.0.0")).unwrap_err();
+        assert!(err.to_string().contains("not a regular file"), "{err}");
     }
 }

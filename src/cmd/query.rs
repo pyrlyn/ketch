@@ -720,14 +720,19 @@ pub fn changelog(cfg: &Config, args: ChangelogArgs) -> Result<()> {
                 VersionSpec::Latest => pkg.version.to_string(),
             };
             match changelog::find_file(&pkg.prefix) {
-                Some(path) => {
-                    let entry = changelog::from_file(&path, Some(&version))?;
-                    if entry.heading.is_some() || args.file {
-                        return show(&entry, &pkg.name, &version);
+                Some(path) => match changelog::from_file(&path, Some(&version)) {
+                    Ok(entry) => {
+                        if entry.heading.is_some() || args.file {
+                            return show(&entry, &pkg.name, &version);
+                        }
+                        ui::debug(&format!("{} has no entry for {version}", path.display()));
+                        whole_file = Some((entry, pkg.name.clone(), version));
                     }
-                    ui::debug(&format!("{} has no entry for {version}", path.display()));
-                    whole_file = Some((entry, pkg.name.clone(), version));
-                }
+                    // `--file` asked for this file, so its refusal is the answer.
+                    // Otherwise the published notes still are.
+                    Err(e) if args.file => return Err(e),
+                    Err(e) => ui::warn(&e.to_string()),
+                },
                 None => ui::debug(&format!("no changelog under {}", pkg.prefix.display())),
             }
         }

@@ -410,11 +410,15 @@ impl KetchCore {
         if let (Some(pkg), VersionSpec::Latest) = (&installed, &spec.version) {
             let version = pkg.version.to_string();
             if let Some(path) = changelog::find_file(&pkg.prefix) {
-                let entry = changelog::from_file(&path, Some(&version))?;
-                if entry.heading.is_some() {
-                    return Ok(Changelog::new(&pkg.name, &version, entry));
+                match changelog::from_file(&path, Some(&version)) {
+                    Ok(entry) => {
+                        if entry.heading.is_some() {
+                            return Ok(Changelog::new(&pkg.name, &version, entry));
+                        }
+                        whole_file = Some(Changelog::new(&pkg.name, &version, entry));
+                    }
+                    Err(e) => op.report.warn(&e.to_string()),
                 }
-                whole_file = Some(Changelog::new(&pkg.name, &version, entry));
             }
         }
         match changelog::published(&cx, &spec, installed, false) {

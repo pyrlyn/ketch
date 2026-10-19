@@ -478,7 +478,9 @@ ketch why rg --json
 
 Show what changed: the changelog file the package ships, or the release notes
 published with the release. Prefers the file on disk for the installed
-version; falls back to the notes.
+version; falls back to the notes. A file that is not a regular file, or is
+larger than 4 MiB, is skipped and the notes are used; `--file` reports that
+instead. Bytes that are not UTF-8 are kept.
 
 ```bash
 ketch changelog ripgrep            # installed version

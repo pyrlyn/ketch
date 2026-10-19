@@ -1,3 +1,9 @@
+### B117. Changelog reads are capped
+
+A client changelog is untrusted prose. `from_file` requires a regular file (`symlink_metadata`, so a link to `/dev/zero` is refused), reads at most 4 MiB, and decodes the rest lossily. `ketch changelog` uses the release notes when that read is refused; `--file` reports the refusal. A non-UTF-8 file is still printed.
+
+Tests: `a_non_utf8_changelog_is_read_instead_of_rejected`, `a_changelog_past_the_cap_is_refused`, `a_changelog_symlink_is_not_a_regular_file`, `a_non_utf8_changelog_is_printed_and_a_symlink_falls_back_to_notes`.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.

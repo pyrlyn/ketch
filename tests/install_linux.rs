@@ -199,3 +199,44 @@ fn path_install_edits_a_shell_config_and_can_undo_itself() {
     let text = std::fs::read_to_string(&bashrc).unwrap();
     assert!(!text.contains("# >>> ketch >>>"), "{text}");
 }
+
+#[test]
+fn a_non_utf8_changelog_is_printed_and_a_symlink_falls_back_to_notes() {
+    let sandbox = Sandbox::new();
+    let version = "1.0.0";
+    let arch = host_arch();
+    let native = sandbox.asset(
+        &format!("testtool-{version}-{arch}-unknown-linux-gnu.tar.gz"),
+        tool_archive(version),
+    );
+    sandbox.publish(
+        "testtool",
+        &[Release::new(version, vec![native]).with_notes("published notes for 1.0.0")],
+    );
+    sandbox.ok(&["install", "test:testtool", "--yes"]);
+
+    let state = std::fs::read_to_string(sandbox.root().join("state.json")).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&state).unwrap();
+    let prefix = std::path::PathBuf::from(
+        parsed["packages"]["testtool"]["prefix"]
+            .as_str()
+            .expect("prefix"),
+    );
+    let file = prefix.join("CHANGELOG.md");
+    std::fs::write(&file, b"## 1.0.0\n\ncafe \xff tea\n").unwrap();
+    let out = sandbox.ok(&["changelog", "testtool"]);
+    assert!(out.contains("cafe"), "{out}");
+    assert!(out.contains('\u{FFFD}'), "{out}");
+
+    std::fs::remove_file(&file).unwrap();
+    let real = prefix.join("REAL.md");
+    std::fs::write(&real, b"## 1.0.0\n\nsecret\n").unwrap();
+    // A link to a real file still looks like a changelog until it is opened
+    // without following the link.
+    std::os::unix::fs::symlink(&real, &file).unwrap();
+    let out = sandbox.ok(&["changelog", "testtool"]);
+    assert!(out.contains("published notes for 1.0.0"), "{out}");
+    assert!(!out.contains("secret"), "{out}");
+    let err = sandbox.fails(&["changelog", "testtool", "--file"]);
+    assert!(err.contains("not a regular file"), "{err}");
+}
