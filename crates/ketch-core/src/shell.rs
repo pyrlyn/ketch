@@ -1435,12 +1435,48 @@ fn read(file: &Path) -> Result<String> {
     fs_kit::read::text_or_empty(file).map_err(|e| Error::fs_kit(file, e))
 }
 
+/// How many startup-file symlinks to follow before calling the chain a cycle.
+///
+/// A dotfiles link is one hop. A chain this long is a loop, not a layout, and
+/// walking it would hang `path install`.
+const STARTUP_LINK_HOPS: usize = 40;
+
+/// The file `write` should replace.
+///
+/// A startup file is very often a symlink into a dotfiles repository.
+/// `fs_kit::path::canon` only resolves a link whose target exists; a dangling
+/// one (the checkout is missing) comes back as the link itself, and renaming
+/// onto that path replaces the symlink with a regular file. Walk the links and
+/// name the final target even when it is not there yet, so the link stays.
+fn write_target(file: &Path) -> Result<PathBuf> {
+    let mut current = file.to_path_buf();
+    for _ in 0..STARTUP_LINK_HOPS {
+        match std::fs::symlink_metadata(&current) {
+            Ok(meta) if meta.file_type().is_symlink() => {
+                let link = std::fs::read_link(&current).map_err(|e| Error::io(&current, e))?;
+                current = if link.is_absolute() {
+                    link
+                } else {
+                    match current.parent() {
+                        Some(dir) if !dir.as_os_str().is_empty() => dir.join(link),
+                        _ => link,
+                    }
+                };
+            }
+            Ok(_) => return Ok(fs_kit::path::canon(&current)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(current),
+            Err(e) => return Err(Error::io(&current, e)),
+        }
+    }
+    Err(Error::msg(format!(
+        "startup file {} is a symlink cycle",
+        file.display()
+    )))
+}
+
 /// Replace the file's contents, atomically and in place.
 fn write(file: &Path, text: &str) -> Result<()> {
-    // A startup file is very often a symlink into a dotfiles repository.
-    // Renaming over the link would replace it with a regular file and quietly
-    // detach the user from their own dotfiles, so the write follows it first.
-    let target = fs_kit::path::canon(file);
+    let target = write_target(file)?;
     fs_kit::write::Options::new()
         .create_parent(true)
         .follow_symlinks(false)
@@ -2041,5 +2077,74 @@ mod tests {
     fn file_mode(path: &Path) -> u32 {
         use std::os::unix::fs::PermissionsExt;
         std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    /// The link is the user's, into a dotfiles repo. Editing it must change
+    /// the target and leave the link where it is.
+    #[cfg(unix)]
+    #[test]
+    fn uninstall_file_follows_a_symlink_instead_of_replacing_it() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let target = dir.path().join("real-zshrc");
+        let link = dir.path().join(".zshrc");
+        let block = Shell::Zsh.block("/home/u/.ketch/bin");
+        std::fs::write(&target, format!("# mine\n{block}")).unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+
+        assert!(uninstall_file(&link).unwrap());
+
+        assert!(
+            std::fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "the startup path must stay a symlink"
+        );
+        let text = std::fs::read_to_string(&target).unwrap();
+        assert!(text.contains("# mine"), "{text}");
+        assert!(!text.contains(BEGIN), "{text}");
+    }
+
+    /// A checkout that is not on disk yet is still the file to create. Replacing
+    /// the dangling link would detach the user from the repo the moment it returns.
+    #[cfg(unix)]
+    #[test]
+    fn a_dangling_startup_symlink_is_not_replaced_by_a_regular_file() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let link = dir.path().join(".zshrc");
+        std::os::unix::fs::symlink("dotfiles/.zshrc", &link).unwrap();
+
+        write(&link, "export PATH=x\n").unwrap();
+
+        assert!(
+            std::fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "the dangling link must still be a symlink"
+        );
+        let target = dir.path().join("dotfiles/.zshrc");
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "export PATH=x\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_startup_symlink_cycle_is_refused() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let a = dir.path().join("a");
+        let b = dir.path().join("b");
+        std::os::unix::fs::symlink(&b, &a).unwrap();
+        std::os::unix::fs::symlink(&a, &b).unwrap();
+
+        let err = write(&a, "export PATH=x\n").unwrap_err();
+        assert!(err.to_string().contains("symlink cycle"), "{err}");
+        assert!(std::fs::symlink_metadata(&a)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert!(std::fs::symlink_metadata(&b)
+            .unwrap()
+            .file_type()
+            .is_symlink());
     }
 }
