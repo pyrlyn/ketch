@@ -206,8 +206,14 @@ pub fn discover(cx: &Ctx<'_>) -> Vec<Result<PluginSource>> {
     };
 
     let mut dirs = vec![cfg.plugin_dir.clone()];
+    // A client app is untrusted. Install links its binaries into the bin dir
+    // and keeps the payload in the store, so a `ketch-source-*` it shipped
+    // would otherwise run on every later command that loads sources.
     if let Some(path) = std::env::var_os("PATH") {
-        dirs.extend(std::env::split_paths(&path));
+        dirs.extend(
+            std::env::split_paths(&path)
+                .filter(|dir| !placed_by_ketch(dir, &cfg.bin_dir, &cfg.store_dir)),
+        );
     }
 
     let mut found = Vec::new();
@@ -231,7 +237,12 @@ pub fn discover(cx: &Ctx<'_>) -> Vec<Result<PluginSource>> {
 
         for (name, path) in names {
             // The plugins dir comes first, so it wins over a copy on PATH.
-            if seen.contains(&name) || !platform.is_executable(&path) {
+            // A PATH entry that is not itself the bin dir can still hold a
+            // symlink into the store; the resolved file is what would run.
+            if seen.contains(&name)
+                || placed_by_ketch(&path, &cfg.bin_dir, &cfg.store_dir)
+                || !platform.is_executable(&path)
+            {
                 continue;
             }
             seen.push(name);
@@ -242,6 +253,18 @@ pub fn discover(cx: &Ctx<'_>) -> Vec<Result<PluginSource>> {
         }
     }
     found
+}
+
+/// True when `path` is the bin directory, the store, or anything inside either.
+///
+/// Canonicalised so a symlink entry on `PATH` does not hide a client binary.
+/// A path that does not exist yet is compared as given: nothing can be run
+/// from it, and `read_dir` skips it.
+fn placed_by_ketch(path: &Path, bin_dir: &Path, store_dir: &Path) -> bool {
+    let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let bin_dir = std::fs::canonicalize(bin_dir).unwrap_or_else(|_| bin_dir.to_path_buf());
+    let store_dir = std::fs::canonicalize(store_dir).unwrap_or_else(|_| store_dir.to_path_buf());
+    path.starts_with(&bin_dir) || path.starts_with(&store_dir)
 }
 
 fn file_name(path: &Path) -> String {
@@ -599,6 +622,57 @@ esac
         .unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
         path
+    }
+
+    #[test]
+    fn discovery_skips_plugins_installed_into_the_bin_dir_or_the_store() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("ketch");
+        let cfg = crate::config::Config::load(Some(root), &Report::silent()).unwrap();
+        std::fs::create_dir_all(&cfg.plugin_dir).unwrap();
+        std::fs::create_dir_all(&cfg.bin_dir).unwrap();
+        let payload = cfg.store_dir.join("tool/1.0");
+        std::fs::create_dir_all(&payload).unwrap();
+        let elsewhere = tmp.path().join("elsewhere");
+        std::fs::create_dir_all(&elsewhere).unwrap();
+
+        fake_plugin(&cfg.plugin_dir, "ok", PROTOCOL_VERSION);
+        fake_plugin(&cfg.bin_dir, "evil", PROTOCOL_VERSION);
+        fake_plugin(&payload, "stolen", PROTOCOL_VERSION);
+        fake_plugin(&elsewhere, "extra", PROTOCOL_VERSION);
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(
+            payload.join(format!("{PLUGIN_PREFIX}stolen")),
+            elsewhere.join(format!("{PLUGIN_PREFIX}stolen")),
+        )
+        .unwrap();
+
+        let path = std::env::join_paths([&cfg.bin_dir, &payload, &elsewhere]).unwrap();
+        let previous = std::env::var_os("PATH");
+        std::env::set_var("PATH", &path);
+        let found = discover(&Ctx::new(&cfg, &Report::silent()));
+        match previous {
+            Some(value) => std::env::set_var("PATH", value),
+            None => std::env::remove_var("PATH"),
+        }
+
+        let schemes: Vec<_> = found
+            .iter()
+            .filter_map(|result| {
+                result
+                    .as_ref()
+                    .ok()
+                    .map(|plugin| plugin.scheme().to_string())
+            })
+            .collect();
+        assert!(schemes.contains(&"ok".to_string()), "{schemes:?}");
+        assert!(schemes.contains(&"extra".to_string()), "{schemes:?}");
+        assert!(
+            !schemes
+                .iter()
+                .any(|scheme| scheme == "evil" || scheme == "stolen"),
+            "{schemes:?}"
+        );
     }
 
     #[test]

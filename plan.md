@@ -69,7 +69,7 @@ New bugs and vulnerabilities from a read-only whole-project review of `main` at 
 | B113 | P3 | vuln | suspected | `extract/mod.rs:81-136` (`safe_member_path`); `config.rs:471` (`sanitize_component`); `model.rs:1116` (`usable_file_name`) | DOS device names (`CON`, `NUL`, `AUX`, `PRN`, `COM1-9`, `LPT1-9`, also with an extension), names with a trailing dot or space, and `<>:"\|?*` pass. An archive member, bin, tag or package named `nul.txt` writes to a device, `foo.` collides with `foo`, a store dir can fail to create. Reject these case-insensitively per component on Windows. |
 | B114 | P3 | vuln | fixed | `extract/archive.rs:304-331` (`check_link_target`); readers `extra.rs:197`, `changelog.rs` `find_file`, `platform/unix.rs:61, 227`, `platform/windows.rs` `payload_executable_entry` | Link targets are checked lexically, ignoring links created earlier: `L -> .` then `N -> L/L/../../..` passes but escapes. `resolve_under`, `find_file`, `ensure_executable` (chmod follows links) and `payload_executable_entry` (checks one hop) then follow it, so local files outside the store can be linked into bin, man or completion dirs and `chmod u+rx`'d. Canonicalize every link in `finish_deferred_links` and require it under the destination; canonicalize in `payload_executable_entry`. |
 | B115 | P3 | vuln | fixed | `extract/macos.rs:175-199` (DMG `copy_volume`), `:210-237` (PKG) | DMG copy skips only top-level symlinks; `ditto` keeps nested absolute or escaping links, and PKG payloads get no link checks. The B114 readers then follow them outside the payload. After the copy, walk the tree with `symlink_metadata` and run every link through the containment check. |
-| B116 | P3 | vuln | confirmed | `source/plugin.rs:204-244` (`discover`) | Plugin discovery scans the plugin dir and every PATH entry, including ketch's own bin dir, and runs each `ketch-source-*` with `capabilities`. A client app that ships such a binary is executed by every later ketch command that loads sources. Discover only in the plugin dir, or exclude `cfg.bin_dir` and anything resolving into the store. |
+| B116 | P3 | vuln | fixed | `source/plugin.rs:204-244` (`discover`) | Plugin discovery scans the plugin dir and every PATH entry, including ketch's own bin dir, and runs each `ketch-source-*` with `capabilities`. A client app that ships such a binary is executed by every later ketch command that loads sources. Discover only in the plugin dir, or exclude `cfg.bin_dir` and anything resolving into the store. |
 | B117 | P3 | bug | confirmed | `changelog.rs:~99` (`from_file`), `src/cmd/query.rs:589` | The client changelog is read with an unbounded `read_to_string(...)?`: a multi-GB file or a link to `/dev/zero` exhausts memory, and a non-UTF-8 file makes `ketch changelog` fail instead of falling back to release notes. Require a regular file (`symlink_metadata`), read through `take` with a cap of a few MiB, decode lossily. |
 | B118 | P3 | vuln | suspected | `install.rs` ~1420-1465 (`verify_checksum`); `src/cmd/pkg.rs:540` | When a release that was installed checksum-verified is followed by one without checksums (or an attacker controlling the release removes them), the upgrade installs with only the generic first-use warning; `checksum_verified` is never consulted. Refuse such a downgrade unless `--yes` or an explicit flag. |
 | B119 | P3 | bug | confirmed | `shell.rs:1302-1310` (`block_span`) | It pairs the first BEGIN with the first END after it. A stray BEGIN without END (hand edit, crash mid-write) makes `splice` append a second block, and a later `unsplice` deletes every user line between the orphan BEGIN and the real END. Pair END with the nearest preceding BEGIN or refuse when marker counts differ. |
@@ -130,6 +130,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B113 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B118 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B123 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
+| B116 | done | P3 | 2 | 100% | Cursor / grok 4.7 |
 
 ### Ketch audit
 
@@ -553,6 +554,12 @@ Plan: one check shared by `safe_member_path`, `sanitize_component` and `usable_f
 Row B118 in the 2026-10-12 findings. Done: a package installed checksum-verified refuses an unverified upgrade unless `--yes` or an explicit flag.
 
 Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in `cli.rs`. Check: an end-to-end test of both paths.
+
+### B116. Do not run an installed client as a source plugin
+
+Row B116 in the 2026-10-12 findings. Discovery walks `PATH`, and install puts client binaries on that `PATH`, so a package that ships `ketch-source-*` was executed on later commands.
+
+Done: the bin directory and the store are not searched, and an executable whose path resolves into either is skipped. A plugin in the plugins directory, or elsewhere on `PATH`, is still found.
 
 ### B123. Relink and rollback restore a stale `.old`
 
