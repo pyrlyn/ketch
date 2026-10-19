@@ -41,3 +41,8 @@ need 'github.event.pull_request.draft != true' 'the draft skip'
 need "startsWith(github.event.comment.body, '/review')" 'the /review command gate'
 need 'OWNER", "MEMBER", "COLLABORATOR' 'the /review author gate'
 need 'gh workflow run ci.yml --ref' 'the /review dispatch'
+# B135: a fork's branch name is not a ref in this repo, and a same-named
+# branch must still be the pull request's commit before CI is dispatched on it.
+need 'headRepository.nameWithOwner' 'the /review head-repository check'
+need 'not this repository' 'the /review fork refusal'
+need 'repos/pyrlyn/ketch/commits/' 'the /review ref SHA lookup'
