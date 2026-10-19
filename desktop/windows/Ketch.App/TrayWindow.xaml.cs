@@ -24,7 +24,7 @@ public sealed partial class TrayWindow : Window
         InitializeComponent();
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
-            presenter.IsShownInSwitchers = false;
+            // Windows App SDK 2.5's OverlappedPresenter has no switcher flag.
             presenter.IsResizable = false;
             presenter.IsMinimizable = false;
             presenter.IsMaximizable = false;
