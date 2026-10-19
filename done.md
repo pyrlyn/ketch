@@ -1,3 +1,9 @@
+### B99. Extraction has no byte or entry budget
+
+Every extractor shares one `Budget`: a byte cap, an entry cap, and a limit that scales with the archive between a 256 MiB floor and a 32 GiB ceiling (`MAX_EXPANSION_RATIO` 100). Zip, tar and the lone gzip, xz and bzip2 extractors refuse past it before the extra bytes are written.
+
+Tests: `a_lone_gzip_bomb_stops_at_the_budget`, `a_tar_member_larger_than_the_budget_is_refused_before_it_is_written`, `a_tar_with_too_many_members_is_refused`, `a_zip_with_too_many_members_is_refused`, `a_zip_bomb_stops_at_the_budget`, `the_budget_scales_with_the_archive_between_a_floor_and_a_ceiling`.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.

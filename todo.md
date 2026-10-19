@@ -21,7 +21,6 @@
 - D19. Linux: packaging and release
 - R20. File and directory helpers from `fs-kit`
 - B98. `install.ps1` closes the user's PowerShell window on error
-- B99. Extraction has no byte or entry budget
 - B102. Windows symlink materialisation can recurse forever
 - R19.1. `stats` as an optional core feature, checked alone
 - R19.2. Registry push as an optional core feature
