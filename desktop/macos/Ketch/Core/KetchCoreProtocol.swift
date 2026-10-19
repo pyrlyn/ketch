@@ -95,8 +95,9 @@ protocol Decider: Sendable {
 
 /// Errors the core reports, mirroring R9's `KetchError`.
 enum KetchError: Error, Sendable, Hashable {
-    /// Another process holds the ketch lock.
-    case busy(pid: UInt32)
+    /// Another process holds the ketch lock. `pid` is nil when the holder
+    /// could not be named; the message must not invent pid 0.
+    case busy(pid: UInt32?)
     case cancelled
     case notFound(name: String)
     case network(message: String)
@@ -107,7 +108,12 @@ enum KetchError: Error, Sendable, Hashable {
 extension KetchError: LocalizedError {
     var errorDescription: String? {
         switch self {
-        case .busy(let pid): "ketch is running in another process (pid \(pid))."
+        case .busy(let pid):
+            if let pid {
+                "ketch is running in another process (pid \(pid))."
+            } else {
+                "ketch is running in another process."
+            }
         case .cancelled: "Cancelled."
         case .notFound(let name): "No package named \(name)."
         case .network(let message): "Network error: \(message)"

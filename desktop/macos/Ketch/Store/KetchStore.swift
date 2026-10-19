@@ -61,8 +61,17 @@ struct BinaryChoice: Identifiable {
 /// Another process holds the ketch lock; `retry` re-runs what was refused.
 struct BusyState: Identifiable {
     let id = UUID()
-    let pid: UInt32
+    /// Nil when the core could not name the holder.
+    let pid: UInt32?
     let retry: @MainActor () async -> Void
+
+    var message: String {
+        if let pid {
+            "Another ketch is running (pid \(pid)). Retry when it finishes."
+        } else {
+            "Another ketch is running. Retry when it finishes."
+        }
+    }
 }
 
 @MainActor
@@ -386,7 +395,7 @@ final class KetchStore {
     private func report(_ error: any Error, retry: (@MainActor () async -> Void)?) {
         switch error as? KetchError {
         case .busy(let pid)?:
-            append(.warning, "ketch is running in another process (pid \(pid))")
+            append(.warning, error.localizedDescription)
             if let retry { busy = BusyState(pid: pid, retry: retry) }
         case .cancelled?:
             append(.warning, "Cancelled")
