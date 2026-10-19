@@ -100,7 +100,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B60 | in progress | P3 | 1 | 80% | Cursor / grok 4.7 |
 | B65 | in progress | P0 | 2 | 0% | Cursor / grok 4.7 high |
 | R3 | in progress | P1 | 3 | 67% | Cursor / grok 4.7 high |
-| M17 | in progress | P2 | 4 | 95% | Cursor / grok 4.7 |
+| M17 | done | P2 | 4 | 100% | Cursor / grok 4.7 |
 | R5 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
 | R6 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
 | R8 | in progress | P3 | 3 | 90% | Claude Code / sonnet-5.5 |
@@ -502,7 +502,7 @@ Rules decided here:
 - Idempotency: the rendered file is compared byte for byte with the one on disk, the installed version with the source's tag. Same file and installed ≥ source → "Everything is up to date", nothing touched; a newer tag → rewrite and upgrade; same version, changed file → reinstall (`force`); installed newer than the source → the installed release stays and only the manifest is redone. The install pins the source's asset (`asset_override`) and checksum (`expected_sha256`); a missing checksum warns and installs, checked the usual way.
 - Bin paths and asset patterns have the version replaced by `*`, so the manifest keeps matching after the next release.
 
-Status: steps 1–6 landed in #215. `docs/ru` and `docs/uk` translate the user-facing docs, including `ketch import`. Still open for the creator: `serde-saphyr`'s MSRV is 1.89, above the declared 1.86. A cask `binary` whose source starts with `$APPDIR` stays inside the app bundle; `kind = "app"` places the bundle and links nothing.
+Status: done. The three converters, `ketch import`, the docs and the offline tests landed in #215. Two notes stay with the creator and do not block the command: `serde-saphyr`'s MSRV is 1.89, above the declared 1.86, and a cask `binary` whose source starts with `$APPDIR` stays inside the app bundle (`kind = "app"` places the bundle and links nothing). See `done.md`.
 
 ### B74. xz archives decompress entirely into memory
 

@@ -1,3 +1,9 @@
+### M17. `ketch import`: a package from winget, Homebrew or a Linux repository
+
+`ketch import winget|brew|linux <name>` converts a package whose artifacts are GitHub Release assets into a user manifest and installs it. Anything else writes nothing and exits non-zero. The three converters live in `crates/ketch-core/src/import/` (recorded fixtures, no network), the command is `src/cmd/import.rs`, and `tests/import.rs` drives it against a local mock. `docs/COMMANDS.md`, `docs/MANIFESTS.md` and the `docs/ru` and `docs/uk` translations describe it. Landed in #215.
+
+Two notes stay with the creator. `serde-saphyr`, which reads the winget YAML, declares MSRV 1.89, above ketch's declared 1.86, and nothing in CI checks that floor. A cask `binary` whose source starts with `$APPDIR` stays inside the app bundle; `kind = "app"` places the bundle and links nothing.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.
