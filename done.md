@@ -1,3 +1,9 @@
+### B60. Windows self-update leaves `ketch.exe.old` behind
+
+Windows will not delete the file backing a running image. `replace_binary` parks the old binary as `ketch.exe.old` and the process doing the cleanup is that image, so the delete at the end of a successful swap fails and used to be dropped. `install_self` on Windows uses `with_extension("old")`, which names the same leftover `ketch.old`. Both names are swept at the start of `self upgrade` (not on `--dry-run`) and `self install`, and again before `replace_binary` renames: by then the earlier updater has exited, so the delete works. A failure warns and continues. The end-of-swap delete stays one best-effort try. `ketch doctor` warns when a leftover is still in the bin dir, or beside the running binary when that binary lives somewhere else.
+
+Tests: `aside_names_cover_the_swap_and_the_flat_install`, `a_previous_swap_backup_is_removed_and_a_missing_one_is_fine`, `doctor_notes_a_stale_aside_and_stays_quiet_without_one`.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.

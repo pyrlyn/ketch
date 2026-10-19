@@ -97,7 +97,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 
 | # | Status | Priority | Complexity | Readiness | Agent |
 | --- | --- | --- | --- | --- | --- |
-| B60 | in progress | P3 | 1 | 80% | Cursor / grok 4.7 |
+| B60 | done | P3 | 1 | 100% | Cursor / grok 4.7 |
 | B65 | in progress | P0 | 2 | 0% | Cursor / grok 4.7 high |
 | R3 | in progress | P1 | 3 | 67% | Cursor / grok 4.7 high |
 | M17 | in progress | P2 | 4 | 95% | Cursor / grok 4.7 |
@@ -173,6 +173,8 @@ Already covered: `assert_cmd`, `assert_fs`, `insta`, `predicates`,
 `tokio-test` / `testcontainers` / extra fuzzers unless a new seam needs them.
 
 ### B60. Windows self-update leaves `ketch.exe.old` behind
+
+Done. See `done.md`.
 
 Observed on Windows: `ketch self update` 0.4.4 → 0.5.1 succeeded, but the old binary stayed in the bin dir as `ketch.exe.old`. Windows will not delete the file backing a running image, and at the success cleanup in `replace_binary` (`let _ = std::fs::remove_file(&backup)` after the smoke test) the process doing the deleting is that renamed old image — so the removal fails with access denied and the error is dropped. `install_self`'s aside cleanup has the same silent drop, and a stale `.old` left behind also becomes a destination that can fail the next swap's rename.
 
