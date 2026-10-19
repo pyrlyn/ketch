@@ -109,6 +109,21 @@ fn fails_after_flag_parse() -> impl predicates::Predicate<str> {
         .or(predicate::str::contains("Failed to fetch"))
 }
 
+/// Windows PowerShell 5.1 throws on `Join-Path $a $b $c`. The nested archive
+/// member has to be joined twice or extraction dies before the binary is found.
+#[test]
+fn the_nested_archive_path_is_joined_for_windows_powershell_51() {
+    let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1"));
+    assert!(
+        src.contains("Join-Path (Join-Path $TempDir 'ketch') $BinaryName"),
+        "{src}"
+    );
+    assert!(
+        !src.contains("Join-Path $TempDir 'ketch' $BinaryName"),
+        "a third positional child is the 5.1 failure"
+    );
+}
+
 #[test]
 fn the_script_names_the_windows_release_tarball() {
     let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1"));
