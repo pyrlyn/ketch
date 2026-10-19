@@ -106,7 +106,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | R8 | in progress | P3 | 3 | 90% | Claude Code / sonnet-5.5 |
 | F12 | in progress | P3 | 5 | 60% | Claude Code / opus-5.5 |
 | F13 | in progress | P3 | 4 | 80% | Claude Code / opus-5.5 |
-| F14 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
+| F14 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
 | F18 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
 | D11 | in progress | P3 | 5 | 10% | Claude Code / sonnet-5.5 |
 | D12 | todo | P3 | 4 | 0% | |
@@ -367,7 +367,7 @@ Plan:
 
 Check: the generator reproduces `Tokens.swift` byte-for-byte; the preview renders both themes; text colours meet WCAG AA contrast on their glass backgrounds (checked by the script or documented per pair).
 
-Status: PR https://github.com/pyrlyn/ketch/pull/188 merged 2026-10-01. Google Labs DESIGN.md spec (alpha, `@google/design.md` 0.4.0) with generated front matter; tokens in W3C DTCG 2025.10; Style Dictionary 5.5.5 with custom formats for Swift (four appearances), CSS and the front matter; `just design-check` covers drift, WCAG AA and lint. Research in `docs/research-design-system.md`. `Theme.swift` reads `Tokens.swift` since F16. Remaining: an Accessibility Inspector pass on the real Liquid Glass material.
+Status: done. PR https://github.com/pyrlyn/ketch/pull/188 merged 2026-10-01. Google Labs DESIGN.md spec (alpha, `@google/design.md` 0.4.0) with generated front matter; tokens in W3C DTCG 2025.10; Style Dictionary 5.5.5 with custom formats for Swift (four appearances), CSS and the front matter; `just design-check` covers drift, WCAG AA and lint. Research in `docs/research-design-system.md`. `Theme.swift` reads `Tokens.swift` since F16. An Accessibility Inspector pass on the real Liquid Glass material is a manual check on a Mac and was not run here. See `done.md`.
 
 ### F18. Figma design for macOS, Windows and Linux
 

@@ -1,3 +1,7 @@
+### F14. Design system for the macOS app: `DESIGN.md` and tokens
+
+`desktop/macos/DESIGN.md` follows the DESIGN.md spec, with generated front matter. `desktop/design/tokens.json` is the one token source, and `desktop/design/build.mjs` writes the Swift, XAML and CSS copies plus the preview stylesheet. `just design-check` fails when a generated file drifts, when text misses WCAG AA on its glass background, or when the DESIGN.md lint fails. Landed in #188. An Accessibility Inspector pass on the real Liquid Glass material still needs a Mac; the contrast numbers the script checks are the ones in the tokens.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.
