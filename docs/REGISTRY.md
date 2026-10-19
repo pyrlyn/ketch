@@ -97,9 +97,14 @@ ketch registry validate .
 ```
 
 That is what must pass before merge: every `ketch.toml` parsed, checked
-against its folder name, refused when `source` is `local:`, passed through
+against its folder name, refused when `source` is `local:` or the file
+carries `[hooks]`, passed through
 [`Manifest::validate`](MANIFESTS.md), with name and alias collisions failing
-the run.
+the run. A `[hooks]` table is shell, and this command's `--fixture` install
+writes the entry into a user manifest directory — the one place hooks are
+allowed — so the commands are dropped from that copy and the entry fails
+validation before anything runs. A client that already fetched the entry
+still loads it and refuses the hooks at install.
 
 To also offline-install the entries a pull request changes, put one local
 asset per package in a fixture directory — a file named after the package,

@@ -311,9 +311,7 @@ fn install_from_fixture(
     manifest: &crate::model::Manifest,
     payload: &Path,
 ) -> Result<()> {
-    let abs = crate::source::local::absolute_path(&payload.to_string_lossy())?;
-    let mut rewritten = manifest.clone();
-    rewritten.source = crate::source::local::package_ref(&abs);
+    let rewritten = registry::for_fixture_install(manifest, payload)?;
     let path = crate::manifest::user_manifest_path(cfg, &rewritten.name);
     std::fs::write(&path, crate::manifest::to_toml(&rewritten)?)
         .map_err(|e| Error::io(&path, e))?;

@@ -674,6 +674,50 @@ fn registry_validate_offline_installs_a_changed_entry_from_a_fixture() {
 
 #[cfg(unix)]
 #[test]
+fn registry_validate_refuses_hooks_and_does_not_run_them() {
+    let temp = assert_fs::TempDir::new().unwrap();
+    let marker = temp.child("hook-ran");
+    let root = temp.child("ketch-root");
+    let registry = temp.child("registry");
+    write_package(
+        &registry,
+        "tool",
+        &format!(
+            "source = \"github:a/b\"\nbin = [{{ name = \"tool\" }}]\n\
+             [hooks]\nafter_install = \"touch {}\"\n",
+            marker.path().display()
+        ),
+    );
+    let fixture = temp.child("fixtures");
+    fixture.create_dir_all().unwrap();
+    let pkg = fixture.child("tool");
+    pkg.create_dir_all().unwrap();
+    Archive::TarGz(vec![Entry::program("tool", "ok")]).write_to(pkg.child("tool.tar.gz").path());
+
+    let mut cmd = Command::cargo_bin("ketch").unwrap();
+    strip_tokens(&mut cmd)
+        .args([
+            "--root",
+            root.path().to_str().unwrap(),
+            "registry",
+            "validate",
+            "--fixture",
+            fixture.path().to_str().unwrap(),
+            "--changed",
+            "tool",
+            registry.path().to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("cannot carry hooks"));
+    assert!(
+        !marker.path().exists(),
+        "a registry hook must not run while the tree is validated"
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn registry_validate_fixture_install_fails_when_the_binary_is_missing() {
     let temp = assert_fs::TempDir::new().unwrap();
     let root = temp.child("ketch-root");

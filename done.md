@@ -1,3 +1,9 @@
+### B89. `registry validate --fixture` ran a registry manifest's hooks
+
+`ketch registry validate --fixture` wrote each registry manifest into the probe root's user manifest directory. That origin is the user's, so `hooks::allowed` ran `[hooks]`. A registry entry with `after_install` got a shell on the validating machine. `check_tree` and `ketch registry push` now refuse an entry that carries hooks, and the copy the probe writes has those hooks removed. A client still loads a published entry and refuses the hooks at install, which is the opt-in of copying the file into the user's manifest directory.
+
+Test: `check_tree_refuses_hooks_that_a_client_would_still_load`, `a_fixture_install_drops_hooks_and_points_at_the_local_asset`, `a_manifest_with_hooks_is_refused`, and `registry_validate_refuses_hooks_and_does_not_run_them`.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.

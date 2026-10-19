@@ -42,7 +42,7 @@ New bugs and vulnerabilities from a read-only whole-project review of `main` at 
 
 | ID | Priority | Kind | Status | Where | Fix |
 | --- | --- | --- | --- | --- | --- |
-| B89 | P1 | vuln | confirmed | `src/cmd/registry.rs:309-327` (`install_from_fixture`); `registry.rs` `check_tree` | `ketch registry validate --fixture` writes each registry manifest into the probe root's user manifest dir, so its origin becomes `User` and `hooks::allowed` runs its `[hooks]`. A registry PR with `after_install = "curl … \| sh"` gets shell on the validating machine or CI runner. Strip `hooks` before writing, and make `check_tree` reject any registry manifest with hooks. |
+| B89 | P1 | vuln | fixed | `src/cmd/registry.rs:309-327` (`install_from_fixture`); `registry.rs` `check_tree` | `ketch registry validate --fixture` writes each registry manifest into the probe root's user manifest dir, so its origin becomes `User` and `hooks::allowed` runs its `[hooks]`. A registry PR with `after_install = "curl … \| sh"` gets shell on the validating machine or CI runner. Strip `hooks` before writing, and make `check_tree` reject any registry manifest with hooks. |
 | B90 | P1 | bug | fixed | `install.rs:1553` (`retain_replaced`), `install.rs:1283` (`prune`), `install.rs:692` (`ScopedDir`) | `retain_replaced` drops only the old version's retained entry, never one whose prefix is the new current prefix. Rollback 1.0→0.9, upgrade back to 1.0, then `prune` (keep=1) deletes the live 1.0 store dir and every link dangles; a failed link in that upgrade also lets `ScopedDir` delete the restored copy. Also drop entries matching the new prefix/version, treat a retained prefix as in-place, and make `prune` never remove `pkg.prefix`. |
 | B91 | P1 | bug | fixed | `src/cmd/pkg.rs:194-207`; `crates/ketch-ffi/src/lib.rs:352-356`; `install.rs:1641-1671` (`package_dir_candidate`, `remove_package_dir`) | A name `State::find` misses (exact, case-sensitive) is treated as a leftover and `store/<name>` is `remove_dir_all`'d without confirmation and ignoring `--dry-run`. On APFS or NTFS `ketch uninstall RipGrep` (or `ripgrep.` on Windows) resolves to the installed `store/ripgrep` and wipes it while state still lists it. Refuse when the on-disk entry name is not byte-equal to the name or any recorded prefix lies under it; confirm and honour `--dry-run`. |
 | B92 | P1 | bug | fixed | `self_update.rs:1021-1046` (`remove_root_at`) | The only wipe guard is a lexical `cfg.root != $HOME`. With `--root ~/.local`, `KETCH_ROOT=/usr/local` or a home spelled differently (case, symlink), `self uninstall` runs `remove_dir_all` on that root's `bin/`, `cache/`, `logs/`, deleting other programs' files. Wipe named children only when the root carries a ketch marker; otherwise remove only recorded entries; canonicalize and fold case before comparing with home. |
@@ -130,6 +130,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B113 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B118 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B123 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
+| B89 | done | P1 | 2 | 100% | Cursor / grok 4.7 |
 
 ### Ketch audit
 
@@ -581,3 +582,9 @@ sigstore, minisign-verify and pgp behind `trust`; without it a `require` policy 
 ### R19.4. Archive codecs as optional core features
 
 `gzip`, `xz`, `bzip2`, `zip`; plain tar always. A build without a codec reports an unsupported archive instead of linking it as a program; one `portable_extractors()` list replaces the three platform copies (#322, on R19.3).
+
+### B89. `registry validate --fixture` ran a registry manifest's hooks
+
+`ketch registry validate --fixture` wrote the registry manifest into the probe's user manifest directory, where hooks are allowed, so a registry `[hooks]` table ran on the validating machine. `check_tree` and `ketch registry push` now refuse an entry that carries hooks, and the fixture copy has them removed before it is written. A client still loads a published entry and refuses the hooks at install.
+
+Status: done. See `done.md`.

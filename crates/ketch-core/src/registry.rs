@@ -238,7 +238,13 @@ pub fn check_tree(dir: &Path) -> Report {
             .to_string_lossy()
             .to_string();
         match read_package(&path, &name) {
-            Ok(manifest) => packages.push((manifest, path)),
+            Ok(manifest) => match refuse_hooks(path.display().to_string(), &manifest) {
+                Ok(()) => packages.push((manifest, path)),
+                Err(e) => errors.push(ValidationError {
+                    path: path.display().to_string(),
+                    message: message_without_path(&path, &e),
+                }),
+            },
             Err(e) => errors.push(ValidationError {
                 path: path.display().to_string(),
                 message: message_without_path(&path, &e),
@@ -502,7 +508,8 @@ fn is_package_file(path: &Path) -> bool {
 /// Rules a registry entry must pass beyond [`Manifest::validate`].
 ///
 /// Shared by [`read_package`] and [`crate::push::load`] so push refuses the
-/// same manifest CI would reject.
+/// same manifest CI would reject. `[hooks]` are the exception: a client still
+/// loads them and refuses at install, while [`refuse_hooks`] stops a merge.
 pub(crate) fn validate_registry_entry(
     what: &str,
     folder: Option<&str>,
@@ -530,6 +537,38 @@ pub(crate) fn validate_registry_entry(
         ));
     }
     Ok(())
+}
+
+/// Refuse `[hooks]` on a registry entry that is about to be merged or pushed.
+///
+/// A registry file is someone else's. `ketch registry validate --fixture`
+/// installs it by writing a copy into a user manifest directory, and that is
+/// the one place hooks are allowed — so a command in the entry would run on
+/// the validating machine. Clients do not use this check: they still load the
+/// entry and refuse the hooks at install.
+pub(crate) fn refuse_hooks(what: impl Into<String>, manifest: &Manifest) -> Result<()> {
+    if manifest.hooks.is_empty() {
+        return Ok(());
+    }
+    Err(Error::parse(
+        what,
+        "a registry package cannot carry hooks; hooks run only from a manifest in your own \
+         manifest directory"
+            .to_string(),
+    ))
+}
+
+/// The manifest a fixture install writes into the probe's user directory.
+///
+/// The source becomes the local asset, and `[hooks]` are dropped. The probe's
+/// user manifest directory is where hooks would run, and these commands were
+/// not written by the person validating the tree.
+pub fn for_fixture_install(manifest: &Manifest, payload: &Path) -> Result<Manifest> {
+    let abs = crate::source::local::absolute_path(&payload.to_string_lossy())?;
+    let mut rewritten = manifest.clone();
+    rewritten.source = crate::source::local::package_ref(&abs);
+    rewritten.hooks = crate::model::Hooks::default();
+    Ok(rewritten)
 }
 
 /// Parse one package folder.
@@ -784,6 +823,48 @@ mod tests {
             "the message must say which folders collide: {}",
             report.errors[0].message
         );
+    }
+
+    #[test]
+    fn check_tree_refuses_hooks_that_a_client_would_still_load() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            tmp.path(),
+            "tool",
+            "source = \"github:a/b\"\n[hooks]\nafter_install = \"touch /tmp/ketch-hook-marker\"\n",
+        );
+        let report = check_tree(tmp.path());
+        assert_eq!(report.packages, 0);
+        assert!(report.parsed.is_empty());
+        assert_eq!(report.errors.len(), 1);
+        assert!(
+            report.errors[0].message.contains("cannot carry hooks"),
+            "{}",
+            report.errors[0].message
+        );
+
+        let loaded = load_dir(tmp.path(), &reporting::Report::silent());
+        assert_eq!(loaded.len(), 1);
+        assert!(!loaded[0].0.hooks.is_empty());
+    }
+
+    #[test]
+    fn a_fixture_install_drops_hooks_and_points_at_the_local_asset() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(tmp.path(), "tool", "source = \"github:a/b\"\n");
+        let manifest = read_package(&tmp.path().join("tool").join(PACKAGE_FILE), "tool").unwrap();
+        let mut hooked = manifest.clone();
+        hooked.hooks.after_install = Some("touch /tmp/ketch-hook-marker".to_string());
+        let payload = tmp.path().join("tool.tar.gz");
+        let rewritten = for_fixture_install(&hooked, &payload).unwrap();
+        assert!(rewritten.hooks.is_empty());
+        assert_eq!(rewritten.source.scheme, "local");
+        assert!(
+            rewritten.source.id.ends_with("tool.tar.gz"),
+            "{}",
+            rewritten.source.id
+        );
+        assert_eq!(rewritten.name, manifest.name);
     }
 
     #[test]
