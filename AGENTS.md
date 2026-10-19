@@ -331,17 +331,18 @@ call it in a small `macos-runner` job and read its output. The macOS targets of 
 shared `rust` job go through the same action inside `pyrlyn/ci`.
 `release-apple-desktop.yml` stays a thin caller (tests/desktop-release.sh), so it
 keeps the hosted default until pyrlyn/ci's workflow resolves the runner itself.
-It has no Rust in it and does not touch the CLI gate.
+Its `pre-build-command` builds the `ketch-ffi` XCFramework; it does not touch
+the CLI gate.
 
 Views talk to `KetchStore`, the store talks to `KetchCoreProtocol`, and
-`CoreFactory.swift` alone decides which core that is — `FakeKetchCore`
-until `ketch-ffi` (R9) exists. Keep it that way: no view or test reaches past
-the protocol. The UI uses system Liquid Glass (`glassEffect`, glass button
-styles), never a drawn imitation. The app updates itself with Sparkle
-(`Ketch/Store/AppUpdater.swift`, "Check for Updates…" in the app menu); only
-a Release build with a real `SUPublicEDKey` starts it. Releases are
-[Releasing → macOS app](#macos-app-releases). `desktop/macos/README.md` has
-the architecture and the steps to wire R9.
+`CoreFactory.swift` alone decides which core that is — `LiveKetchCore` over
+`ketch-ffi`, or `FakeKetchCore` when a test asks. Keep it that way: no view
+or test reaches past the protocol. The UI uses system Liquid Glass
+(`glassEffect`, glass button styles), never a drawn imitation. The app updates
+itself with Sparkle (`Ketch/Store/AppUpdater.swift`, "Check for Updates…" in
+the app menu); only a Release build with a real `SUPublicEDKey` starts it.
+Releases are [Releasing → macOS app](#macos-app-releases).
+`desktop/macos/README.md` has the architecture.
 
 ## Conventions
 
@@ -700,9 +701,10 @@ stop before building:
   warns on a mismatch. Losing or rotating this key strands every installed
   copy on its version.
 
-The ketch-ffi XCFramework (R9) does not exist yet: the caller's
-`pre-build-command` is empty (marked `TODO(R9)`), so a release made before R9
-ships the app on `FakeKetchCore`.
+The app links `ketch-ffi`. `release-apple-desktop.yml`'s `pre-build-command`
+runs `scripts/xcframework.sh` before the archive, and CI's `macos-app` job
+does the same with `--debug` before `xcodebuild`. The UI smoke test sets
+`KETCH_USE_FAKE_CORE=1` so it still asserts the sample packages.
 
 ## Documentation translations
 
