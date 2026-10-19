@@ -75,6 +75,29 @@ fn the_script_names_linux_and_windows_release_tarballs() {
     assert!(!src.contains("macOS-only at the moment"), "{src}");
 }
 
+/// `curl | bash` executes each complete statement as it arrives. The body is
+/// one function called on the last line, so a cut-off download is a syntax
+/// error and does not start installing.
+#[test]
+fn a_truncated_download_does_not_start_installing() {
+    let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/install.sh"));
+    assert!(
+        src.trim_end().ends_with("main \"$@\""),
+        "the call has to be the last line"
+    );
+    let lines: Vec<&str> = src.lines().collect();
+    let partial = lines[..lines.len() - 20].join("\n");
+    Command::new("/bin/bash")
+        .arg("-s")
+        .env("PATH", "/bin:/usr/bin")
+        .env("HOME", "/nonexistent-home")
+        .write_stdin(partial)
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("Installing ketch").not())
+        .stdout(predicate::str::contains("Fetching").not());
+}
+
 /// The whole script, with the network replaced by a stub `curl` and the release
 /// by a stub `ketch`.
 ///

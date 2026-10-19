@@ -3,7 +3,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
 
-
+# A truncated `curl | bash` reads and runs each complete line as it arrives.
+# The body is one function, called on the last line, so an unfinished
+# download is a syntax error and installs nothing.
+main() {
 set -euo pipefail
 IFS=$'\n\t'
 
@@ -394,3 +397,6 @@ fi
 echo ""
 echo "Getting started:"
 "${INSTALL_PATH}" --help
+}
+
+main "$@"
