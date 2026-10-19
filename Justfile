@@ -146,9 +146,11 @@ lint-cask:
         echo "lint-cask: skipped (macOS only, like CI's package job)"
         exit 0
     fi
-    mkdir -p cask/Casks
-    scripts/cask.sh 0.0.0 "$(printf '%064d' 0)" > cask/Casks/ketch.rb
-    brew style cask/Casks/ketch.rb
+    # target/ is gitignored. A Casks/ directory at the repo root survives
+    # `just check` and then `scripts/release.sh --local` refuses the dirty tree.
+    mkdir -p target/cask/Casks
+    scripts/cask.sh 0.0.0 "$(printf '%064d' 0)" > target/cask/Casks/ketch.rb
+    brew style target/cask/Casks/ketch.rb
 
 # every generated man page through `mandoc -Tlint` at warning level; the
 # style notes it also prints come from clap_mangen's layout, not ketch's text

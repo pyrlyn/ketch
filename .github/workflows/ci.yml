@@ -467,9 +467,11 @@ jobs:
       - name: The generated cask passes brew style
         if: env.RUN == 'true' && runner.os == 'macOS'
         run: |
-          mkdir -p cask/Casks
-          scripts/cask.sh 0.0.0 "$(printf '%064d' 0)" > cask/Casks/ketch.rb
-          brew style cask/Casks/ketch.rb
+          # target/ is gitignored, same as `just lint-cask`: brew style only
+          # needs a parent directory named Casks/.
+          mkdir -p target/cask/Casks
+          scripts/cask.sh 0.0.0 "$(printf '%064d' 0)" > target/cask/Casks/ketch.rb
+          brew style target/cask/Casks/ketch.rb
 
   # A `/review` comment in a pull request re-runs CI on that PR's head by
   # dispatching ci.yml on the PR's branch. The default token cannot dispatch

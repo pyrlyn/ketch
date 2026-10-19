@@ -14,6 +14,26 @@ if [ ! -f "$wf" ]; then
     exit 1
 fi
 
+# B136: brew style keys off a directory named Casks/, and that file must not
+# land in the repo root, where it dirties the tree release.sh refuses.
+if ! grep -q 'target/cask/Casks/ketch.rb' "$wf"; then
+    echo "ci-triggers: cask lint must write target/cask/Casks/ketch.rb (B136)" >&2
+    exit 1
+fi
+if grep 'cask/Casks' "$wf" | grep -v 'target/cask/Casks' | grep -q .; then
+    echo "ci-triggers: cask lint must write under target/cask/Casks (B136)" >&2
+    exit 1
+fi
+justfile="$ROOT/Justfile"
+if ! grep -q 'target/cask/Casks/ketch.rb' "$justfile"; then
+    echo "ci-triggers: Justfile lint-cask must write under target/ (B136)" >&2
+    exit 1
+fi
+if grep 'cask/Casks' "$justfile" | grep -v 'target/cask/Casks' | grep -q .; then
+    echo "ci-triggers: Justfile still writes cask/Casks at the repo root (B136)" >&2
+    exit 1
+fi
+
 if command -v ruby >/dev/null 2>&1; then
     ruby -ryaml -e "YAML.load_file(ARGV[0])" "$wf"
 else
