@@ -52,6 +52,7 @@ Project programs and direct packages from manifests.
 | clap_mangen | local | https://crates.io/crates/clap_mangen | ketch's man pages, one per command (`src/man.rs`) |
 | console | local (Windows only) | https://crates.io/crates/console | Switches on virtual terminal processing so legacy conhost shows colour instead of escape codes; already in the tree through indicatif |
 | crossterm | local | https://crates.io/crates/crossterm | Terminal |
+| ctrlc | local | https://crates.io/crates/ctrlc | Ctrl-C on Unix and Windows; cancels the running command without unsafe in the binary |
 | diesel | local | https://crates.io/crates/diesel | SQLite ORM |
 | diesel_migrations | local | https://crates.io/crates/diesel_migrations | SQLite migrations |
 | dirs | local | https://crates.io/crates/dirs | Rust dependency |

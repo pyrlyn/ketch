@@ -6,7 +6,6 @@
 - M17. `ketch import`: a package from winget, Homebrew or a Linux repository
 - R5. Workspace split: `ketch-core` library crate
 - R6. A reporter instead of the global `ui::` sink
-- R8. Core calls from a long-running host
 - F12. Native macOS app (SwiftUI) on `ketch-ffi`
 - F13. macOS app release pipeline
 - F14. Design system for the macOS app: `DESIGN.md` and tokens
