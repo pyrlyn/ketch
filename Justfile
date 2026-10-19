@@ -113,6 +113,7 @@ lint-shell:
     sh tests/ci-yml-triggers.sh
     sh tests/desktop-release.sh
     sh tests/docs-i18n.sh
+    python3 tests/cask_smoke.py
 
 package:
     #!/usr/bin/env bash
