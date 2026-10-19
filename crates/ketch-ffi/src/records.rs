@@ -241,8 +241,8 @@ pub struct Changelog {
 impl Changelog {
     pub(crate) fn new(name: &str, version: &str, entry: Entry) -> Self {
         Changelog {
-            name: name.to_string(),
-            version: version.to_string(),
+            name: changelog::sanitize(name),
+            version: changelog::sanitize(version),
             source: match entry.origin {
                 Origin::File(path) => ChangelogSource::File {
                     path: path.display().to_string(),
@@ -687,6 +687,18 @@ mod tests {
                 fix: Some("ketch link x".into()),
             }
         );
+    }
+
+    #[test]
+    fn a_changelog_version_loses_escapes_and_bidi_overrides() {
+        let entry = Entry {
+            origin: Origin::Release,
+            heading: None,
+            body: "notes".into(),
+        };
+        let log = Changelog::new("rg\u{202e}", "1.0\u{1b}[2J", entry);
+        assert_eq!(log.name, "rg");
+        assert_eq!(log.version, "1.0[2J");
     }
 
     #[test]

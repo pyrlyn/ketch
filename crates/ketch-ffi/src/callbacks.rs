@@ -78,13 +78,25 @@ impl From<CoreTask> for TaskKind {
         match task {
             CoreTask::Batch => TaskKind::Batch,
             CoreTask::Download { label, batch } => TaskKind::Download {
-                label,
+                label: clean(&label),
                 batch_id: batch.map(|id| id.get()),
             },
-            CoreTask::Activity { message } => TaskKind::Activity { message },
-            CoreTask::Counter { verb, unit, total } => TaskKind::Counter { verb, unit, total },
+            CoreTask::Activity { message } => TaskKind::Activity {
+                message: clean(&message),
+            },
+            CoreTask::Counter { verb, unit, total } => TaskKind::Counter {
+                verb: clean(&verb),
+                unit: clean(&unit),
+                total,
+            },
         }
     }
+}
+
+/// Client text on its way to a GUI. The same filter the terminal uses: an
+/// asset name or a tag can carry escapes and bidi overrides.
+fn clean(text: &str) -> String {
+    ketch_core::changelog::sanitize(text)
 }
 
 /// One thing the core reports, field for field what `report::Event` carries.
@@ -130,21 +142,33 @@ impl From<report::Event> for Event {
         use report::Event as E;
         match event {
             E::Step { package, stage } => Event::Step {
-                package,
+                package: clean(&package),
                 stage: stage.into(),
             },
-            E::Status { verb, detail } => Event::Status { verb, detail },
-            E::Success { verb, detail } => Event::Success { verb, detail },
-            E::Warn { detail } => Event::Warn { detail },
-            E::Note { detail } => Event::Note { detail },
-            E::Debug { detail } => Event::Debug { detail },
+            E::Status { verb, detail } => Event::Status {
+                verb: clean(&verb),
+                detail: clean(&detail),
+            },
+            E::Success { verb, detail } => Event::Success {
+                verb: clean(&verb),
+                detail: clean(&detail),
+            },
+            E::Warn { detail } => Event::Warn {
+                detail: clean(&detail),
+            },
+            E::Note { detail } => Event::Note {
+                detail: clean(&detail),
+            },
+            E::Debug { detail } => Event::Debug {
+                detail: clean(&detail),
+            },
             E::Began { id, task } => Event::Began {
                 id: id.get(),
                 task: task.into(),
             },
             E::Sized { id, name, total } => Event::Sized {
                 id: id.get(),
-                name,
+                name: clean(&name),
                 total,
             },
             E::Progress { id, done, total } => Event::Progress {
@@ -154,7 +178,7 @@ impl From<report::Event> for Event {
             },
             E::Ended { id, message } => Event::Ended {
                 id: id.get(),
-                message,
+                message: message.as_deref().map(clean),
             },
             E::Abandoned { id } => Event::Abandoned { id: id.get() },
         }
@@ -273,6 +297,41 @@ mod tests {
         fn event(&self, event: Event) {
             self.0.lock().unwrap().push(event);
         }
+    }
+
+    #[test]
+    fn client_text_in_an_event_loses_escapes_and_bidi_overrides() {
+        let raw = "ok\u{1b}\u{202e}evil";
+        let Event::Status { verb, detail } = Event::from(report::Event::Status {
+            verb: raw.into(),
+            detail: raw.into(),
+        }) else {
+            panic!("status");
+        };
+        assert_eq!(verb, "okevil");
+        assert_eq!(detail, "okevil");
+
+        let id = {
+            let core =
+                report::Report::shared(Arc::new(ForeignReporter(Arc::new(Recorded::default()))));
+            core.activity("tmp").id()
+        };
+        let Event::Sized { name, .. } = Event::from(report::Event::Sized {
+            id,
+            name: raw.into(),
+            total: None,
+        }) else {
+            panic!("sized");
+        };
+        assert_eq!(name, "okevil");
+
+        let TaskKind::Download { label, .. } = TaskKind::from(report::Task::Download {
+            label: raw.into(),
+            batch: None,
+        }) else {
+            panic!("download");
+        };
+        assert_eq!(label, "okevil");
     }
 
     #[test]
