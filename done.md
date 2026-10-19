@@ -1,3 +1,9 @@
+### R19.4. Archive codecs as optional core features
+
+`gzip`, `xz`, `bzip2` and `zip` are each a feature of `ketch-core`. The defaults turn all four on, which is what the CLI builds. Plain tar stays in every build. `portable_extractors()` is the one list macOS, Linux and Windows use. A build with the codecs off reports `UnsupportedArchive` instead of treating the file as a program. `scripts/core-features.sh` builds the core with no features and with each feature alone, including each codec.
+
+Test: `an_archive_whose_codec_is_left_out_is_unsupported` (compiled only when every codec feature is off).
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.
