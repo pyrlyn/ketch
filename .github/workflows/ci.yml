@@ -112,6 +112,61 @@ jobs:
           if ($errors) { $errors | Format-List *; exit 1 }
           ./install.ps1 --help
 
+      # pwsh accepts a three-argument Join-Path. Windows PowerShell 5.1 does not,
+      # and that is the shell `irm | iex` runs in. This step extracts a stub
+      # release, which is where that call used to throw (B94).
+      - name: Install past extraction on Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+          $work = Join-Path $env:TEMP ('ketch-ps51-' + [guid]::NewGuid().ToString())
+          $release = Join-Path $work 'release'
+          $home = Join-Path $work 'home'
+          New-Item -ItemType Directory -Path $release, $home | Out-Null
+          $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          if (-not (Test-Path -LiteralPath $csc)) { Write-Error "csc.exe not found at $csc" }
+          $stub = Join-Path $release 'stub.cs'
+          $stubSource = @'
+          using System;
+          using System.IO;
+          class P {
+            static int Main(string[] args) {
+              if (args.Length >= 2 && args[0] == "self" && args[1] == "install") {
+                string root = Environment.GetEnvironmentVariable("KETCH_ROOT");
+                string bin = Path.Combine(root, "bin");
+                Directory.CreateDirectory(bin);
+                string dest = Path.Combine(bin, "ketch.exe");
+                string me = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                if (!string.Equals(Path.GetFullPath(me), Path.GetFullPath(dest), StringComparison.OrdinalIgnoreCase)) {
+                  File.Copy(me, dest, true);
+                }
+                return 0;
+              }
+              Console.WriteLine("ketch (stub)");
+              return 0;
+            }
+          }
+          '@
+          Set-Content -Encoding ascii -Path $stub -Value $stubSource
+          $exe = Join-Path $release 'ketch.exe'
+          & $csc /nologo /out:$exe $stub
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $payload = Join-Path $release 'payload.tar.gz'
+          Push-Location $release
+          & "$env:SystemRoot\System32\tar.exe" -czf $payload ketch.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
+          $hash = (Get-FileHash -LiteralPath $payload -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -Encoding ascii (Join-Path $release 'SHA256SUMS') "$hash  ketch-x86_64-pc-windows-msvc.tar.gz"
+          $env:KETCH_INSTALL_RELEASE_DIR = $release
+          $env:USERPROFILE = $home
+          $root = Join-Path $home 'ketch-root'
+          & .\install.ps1 --root $root --no-modify-path
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $installed = Join-Path $root 'bin\ketch.exe'
+          if (-not (Test-Path -LiteralPath $installed)) { Write-Error "install.ps1 did not place $installed" }
+
   # Which runner the macOS jobs use: pyrlyn/ci's macos-runner action reads the MACOS_RUNNER
   # variable (unset = the hosted labels below, xcode-27-local = the dedicated Mac).
   macos-runner:

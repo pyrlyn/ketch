@@ -384,9 +384,12 @@ OPTIONS:
             }
 
             $BinaryPath = $null
+            # Windows PowerShell 5.1 Join-Path takes two paths. A third positional
+            # argument is -AdditionalChildPath, which only pwsh has, and it throws
+            # here before the search below can run.
             $candidates = @(
                 (Join-Path $TempDir $BinaryName),
-                (Join-Path $TempDir 'ketch' $BinaryName)
+                (Join-Path (Join-Path $TempDir 'ketch') $BinaryName)
             )
             foreach ($candidate in $candidates) {
                 if (Test-Path -LiteralPath $candidate) {

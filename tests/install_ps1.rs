@@ -155,6 +155,21 @@ fn the_script_edits_path_unexpanded_through_the_registry_not_setx() {
     assert!(!src.contains("setx"), "{src}");
 }
 
+/// Windows PowerShell 5.1 `Join-Path` has no `-AdditionalChildPath`. A third
+/// positional path throws after extraction, before the archive is searched.
+#[test]
+fn join_path_is_nested_for_windows_powershell_5_1() {
+    let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1"));
+    assert!(
+        src.contains("Join-Path (Join-Path $TempDir 'ketch') $BinaryName"),
+        "the archive directory must be a nested Join-Path"
+    );
+    assert!(
+        !src.contains("Join-Path $TempDir 'ketch' $BinaryName"),
+        "a third positional Join-Path argument throws on Windows PowerShell 5.1"
+    );
+}
+
 /// Under `irm … | iex` an `exit` closes the user's PowerShell window, so the
 /// only one left is the one that runs when the script is a file.
 #[test]
@@ -497,6 +512,31 @@ fn main() {
             cmd.arg(arg);
         }
         cmd.assert()
+    }
+
+    /// `pwsh` accepts `Join-Path` with three paths. Windows PowerShell 5.1 throws,
+    /// so the same stub release has to run under `powershell.exe`.
+    #[test]
+    fn windows_powershell_5_1_installs_past_extraction() {
+        let release = StubRelease::new();
+        let work = TempDir::new().unwrap();
+        let root = work.child("root");
+        Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-File",
+                concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1"),
+                "--no-modify-path",
+                "--root",
+            ])
+            .arg(root.path())
+            .current_dir(work.path())
+            .env("KETCH_INSTALL_RELEASE_DIR", release.dir.path())
+            .env("USERPROFILE", work.path())
+            .assert()
+            .success();
+        root.child("bin/ketch.exe")
+            .assert(predicate::path::is_file());
     }
 
     #[test]
