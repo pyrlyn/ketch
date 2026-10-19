@@ -73,16 +73,28 @@ pub enum TaskKind {
     },
 }
 
+/// Client asset names and status text cross into Swift, C# and Vala. A bidi
+/// override in any of them rewrites the GUI the same way it would a terminal.
+fn clean(text: impl AsRef<str>) -> String {
+    ketch_core::changelog::sanitize(text.as_ref())
+}
+
 impl From<CoreTask> for TaskKind {
     fn from(task: CoreTask) -> Self {
         match task {
             CoreTask::Batch => TaskKind::Batch,
             CoreTask::Download { label, batch } => TaskKind::Download {
-                label,
+                label: clean(label),
                 batch_id: batch.map(|id| id.get()),
             },
-            CoreTask::Activity { message } => TaskKind::Activity { message },
-            CoreTask::Counter { verb, unit, total } => TaskKind::Counter { verb, unit, total },
+            CoreTask::Activity { message } => TaskKind::Activity {
+                message: clean(message),
+            },
+            CoreTask::Counter { verb, unit, total } => TaskKind::Counter {
+                verb: clean(verb),
+                unit: clean(unit),
+                total,
+            },
         }
     }
 }
@@ -130,21 +142,33 @@ impl From<report::Event> for Event {
         use report::Event as E;
         match event {
             E::Step { package, stage } => Event::Step {
-                package,
+                package: clean(package),
                 stage: stage.into(),
             },
-            E::Status { verb, detail } => Event::Status { verb, detail },
-            E::Success { verb, detail } => Event::Success { verb, detail },
-            E::Warn { detail } => Event::Warn { detail },
-            E::Note { detail } => Event::Note { detail },
-            E::Debug { detail } => Event::Debug { detail },
+            E::Status { verb, detail } => Event::Status {
+                verb: clean(verb),
+                detail: clean(detail),
+            },
+            E::Success { verb, detail } => Event::Success {
+                verb: clean(verb),
+                detail: clean(detail),
+            },
+            E::Warn { detail } => Event::Warn {
+                detail: clean(detail),
+            },
+            E::Note { detail } => Event::Note {
+                detail: clean(detail),
+            },
+            E::Debug { detail } => Event::Debug {
+                detail: clean(detail),
+            },
             E::Began { id, task } => Event::Began {
                 id: id.get(),
                 task: task.into(),
             },
             E::Sized { id, name, total } => Event::Sized {
                 id: id.get(),
-                name,
+                name: clean(name),
                 total,
             },
             E::Progress { id, done, total } => Event::Progress {
@@ -154,7 +178,7 @@ impl From<report::Event> for Event {
             },
             E::Ended { id, message } => Event::Ended {
                 id: id.get(),
-                message,
+                message: message.map(clean),
             },
             E::Abandoned { id } => Event::Abandoned { id: id.get() },
         }
@@ -298,6 +322,49 @@ mod tests {
                 },
                 Event::Ended { id, message: None },
             ]
+        );
+    }
+
+    #[test]
+    fn client_text_in_an_event_loses_bidi_overrides() {
+        let id = report::Report::silent().activity("x").id();
+        assert_eq!(
+            Event::from(report::Event::Status {
+                verb: "get\u{202e}".into(),
+                detail: "file\u{202e}name".into(),
+            }),
+            Event::Status {
+                verb: "get".into(),
+                detail: "filename".into(),
+            }
+        );
+        assert_eq!(
+            Event::from(report::Event::Sized {
+                id,
+                name: "rg\u{202e}.tar.gz".into(),
+                total: None,
+            }),
+            Event::Sized {
+                id: id.get(),
+                name: "rg.tar.gz".into(),
+                total: None,
+            }
+        );
+        assert_eq!(
+            Event::from(report::Event::Began {
+                id,
+                task: CoreTask::Download {
+                    label: "pkg\u{202e}".into(),
+                    batch: None,
+                },
+            }),
+            Event::Began {
+                id: id.get(),
+                task: TaskKind::Download {
+                    label: "pkg".into(),
+                    batch_id: None,
+                },
+            }
         );
     }
 

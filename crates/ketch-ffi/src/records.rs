@@ -242,7 +242,9 @@ impl Changelog {
     pub(crate) fn new(name: &str, version: &str, entry: Entry) -> Self {
         Changelog {
             name: name.to_string(),
-            version: version.to_string(),
+            // A tag is client text. The body was already sanitized; the version
+            // was not, so a bidi override in it reached the GUI raw.
+            version: changelog::sanitize(version),
             source: match entry.origin {
                 Origin::File(path) => ChangelogSource::File {
                     path: path.display().to_string(),
@@ -686,6 +688,19 @@ mod tests {
                 detail: "1 broken".into(),
                 fix: Some("ketch link x".into()),
             }
+        );
+    }
+
+    #[test]
+    fn a_changelog_version_drops_a_bidi_override() {
+        let entry = Entry {
+            origin: Origin::Release,
+            heading: None,
+            body: String::new(),
+        };
+        assert_eq!(
+            Changelog::new("rg", "1.2\u{202e}.0", entry).version,
+            "1.2.0"
         );
     }
 
