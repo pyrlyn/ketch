@@ -41,3 +41,19 @@ need 'github.event.pull_request.draft != true' 'the draft skip'
 need "startsWith(github.event.comment.body, '/review')" 'the /review command gate'
 need 'OWNER", "MEMBER", "COLLABORATOR' 'the /review author gate'
 need 'gh workflow run ci.yml --ref' 'the /review dispatch'
+# A comment run must not join the group a push to main uses, and every job
+# but review must refuse issue_comment (`draft != true` is true when the
+# event has no pull request). commits is already pull_request-only.
+need "format('review-{0}', github.event.issue.number)" 'a comment concurrency group of its own'
+
+ruby -ryaml -e '
+  wf = YAML.load_file(ARGV[0])
+  jobs = wf["jobs"] or abort "ci-triggers: no jobs"
+  jobs.each do |name, job|
+    next if name == "review"
+    iff = job["if"].to_s
+    next if iff.include?("issue_comment")
+    next if iff.include?("event_name == '\''pull_request'\''") || iff.include?("event_name == \"pull_request\"")
+    abort "ci-triggers: #{name} can run on issue_comment"
+  end
+' "$wf"
