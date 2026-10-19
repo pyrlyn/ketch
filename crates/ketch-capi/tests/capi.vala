@@ -95,7 +95,61 @@ int main () {
     envelope (core.uninstall (ghost, null, null, null, (path) => true, null));
     expect (!FileUtils.test (leftover, FileTest.EXISTS), "a confirmation removes the leftover");
 
-    print ("capi: installed, doctor, cancelled install, a reported install and a leftover all answered\n");
+    // Two binaries that share the package name, and neither is that name:
+    // the install has to ask. The stop delegate is passed too, so the Vala
+    // binding is compiled against the int32_t callback (B126).
+    var family = Path.build_filename (dir, "family");
+    DirUtils.create_with_parents (family, 0755);
+    var cli = Path.build_filename (family, "rtok-cli");
+    var hook = Path.build_filename (family, "rtok-hook");
+    try {
+        FileUtils.set_contents (cli, "#!/bin/sh\necho cli\n");
+        FileUtils.set_contents (hook, "#!/bin/sh\necho hook\n");
+    } catch (Error e) {
+        error ("no family payload: %s", e.message);
+    }
+    FileUtils.chmod (cli, 0755);
+    FileUtils.chmod (hook, 0755);
+    var archive = Path.build_filename (dir, "rtok");
+    string tar_err;
+    int waited;
+    try {
+        Process.spawn_command_line_sync (
+            "tar -czf %s -C %s rtok-cli rtok-hook".printf (Shell.quote (archive), Shell.quote (family)),
+            null, out tar_err, out waited);
+    } catch (Error e) {
+        error ("could not run tar: %s", e.message);
+    }
+    expect (Process.exit_status (waited) == 0, "tar packed the two binaries: " + tar_err);
+    string[] rtok = { "local:" + archive };
+    string offered = "";
+    var chosen = ok (core.install (rtok, null, null, (package, candidates) => {
+        expect (package == "rtok", "the choice is for rtok, not " + package);
+        offered = candidates;
+        var parser = new Json.Parser ();
+        try {
+            parser.load_from_data (candidates);
+        } catch (Error e) {
+            error ("candidates are not JSON (%s): %s", e.message, candidates);
+        }
+        var list = parser.get_root ().get_array ();
+        for (int i = 0; i < (int) list.get_length (); i++) {
+            if (list.get_string_element (i) == "rtok-cli") {
+                return (int64) i;
+            }
+        }
+        error ("rtok-cli was not offered: %s", candidates);
+    }, (_holders) => {
+        return false;
+    }, null)).get_array ();
+    expect (chosen.get_length () == 1, "the chosen binary was installed");
+    expect (offered.contains ("rtok-cli") && offered.contains ("rtok-hook"), offered);
+    expect (FileUtils.test (Path.build_filename (dir, "root", "bin", "rtok-cli"), FileTest.EXISTS),
+            "the answer's binary is linked");
+    expect (!FileUtils.test (Path.build_filename (dir, "root", "bin", "rtok-hook"), FileTest.EXISTS),
+            "the other family member is not linked");
+
+    print ("capi: installed, doctor, cancelled install, a reported install, a leftover and a binary choice all answered\n");
     return 0;
 }
 
