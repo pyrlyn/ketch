@@ -72,6 +72,16 @@ need "$r" 'name: Smoke test' 'the smoke test'
 need "$r" 'sha256sum $(ls ketch-\*.tar.gz | sort) > SHA256SUMS' 'the aggregate SHA256SUMS'
 need "$r" 'uses: ./.github/workflows/tap.yml' 'the tap publish job'
 need "$r" 'pyrlyn/ci/.github/actions/notify-release-failure@' 'the release-failure job'
+# dist-generate.sh appends this job at one commit. A workflow that still says
+# @main fails the package job's "release.yml is what dist generates" check.
+pin=$(sed -n 's/.*notify-release-failure@\([0-9a-f]\{40\}\).*/\1/p' "$ROOT/scripts/dist-generate.sh")
+[ -n "$pin" ] || { echo "release-workflows: dist-generate.sh has no notify-failure pin" >&2; exit 1; }
+need "$r" "notify-release-failure@${pin}" 'the notify-failure pin from dist-generate.sh'
+# build-setup.yml is spliced over the generated install step. The two files
+# have to name the same mise-action commit or the next regenerate rewrites it.
+mise=$(sed -n 's/.*jdx\/mise-action@\([0-9a-f]\{40\}\).*/\1/p' "$ROOT/.github/build-setup.yml")
+[ -n "$mise" ] || { echo "release-workflows: build-setup.yml has no mise-action pin" >&2; exit 1; }
+need "$r" "jdx/mise-action@${mise}" 'the mise-action pin from build-setup.yml'
 need "$r" 'gh release upload "${{ needs.plan.outputs.tag }}" artifacts/\*' 'the upload to bump'"'"'s draft (create-release = false)'
 if grep -q 'gh release create' "$r"; then
     echo "release-workflows: release.yml creates a release (and a tag); bump.yml does that" >&2
