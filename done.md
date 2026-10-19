@@ -1,3 +1,7 @@
+### D11. Windows: WinUI 3 app shell on a fake core
+
+`desktop/windows/Ketch.App` is a WinUI 3 app on `FakeKetchCore`: a `NavigationView` (Installed, Discover, Updates, Activity, Doctor, Settings), a `TitleBar` over `MicaBackdrop`, `ContentDialog` for uninstall, upgrade-all and binary choice, and `InfoBar` for busy and errors. Settings picks light, dark or system; high contrast follows the token file's `HighContrast` dictionary. `Ketch.AppCore` and `Ketch.AppCore.Tests` have no UI types. The `ketch-win-app` job on `windows-latest` runs `dotnet test` and `dotnet build -c Release -p:Platform=x64`. `toolchain.md` lists `Microsoft.WindowsAppSDK` 2.5.1, and `desktop/contract/README.md` names the Windows fake.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.

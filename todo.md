@@ -11,7 +11,6 @@
 - F13. macOS app release pipeline
 - F14. Design system for the macOS app: `DESIGN.md` and tokens
 - F18. Figma design for macOS, Windows and Linux
-- D11. Windows: WinUI 3 app shell on a fake core
 - D12. Windows: the app on the real core
 - D13. Windows: tray icon, notifications, start at login, links
 - D14. Windows: release pipeline
