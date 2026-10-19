@@ -124,7 +124,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B102 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | R18 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
 | R19.1 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
-| R19.2 | in progress | P2 | 2 | 90% | Claude Code / opus-5.5 |
+| R19.2 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
 | R19.3 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | R19.4 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | B113 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
@@ -572,7 +572,7 @@ diesel, diesel_migrations and libsqlite3-sys behind `stats`; `stats::record` doe
 
 ### R19.2. Registry push as an optional core feature
 
-octocrab and push's use of tokio behind `push`; the desktop apps no longer link it (#320, on R19.1).
+Done (#320, on R19.1). octocrab and push's use of tokio sit behind the `push` feature. The CLI keeps it on by default; `ketch-ffi` does not name it, so the desktop apps do not link the registry client. `tests/workspace.rs` fails if `push` shows up in the FFI feature list.
 
 ### R19.3. Publisher signatures as an optional core feature
 
