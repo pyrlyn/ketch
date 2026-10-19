@@ -342,9 +342,10 @@ jobs:
       # libadwaita's types from. git fetches the pinned subproject.
       - name: Vala and GTK toolchain
         run: |
-          apt-get install -y --no-install-recommends valac meson ninja-build \
-            pkg-config libjson-glib-dev libgtk-4-dev libadwaita-1-dev \
-            python3-gi gir1.2-girepository-3.0 gir1.2-gtk-4.0 gir1.2-adw-1
+          apt-get install -y --no-install-recommends gcc libc6-dev valac \
+            meson ninja-build pkg-config libjson-glib-dev libgtk-4-dev \
+            libadwaita-1-dev python3-gi gir1.2-girepository-3.0 \
+            gir1.2-gtk-4.0 gir1.2-adw-1
 
       - name: Build
         run: |
