@@ -129,7 +129,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | R19.4 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | B113 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B118 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
-| B123 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
+| B123 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
 
 ### Ketch audit
 
@@ -556,9 +556,7 @@ Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in
 
 ### B123. Relink and rollback restore a stale `.old`
 
-Row B123 in the 2026-10-12 findings. Done: the store is restored only when this call made the swap.
-
-Plan: have `move_into_store` report the swap; `restore_retired_store` uses it. Check: a test with a stale `.old` and a failing link that keeps the live prefix.
+Row B123 in the 2026-10-12 findings. Done: the store is restored only when this call made the swap. `move_into_store` reports whether it retired a tree, and `restore_retired_store` runs only then. A stale `.old` left by an earlier interrupted swap stays aside when relink fails: `a_failed_relink_keeps_the_live_prefix_over_a_stale_old_copy` on macOS and on Linux.
 
 ### R19. Heavy subsystems out of the always-built core
 
