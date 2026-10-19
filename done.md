@@ -1,3 +1,7 @@
+### F18. Figma design for macOS, Windows and Linux
+
+The desktop design lives in one Figma file, `v7OJLmQEyCFbJ63uSYpJ9g`: shared foundations and screen specs, macOS frames synced with the F17 app plus the decision screens, Windows (Fluent) and Linux (libadwaita) pages in light and dark, and prototype links on each page. `desktop/design/figma.md` names the pages, frame ids, variable collections (`Color`, `Platform`) and the Swift code syntax each variable carries. `tokens.json` stays the source of truth.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.
