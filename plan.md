@@ -80,7 +80,7 @@ New bugs and vulnerabilities from a read-only whole-project review of `main` at 
 | B124 | P3 | bug | fixed | `platform/windows.rs:80-104` (`busy_aside`, `clear_for_replace`) | `tool.exe.old.<pid>-<ms>` files left when a running exe is renamed aside are never swept (only ketch's own asides are), so they pile up with every upgrade of a running tool. Sweep `*.old.*` siblings of recorded links at the start of commit, relink and uninstall. |
 | B125 | P3 | vuln | confirmed | `crates/ketch-ffi/src/callbacks.rs:128-162`; `crates/ketch-ffi/src/records.rs:238-241` | Event `detail`/`verb`/`name`/`label` and `Changelog.version` carry client asset names and tags to Swift, C# and Vala unsanitised, though the `records.rs` header says they pass through `changelog::sanitize`; GUIs get bidi overrides raw. Sanitise string fields in `From<report::Event>` and `Changelog::new`. |
 | B126 | P3 | bug | suspected | `crates/ketch-capi/vapi/ketch.vapi` (`StopFunc`); `crates/ketch-capi/include/ketch.h:37` | `KetchStopFn` returns C `bool`, the Vala delegate returns `gboolean` (int): an incompatible function-pointer type (error by default on GCC ≥ 14) and a return-ABI mismatch. `tests/capi.vala` never passes a `ChooseFunc` or `StopFunc`. Return `int32_t` and cover both callbacks in the Vala test. |
-| B127 | P3 | bug | confirmed | `crates/ketch-capi/src/lib.rs:61-65` (`ErrorBody`) | `ErrorBody` flattens `KetchError`, whose `Network`/`Verification`/`Other` variants already have `message`, and adds its own: the JSON envelope has a duplicate `"message"` key that strict parsers reject. Skip or rename the outer field. |
+| B127 | P3 | bug | fixed | `crates/ketch-capi/src/lib.rs:61-65` (`ErrorBody`) | `ErrorBody` flattens `KetchError`, whose `Network`/`Verification`/`Other` variants already have `message`, and adds its own: the JSON envelope has a duplicate `"message"` key that strict parsers reject. Skip or rename the outer field. |
 | B128 | P3 | bug | confirmed | `desktop/macos/Ketch/Core/ContractScenario.swift:132`; `KetchCoreProtocol.swift:99` | `Busy` with an unknown holder becomes `pid 0`, and the user reads "ketch is running in another process (pid 0)". Make `busy(pid:)` optional, as on Windows. |
 | B129 | P3 | bug | confirmed | `desktop/macos/Ketch/Store/KetchStore.swift:135-145, 312-321` | The background update loop and window-key refresh report errors through `report`, which sets `errorMessage`; offline with the real core, a modal alert pops on every interval and focus change. Log background failures without alerting. |
 | B130 | P3 | bug | fixed | `desktop/macos/Ketch/Views/DiscoverView.swift:44-47`, `PackageDetailView.swift:59-62`; `desktop/windows/Ketch.App/Pages/DiscoverPage.xaml.cs:36-42` | Core calls ignore task cancellation, so an older, slower search or changelog reply can land after a newer one (Windows also searches on every keystroke). Tag requests and drop out-of-date replies; debounce search. |
@@ -130,6 +130,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B113 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B118 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B123 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
+| B127 | done | P3 | 2 | 100% | Cursor / grok 4.7 |
 
 ### Ketch audit
 
@@ -559,6 +560,10 @@ Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in
 Row B123 in the 2026-10-12 findings. Done: the store is restored only when this call made the swap.
 
 Plan: have `move_into_store` report the swap; `restore_retired_store` uses it. Check: a test with a stale `.old` and a failing link that keeps the live prefix.
+
+### B127. The C ABI error envelope repeats `message`
+
+Row B127 in the 2026-10-12 findings. Done: `ErrorBody` keeps the variant's own `message` and adds the sentence only for `Busy`, `Cancelled` and `NotFound`, which have no such field. A network error is one `"message"` key.
 
 ### R19. Heavy subsystems out of the always-built core
 
