@@ -377,8 +377,10 @@ same version, and runs no hooks.
 someone else's file, and installing what it describes must never mean running
 their shell — so a manifest from those tiers that carries `hooks` is refused
 at install, before anything is placed, with a message saying which file to
-copy where. Copying it to your manifest directory is the opt-in: it becomes
-yours, and it wins over the registry's copy from then on.
+copy where. `ketch registry validate` rejects the package too, so a fixture
+install cannot copy it into a user manifest and run the commands. Copying it
+to your manifest directory is the opt-in: it becomes yours, and it wins over
+the registry's copy from then on.
 
 ## What ketch checks
 

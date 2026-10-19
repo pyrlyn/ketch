@@ -1,3 +1,9 @@
+### B89. Registry validation does not run package hooks
+
+`ketch registry validate --fixture` used to copy a registry manifest into the probe root's user manifest directory, which is the one origin allowed to run `[hooks]`. `check_tree` now rejects a registry package that declares hooks, and the probe install clears `hooks` before it writes the copy, so a command in a registry pull request does not run on the validating machine.
+
+Tests: `check_tree_refuses_a_registry_package_that_declares_hooks`, `registry_validate_does_not_run_hooks_from_a_registry_package`.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.

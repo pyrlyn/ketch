@@ -529,6 +529,21 @@ pub(crate) fn validate_registry_entry(
                 .to_string(),
         ));
     }
+    // Hooks are shell the manifest's author wrote. A registry file is not the
+    // user's, and `registry validate --fixture` copies it into a user manifest
+    // directory, which is the one origin allowed to run them.
+    if manifest
+        .hooks
+        .entries()
+        .iter()
+        .any(|(_, cmd)| cmd.is_some())
+    {
+        return Err(Error::parse(
+            what,
+            "a registry package cannot declare hooks; they run only from a manifest in your own manifest directory"
+                .to_string(),
+        ));
+    }
     Ok(())
 }
 
@@ -795,6 +810,24 @@ mod tests {
         assert_eq!(report.errors.len(), 1);
         assert!(
             report.errors[0].message.contains("local path"),
+            "{}",
+            report.errors[0].message
+        );
+    }
+
+    #[test]
+    fn check_tree_refuses_a_registry_package_that_declares_hooks() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            tmp.path(),
+            "hooked",
+            "source = \"github:a/b\"\n[hooks]\nafter_install = \"echo pwned\"\n",
+        );
+        let report = check_tree(tmp.path());
+        assert_eq!(report.packages, 0);
+        assert_eq!(report.errors.len(), 1);
+        assert!(
+            report.errors[0].message.contains("cannot declare hooks"),
             "{}",
             report.errors[0].message
         );
