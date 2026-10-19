@@ -1,0 +1,73 @@
+# The Windows app's release. Dispatch-only, from main:
+# Actions -> release-windows-desktop -> Run workflow, or
+# `gh workflow run release-windows-desktop.yml --ref main -f version=X.Y.Z`.
+#
+# Publishes Ketch-X.Y.Z-win-x64.zip (unpackaged, self-contained) and
+# Ketch-X.Y.Z-win-x64.msix under the tag desktop-windows-vX.Y.Z, plus the
+# winget manifests for that tag. Both are x64. Updates are winget; submitting
+# the manifests to microsoft/winget-pkgs is a maintainer step.
+#
+# /releases/latest belongs to the CLI. The release is created with
+# --latest=false and the run fails, restoring the previous tag, if that
+# moved. Signing uses WINDOWS_CERTIFICATE (base64 pfx) and
+# WINDOWS_CERTIFICATE_PWD, a Windows certificate, not the Apple Developer ID
+# used as MACOS_CERTIFICATE. A missing secret fails before dotnet publish.
+# AGENTS.md, "Windows app releases".
+name: release-windows-desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: App version to release, X.Y.Z (tagged desktop-windows-vX.Y.Z)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        with:
+          install_args: dotnet python
+
+      # Before dotnet publish. The packager reads the secrets from the
+      # environment and never prints them. VERSION is bound the same way so
+      # the dispatch input is not interpolated into a run script.
+      - name: Refuse an unsigned release
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PWD: ${{ secrets.WINDOWS_CERTIFICATE_PWD }}
+        run: python scripts/windows_desktop_package.py require-signing
+
+      - name: Record the current latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/windows_desktop_package.py record-latest --out target/windows-desktop/latest-before.txt
+
+      - name: Package the zip and the MSIX
+        env:
+          VERSION: ${{ inputs.version }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PWD: ${{ secrets.WINDOWS_CERTIFICATE_PWD }}
+        run: python scripts/windows_desktop_package.py package --publish --require-msix --sign
+
+      - name: Publish the release
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/windows_desktop_package.py publish --out-dir target/windows-desktop --latest-file target/windows-desktop/latest-before.txt

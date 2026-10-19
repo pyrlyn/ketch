@@ -309,13 +309,21 @@ jobs:
 
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          install_args: dotnet
+          install_args: dotnet python
 
       - name: App core tests
         run: dotnet test --project Ketch.AppCore.Tests
 
       - name: Build the WinUI app
         run: dotnet build Ketch.App/Ketch.App.csproj -c Release -p:Platform=x64
+
+      # The release workflow is dispatch-only, so the unsigned zip and MSIX
+      # are built here. 0.0.1 is a fixed CI version, not a release tag.
+      - name: Package the unpackaged zip and the MSIX
+        working-directory: ${{ github.workspace }}
+        env:
+          VERSION: "0.0.1"
+        run: python scripts/windows_desktop_package.py package --publish --require-msix
 
   # The design tokens: every generated copy (Swift, XAML, GTK CSS, DESIGN.md,
   # preview.html) is what desktop/design/build.mjs writes from tokens.json, DESIGN.md passes
@@ -403,6 +411,11 @@ jobs:
           sh tests/ci-yml-triggers.sh
           sh tests/desktop-release.sh
           sh tests/docs-i18n.sh
+          if command -v python3 >/dev/null 2>&1; then
+            python3 tests/desktop_windows_release.py
+          else
+            python tests/desktop_windows_release.py
+          fi
 
       # src/lib.rs and the core's fuzz entry points exist only under
       # cfg(fuzzing), which no other build sets; checked on stable here so they

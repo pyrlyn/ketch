@@ -266,6 +266,8 @@ differ by orders of magnitude — the cargo home is the small one. Set
 | `desktop/macos/DESIGN.md` | the macOS app's design system in the DESIGN.md format; its front matter is generated |
 | `desktop/design/` | `tokens.json`, the one source of design tokens, and `build.mjs`, which generates `generated/Tokens.swift` (macOS), `generated/KetchTokens.xaml` (Windows), `generated/ketch-tokens.css` (Linux), the macOS DESIGN.md front matter and `preview.html`'s CSS (`just design-tokens`) |
 | `.github/workflows/release-apple-desktop.yml` | the macOS app's release: a thin caller of pyrlyn/ci `release-apple-desktop.yml` (signed, notarised `.dmg` under a `desktop-v*` tag, and its Sparkle appcast) |
+| `.github/workflows/release-windows-desktop.yml` | the Windows app's release: unpackaged zip and signed MSIX under a `desktop-windows-v*` tag, with winget manifests, never `/releases/latest` |
+| `scripts/windows_desktop_package.py` | builds that zip and MSIX; the release workflow and `ketch-win-app` both call it |
 | `desktop/cliff.toml` | the app's release notes: commits under `desktop/` and `crates/ketch-ffi/` since the last `desktop-v*` tag |
 
 The rule that keeps `cmd/` thin: anything touching the install tree belongs in
@@ -703,6 +705,45 @@ stop before building:
 The ketch-ffi XCFramework (R9) does not exist yet: the caller's
 `pre-build-command` is empty (marked `TODO(R9)`), so a release made before R9
 ships the app on `FakeKetchCore`.
+
+### Windows app releases
+
+The app in `desktop/windows/` is released from this repository by
+`.github/workflows/release-windows-desktop.yml`. Dispatch it from `main`
+(Actions → release-windows-desktop, or
+`gh workflow run release-windows-desktop.yml --ref main -f version=X.Y.Z`).
+The version is the workflow input, plain `X.Y.Z`, and the tag is
+`desktop-windows-vX.Y.Z`, never `vX.Y.Z`. The same latest-release rule as the
+macOS app applies: the release is created with `--latest=false` and
+`--prerelease`, then the workflow reads `/releases/latest` and fails, putting
+the previous release back, if that tag moved. CLI tooling ignores the tag for
+the same reason it ignores `desktop-v*`: `cliff.toml`'s `tag_pattern` is anchored
+at `^v[0-9]`, and `desktop-windows-v` does not match it.
+
+The run publishes two x64 self-contained artifacts. The creator chose to ship
+both forms (D14):
+
+- `Ketch-X.Y.Z-win-x64.zip` is the unpackaged `dotnet publish` output. This is
+  the form `ketch path install` can see, because an MSIX virtualizes HKCU and
+  AppData.
+- `Ketch-X.Y.Z-win-x64.msix` is those same files packed with `makeappx`.
+
+Updates go through winget, not Velopack. The run attaches the three winget
+manifests (version, en-US locale, installer) with the artifact URLs and
+sha256. Submitting them to `microsoft/winget-pkgs` is a maintainer step, the
+way the Homebrew cask is pushed by the tap workflow. Pull-request CI
+(`ketch-win-app`) builds the unsigned zip and MSIX, because the release
+workflow itself never runs on a pull request.
+
+Signing uses a Windows code-signing certificate in `WINDOWS_CERTIFICATE`
+(base64 `.pfx`) and `WINDOWS_CERTIFICATE_PWD`. They are a pair in the same
+way `MACOS_CERTIFICATE` and `MACOS_CERTIFICATE_PWD` are, and they are not that
+Apple Developer ID certificate. The workflow exits before `dotnet publish`
+when either secret is empty, rather than publishing unsigned. The password
+stays in the environment; the packager never puts it on a command line.
+
+R10's Windows App SDK licence question is still open for the creator. The
+pipeline does not decide it.
 
 ## Documentation translations
 

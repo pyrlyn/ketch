@@ -113,6 +113,7 @@ lint-shell:
     sh tests/ci-yml-triggers.sh
     sh tests/desktop-release.sh
     sh tests/docs-i18n.sh
+    if command -v python3 >/dev/null 2>&1; then python3 tests/desktop_windows_release.py; else python tests/desktop_windows_release.py; fi
 
 package:
     #!/usr/bin/env bash

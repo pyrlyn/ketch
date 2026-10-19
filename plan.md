@@ -111,7 +111,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | D11 | in progress | P3 | 5 | 10% | Claude Code / sonnet-5.5 |
 | D12 | todo | P3 | 4 | 0% | |
 | D13 | todo | P3 | 3 | 0% | |
-| D14 | todo | P3 | 4 | 0% | |
+| D14 | done | P3 | 4 | 100% | Cursor / grok 4.7 |
 | D16 | todo | P3 | 5 | 0% | |
 | D17 | todo | P3 | 4 | 0% | |
 | D18 | todo | P3 | 3 | 0% | |
@@ -444,6 +444,8 @@ How the Windows app reaches users and updates itself, separate from the CLI's re
 Done when CI builds, on `desktop-windows-v*` tags and without touching `/releases/latest`, both an MSIX and an unpackaged self-contained zip, signed (Artifact Signing or the creator's choice), updates arrive through the chosen route (Velopack or winget), and the creator's answers to R10's decisions are recorded. The creator chose to ship both forms. The MSIX is signed with a certificate held in repository secrets named the way the macOS ones are (`MACOS_CERTIFICATE`, `MACOS_CERTIFICATE_PWD`), and the release fails when they are missing rather than shipping unsigned.
 
 Settings persistence differs between the two: an MSIX has `ApplicationData`, an unpackaged app has none (D12 stores settings in a way that works in both).
+
+Status: done. `.github/workflows/release-windows-desktop.yml` is dispatch-only from `main`. It publishes `Ketch-<version>-win-x64.zip` and `Ketch-<version>-win-x64.msix` under `desktop-windows-v<version>` with `--latest=false`, and fails if `/releases/latest` moved. Signing uses `WINDOWS_CERTIFICATE` and `WINDOWS_CERTIFICATE_PWD` (a Windows code-signing certificate, not the Apple Developer ID `.p12`); a missing secret fails the run before `dotnet publish`. Updates go through winget: the three manifests are release assets, and submitting them to `microsoft/winget-pkgs` stays a maintainer step. `ketch-win-app` builds the unsigned zip and MSIX on every pull request. R10's distribution answer recorded here: both forms, and winget rather than Velopack, because an unpackaged install is what `ketch path install` needs. The Windows App SDK licence question is still the creator's and is not decided here.
 
 ### D16. Linux: Vala + GTK 4 app shell on a fake core
 
