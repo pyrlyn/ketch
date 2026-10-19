@@ -127,6 +127,10 @@ pub struct Config {
 /// above any command-line tool, well below a disk.
 pub const DEFAULT_MAX_DOWNLOAD_MIB: u64 = 4096;
 
+/// Most packages worked on at once, from any of `jobs`, `KETCH_JOBS` or
+/// `--jobs`: past it, parallel requests trip GitHub's secondary rate limits.
+pub const MAX_JOBS: usize = 16;
+
 impl Config {
     /// Builds the effective configuration from command-line, environment, file, and default settings.
     ///
@@ -319,7 +323,7 @@ impl Config {
             // Downloads dominate an install and spend their time waiting, so
             // the useful number is well above the core count. Capped anyway:
             // a hundred parallel requests is how a source starts refusing them.
-            jobs: jobs.filter(|n| *n > 0).unwrap_or(4).min(16),
+            jobs: jobs.filter(|n| *n > 0).unwrap_or(4).min(MAX_JOBS),
             max_download,
             target: TargetSpec::host(),
             root,

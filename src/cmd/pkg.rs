@@ -534,9 +534,11 @@ fn select(state: &State, names: &[String]) -> Result<Vec<String>> {
 }
 
 /// How many packages to work on at once: the flag, else the configured
-/// default, never zero and never more than there are packages.
+/// default, never zero and never past the cap the config value already has.
 pub(crate) fn jobs(cfg: &Config, flag: Option<usize>) -> usize {
-    flag.filter(|n| *n > 0).unwrap_or(cfg.jobs).max(1)
+    flag.filter(|n| *n > 0)
+        .unwrap_or(cfg.jobs)
+        .clamp(1, crate::config::MAX_JOBS)
 }
 
 pub(crate) fn report(out: &Installed) {
@@ -581,5 +583,28 @@ pub(crate) fn path_hint(cfg: &Config, state: &State) {
         // Already in the startup file: this shell just predates the edit, and
         // telling them to install again would not change that.
         ui::out("It is in your shell config already — open a new shell.");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_jobs_flag_is_held_to_the_same_cap_as_the_config() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = Config::load(
+            Some(tmp.path().to_path_buf()),
+            &crate::report::Report::silent(),
+        )
+        .unwrap();
+        assert_eq!(jobs(&cfg, Some(500)), crate::config::MAX_JOBS);
+        assert_eq!(jobs(&cfg, Some(3)), 3);
+        assert_eq!(
+            jobs(&cfg, Some(0)),
+            cfg.jobs,
+            "0 falls back to the configured value"
+        );
+        assert_eq!(jobs(&cfg, None), cfg.jobs);
     }
 }
