@@ -33,6 +33,9 @@ final class FakeKetchCore: KetchCoreProtocol {
         /// Extra latency for one call, keyed as `calls` records it but with
         /// the arguments as passed, so a test can make an early reply late.
         var delays: [String: Duration] = [:]
+        /// Thrown by `installed` and `outdated` until cleared. A background
+        /// refresh has to be able to fail without an install in progress.
+        var readError: KetchError?
     }
 
     let root: URL
@@ -67,6 +70,11 @@ final class FakeKetchCore: KetchCoreProtocol {
         state.withLock { $0.delays[call] = delay }
     }
 
+    /// Makes `installed` and `outdated` throw `error` (`nil` lets them answer).
+    func failReads(_ error: KetchError?) {
+        state.withLock { $0.readError = error }
+    }
+
     /// Makes the fake answer as the core did in `scenario`: a read returns the
     /// scenario's records, and install, upgrade and uninstall replay its
     /// events, questions and outcome. Scenarios come from
@@ -98,8 +106,9 @@ final class FakeKetchCore: KetchCoreProtocol {
     // MARK: KetchCoreProtocol
 
     func installed() throws -> [InstalledPackage] {
-        state.withLock { state in
+        try state.withLock { state in
             state.calls.append("installed")
+            if let readError = state.readError { throw readError }
             return state.installed.sorted { $0.name < $1.name }
         }
     }
@@ -118,8 +127,9 @@ final class FakeKetchCore: KetchCoreProtocol {
     }
 
     func outdated() throws -> [Upgrade] {
-        state.withLock { state in
+        try state.withLock { state in
             state.calls.append("outdated")
+            if let readError = state.readError { throw readError }
             if let upgrades = state.upgrades { return upgrades }
             return state.installed.compactMap { package in
                 guard let latest = state.registry.first(where: { $0.name == package.name })?.latest,
