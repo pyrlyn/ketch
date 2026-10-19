@@ -87,7 +87,7 @@ New bugs and vulnerabilities from a read-only whole-project review of `main` at 
 | B131 | P3 | bug | confirmed | `desktop/windows/Ketch.AppCore/KetchStore.cs:325-328` (`Operate`) | When an operation is already running, `Operate` returns silently: a confirmed Uninstall or a clicked Install does nothing. Set `ErrorMessage` as macOS does. |
 | B132 | P3 | bug | fixed | `install.ps1` | `--version 0.10.0` is given a leading `v` before the download URL is built, the same as `install.sh`. A tag that already starts with `v` is left alone. |
 | B133 | P3 | vuln | confirmed | `install.sh:7-359` | The body is not wrapped in a function, so under `curl \| bash` a truncated download runs whatever complete lines arrived. Low impact today, but the guard is missing. Put the body in `main() { … }` and call `main "$@"` last. |
-| B134 | P3 | bug | suspected | `install.ps1:229, 263` | `[Net.ServicePointManager]::SecurityProtocol` is never set; on older Windows 10/Server, PowerShell 5.1 defaults to TLS 1.0/1.1, which GitHub rejects. OR in `Tls12` at the top. |
+| B134 | P3 | bug | fixed | `install.ps1` | The installer adds `Tls12` with `-bor` before any download, so older Windows PowerShell can reach GitHub and a host that already enabled TLS 1.3 keeps it. |
 | B135 | P3 | bug | confirmed | `.github/workflows/ci.yml:439-445` | `/review` dispatches with `--ref "$branch"` from the PR's `headRefName`; for a fork PR that ref is missing (the job fails) or names a base branch such as `main`, and CI runs on `main` while the bot says it ran on the PR head. Refuse when `headRepository` is not this repo, or check the dispatched ref's SHA equals the head SHA. |
 | B136 | P3 | bug | confirmed | `Justfile:147` (`lint-cask`) | `just check` writes `cask/Casks/ketch.rb` into the repo root and `cask/` is not ignored, so `scripts/release.sh --local` then stops at its clean-tree check (`release.sh:94`). Write it under `target/` or ignore `/cask/`. |
 | B137 | P3 | bug | confirmed | `tests/commit-msg-breaking.sh`; `Justfile` `lint-commits`; `ci.yml` | `done.md:375` says the test is wired into `just lint-commits`, but neither the Justfile nor CI calls it. Add it to `lint-commits` and CI's shell step. |
@@ -130,6 +130,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B113 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B118 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B123 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
+| B134 | done | P3 | 1 | 100% | Cursor / grok 4.7 |
 
 ### Ketch audit
 
@@ -553,6 +554,12 @@ Plan: one check shared by `safe_member_path`, `sanitize_component` and `usable_f
 Row B118 in the 2026-10-12 findings. Done: a package installed checksum-verified refuses an unverified upgrade unless `--yes` or an explicit flag.
 
 Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in `cli.rs`. Check: an end-to-end test of both paths.
+
+### B134. `install.ps1` leaves TLS 1.0 on older Windows
+
+Row B134 in the 2026-10-12 findings. Windows PowerShell 5.1 on older Windows 10 and Server defaults to TLS 1.0/1.1, and GitHub rejects that handshake. The installer adds `Tls12` with `-bor` to `[Net.ServicePointManager]::SecurityProtocol` before any request, so a host that already enabled TLS 1.3 keeps it.
+
+Status: done. See `done.md`.
 
 ### B123. Relink and rollback restore a stale `.old`
 

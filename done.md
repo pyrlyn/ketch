@@ -1,3 +1,9 @@
+### B134. `install.ps1` leaves TLS 1.0 on older Windows
+
+Windows PowerShell 5.1 on older Windows 10 and Server defaults `[Net.ServicePointManager]::SecurityProtocol` to TLS 1.0/1.1. GitHub refuses those, so `irm | iex` failed before the archive was fetched. The installer now adds `Tls12` with `-bor`, which turns TLS 1.2 on and leaves TLS 1.3 in place where the host already enabled it.
+
+Test: `the_script_enables_tls12_without_dropping_newer_protocols`.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.
