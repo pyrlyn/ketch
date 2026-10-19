@@ -267,10 +267,44 @@ impl Lockfile {
     /// The entry for an installed package, matched on source rather than name.
     ///
     /// The source is the stable identity: a package can be renamed upstream, or
-    /// installed under an alias, and still be the same thing to update.
-    fn find(&self, pkg: &InstalledPackage) -> Option<&LockedPackage> {
-        self.packages.iter().find(|l| l.source == pkg.source)
+    /// installed under an alias, and still be the same thing to update. Only
+    /// when one source is installed under several names (`--name`) does the
+    /// name decide which entry is whose.
+    fn find(&self, pkg: &InstalledPackage, state: &State) -> Option<&LockedPackage> {
+        self.packages
+            .iter()
+            .find(|l| l.source == pkg.source && l.name == pkg.name)
+            .or_else(|| {
+                self.packages
+                    .iter()
+                    .find(|l| l.source == pkg.source && installed_as(state, l).is_none())
+            })
     }
+}
+
+/// The installed package an entry describes: the one with its source and
+/// name, else one with its source that no other entry names.
+fn counterpart<'a>(
+    lock: &Lockfile,
+    entry: &LockedPackage,
+    state: &'a State,
+) -> Option<&'a InstalledPackage> {
+    installed_as(state, entry).or_else(|| {
+        state.iter().find(|p| {
+            p.source == entry.source
+                && !lock
+                    .packages
+                    .iter()
+                    .any(|l| l.source == p.source && l.name == p.name)
+        })
+    })
+}
+
+/// The package installed under exactly this entry's source and name.
+fn installed_as<'a>(state: &'a State, entry: &LockedPackage) -> Option<&'a InstalledPackage> {
+    state
+        .iter()
+        .find(|p| p.source == entry.source && p.name == entry.name)
 }
 
 /// What `sync` would do, and what `--check` reports.
@@ -301,14 +335,14 @@ impl Plan {
 pub fn plan(lock: &Lockfile, state: &State) -> Plan {
     let mut plan = Plan::default();
     for entry in &lock.packages {
-        match state.iter().find(|p| p.source == entry.source) {
+        match counterpart(lock, entry, state) {
             None => plan.missing.push(entry.clone()),
             Some(installed) if entry.matches_installed(installed) => plan.matched += 1,
             Some(installed) => plan.changed.push((entry.clone(), installed.tag.clone())),
         }
     }
     for installed in state.iter() {
-        if lock.find(installed).is_none() {
+        if lock.find(installed, state).is_none() {
             plan.extra.push(installed.name.clone());
         }
     }
@@ -525,6 +559,32 @@ bin = \"fd\"
         let plan = plan(&lock, &renamed);
         assert_eq!(plan.matched, 1);
         assert!(plan.extra.is_empty(), "{:?}", plan.extra);
+    }
+
+    #[test]
+    fn one_source_under_two_names_matches_each_entry_to_its_own_install() {
+        // `--name` lets one repository be installed twice, e.g. a pinned old
+        // release beside the current one. Matching on source alone paired
+        // both entries with the first install and reported drift forever.
+        let state = state_with(vec![
+            installed("fd", "sharkdp/fd", "v10.3.0"),
+            installed("fd-old", "sharkdp/fd", "v9.0.0"),
+        ]);
+        let lock = lock_of(&state);
+        let same = plan(&lock, &state);
+        assert_eq!(same.matched, 2, "changed: {:?}", same.changed);
+        assert!(same.changed.is_empty());
+        assert!(same.extra.is_empty(), "{:?}", same.extra);
+
+        let moved = state_with(vec![
+            installed("fd", "sharkdp/fd", "v10.3.0"),
+            installed("fd-old", "sharkdp/fd", "v9.1.0"),
+        ]);
+        let drift = plan(&lock, &moved);
+        assert_eq!(drift.matched, 1);
+        assert_eq!(drift.changed.len(), 1);
+        assert_eq!(drift.changed[0].0.name, "fd-old");
+        assert_eq!(drift.changed[0].1, "v9.1.0");
     }
 
     #[test]
