@@ -137,7 +137,6 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 Row B85 in the 2026-10-08 findings. `registry::update` downloads with `cx.cancel`. `ask_all` checks that token before each package, so a cancel stops the parallel lookup.
 
 Status: done. See `done.md`.
-| B126 | done | P3 | 2 | 100% | Cursor / grok 4.7 |
 
 ### Ketch audit
 
@@ -561,12 +560,6 @@ Plan: one check shared by `safe_member_path`, `sanitize_component` and `usable_f
 Row B118 in the 2026-10-12 findings. Done: a package installed checksum-verified refuses an unverified upgrade unless `--yes` or an explicit flag.
 
 Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in `cli.rs`. Check: an end-to-end test of both paths.
-
-### B126. C ABI yes/no callbacks return a full int
-
-Row B126 in the 2026-10-12 findings. `KetchStopFn` and `KetchConfirmFn` returned C `bool`, while a Vala `bool` is `gboolean` (an `int`). GCC 14 rejects that function-pointer mismatch, and the return ABI does not agree.
-
-Done: both callbacks return `int32_t`, and any non-zero answer is yes. The Vala test asks which of two binaries to link and passes a stop callback, so the binding is compiled against those types.
 
 ### B123. Relink and rollback restore a stale `.old`
 

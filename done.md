@@ -1,3 +1,9 @@
+### B126. C ABI yes/no callbacks return a full int
+
+Row B126 in the 2026-10-12 findings. `KetchStopFn` and `KetchConfirmFn` returned C `bool`, while a Vala `bool` is `gboolean` (an `int`). GCC 14 rejects that function-pointer mismatch, and the return ABI does not agree.
+
+Done: both callbacks return `int32_t`, and any non-zero answer is yes. The Vala test asks which of two binaries to link and passes a stop callback, so the binding is compiled against those types.
+
 ### B85. Registry update and listing ignore cancel
 
 `registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
