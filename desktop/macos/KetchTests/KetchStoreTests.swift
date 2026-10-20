@@ -310,6 +310,25 @@ import Testing
         #expect(plain == "1.2.0\n\n- see docs")
         #expect(text.runs.contains { $0.link == URL(string: "https://example.com") })
     }
+
+    @Test func changelogDropsLinksThatAreNotHttps() {
+        let markdown = [
+            "- [docs](https://example.com) [call](zoommtg://join)",
+            "[disk](file:///etc/passwd) [web](http://example.com)",
+        ].joined(separator: " ")
+        let text = KetchStore.render(markdown: markdown)
+
+        let plain = String(text.characters)
+        #expect(plain.contains("docs"))
+        #expect(plain.contains("call"))
+        #expect(plain.contains("disk"))
+        #expect(plain.contains("web"))
+        #expect(text.runs.contains { $0.link == URL(string: "https://example.com") })
+        #expect(!text.runs.contains { run in
+            guard let scheme = run.link?.scheme?.lowercased() else { return false }
+            return scheme != "https"
+        })
+    }
 }
 
 @MainActor

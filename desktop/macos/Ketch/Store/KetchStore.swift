@@ -207,6 +207,9 @@ final class KetchStore {
     /// escape sequences and bidi overrides; this only parses it. Headings are
     /// styled line by line because SwiftUI's `Text` drops the block structure
     /// a full Markdown parse produces.
+    ///
+    /// `Text` opens a link with the system handler, so a client changelog can
+    /// hand the user `zoommtg://` or `file://`. Only `https` stays a link.
     nonisolated static func render(markdown: String) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace, failurePolicy: .returnPartiallyParsedIfPossible)
@@ -218,10 +221,22 @@ final class KetchStore {
             let isHeading = level > 0 && body.first == " "
             let source = String(isHeading ? body.drop { $0 == " " } : line)
             var text = (try? AttributedString(markdown: source, options: options)) ?? AttributedString(source)
+            dropNonHttpsLinks(&text)
             if isHeading { text.font = level <= 2 ? .title3.bold() : .headline }
             result += text
         }
         return result
+    }
+
+    /// A changelog link that is not `https` is kept as text and is not tappable.
+    private nonisolated static func dropNonHttpsLinks(_ text: inout AttributedString) {
+        let unsafe = text.runs.compactMap { run -> Range<AttributedString.Index>? in
+            guard let link = run.link else { return nil }
+            return link.scheme?.lowercased() == "https" ? nil : run.range
+        }
+        for range in unsafe {
+            text[range].link = nil
+        }
     }
 
     // MARK: Operations
