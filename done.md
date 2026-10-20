@@ -1,3 +1,7 @@
+### B85. Registry update and listing ignore cancel
+
+`registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
+
 ### B81. Archive extraction keeps setuid bits
 
 Found by the 2026-10-08 review: extraction kept `mode & 0o7777`, so setuid, setgid and sticky bits from an archive survived. `payload_mode` now keeps `0o777`, and tar, zip and the directory-mode path all go through it.
