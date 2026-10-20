@@ -32,7 +32,7 @@ permissions:
   contents: read
 
 jobs:
-  # Tracks pyrlyn/ci main (#357). tests/desktop-release.sh also allows a commit SHA.
+  # pyrlyn/ci main, like the other shared workflows.
   release:
     permissions:
       contents: write # the desktop-v tag, its release, and the appcast release
