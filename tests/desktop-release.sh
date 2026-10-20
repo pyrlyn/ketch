@@ -38,9 +38,8 @@ triggers="$(ruby -ryaml -e 'w = YAML.load_file(ARGV[0]); puts (w["on"] || w[true
 [ "$triggers" = workflow_dispatch ] || fail "release-apple-desktop.yml runs on '$triggers', not only workflow_dispatch"
 need "$wf" 'version:' 'the version input'
 
-# No local release steps: one job, the infra reusable workflow, at @main or a
-# commit SHA, with the org secrets and the inputs that keep app releases apart
-# from the CLI.
+# No local release steps: one job, the infra reusable workflow, pinned by SHA,
+# with the org secrets and the inputs that keep app releases apart from the CLI.
 ruby -ryaml -e '
   w = YAML.load_file(ARGV[0])
   jobs = w["jobs"]
