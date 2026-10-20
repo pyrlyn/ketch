@@ -1,3 +1,7 @@
+### B85. Registry update and listing ignore cancel
+
+`registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
+
 ### B82. Duplicate checksum basenames overwrite each other
 
 An aggregate checksum list is keyed by file name. Two lines that name the same file with different hashes used to let the later one win. Conflicting names are dropped, so neither hash is trusted.
