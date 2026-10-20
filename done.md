@@ -1,3 +1,7 @@
+### B85. Registry update and listing ignore cancel
+
+`registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
+
 ### B134. `install.ps1` leaves TLS 1.0 on older Windows
 
 Windows PowerShell 5.1 on older Windows 10 and Server defaults `[Net.ServicePointManager]::SecurityProtocol` to TLS 1.0/1.1. GitHub refuses those, so `irm | iex` failed before the archive was fetched. The installer now adds `Tls12` with `-bor`, which turns TLS 1.2 on and leaves TLS 1.3 in place where the host already enabled it.
