@@ -10,6 +10,11 @@ on:
 permissions:
   contents: read
 
+# Each run applies the whole settings file, so a newer run supersedes an older one.
+concurrency:
+  group: repo-settings
+  cancel-in-progress: true
+
 jobs:
   repo-settings:
     uses: pyrlyn/ci/.github/workflows/repo-settings.yml@main
