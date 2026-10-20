@@ -1,3 +1,7 @@
+### B85. Registry update and listing ignore cancel
+
+`registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
+
 ### B100. Zip symlink targets are read without a bound
 
 A zip symlink's target is the member body. It was read with an unbounded `read_to_string`, so a small, highly compressed member could expand to gigabytes. The read now stops at 4 KiB plus one byte and refuses anything longer.
