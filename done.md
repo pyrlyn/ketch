@@ -1,3 +1,9 @@
+### R17. Windows PATH helpers live in one module
+
+Row R17 in the 2026-10-08 findings. The Windows PATH, PowerShell profile and cmd AutoRun string helpers were compiled on every OS and silenced with `allow(dead_code)`.
+
+Done: they sit in `windows_env`, compiled on Windows and in tests. A Unix build that is not a test does not include them.
+
 ### B85. Registry update and listing ignore cancel
 
 `registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
