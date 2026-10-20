@@ -1,3 +1,7 @@
+### B107. A failed self-docs link leaves `state.json` on the old version
+
+Row B107 in the 2026-10-12 findings. `expose_self_docs(...)?` ran after the new version was placed but before `state.save`, so a user-owned completion or man file at the destination left the new binary on disk and `state.json` naming the old one, and every later self upgrade repeated it. Done: self install and self upgrade save the new package before linking man pages and completions, and a failure there is a warning.
+
 ### B85. Registry update and listing ignore cancel
 
 `registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.

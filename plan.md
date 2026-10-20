@@ -137,9 +137,6 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 Row B85 in the 2026-10-08 findings. `registry::update` downloads with `cx.cancel`. `ask_all` checks that token before each package, so a cancel stops the parallel lookup.
 
 Status: done. See `done.md`.
-| B107 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
-
-B107 is done: self install and self upgrade save the new package before linking man pages and completions, and a failure there is a warning.
 
 ### Ketch audit
 
