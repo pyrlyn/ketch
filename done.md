@@ -1,3 +1,7 @@
+### B85. Registry update and listing ignore cancel
+
+`registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
+
 ### B110. Changelog links open any URL scheme
 
 Client release notes are parsed as inline Markdown into `Text`. Every `.link` run was clickable through the default `openURL` action, including `zoommtg:` and `file:`. `KetchStore.render` now drops a link unless its scheme is `https`. The words stay.
