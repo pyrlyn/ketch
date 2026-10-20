@@ -1,3 +1,7 @@
+### B123. Relink and rollback restore a stale `.old`
+
+Row B123 in the 2026-10-12 findings. Done: the store is restored only when this call made the swap. `move_into_store` reports whether it retired a tree, and `restore_retired_store` runs only then. A stale `.old` left by an earlier interrupted swap stays aside when relink fails: `a_failed_relink_keeps_the_live_prefix_over_a_stale_old_copy` on macOS and on Linux.
+
 ### B85. Registry update and listing ignore cancel
 
 `registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.

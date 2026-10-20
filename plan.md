@@ -76,7 +76,7 @@ New bugs and vulnerabilities from a read-only whole-project review of `main` at 
 | B120 | P3 | bug | fixed | `shell.rs` (`marker_at_line_start`, `block_span`) | A marker line may end in `\r\n` or `\r`. The span consumes that ending, so a CRLF profile is updated in place instead of gaining a second block. |
 | B121 | P3 | bug | suspected | `shell.rs:1377-1405` (`write`) | When a startup file is a dangling symlink (dotfiles repo not checked out), canonicalize fails, the raw path is used, and the temp-file rename replaces the user's symlink with a regular file. Resolve with `read_link` and write the target, or refuse. |
 | B122 | P3 | bug | fixed | `src/ui.rs` (`BarProgress::start`) | The download label reaches `set_message` through `printable` before it is truncated, the same filter as every other status line. |
-| B123 | P3 | bug | confirmed | `platform/{macos,unix,windows}.rs` `restore_retired_store`, from `relink`/`rollback` | In these paths `move_into_store` is a no-op and `sweep_swap_leftovers` does not run; if linking fails while a stale `<ver>.old` from an earlier interrupted swap exists, the error path deletes the live prefix and renames the stale copy over it. Restore only when this call made the swap (have `move_into_store` say so). |
+| B123 | P3 | bug | fixed | `platform/{macos,unix,windows}.rs` `restore_retired_store`, from `relink`/`rollback` | In these paths `move_into_store` is a no-op and `sweep_swap_leftovers` does not run; if linking fails while a stale `<ver>.old` from an earlier interrupted swap exists, the error path deletes the live prefix and renames the stale copy over it. Restore only when this call made the swap (have `move_into_store` say so). |
 | B124 | P3 | bug | fixed | `platform/windows.rs:80-104` (`busy_aside`, `clear_for_replace`) | `tool.exe.old.<pid>-<ms>` files left when a running exe is renamed aside are never swept (only ketch's own asides are), so they pile up with every upgrade of a running tool. Sweep `*.old.*` siblings of recorded links at the start of commit, relink and uninstall. |
 | B125 | P3 | vuln | confirmed | `crates/ketch-ffi/src/callbacks.rs:128-162`; `crates/ketch-ffi/src/records.rs:238-241` | Event `detail`/`verb`/`name`/`label` and `Changelog.version` carry client asset names and tags to Swift, C# and Vala unsanitised, though the `records.rs` header says they pass through `changelog::sanitize`; GUIs get bidi overrides raw. Sanitise string fields in `From<report::Event>` and `Changelog::new`. |
 | B126 | P3 | bug | suspected | `crates/ketch-capi/vapi/ketch.vapi` (`StopFunc`); `crates/ketch-capi/include/ketch.h:37` | `KetchStopFn` returns C `bool`, the Vala delegate returns `gboolean` (int): an incompatible function-pointer type (error by default on GCC ≥ 14) and a return-ABI mismatch. `tests/capi.vala` never passes a `ChooseFunc` or `StopFunc`. Return `int32_t` and cover both callbacks in the Vala test. |
@@ -129,7 +129,6 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | R19.4 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | B113 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B118 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
-| B123 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
 | B85 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
 
 ### B85. Registry update and listing ignore cancel
@@ -560,10 +559,6 @@ Plan: one check shared by `safe_member_path`, `sanitize_component` and `usable_f
 Row B118 in the 2026-10-12 findings. Done: a package installed checksum-verified refuses an unverified upgrade unless `--yes` or an explicit flag.
 
 Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in `cli.rs`. Check: an end-to-end test of both paths.
-
-### B123. Relink and rollback restore a stale `.old`
-
-Row B123 in the 2026-10-12 findings. Done: the store is restored only when this call made the swap. `move_into_store` reports whether it retired a tree, and `restore_retired_store` runs only then. A stale `.old` left by an earlier interrupted swap stays aside when relink fails: `a_failed_relink_keeps_the_live_prefix_over_a_stale_old_copy` on macOS and on Linux.
 
 ### R19. Heavy subsystems out of the always-built core
 
