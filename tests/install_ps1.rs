@@ -23,6 +23,17 @@ fn pwsh_bin() -> Option<std::path::PathBuf> {
             candidate.is_file().then_some(candidate)
         })
     })
+    // A version-manager shim (mise, asdf) can sit on PATH without a PowerShell
+    // behind it; treat a pwsh that cannot start as absent.
+    .filter(|pwsh| {
+        std::process::Command::new(pwsh)
+            .args(["-NoProfile", "-NonInteractive", "-Command", "exit 0"])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success())
+    })
 }
 
 #[cfg(windows)]
