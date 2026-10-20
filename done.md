@@ -1,3 +1,7 @@
+### B85. Registry update and listing ignore cancel
+
+`registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
+
 ### B98. `install.ps1` closes the user's PowerShell window on error
 
 Under `irm … | iex` the installer runs in the caller's session. The body is a scriptblock invoked with `@args`, so its variables, functions and `$ErrorActionPreference = 'Stop'` stay inside it. Error paths throw; the catch prints the message. `exit` runs only when `$PSCommandPath` is set, which is a file launch (`-File` or `.\install.ps1`). Piped into `iex` the status is `$global:LASTEXITCODE` and the session keeps running. The caller's `KETCH_ROOT` is restored in `finally`.
