@@ -1,3 +1,7 @@
+### B85. Registry update and listing ignore cancel
+
+`registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
+
 ### D11. Windows: WinUI 3 app shell on a fake core
 
 `desktop/windows` is a WinUI 3 app on the Windows App SDK and .NET 10, built with `dotnet build` and no Visual Studio. `Ketch.AppCore` holds the fake core and the store and tests on any OS. The app has Installed, Discover, Updates, Activity, Doctor, Settings and a package page, with `ContentDialog` and `InfoBar`, Mica, and light, dark and high contrast from the token file. The `ketch-win-app` job runs `dotnet test` and the Release build. Landed in #247.
