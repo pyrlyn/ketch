@@ -879,8 +879,10 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn a_process_that_ignores_term_is_killed_when_the_grace_ends() {
+        // TERM is ignored before the child starts, so it inherits the
+        // disposition: a `trap` inside the child races the signal sent next.
         let pid = detached_pid(
-            "nohup sh -c 'trap \"\" TERM; while :; do :; done' >/dev/null 2>&1 & echo $!",
+            "trap '' TERM; nohup sh -c 'while :; do :; done' >/dev/null 2>&1 & echo $!",
         );
         assert!(crate::state::process_alive(pid), "pid {pid} never started");
         let grace = Duration::from_millis(700);
