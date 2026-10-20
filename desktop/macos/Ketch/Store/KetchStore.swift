@@ -204,9 +204,11 @@ final class KetchStore {
     }
 
     /// Changelog Markdown as styled text. The core has already stripped
-    /// escape sequences and bidi overrides; this only parses it. Headings are
-    /// styled line by line because SwiftUI's `Text` drops the block structure
-    /// a full Markdown parse produces.
+    /// escape sequences and bidi overrides. Headings are styled line by
+    /// line because SwiftUI's `Text` drops the block structure a full
+    /// Markdown parse produces. Link runs are removed: the notes are
+    /// someone else's prose, and a `.link` is opened by the default
+    /// `openURL` for any scheme (B110).
     nonisolated static func render(markdown: String) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace, failurePolicy: .returnPartiallyParsedIfPossible)
@@ -218,10 +220,19 @@ final class KetchStore {
             let isHeading = level > 0 && body.first == " "
             let source = String(isHeading ? body.drop { $0 == " " } : line)
             var text = (try? AttributedString(markdown: source, options: options)) ?? AttributedString(source)
+            stripLinks(&text)
             if isHeading { text.font = level <= 2 ? .title3.bold() : .headline }
             result += text
         }
         return result
+    }
+
+    /// Drop `.link` so a changelog cannot hand the user a clickable URL.
+    nonisolated private static func stripLinks(_ text: inout AttributedString) {
+        let linked = text.runs.filter { $0.link != nil }.map(\.range)
+        for range in linked {
+            text[range].link = nil
+        }
     }
 
     // MARK: Operations

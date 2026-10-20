@@ -303,12 +303,13 @@ import Testing
         #expect(store.findings.contains { $0.severity == .warning && $0.fix != nil })
     }
 
-    @Test func changelogHeadingsLoseTheirMarkersAndLinksSurvive() {
-        let text = KetchStore.render(markdown: "## 1.2.0\n\n- see [docs](https://example.com)")
+    @Test func changelogHeadingsLoseTheirMarkersAndLinksArePlainText() {
+        let text = KetchStore.render(
+            markdown: "## 1.2.0\n\n- see [docs](https://example.com) and [join](zoommtg://room)")
 
         let plain = String(text.characters)
-        #expect(plain == "1.2.0\n\n- see docs")
-        #expect(text.runs.contains { $0.link == URL(string: "https://example.com") })
+        #expect(plain == "1.2.0\n\n- see docs and join")
+        #expect(text.runs.allSatisfy { $0.link == nil })
     }
 }
 
