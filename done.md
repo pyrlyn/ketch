@@ -1,3 +1,7 @@
+### B127. The C ABI error envelope repeats `message`
+
+Row B127 in the 2026-10-12 findings. Done: `ErrorBody` keeps the variant's own `message` and adds the sentence only for `Busy`, `Cancelled` and `NotFound`, which have no such field. A network error is one `"message"` key.
+
 ### B85. Registry update and listing ignore cancel
 
 `registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
