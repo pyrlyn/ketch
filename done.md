@@ -1,3 +1,7 @@
+### B85. Registry update and listing ignore cancel
+
+`registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
+
 ### R16. Fuzz seed script reads the old builtin path
 
 `fuzz/seed.sh` looked for `src/builtin.toml` after that file moved into `ketch-core`. The script already reads `crates/ketch-core/src/builtin.toml`. The readme still named the old path; it now matches.
