@@ -137,13 +137,6 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 Row B85 in the 2026-10-08 findings. `registry::update` downloads with `cx.cancel`. `ask_all` checks that token before each package, so a cancel stops the parallel lookup.
 
 Status: done. See `done.md`.
-| B100 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
-
-### B100. Zip symlink targets are read without a bound
-
-Row B100 in the 2026-10-12 findings. A zip symlink is a member whose body is the target. That body is read through `take(4097)` and refused past 4 KiB, so a highly compressed member cannot expand into an unbounded string.
-
-Status: done. See `done.md`.
 
 ### Ketch audit
 
