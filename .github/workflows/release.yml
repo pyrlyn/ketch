@@ -491,7 +491,7 @@ jobs:
   # Added by scripts/dist-generate.sh: a failed release (not a pull request or a dry run)
   # opens or comments on a `release-failure` issue that mentions and assigns @listepo. The
   # only release failure notification: GitHub cannot filter Actions notifications per
-  # workflow. Pinned to pyrlyn/ci's ci/notify-release-failure; repin to its merge commit.
+  # workflow. pyrlyn/ci stays on @main: no-pinned-ci rejects a commit SHA.
   notify-failure:
     needs: [plan, build-local-artifacts, build-global-artifacts, host, custom-tap, announce]
     if: >-
@@ -503,7 +503,7 @@ jobs:
       "actions": "read"
       "issues": "write"
     steps:
-      - uses: pyrlyn/ci/.github/actions/notify-release-failure@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
+      - uses: pyrlyn/ci/.github/actions/notify-release-failure@main
         with:
           ref: ${{ inputs.tag }}
           needs: ${{ toJSON(needs) }}
