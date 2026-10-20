@@ -1,3 +1,7 @@
+### B85. Registry update and listing ignore cancel
+
+`registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
+
 ### B118. An upgrade silently drops checksum verification
 
 A package installed against a published checksum used to accept a later release that published none, with only the first-use warning. `refuse_checksum_downgrade` now refuses that upgrade. `--allow-unverified` or `--yes` consents, and a lockfile hash stands in for consent because it is a stronger pin than either.

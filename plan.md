@@ -17,7 +17,7 @@ New bugs, dead code and moves from a read-only Cursor cloud review of `main` at 
 | B82 | P2 | bug | confirmed | `source/github.rs:310-312` | Aggregate checksum files are keyed by basename; a later duplicate overwrites an earlier one. Reject or flag a basename that maps to two hashes. |
 | B83 | P2 | bug | confirmed | `source/github.rs:427-431` | A sidecar checksum takes the first sorted entry (`BTreeMap::into_values().next()`), not the asset's. Look up the asset name first; fall back to a single entry only when unambiguous. |
 | B84 | P2 | bug | fixed | `http.rs:118-186` | Downloads stream with no maximum size. Add a configurable download/unpacked cap and abort over it. |
-| B85 | P2 | bug | confirmed | `registry.rs:61-67`; `listing.rs:390-426` | `registry::update` passes a fresh `Cancel::new()` to `Http::download`, and the parallel `ask_all` never checks for cancellation. Thread the caller's `Cancel` through both. |
+| B85 | P2 | bug | fixed | `registry.rs` `update`; `listing.rs` `ask_all` | Registry download uses the caller's `Cancel`, and `ask_all` stops between packages when it fires. |
 | B86 | P2 | bug | suspected | `source/plugin.rs:159-168` | A plugin's `asset.url` and `headers` go to `Http::anonymous` with no scheme or host check, though plugin JSON is untrusted. Allow `https:` only; drop `Authorization` and hop-by-hop headers. |
 | B87 | P2 | bug | fixed | `source/local.rs` `sha256_tree` | The local tree hash framed only `path\0bytes`. It now frames kind, path, permission bits and length, and hashes a symlink's target. A lock from before this framing does not match until `ketch lock`. |
 | B88 | P2 | bug | suspected | `process.rs:461-494` | After `offer_to_stop`, ketch waits 200 ms before `/F`; the install can still hit a locked `.exe`. Wait, with a bound, until the pid is gone. |
@@ -130,6 +130,13 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B113 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B118 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
 | B123 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
+| B85 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
+
+### B85. Registry update and listing ignore cancel
+
+Row B85 in the 2026-10-08 findings. `registry::update` downloads with `cx.cancel`. `ask_all` checks that token before each package, so a cancel stops the parallel lookup.
+
+Status: done. See `done.md`.
 
 ### Ketch audit
 
