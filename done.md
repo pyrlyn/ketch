@@ -1,3 +1,7 @@
+### B85. Registry update and listing ignore cancel
+
+`registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
+
 ### R6. A reporter instead of the global `ui::` sink
 
 The core reports typed events through `Report` and `Ctx`. It does not call `ui::` (the only match under `crates/ketch-core/src` is a comment in `config.rs`). The CLI's `ui.rs` is the renderer: colour, verbosity and emoji live there, and `log::record` is reached from that renderer. A non-CLI host uses `LogReporter`. The TUI is the same renderer's full-screen mode; `renderer_projects_state_without_a_real_terminal` draws it on `TestBackend`. `--tui` with no terminal falls back to the line renderer.
