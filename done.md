@@ -1,3 +1,9 @@
+### R15. Drop the unread placement version and registry alias list
+
+Row R15 in the 2026-10-08 findings. `Placement::version` was carried into every place call and never read. `Resolver::aliases` had no caller.
+
+Done: both are gone. The root `dirs` dependency, `Release::asset` and the stale `allow(dead_code)` on `PackageSpec::raw` were already gone.
+
 ### B85. Registry update and listing ignore cancel
 
 `registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.

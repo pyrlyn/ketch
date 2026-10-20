@@ -137,7 +137,6 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 Row B85 in the 2026-10-08 findings. `registry::update` downloads with `cx.cancel`. `ask_all` checks that token before each package, so a cancel stops the parallel lookup.
 
 Status: done. See `done.md`.
-| R15 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
 
 ### Ketch audit
 
@@ -561,12 +560,6 @@ Plan: one check shared by `safe_member_path`, `sanitize_component` and `usable_f
 Row B118 in the 2026-10-12 findings. Done: a package installed checksum-verified refuses an unverified upgrade unless `--yes` or an explicit flag.
 
 Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in `cli.rs`. Check: an end-to-end test of both paths.
-
-### R15. Drop the unread placement version and registry alias list
-
-Row R15 in the 2026-10-08 findings. `Placement::version` was carried into every place call and never read. `Resolver::aliases` had no caller.
-
-Done: both are gone. The root `dirs` dependency, `Release::asset` and the stale `allow(dead_code)` on `PackageSpec::raw` were already gone.
 
 ### B123. Relink and rollback restore a stale `.old`
 
