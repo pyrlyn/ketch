@@ -1,3 +1,7 @@
+### B85. Registry update and listing ignore cancel
+
+`registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
+
 ### D13. Windows: tray icon, notifications, start at login, links
 
 The Windows counterparts of the macOS menu-bar extra. WinUI has no tray control, so the icon is `Shell_NotifyIcon` on a message-only window, and the panel is a borderless Acrylic window that lists pending upgrades, the running operation, Update all (with the same confirmation as the Updates page), Open, Check, Settings and Quit. Closing the main window hides it while the icon is on; Quit removes the icon and leaves.
