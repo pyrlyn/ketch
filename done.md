@@ -1,3 +1,7 @@
+### B119. A stray shell-block marker swallows the lines above the real block
+
+Row B119 in the 2026-10-12 findings. Done: an END pairs with the nearest BEGIN still before it, so an orphan BEGIN does not take the next block's END. Uninstall leaves the lines between them, and the next install rewrites the closed block instead of appending another.
+
 ### B85. Registry update and listing ignore cancel
 
 `registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.

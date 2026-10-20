@@ -137,7 +137,6 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 Row B85 in the 2026-10-08 findings. `registry::update` downloads with `cx.cancel`. `ask_all` checks that token before each package, so a cancel stops the parallel lookup.
 
 Status: done. See `done.md`.
-| B119 | done | P3 | 2 | 100% | Cursor / grok 4.7 |
 
 ### Ketch audit
 
@@ -567,10 +566,6 @@ Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in
 Row B123 in the 2026-10-12 findings. Done: the store is restored only when this call made the swap.
 
 Plan: have `move_into_store` report the swap; `restore_retired_store` uses it. Check: a test with a stale `.old` and a failing link that keeps the live prefix.
-
-### B119. A stray shell-block marker swallows the lines above the real block
-
-Row B119 in the 2026-10-12 findings. Done: an END pairs with the nearest BEGIN still before it, so an orphan BEGIN does not take the next block's END. Uninstall leaves the lines between them, and the next install rewrites the closed block instead of appending another.
 
 ### R19. Heavy subsystems out of the always-built core
 
