@@ -1,3 +1,7 @@
+### B85. Registry update and listing ignore cancel
+
+`registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
+
 ### B83. A sidecar checksum takes the first sorted line
 
 A `.sha256` sidecar used to take the alphabetically first hash. It now prefers the line that names the asset, and falls back to a lone entry only when the file has exactly one.
