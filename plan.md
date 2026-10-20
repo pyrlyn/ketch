@@ -137,7 +137,6 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 Row B85 in the 2026-10-08 findings. `registry::update` downloads with `cx.cancel`. `ask_all` checks that token before each package, so a cancel stops the parallel lookup.
 
 Status: done. See `done.md`.
-| B80 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
 
 ### Ketch audit
 
@@ -561,12 +560,6 @@ Plan: one check shared by `safe_member_path`, `sanitize_component` and `usable_f
 Row B118 in the 2026-10-12 findings. Done: a package installed checksum-verified refuses an unverified upgrade unless `--yes` or an explicit flag.
 
 Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in `cli.rs`. Check: an end-to-end test of both paths.
-
-### B80. A lone bz2 file extracts as the program
-
-Row B80 in the 2026-10-08 findings. A lone xz or bz2 used to be claimed by the tar extractor and fail. Detection already peeks the decompressed head, and both lone-file extractors are registered. xz had an extraction test; bz2 had only detection.
-
-Done: `a_lone_bz2_file_is_extracted_as_the_program` extracts `jq.bz2` to `jq`.
 
 ### B123. Relink and rollback restore a stale `.old`
 

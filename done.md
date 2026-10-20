@@ -1533,7 +1533,7 @@ Check: `retired_targets` in `platform/windows.rs`; not covered by a Windows test
 
 Found by the 2026-10-08 cloud review: `TarXzExtractor` claimed any xz stream without peeking for ustar. On re-check it was already fixed by 5152c87: detection peeks the decompressed head, and `XzFileExtractor` and `Bz2FileExtractor` are registered on all three platforms. A lone bz2 has only a detection test.
 Model: Claude Code / opus-5.5 · Status: done 2026-10-12 (already fixed in 5152c87) · Priority: P2 · Complexity: 3
-Check: the lone `.xz` extraction test in `extract/archive.rs`.
+Check: the lone `.xz` extraction test in `extract/archive.rs`, and `a_lone_bz2_file_is_extracted_as_the_program` for bz2.
 
 ### B84. Downloads have no size cap
 
