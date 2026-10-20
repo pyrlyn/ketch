@@ -1,3 +1,7 @@
+### B85. Registry update and listing ignore cancel
+
+`registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
+
 ### B128. An unknown lock holder is pid 0
 
 A `Busy` error with no pid became `busy(pid: 0)`, and the banner read "pid 0". The pid is optional. The log and the banner name the holder only when there is one, which is what the Windows app already did.
