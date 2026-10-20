@@ -130,7 +130,6 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B113 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B118 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B123 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
-| B117 | done | P3 | 2 | 100% | Cursor / grok 4.7 |
 | B85 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
 
 ### B85. Registry update and listing ignore cancel
@@ -567,10 +566,6 @@ Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in
 Row B123 in the 2026-10-12 findings. Done: the store is restored only when this call made the swap.
 
 Plan: have `move_into_store` report the swap; `restore_retired_store` uses it. Check: a test with a stale `.old` and a failing link that keeps the live prefix.
-
-### B117. A changelog file is read without a bound
-
-Row B117 in the 2026-10-12 findings. Done: `from_file` reads a regular file only, stops at 4 MiB, and decodes the bytes lossily. `find_file` skips a symlink, so the command falls through to the release notes instead of opening the link.
 
 ### R19. Heavy subsystems out of the always-built core
 
