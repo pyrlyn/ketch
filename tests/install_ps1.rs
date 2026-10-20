@@ -17,23 +17,24 @@ use predicates::prelude::*;
 fn pwsh_bin() -> Option<std::path::PathBuf> {
     // Resolve before tests clear PATH — otherwise `Command::new("pwsh")` cannot
     // spawn even when PowerShell is installed on the runner.
-    std::env::var_os("PATH").and_then(|path| {
-        std::env::split_paths(&path).find_map(|dir| {
-            let candidate = dir.join(if cfg!(windows) { "pwsh.exe" } else { "pwsh" });
-            candidate.is_file().then_some(candidate)
+    std::env::var_os("PATH")
+        .and_then(|path| {
+            std::env::split_paths(&path).find_map(|dir| {
+                let candidate = dir.join(if cfg!(windows) { "pwsh.exe" } else { "pwsh" });
+                candidate.is_file().then_some(candidate)
+            })
         })
-    })
-    // A version-manager shim (mise, asdf) can sit on PATH without a PowerShell
-    // behind it; treat a pwsh that cannot start as absent.
-    .filter(|pwsh| {
-        std::process::Command::new(pwsh)
-            .args(["-NoProfile", "-NonInteractive", "-Command", "exit 0"])
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .is_ok_and(|status| status.success())
-    })
+        // A version-manager shim (mise, asdf) can sit on PATH without a PowerShell
+        // behind it; treat a pwsh that cannot start as absent.
+        .filter(|pwsh| {
+            std::process::Command::new(pwsh)
+                .args(["-NoProfile", "-NonInteractive", "-Command", "exit 0"])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .is_ok_and(|status| status.success())
+        })
 }
 
 #[cfg(windows)]
