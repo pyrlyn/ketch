@@ -173,6 +173,11 @@ Client release notes are parsed as inline Markdown into `Text`. Every `.link` ru
 
 Test: `changelogLinksStayOnlyWhenTheyAreHTTPS` (with the existing https link test).
 
+### B82. Duplicate checksum basenames overwrite each other
+
+An aggregate checksum list is keyed by file name. Two lines that name the same file with different hashes used to let the later one win. Conflicting names are dropped, so neither hash is trusted.
+
+Test: `an_ambiguous_basename_is_dropped_rather_than_overwritten`.
 ### B129. Background refresh raises an error sheet
 
 The update timer and the window becoming key both called `refresh`, and any error set `errorMessage`. Offline, with the real core, the modal appeared on every interval and every time the window came forward. Those callers now pass `alerting: false`. The failure is a warning in the activity log, and a refresh the user started still alerts.
