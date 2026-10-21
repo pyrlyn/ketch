@@ -299,7 +299,7 @@ Plan:
 
 Check: `just check` clean; `cargo nextest run --workspace` passes with no snapshot changes; `dist build` for the host produces `ketch-<target>.tar.gz` with the same layout; `just dist-generate` leaves `release.yml` unchanged; `scripts/release.sh --dry-run` prints the right next version.
 
-Status: PR https://github.com/pyrlyn/ketch/pull/187 merged 2026-10-01. The version moved to `[workspace.package]`; `release.sh` and `crate-version.sh` read it there, and v0.9.0 was released after the merge. Remaining: the doc examples that became doctests are marked `ignore` and should be rewritten (18 `ignore` fences under `crates/` at the last check).
+Status: PR https://github.com/pyrlyn/ketch/pull/187 merged 2026-10-01. The version moved to `[workspace.package]`; `release.sh` and `crate-version.sh` read it there, and v0.9.0 was released after the merge. The 18 `ignore` fences under `crates/` are examples that compile (`no_run` only where running would touch GitHub or the real ketch root). `tests/workspace.rs` rejects a new `ignore` fence there. Remaining: step 5, `clap` and `clap_complete` still in `ketch-core`.
 
 ### R6. A reporter instead of the global `ui::` sink
 
