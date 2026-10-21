@@ -23,11 +23,9 @@ Item 2 stays with B64. Item 1 is B65, which closes with B64's `tests/bin_choice.
 
 Status: done. CI already runs the whole suite on every OS, with no workflow edit: `ci.yml`'s `rust` job (pyrlyn/ci `ci-rust.yml`) runs clippy and `cargo nextest run --workspace --all-targets` on Linux x86_64 and aarch64, macOS aarch64 and Windows x86_64, and `package` runs `dist build` on all three OSes. `verify.yml` no longer exists; the per-OS `check` jobs named above became that shared job, which brings its own sccache. Item 1 is B65, its own task (it extends `tests/bin_choice.rs`, which every OS already runs). Item 2: `install.rs` tests `a_choice_asked_for_a_user_manifest_is_written_into_the_file` and `a_choice_asked_for_a_registry_package_is_remembered_in_state_and_reused` drive `commit` with a scripted `Decider` over a payload holding `rtok-cli` and `rtok-hook`: the user manifest gets `bin = [...]` appended with the rest of the file unchanged; a registry package keeps its choice in state, its registry copy is never written, and an upgrade reuses the choice without asking. They are not OS-gated, so every CI target runs them. Item 3: no second cache, for the reasons and numbers above.
 
-### R19.3. Publisher signatures as an optional core feature
+### F18. Figma design for macOS, Windows and Linux
 
-sigstore, minisign-verify and pgp are the `trust` feature of `ketch-core` (default on, so the CLI still verifies). A build without it still checks a policy's shape and still calls `verify`. That call cannot satisfy the policy: `require` refuses the install, `warn` installs on the checksum and says so, and a key the verifier would ignore is still refused. `ketch-ffi` keeps `trust` on. `scripts/core-features.sh` is what builds the core without the feature and runs `without_verifiers`.
-
-Tests: `a_required_signature_refuses_the_install`, `a_warn_policy_installs_on_the_checksum_alone`, `keys_a_verifier_ignores_are_still_refused`.
+The desktop design lives in one Figma file, `v7OJLmQEyCFbJ63uSYpJ9g`: shared foundations and screen specs, macOS frames synced with the F17 app plus the decision screens, Windows (Fluent) and Linux (libadwaita) pages in light and dark, and prototype links on each page. `desktop/design/figma.md` names the pages, frame ids, variable collections (`Color`, `Platform`) and the Swift code syntax each variable carries. `tokens.json` stays the source of truth.
 
 ### B85. Registry update and listing ignore cancel
 

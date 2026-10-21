@@ -106,7 +106,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | F12 | in progress | P3 | 5 | 60% | Claude Code / opus-5.5 |
 | F13 | in progress | P3 | 4 | 80% | Claude Code / opus-5.5 |
 | F14 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
-| F18 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
+| F18 | done | P2 | 4 | 100% | Cursor / grok 4.7 |
 | D11 | in progress | P3 | 5 | 10% | Claude Code / sonnet-5.5 |
 | D12 | todo | P3 | 4 | 0% | |
 | D13 | todo | P3 | 3 | 0% | |
@@ -385,10 +385,11 @@ Execution plan:
 7. Update the Figma mapping doc (`desktop/macos/design/figma.md`, or a platform-neutral place
    if the structure warrants it), open a PR, wait for CI.
 
+Done. See `done.md`.
+
 Status: the Figma work is done — shared pages, macOS synced with F17 plus ten new frames,
 Windows (Fluent) and Linux (libadwaita, per R11) pages in light and dark, prototype flows on
-every page. `figma.md` lives in `desktop/design/`. Left: the creator's
-review of the file and the merge of the PR.
+every page. `figma.md` lives in `desktop/design/`. The mapping pull request is #212.
 
 ### D11. Windows: WinUI 3 app shell on a fake core
 
