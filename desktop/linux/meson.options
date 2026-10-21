@@ -1,0 +1,7 @@
+# Copyright (c) 2026 Ivan Tugay
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
+# Off where GTK 4.20 and libadwaita 1.8 are missing, so the core library and
+# its tests still build there; CI sets it to enabled.
+option('gui', type: 'feature', value: 'auto', description: 'Build the GTK app, not only ketch-app-core and its tests')

@@ -14,6 +14,26 @@ if [ ! -f "$wf" ]; then
     exit 1
 fi
 
+# B136: brew style keys off a directory named Casks/, and that file must not
+# land in the repo root, where it dirties the tree release.sh refuses.
+if ! grep -q 'target/cask/Casks/ketch.rb' "$wf"; then
+    echo "ci-triggers: cask lint must write target/cask/Casks/ketch.rb (B136)" >&2
+    exit 1
+fi
+if grep 'cask/Casks' "$wf" | grep -v 'target/cask/Casks' | grep -q .; then
+    echo "ci-triggers: cask lint must write under target/cask/Casks (B136)" >&2
+    exit 1
+fi
+justfile="$ROOT/Justfile"
+if ! grep -q 'target/cask/Casks/ketch.rb' "$justfile"; then
+    echo "ci-triggers: Justfile lint-cask must write under target/ (B136)" >&2
+    exit 1
+fi
+if grep 'cask/Casks' "$justfile" | grep -v 'target/cask/Casks' | grep -q .; then
+    echo "ci-triggers: Justfile still writes cask/Casks at the repo root (B136)" >&2
+    exit 1
+fi
+
 if command -v ruby >/dev/null 2>&1; then
     ruby -ryaml -e "YAML.load_file(ARGV[0])" "$wf"
 else
@@ -46,3 +66,19 @@ need 'gh workflow run ci.yml --ref' 'the /review dispatch'
 need 'headRepository.nameWithOwner' 'the /review head-repository check'
 need 'not this repository' 'the /review fork refusal'
 need 'repos/pyrlyn/ketch/commits/' 'the /review ref SHA lookup'
+# A comment run must not join the group a push to main uses, and every job
+# but review must refuse issue_comment (`draft != true` is true when the
+# event has no pull request). commits is already pull_request-only.
+need "format('review-{0}', github.event.issue.number)" 'a comment concurrency group of its own'
+
+ruby -ryaml -e '
+  wf = YAML.load_file(ARGV[0])
+  jobs = wf["jobs"] or abort "ci-triggers: no jobs"
+  jobs.each do |name, job|
+    next if name == "review"
+    iff = job["if"].to_s
+    next if iff.include?("issue_comment")
+    next if iff.include?("event_name == '\''pull_request'\''") || iff.include?("event_name == \"pull_request\"")
+    abort "ci-triggers: #{name} can run on issue_comment"
+  end
+' "$wf"
