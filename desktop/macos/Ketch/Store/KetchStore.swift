@@ -133,7 +133,10 @@ final class KetchStore {
 
     /// Re-reads installed and outdated packages; called on launch, when the
     /// window becomes key (so CLI installs show up) and after every operation.
-    func refresh() async {
+    /// `alerting` is false for the timer and for becoming key: offline, those
+    /// would raise the error sheet on every interval and every focus change.
+    /// The failure is still a log line.
+    func refresh(alerting: Bool = true) async {
         do {
             let (installed, outdated) = try await background { core in
                 (try core.installed(), try core.outdated())
@@ -142,6 +145,10 @@ final class KetchStore {
             self.outdated = outdated
             lastChecked = Date()
         } catch {
+            guard alerting else {
+                append(.warning, error.localizedDescription)
+                return
+            }
             report(error, retry: { [weak self] in await self?.refresh() })
         }
     }
@@ -340,7 +347,7 @@ final class KetchStore {
             while !Task.isCancelled {
                 guard let self else { return }
                 if !self.isRunning {
-                    await self.refresh()
+                    await self.refresh(alerting: false)
                     await self.notifyOfNewUpdates()
                 }
                 let interval = self.settings.updateCheckInterval
