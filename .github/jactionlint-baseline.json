@@ -2,12 +2,44 @@
   "version": 1,
   "entries": [
     {
+      "file": ".github/workflows/bump.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "36990d02b7d1d103",
+      "context": "389ce7873c6e83e1",
+      "occurrence": 0,
+      "message": "reusable workflow call \"pyrlyn/ci/.github/workflows/bump.yml@main\" must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
       "file": ".github/workflows/ci.yml",
       "rule": "dangerous-triggers",
       "fingerprint": "a93f6bb245795441",
       "context": "679173a66b3203d5",
       "occurrence": 0,
       "message": "trigger \"issue_comment\" is dangerous: it runs in the context of the default branch with a write token and secrets and can be started by anyone who can comment. check the permission of the commenter and never run code of the pull request"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "14ef75ed18979789",
+      "context": "197e098f29212875",
+      "occurrence": 0,
+      "message": "action \"pyrlyn/ci/.github/actions/config@main\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "66a0c290929cb308",
+      "context": "102fc61f53dd033e",
+      "occurrence": 0,
+      "message": "reusable workflow call \"pyrlyn/ci/.github/workflows/ci-rust.yml@main\" must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "6daee654ff04abff",
+      "context": "63cf0492b80957ce",
+      "occurrence": 0,
+      "message": "action \"pyrlyn/ci/.github/actions/commits@main\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
     },
     {
       "file": ".github/workflows/ci.yml",
@@ -35,6 +67,22 @@
     },
     {
       "file": ".github/workflows/ci.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "8d7b11f84c9c3c53",
+      "context": "e5eb876bdc6fd64d",
+      "occurrence": 0,
+      "message": "action \"pyrlyn/ci/.github/actions/macos-runner@main\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "8d7b11f84c9c3c53",
+      "context": "e5eb876bdc6fd64d",
+      "occurrence": 1,
+      "message": "action \"pyrlyn/ci/.github/actions/macos-runner@main\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
       "rule": "missing-timeout",
       "fingerprint": "006abd7d2fb3453e",
       "context": "bb0e07d0bca72d8c",
@@ -48,6 +96,14 @@
       "context": "c2f17c3b589c43d3",
       "occurrence": 0,
       "message": "actions/checkout leaves the GITHUB_TOKEN in the git config of the workspace, where a later step such as an artifact upload can publish it. set \"persist-credentials: false\" under \"with:\" unless a later step needs to push"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "a1a2019e8e6713e1",
+      "context": "6ae2df26fdc6c163",
+      "occurrence": 0,
+      "message": "action \"pyrlyn/ci/.github/actions/setup-rust@main\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
     },
     {
       "file": ".github/workflows/ci.yml",
@@ -67,6 +123,14 @@
     },
     {
       "file": ".github/workflows/ci.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "ae0c647c8f80528c",
+      "context": "a8197c19f6aae658",
+      "occurrence": 0,
+      "message": "action \"pyrlyn/ci/.github/actions/setup-rust@main\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
       "rule": "missing-timeout",
       "fingerprint": "f4eb4c7c78414c13",
       "context": "4ca8a7005d55b935",
@@ -83,6 +147,14 @@
     },
     {
       "file": ".github/workflows/ci.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "33c76c7e76bce0c9",
+      "context": "3288134042841651",
+      "occurrence": 0,
+      "message": "action \"pyrlyn/ci/.github/actions/setup-rust@main\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
       "rule": "missing-timeout",
       "fingerprint": "8c330015ccf66c2f",
       "context": "4237fdf5a2e9b7e4",
@@ -96,6 +168,14 @@
       "context": "1b889c19d7a812c6",
       "occurrence": 0,
       "message": "actions/checkout leaves the GITHUB_TOKEN in the git config of the workspace, where a later step such as an artifact upload can publish it. set \"persist-credentials: false\" under \"with:\" unless a later step needs to push"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "0a793396dd97b23e",
+      "context": "49c211f26e9a386d",
+      "occurrence": 0,
+      "message": "action \"pyrlyn/ci/.github/actions/setup-rust@main\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
     },
     {
       "file": ".github/workflows/ci.yml",
@@ -171,6 +251,14 @@
     },
     {
       "file": ".github/workflows/ci.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "4f6741ddca5e191e",
+      "context": "dbb2426827c5017e",
+      "occurrence": 0,
+      "message": "action \"pyrlyn/ci/.github/actions/setup-rust@main\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
       "rule": "missing-timeout",
       "fingerprint": "3781be190c0b341b",
       "context": "c0eaee11f2bf50e2",
@@ -202,6 +290,46 @@
       "message": "trigger \"issue_comment\" is dangerous: it runs in the context of the default branch with a write token and secrets and can be started by anyone who can comment. check the permission of the commenter and never run code of the pull request"
     },
     {
+      "file": ".github/workflows/cla.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "3679cfc46b51c250",
+      "context": "032fac77346e10fa",
+      "occurrence": 0,
+      "message": "reusable workflow call \"pyrlyn/ci/.github/workflows/cla.yml@main\" must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/coderabbit-issues.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "1bfbe9e9a844acc7",
+      "context": "2c0045c3d2c62007",
+      "occurrence": 0,
+      "message": "reusable workflow call \"pyrlyn/ci/.github/workflows/coderabbit-issues.yml@main\" must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/dependabot.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "11bdbe923603cd9b",
+      "context": "ceb7f11afc51628a",
+      "occurrence": 0,
+      "message": "reusable workflow call \"pyrlyn/ci/.github/workflows/dependabot-automerge.yml@main\" must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/pipeline.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "10b726717e2a34a0",
+      "context": "abe5e0308a3cc54a",
+      "occurrence": 0,
+      "message": "reusable workflow call \"pyrlyn/ci/.github/workflows/ci.yml@main\" must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/release-apple-desktop.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "72cdad913d1675f2",
+      "context": "a49a32cb1b610872",
+      "occurrence": 0,
+      "message": "reusable workflow call \"pyrlyn/ci/.github/workflows/release-apple-desktop.yml@main\" must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
       "file": ".github/workflows/release-ci-alert.yml",
       "rule": "dangerous-triggers",
       "fingerprint": "e1b416090046774f",
@@ -216,6 +344,14 @@
       "context": "fe8e5480cabfe055",
       "occurrence": 0,
       "message": "workflow \"license-check\" specified at \"workflows\" of \"workflow_run\" event is not found in the repository. a workflow is specified by its \"name:\" or its file path when it has no name"
+    },
+    {
+      "file": ".github/workflows/release-ci-alert.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "d5c5dcbd0c9a5999",
+      "context": "6001caf94cde8951",
+      "occurrence": 0,
+      "message": "reusable workflow call \"pyrlyn/ci/.github/workflows/release-ci-alert.yml@main\" must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because the \"unpinned-uses\" rule is enabled"
     },
     {
       "file": ".github/workflows/release.yml",
@@ -338,6 +474,22 @@
       "message": "\"secrets: inherit\" passes every secret of this workflow to the reusable workflow \"./.github/workflows/tap.yml\". list only the secrets it needs in a \"secrets:\" mapping, e.g. \"NAME: ${{ secrets.NAME }}\""
     },
     {
+      "file": ".github/workflows/sync-docs.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "e3a12b3b9f2ef7dd",
+      "context": "1b04748f461a8cb9",
+      "occurrence": 0,
+      "message": "reusable workflow call \"pyrlyn/ci/.github/workflows/sync-docs.yml@main\" must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/tap.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "8d7b11f84c9c3c53",
+      "context": "e5eb876bdc6fd64d",
+      "occurrence": 0,
+      "message": "action \"pyrlyn/ci/.github/actions/macos-runner@main\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
       "file": ".github/workflows/tap.yml",
       "rule": "missing-timeout",
       "fingerprint": "9329a20acd35b2ae",
@@ -352,14 +504,6 @@
       "context": "efbfd008ed1f922b",
       "occurrence": 0,
       "message": "action \"actions/checkout@v7\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
-    },
-    {
-      "file": ".github/workflows/tap.yml",
-      "rule": "pipeline-without-pipefail",
-      "fingerprint": "06e6f67888f7533d",
-      "context": "79fffd7c666611c6",
-      "occurrence": 0,
-      "message": "failure of \"shasum\" is hidden in the pipeline \"shasum -a 256 dist/ketch-aarch64-apple-darwin.tar.gz | cut -...\" because the default shell runs \"bash -e {0}\" without pipefail. add \"set -o pipefail\" before the pipeline or use \"shell: bash\", which runs with pipefail"
     }
   ]
 }
