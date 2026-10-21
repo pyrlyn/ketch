@@ -33,3 +33,6 @@ site/__pycache__/
 /desktop/linux/subprojects/*/
 /desktop/linux/subprojects/packagecache/
 /desktop/linux/subprojects/.wraplock
+
+# rtok's claim lock, held only while a task is being claimed
+/tasks/.claim.lock
