@@ -75,6 +75,12 @@ Check: unit tests — two locks in one process → second is `Busy`; lock releas
 
 Status: done. PR https://github.com/pyrlyn/ketch/pull/184 merged 2026-10-01. Pid re-entrancy had no callers and was removed. Ctrl-C cancels the run's token (a second Ctrl-C exits 130 at once). Install requests, `self upgrade` and registry downloads share that token.
 
+### R17. Windows PATH helpers live in one module
+
+Row R17 in the 2026-10-08 findings. The Windows PATH, PowerShell profile and cmd AutoRun string helpers were compiled on every OS and silenced with `allow(dead_code)`.
+
+Done: they sit in `windows_env`, compiled on Windows and in tests. A Unix build that is not a test does not include them.
+
 ### B85. Registry update and listing ignore cancel
 Each of the four switches can be turned off in Settings. They persist in `%LOCALAPPDATA%\ketch\settings.json`, so an unpackaged app and an MSIX share one file. A broken file loads the defaults rather than stopping the app.
 
