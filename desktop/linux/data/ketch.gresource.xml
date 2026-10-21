@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Copyright (c) 2026 Ivan Tugay
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
+  The .ui files are blueprint-compiler's output and tokens.css a copy of
+  desktop/design/generated/ketch-tokens.css, both in the build directory;
+  data/meson.build passes it as a source_dir beside this one.
+-->
+<gresources>
+  <gresource prefix="/io/github/pyrlyn/Ketch">
+    <file>window.ui</file>
+    <file>package-page.ui</file>
+    <file>style.css</file>
+    <file>tokens.css</file>
+  </gresource>
+</gresources>
