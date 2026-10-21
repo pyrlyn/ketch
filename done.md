@@ -2,9 +2,9 @@
 
 `registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
 
-### R19.4. Archive codecs as optional core features
+### D11. Windows: WinUI 3 app shell on a fake core
 
-`gzip`, `xz`, `bzip2` and `zip` are cargo features of `ketch-core`. Plain tar stays on. `portable_extractors()` is the one list macOS, Linux and Windows extend, so a platform copy of the codec list is gone. A build that leaves a codec out reports `UnsupportedArchive` instead of treating the bytes as a program. `an_archive_whose_codec_is_left_out_is_unsupported` covers that, and `scripts/core-features.sh` builds each feature alone. The stacked pull request #322 was closed; the change came in with #354.
+`desktop/windows` is a WinUI 3 app on the Windows App SDK and .NET 10, built with `dotnet build` and no Visual Studio. `Ketch.AppCore` holds the fake core and the store and tests on any OS. The app has Installed, Discover, Updates, Activity, Doctor, Settings and a package page, with `ContentDialog` and `InfoBar`, Mica, and light, dark and high contrast from the token file. The `ketch-win-app` job runs `dotnet test` and the Release build. Landed in #247.
 
 ### B132. `install.ps1` omits the `v` on `--version`
 
