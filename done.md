@@ -23,19 +23,15 @@ Item 2 stays with B64. Item 1 is B65, which closes with B64's `tests/bin_choice.
 
 Status: done. CI already runs the whole suite on every OS, with no workflow edit: `ci.yml`'s `rust` job (pyrlyn/ci `ci-rust.yml`) runs clippy and `cargo nextest run --workspace --all-targets` on Linux x86_64 and aarch64, macOS aarch64 and Windows x86_64, and `package` runs `dist build` on all three OSes. `verify.yml` no longer exists; the per-OS `check` jobs named above became that shared job, which brings its own sccache. Item 1 is B65, its own task (it extends `tests/bin_choice.rs`, which every OS already runs). Item 2: `install.rs` tests `a_choice_asked_for_a_user_manifest_is_written_into_the_file` and `a_choice_asked_for_a_registry_package_is_remembered_in_state_and_reused` drive `commit` with a scripted `Decider` over a payload holding `rtok-cli` and `rtok-hook`: the user manifest gets `bin = [...]` appended with the rest of the file unchanged; a registry package keeps its choice in state, its registry copy is never written, and an upgrade reuses the choice without asking. They are not OS-gated, so every CI target runs them. Item 3: no second cache, for the reasons and numbers above.
 
-### B123. Relink and rollback restore a stale `.old`
+### R19.3. Publisher signatures as an optional core feature
 
-Row B123 in the 2026-10-12 findings. Done: the store is restored only when this call made the swap. `move_into_store` reports whether it retired a tree, and `restore_retired_store` runs only then. A stale `.old` left by an earlier interrupted swap stays aside when relink fails: `a_failed_relink_keeps_the_live_prefix_over_a_stale_old_copy` on macOS and on Linux.
+sigstore, minisign-verify and pgp are the `trust` feature of `ketch-core` (default on, so the CLI still verifies). A build without it still checks a policy's shape and still calls `verify`. That call cannot satisfy the policy: `require` refuses the install, `warn` installs on the checksum and says so, and a key the verifier would ignore is still refused. `ketch-ffi` keeps `trust` on. `scripts/core-features.sh` is what builds the core without the feature and runs `without_verifiers`.
+
+Tests: `a_required_signature_refuses_the_install`, `a_warn_policy_installs_on_the_checksum_alone`, `keys_a_verifier_ignores_are_still_refused`.
 
 ### B85. Registry update and listing ignore cancel
 
 `registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
-
-### B98. `install.ps1` closes the user's PowerShell window on error
-
-Under `irm … | iex` the installer runs in the caller's session. The body is a scriptblock invoked with `@args`, so its variables, functions and `$ErrorActionPreference = 'Stop'` stay inside it. Error paths throw; the catch prints the message. `exit` runs only when `$PSCommandPath` is set, which is a file launch (`-File` or `.\install.ps1`). Piped into `iex` the status is `$global:LASTEXITCODE` and the session keeps running. The caller's `KETCH_ROOT` is restored in `finally`.
-
-Tests: `the_script_exits_only_when_run_as_a_file`, `a_failure_under_iex_leaves_the_callers_session_running`.
 
 ### B132. `install.ps1` omits the `v` on `--version`
 

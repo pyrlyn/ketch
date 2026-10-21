@@ -124,7 +124,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | R18 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
 | R19.1 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | R19.2 | in progress | P2 | 2 | 90% | Claude Code / opus-5.5 |
-| R19.3 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
+| R19.3 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
 | R19.4 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | B113 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B118 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
@@ -553,6 +553,8 @@ diesel, diesel_migrations and libsqlite3-sys behind `stats`; `stats::record` doe
 octocrab and push's use of tokio behind `push`; the desktop apps no longer link it (#320, on R19.1).
 
 ### R19.3. Publisher signatures as an optional core feature
+
+Done. See `done.md`.
 
 sigstore, minisign-verify and pgp behind `trust`; without it a `require` policy refuses the install, `warn` installs on the checksum alone, unknown keys are still refused (#321, on R19.2).
 
