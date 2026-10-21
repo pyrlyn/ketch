@@ -78,13 +78,26 @@ impl From<CoreTask> for TaskKind {
         match task {
             CoreTask::Batch => TaskKind::Batch,
             CoreTask::Download { label, batch } => TaskKind::Download {
-                label,
+                label: clean(&label),
                 batch_id: batch.map(|id| id.get()),
             },
-            CoreTask::Activity { message } => TaskKind::Activity { message },
-            CoreTask::Counter { verb, unit, total } => TaskKind::Counter { verb, unit, total },
+            CoreTask::Activity { message } => TaskKind::Activity {
+                message: clean(&message),
+            },
+            CoreTask::Counter { verb, unit, total } => TaskKind::Counter {
+                verb: clean(&verb),
+                unit: clean(&unit),
+                total,
+            },
         }
     }
+}
+
+/// A GUI renders these strings; it is not the terminal, so the filter the
+/// terminal applies has to run before the text leaves the binding. Asset
+/// names, status lines and task labels are a client app's bytes.
+fn clean(text: &str) -> String {
+    ketch_core::changelog::sanitize(text)
 }
 
 /// One thing the core reports, field for field what `report::Event` carries.
@@ -130,21 +143,33 @@ impl From<report::Event> for Event {
         use report::Event as E;
         match event {
             E::Step { package, stage } => Event::Step {
-                package,
+                package: clean(&package),
                 stage: stage.into(),
             },
-            E::Status { verb, detail } => Event::Status { verb, detail },
-            E::Success { verb, detail } => Event::Success { verb, detail },
-            E::Warn { detail } => Event::Warn { detail },
-            E::Note { detail } => Event::Note { detail },
-            E::Debug { detail } => Event::Debug { detail },
+            E::Status { verb, detail } => Event::Status {
+                verb: clean(&verb),
+                detail: clean(&detail),
+            },
+            E::Success { verb, detail } => Event::Success {
+                verb: clean(&verb),
+                detail: clean(&detail),
+            },
+            E::Warn { detail } => Event::Warn {
+                detail: clean(&detail),
+            },
+            E::Note { detail } => Event::Note {
+                detail: clean(&detail),
+            },
+            E::Debug { detail } => Event::Debug {
+                detail: clean(&detail),
+            },
             E::Began { id, task } => Event::Began {
                 id: id.get(),
                 task: task.into(),
             },
             E::Sized { id, name, total } => Event::Sized {
                 id: id.get(),
-                name,
+                name: clean(&name),
                 total,
             },
             E::Progress { id, done, total } => Event::Progress {
@@ -154,7 +179,7 @@ impl From<report::Event> for Event {
             },
             E::Ended { id, message } => Event::Ended {
                 id: id.get(),
-                message,
+                message: message.as_deref().map(clean),
             },
             E::Abandoned { id } => Event::Abandoned { id: id.get() },
         }
@@ -372,6 +397,54 @@ mod tests {
         let leftover = std::path::Path::new("/k/store/ghost");
         assert!(ForeignDecider(Arc::new(Scripted(None, true))).confirm_remove_leftover(leftover));
         assert!(!ForeignDecider(Arc::new(Scripted(None, false))).confirm_remove_leftover(leftover));
+    }
+
+    #[test]
+    fn client_text_in_an_event_loses_escapes_and_bidi_overrides() {
+        let dirty = "rg\u{1b}\u{202e}";
+        assert_eq!(
+            Event::from(report::Event::Status {
+                verb: dirty.into(),
+                detail: dirty.into(),
+            }),
+            Event::Status {
+                verb: "rg".into(),
+                detail: "rg".into(),
+            }
+        );
+        let id = report::Report::silent().activity("x").id();
+        assert_eq!(
+            Event::from(report::Event::Sized {
+                id,
+                name: dirty.into(),
+                total: None,
+            }),
+            Event::Sized {
+                id: id.get(),
+                name: "rg".into(),
+                total: None,
+            }
+        );
+        assert_eq!(
+            Event::from(report::Event::Ended {
+                id,
+                message: Some(dirty.into()),
+            }),
+            Event::Ended {
+                id: id.get(),
+                message: Some("rg".into()),
+            }
+        );
+        assert_eq!(
+            TaskKind::from(CoreTask::Download {
+                label: dirty.into(),
+                batch: None,
+            }),
+            TaskKind::Download {
+                label: "rg".into(),
+                batch_id: None,
+            }
+        );
     }
 
     #[test]
