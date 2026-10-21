@@ -28,6 +28,7 @@ use crate::http::{self, Http};
 use crate::model::{Release, ReleaseAsset, SourceInfo};
 use crate::report::{Ctx, ProgressSink, Report};
 use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
@@ -167,11 +168,13 @@ impl Source for PluginSource {
                     stderr: String::new(),
                 });
             }
-            // No token is ever handed to a plugin's URLs: whatever credentials
-            // an asset needs must come from the plugin's own headers.
+            // No token is ever handed to a plugin's URLs. A plugin may still
+            // name its own credential header; Authorization and hop-by-hop
+            // names are not among the ones ketch will send.
+            let headers = plugin_fetch_headers(&asset.headers);
             return Http::anonymous(&self.report)
                 .with_max_download(self.max_download)
-                .download(&asset.url, dest, &asset.headers, false, progress, cancel);
+                .download(&asset.url, dest, &headers, false, progress, cancel);
         }
         let dest_str = dest.to_string_lossy().to_string();
         output(&self.path, &["download", &asset.url, &dest_str])?;
@@ -303,6 +306,53 @@ fn loopback_host(rest: &str) -> bool {
     matches!(hostport, "127.0.0.1" | "localhost")
         || hostport.starts_with("127.0.0.1:")
         || hostport.starts_with("localhost:")
+}
+
+/// Hop-by-hop header names (RFC 9110 §7.6.1), plus the obsolete
+/// `Proxy-Connection`. These describe the plugin's connection to its own
+/// host, not the request ketch is about to make.
+const HOP_BY_HOP: &[&str] = &[
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "proxy-connection",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+];
+
+fn forbidden_plugin_header(name: &str) -> bool {
+    let name = name.trim();
+    name.eq_ignore_ascii_case("authorization")
+        || HOP_BY_HOP.iter().any(|hop| name.eq_ignore_ascii_case(hop))
+}
+
+/// Headers ketch forwards when it fetches a plugin asset itself.
+///
+/// `Authorization` is the name ketch uses for its own GitHub token on other
+/// requests, and a plugin must not attach one to a URL ketch fetches. A
+/// `Connection` value also names hop-by-hop headers, so those are dropped
+/// with the fixed list.
+fn plugin_fetch_headers(headers: &BTreeMap<String, String>) -> BTreeMap<String, String> {
+    let listed: Vec<String> = headers
+        .iter()
+        .filter(|(name, _)| name.trim().eq_ignore_ascii_case("connection"))
+        .flat_map(|(_, value)| value.split(','))
+        .map(|part| part.trim().to_string())
+        .filter(|part| !part.is_empty())
+        .collect();
+    headers
+        .iter()
+        .filter(|(name, _)| {
+            !forbidden_plugin_header(name)
+                && !listed
+                    .iter()
+                    .any(|extra| name.trim().eq_ignore_ascii_case(extra))
+        })
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect()
 }
 
 /// Run one plugin subcommand and return its stdout.
@@ -800,7 +850,8 @@ esac
 
 #[cfg(test)]
 mod url_tests {
-    use super::allowed_asset_url;
+    use super::{allowed_asset_url, plugin_fetch_headers};
+    use std::collections::BTreeMap;
 
     #[test]
     fn https_and_loopback_http_are_allowed_and_anything_else_is_not() {
@@ -811,5 +862,23 @@ mod url_tests {
         assert!(!allowed_asset_url("http://localhost.evil.example/a.bin"));
         assert!(!allowed_asset_url("file:///etc/passwd"));
         assert!(!allowed_asset_url("ftp://127.0.0.1/a.bin"));
+    }
+
+    #[test]
+    fn authorization_and_hop_by_hop_headers_are_dropped() {
+        let mut headers = BTreeMap::new();
+        headers.insert("PRIVATE-TOKEN".to_string(), "secret".to_string());
+        headers.insert("Authorization".to_string(), "Bearer stolen".to_string());
+        headers.insert("authorization".to_string(), "Basic x".to_string());
+        headers.insert("Transfer-Encoding".to_string(), "chunked".to_string());
+        headers.insert("Connection".to_string(), "close, X-Trace".to_string());
+        headers.insert("X-Trace".to_string(), "1".to_string());
+        headers.insert("Keep-Alive".to_string(), "timeout=5".to_string());
+        let kept = plugin_fetch_headers(&headers);
+        assert_eq!(
+            kept.get("PRIVATE-TOKEN").map(String::as_str),
+            Some("secret")
+        );
+        assert!(kept.len() == 1, "{kept:?}");
     }
 }
