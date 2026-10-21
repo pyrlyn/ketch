@@ -36,6 +36,12 @@ Row B117 in the 2026-10-12 findings. Done: `from_file` reads a regular file only
 
 Row B127 in the 2026-10-12 findings. Done: `ErrorBody` keeps the variant's own `message` and adds the sentence only for `Busy`, `Cancelled` and `NotFound`, which have no such field. A network error is one `"message"` key.
 
+### B94. `install.ps1` Join-Path takes three children
+
+Windows PowerShell 5.1's `Join-Path` accepts one child path. `Join-Path $TempDir 'ketch' $BinaryName` is `-AdditionalChildPath` in pwsh 6+ and throws in 5.1, which is the shell `irm | iex` runs in, after the archive has already been extracted. The nested member is joined twice. The `powershell` CI job runs the script under `shell: powershell` past extraction, with the binary only inside `ketch/`.
+
+Test: `the_nested_archive_path_is_joined_for_windows_powershell_51`.
+
 ### B85. Registry update and listing ignore cancel
 Each of the four switches can be turned off in Settings. They persist in `%LOCALAPPDATA%\ketch\settings.json`, so an unpackaged app and an MSIX share one file. A broken file loads the defaults rather than stopping the app.
 
