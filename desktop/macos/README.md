@@ -5,9 +5,9 @@ upgrade, uninstall, changelogs, doctor, and a menu-bar extra with pending
 upgrades. It manages the same ketch root as the CLI (`~/.ketch`, or
 `KETCH_ROOT`).
 
-**Status:** the app runs on `FakeKetchCore`, canned data with simulated
-progress. The real core arrives with `ketch-ffi` (R9); see
-[Wiring the real core](#wiring-the-real-core).
+**Status:** the app runs on `LiveKetchCore`, the adapter over `ketch-ffi`.
+The UI smoke test and a hosted unit-test launch keep `FakeKetchCore` (canned
+packages, no network). See [The live core](#the-live-core).
 
 ![The Installed section](screenshot.jpg)
 
@@ -21,10 +21,14 @@ progress. The real core arrives with `ketch-ffi` (R9); see
 From the repository root:
 
 ```bash
-just macos-app    # generate Ketch.xcodeproj, build an Apple Silicon (arm64) Debug app
+just macos-app    # XCFramework, then an Apple Silicon (arm64) Debug app
 just macos-test   # Swift Testing unit tests, then the UI smoke test
 open desktop/macos/build/Build/Products/Debug/Ketch.app
 ```
+
+`just macos-app` and `just macos-test` build the debug XCFramework into
+`KetchCore/` first (`scripts/xcframework.sh --debug`). That output is
+gitignored.
 
 `project.yml` is the project; `Ketch.xcodeproj` and `build/` are generated
 and gitignored. To work in Xcode, run `just macos-project` and open the
@@ -46,13 +50,14 @@ from this directory; CI runs `lint --strict`.
 
 | Path | Owns |
 | --- | --- |
-| `project.yml` | the XcodeGen spec: targets, Swift 6 strict concurrency, deployment target 26.0, the Sparkle package |
+| `project.yml` | the XcodeGen spec: targets, Swift 6 strict concurrency, deployment target 26.0, Sparkle and the local `KetchCore` package |
 | `Ketch/Info.plist` | Sparkle's keys, merged into the generated Info.plist: the feed URL and the EdDSA public key |
 | `ExportOptions.plist` | `xcodebuild -exportArchive` options for a Developer ID release |
 | `Ketch/Store/AppUpdater.swift` | the app's own updates through Sparkle, behind "Check for Updates…" |
 | `Ketch/Core/KetchCoreProtocol.swift` | the core's API as the app sees it: records, events, `Reporter`, `Decider`, `CancelToken`, `KetchError` — mirroring R9 |
-| `Ketch/Core/FakeKetchCore.swift` | the stand-in core for previews, tests and, until R9, the app |
-| `Ketch/Core/CoreFactory.swift` | the one place that picks the core |
+| `Ketch/Core/FakeKetchCore.swift` | the stand-in core for previews, unit tests and the UI smoke test |
+| `Ketch/Core/LiveKetchCore.swift` | `KetchCoreProtocol` over the generated `ketch-ffi` bindings |
+| `Ketch/Core/CoreFactory.swift` | the one place that picks the core: live, or the fake under test |
 | `Ketch/Core/KetchRoot.swift` | the root, resolved like the CLI (`KETCH_ROOT`, empty means unset) |
 | `Ketch/Store/KetchStore.swift` | the `@Observable` main-actor store: state, operations, callbacks, update checks |
 | `Ketch/Store/AppSettings.swift` | the app's own preferences (UserDefaults) and Open at login |
@@ -142,8 +147,9 @@ Before the first release, the creator generates the update key once with the
 public key as `SUPublicEDKey` in `Ketch/Info.plist`, and store
 `generate_keys -x <file>`'s output as the `SPARKLE_ED_PRIVATE_KEY` secret.
 
-Until R9 ships the ketch-ffi XCFramework, the caller's `pre-build-command` is
-empty (`TODO(R9)`), and a release carries the app on `FakeKetchCore`.
+The release workflow's `pre-build-command` runs `scripts/xcframework.sh`
+before the archive, so the app that ships links the live core. `rust` is in
+that job's `mise-install-args`.
 
 ### Updates
 
@@ -157,21 +163,22 @@ feed and every archive are EdDSA-signed (`SURequireSignedFeed`,
 key starts the updater; Debug builds and test runs leave "Check for Updates…"
 disabled.
 
-## Wiring the real core
+## The live core
 
-When R9 lands, `desktop/macos/KetchCore/` is a local Swift package with the
-XCFramework and the UniFFI bindings. Then:
+`desktop/macos/KetchCore/` is a local Swift package with the XCFramework and
+the UniFFI bindings. `project.yml` depends on it. `Ketch/Core/LiveKetchCore.swift`
+is the `KetchCoreProtocol` over the generated object: it converts records and
+events, maps `KetchError`, wraps the app's `Reporter` and `Decider` per call,
+and forwards `CancelToken.onCancel` to the FFI token. `CoreFactory.make`
+returns it.
 
-1. Add it to `project.yml` (`packages: KetchCore: { path: KetchCore }` and a
-   `package: KetchCore` dependency on the `Ketch` target).
-2. Add `Ketch/Core/LiveKetchCore.swift`: a `KetchCoreProtocol` over the
-   generated `KetchCore` object that converts its records and events to the
-   types in `KetchCoreProtocol.swift`, maps its `KetchError`, wraps the
-   app's `Reporter`/`Decider` in the generated foreign traits per call, and
-   forwards `CancelToken.onCancel` to the FFI token.
-3. Return it from `CoreFactory.make`.
+The store, the views and the unit tests are unchanged. They construct
+`FakeKetchCore` themselves. Two launches of the real app still use the fake,
+because they assert the sample packages or must not touch the network:
 
-Nothing in the store, the views or the tests changes; the fake stays for
-previews and tests. Two things to recheck against the generated API: the
-record fields (`InstalledPackage`, `Finding`), and whether doctor exposes fix
-actions (the Doctor view names fixes but cannot run them yet).
+- the UI smoke test sets `KETCH_USE_FAKE_CORE=1`;
+- a hosted unit-test run sets `XCTestConfigurationFilePath`, and
+  `CoreFactory` treats that as the fake too.
+
+Doctor still names each fix as text. The core's `doctor` returns the fix
+string; it does not run the fix. The view was already written that way.

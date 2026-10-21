@@ -29,6 +29,10 @@ packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     exactVersion: 2.10.0
+  # ketch-ffi's XCFramework and generated bindings. `scripts/xcframework.sh`
+  # writes both into this package; they are gitignored build output.
+  KetchCore:
+    path: KetchCore
 targets:
   Ketch:
     type: application
@@ -42,6 +46,7 @@ targets:
       - path: ../design/generated/Tokens.swift
     dependencies:
       - package: Sparkle
+      - package: KetchCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.pyrlyn.ketch

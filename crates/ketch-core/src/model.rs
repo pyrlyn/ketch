@@ -1564,6 +1564,19 @@ pub fn glob_match(pattern: &str, text: &str) -> bool {
     pi == p.len()
 }
 
+/// [`glob_match`] for a path inside a payload.
+///
+/// A manifest writes `bin/tool.exe`. On Windows the walked relative path
+/// string uses `\`, so the two never compared equal and every directory in
+/// `bin.path` was reported missing. Both sides are folded to `/` first.
+/// Asset-name globs stay on [`glob_match`]: a backslash there is not a separator.
+pub fn glob_match_path(pattern: &str, path: &str) -> bool {
+    fn slashes(text: &str) -> String {
+        text.replace('\\', "/")
+    }
+    glob_match(&slashes(pattern), &slashes(path))
+}
+
 /// The payload file to link when one `bin` glob matched several: the one whose
 /// stem is the spec's link `name` — `rtok.exe` for `rtok*`, never the
 /// `rtok-hook.exe` a release ships beside it. When several share that stem the
@@ -1859,6 +1872,14 @@ mod tests {
         assert!(glob_match("rg?.tar.gz", "rg1.tar.gz"));
         // Pathological pattern must still terminate promptly.
         assert!(!glob_match("*a*a*a*a*b", &"a".repeat(64)));
+    }
+
+    #[test]
+    fn a_path_glob_matches_either_separator() {
+        assert!(glob_match_path("bin/tool.exe", r"bin\tool.exe"));
+        assert!(glob_match_path(r"bin\tool.exe", "bin/tool.exe"));
+        assert!(glob_match_path("bin/tool.exe", "bin/tool.exe"));
+        assert!(!glob_match_path("bin/tool.exe", r"bin\other.exe"));
     }
 
     #[test]
