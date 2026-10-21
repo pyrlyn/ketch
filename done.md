@@ -205,6 +205,10 @@ Found by the 2026-10-08 review: extraction kept `mode & 0o7777`, so setuid, setg
 
 Test: `setuid_bits_from_an_archive_are_dropped`.
 
+### R14. Delete the stale self-update patch script
+
+`scripts/b32_patch.py` opened `src/self_update.rs` after the core move, and nothing referenced it. The script is gone.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.
