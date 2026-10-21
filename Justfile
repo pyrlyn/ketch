@@ -95,6 +95,8 @@ lint-commits:
         fi
     done
     sh -n .githooks/commit-msg
+    # The hook's breaking-marker rule, which the fixtures above do not cover.
+    sh tests/commit-msg-breaking.sh
     if [ -n "$mismatches" ]; then
         echo "lint-commits: fixtures disagreed with their names:$mismatches"
         exit 1
@@ -114,6 +116,7 @@ lint-shell:
     sh tests/desktop-release.sh
     python3 tests/desktop_windows_release.py
     sh tests/docs-i18n.sh
+    sh tests/commit-msg-breaking.sh
     python3 tests/cask_smoke.py
     python3 tests/install_truncation.py
 
