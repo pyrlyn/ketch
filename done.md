@@ -23,11 +23,9 @@ Item 2 stays with B64. Item 1 is B65, which closes with B64's `tests/bin_choice.
 
 Status: done. CI already runs the whole suite on every OS, with no workflow edit: `ci.yml`'s `rust` job (pyrlyn/ci `ci-rust.yml`) runs clippy and `cargo nextest run --workspace --all-targets` on Linux x86_64 and aarch64, macOS aarch64 and Windows x86_64, and `package` runs `dist build` on all three OSes. `verify.yml` no longer exists; the per-OS `check` jobs named above became that shared job, which brings its own sccache. Item 1 is B65, its own task (it extends `tests/bin_choice.rs`, which every OS already runs). Item 2: `install.rs` tests `a_choice_asked_for_a_user_manifest_is_written_into_the_file` and `a_choice_asked_for_a_registry_package_is_remembered_in_state_and_reused` drive `commit` with a scripted `Decider` over a payload holding `rtok-cli` and `rtok-hook`: the user manifest gets `bin = [...]` appended with the rest of the file unchanged; a registry package keeps its choice in state, its registry copy is never written, and an upgrade reuses the choice without asking. They are not OS-gated, so every CI target runs them. Item 3: no second cache, for the reasons and numbers above.
 
-### B60. Windows self-update leaves `ketch.exe.old` behind
+### B123. Relink and rollback restore a stale `.old`
 
-Windows will not delete the file backing a running image. `replace_binary` parks the old binary as `ketch.exe.old` and the process doing the cleanup is that image, so the delete at the end of a successful swap fails and used to be dropped. `install_self` on Windows uses `with_extension("old")`, which names the same leftover `ketch.old`. Both names are swept at the start of `self upgrade` (not on `--dry-run`) and `self install`, and again before `replace_binary` renames: by then the earlier updater has exited, so the delete works. A failure warns and continues. The end-of-swap delete stays one best-effort try. `ketch doctor` warns when a leftover is still in the bin dir, or beside the running binary when that binary lives somewhere else.
-
-Tests: `aside_names_cover_the_swap_and_the_flat_install`, `a_previous_swap_backup_is_removed_and_a_missing_one_is_fine`, `doctor_notes_a_stale_aside_and_stays_quiet_without_one`.
+Row B123 in the 2026-10-12 findings. Done: the store is restored only when this call made the swap. `move_into_store` reports whether it retired a tree, and `restore_retired_store` runs only then. A stale `.old` left by an earlier interrupted swap stays aside when relink fails: `a_failed_relink_keeps_the_live_prefix_over_a_stale_old_copy` on macOS and on Linux.
 
 ### B85. Registry update and listing ignore cancel
 
