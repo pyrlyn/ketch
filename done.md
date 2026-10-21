@@ -1,3 +1,9 @@
+### B65. Binary selection regression test
+
+Add a fixture with two similarly named binaries (`rtok` and `rtok-hook`) and assert the intended one is chosen on every OS: macOS, Windows and Linux. This is the test that would have caught the Windows alphabetical-sort bug, where `rtok-hook` was selected instead of the intended binary.
+
+B64's `tests/bin_choice.rs` already linked `rtok` beside `rtok-hook` on every OS, but each host shipped its own names, so only the Windows job saw the order that broke: `rtok-hook.exe` sorts before `rtok.exe`. With discovery reverted to a plain sort and the chooser taking the first candidate, that test still passed on macOS. `windows_names_link_the_binary_named_like_the_package_on_every_os` now ships `rtok-hook.exe` and `rtok.exe` (both archive orders, and upper case) on every host and reads the linked target from `state.json`, so macOS and Linux CI fail on the same regression.
+
 ### R3. Cross-platform CI
 
 Run verification on macOS, Windows and Linux. A ketch config is either a local file in the project or pushed to a registry; keep that model. The cross-platform check must catch OS-specific binary selection bugs like the one in B64.
@@ -192,6 +198,15 @@ Client release notes are parsed as inline Markdown into `Text`. Every `.link` ru
 
 Test: `changelogLinksStayOnlyWhenTheyAreHTTPS` (with the existing https link test).
 
+### R16. Fuzz seed script reads the old builtin path
+
+`fuzz/seed.sh` looked for `src/builtin.toml` after that file moved into `ketch-core`. The script already reads `crates/ketch-core/src/builtin.toml`. The readme still named the old path; it now matches.
+
+### B83. A sidecar checksum takes the first sorted line
+
+A `.sha256` sidecar used to take the alphabetically first hash. It now prefers the line that names the asset, and falls back to a lone entry only when the file has exactly one.
+
+Test: `a_sidecar_prefers_the_named_asset_over_the_alphabetically_first_line`.
 ### B82. Duplicate checksum basenames overwrite each other
 
 An aggregate checksum list is keyed by file name. Two lines that name the same file with different hashes used to let the later one win. Conflicting names are dropped, so neither hash is trusted.
@@ -214,6 +229,10 @@ Test: `aLockWithNoKnownHolderStillOffersRetry`.
 Found by the 2026-10-08 review: extraction kept `mode & 0o7777`, so setuid, setgid and sticky bits from an archive survived. `payload_mode` now keeps `0o777`, and tar, zip and the directory-mode path all go through it.
 
 Test: `setuid_bits_from_an_archive_are_dropped`.
+
+### R14. Delete the stale self-update patch script
+
+`scripts/b32_patch.py` opened `src/self_update.rs` after the core move, and nothing referenced it. The script is gone.
 
 ### B132. `install.ps1` omits the `v` on `--version`
 
@@ -1700,9 +1719,9 @@ Also through `commit`: `install::tests::a_reinstall_whose_linking_fails_after_th
 
 ### B105. Windows same-version reinstall refuses its own copied bin
 
-Found by the 2026-10-12 review: ownership of a copied bin was proven against `record.target` after the swap had changed it. On re-check it was already fixed by 13efcf9: `retired_targets` compares bin and extra copies against `<store>.old` after the swap. A Windows end-to-end test (`install`, then `install --force`) is still missing.
+Found by the 2026-10-12 review: ownership of a copied bin was proven against `record.target` after the swap had changed it. On re-check it was already fixed by 13efcf9: `retired_targets` compares bin and extra copies against `<store>.old` after the swap.
 Model: Claude Code / opus-5.5 · Status: done 2026-10-12 (already fixed in 13efcf9) · Priority: P2 · Complexity: 3
-Check: `retired_targets` in `platform/windows.rs`; not covered by a Windows test.
+Check: `placing_a_new_build_into_the_same_store_path_replaces_our_copy` in `platform/windows.rs`.
 
 ### B80. A lone `.xz`/`.bz2` file fails as a tarball
 
