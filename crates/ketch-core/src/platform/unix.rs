@@ -10,7 +10,7 @@ use super::claim::Claims;
 use super::Platform;
 use crate::error::{Error, Result};
 use crate::extra::ExtraPlacement;
-use crate::model::{glob_match, glob_preferred, BinSpec, LinkKind, LinkRecord, LinkRole};
+use crate::model::{glob_match_path, glob_preferred, BinSpec, LinkKind, LinkRecord, LinkRole};
 use fs_kit::tree::remove_any;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -255,7 +255,7 @@ pub(crate) fn resolve_bin_specs(root: &Path, specs: &[BinSpec]) -> Result<Vec<(P
                     .filter(|p| {
                         p.strip_prefix(root)
                             .ok()
-                            .is_some_and(|rel| glob_match(pattern, &rel.to_string_lossy()))
+                            .is_some_and(|rel| glob_match_path(pattern, &rel.to_string_lossy()))
                     })
                     .map(|p| p.as_path())
                     .collect();
