@@ -75,6 +75,12 @@ Row B116 in the 2026-10-12 findings. Discovery walks `PATH`, and install puts cl
 
 Done: the bin directory and the store are not searched, and an executable whose path resolves into either is skipped. A plugin in the plugins directory, or elsewhere on `PATH`, is still found.
 
+### B126. C ABI yes/no callbacks return a full int
+
+Row B126 in the 2026-10-12 findings. `KetchStopFn` and `KetchConfirmFn` returned C `bool`, while a Vala `bool` is `gboolean` (an `int`). GCC 14 rejects that function-pointer mismatch, and the return ABI does not agree.
+
+Done: both callbacks return `int32_t`, and any non-zero answer is yes. The Vala test asks which of two binaries to link and passes a stop callback, so the binding is compiled against those types.
+
 ### B138. Record the Marvin advisory and keep rustls past its fix
 
 Row B138 in the 2026-10-12 findings. rustls 0.23.43 (RUSTSEC-2026-0285) is already 0.23.46 in `Cargo.lock`, so it was not bumped again. rsa 0.9.10 (RUSTSEC-2023-0071, Marvin) has no upstream fix and is only reached to verify signatures.
