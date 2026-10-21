@@ -443,6 +443,9 @@ public sealed class KetchStore : INotifyPropertyChanged
     {
         if (activity is not null)
         {
+            // A click while something is running used to return and leave the
+            // window unchanged, so a confirmed uninstall looked like it did nothing.
+            ErrorMessage = "Another operation is running. Wait for it or cancel it first.";
             return;
         }
 
