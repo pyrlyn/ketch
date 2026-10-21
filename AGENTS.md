@@ -414,7 +414,9 @@ These are observed throughout; match them rather than introducing your own.
     `Source::download` take the token), and before `commit` places anything.
     A cancelled install has removed its temp dirs and written no state entry.
     New long-running steps must take the token and check it, not loop without
-    one. The CLI passes tokens that nothing cancels.
+    one. The CLI arms Ctrl-C on one token for the run: the first cancels, a
+    second exits 130 at once. Install requests, `self upgrade` and registry
+    downloads share it.
   - *Per operation.* Build `Config` per operation (`Config::load` re-reads
     `config.toml` and the environment) and call `log::init` per operation; do
     not cache either across operations. `push.rs` owns a tokio runtime and

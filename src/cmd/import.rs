@@ -9,7 +9,6 @@
 //! takes. Everything about what changes on a re-run is decided in the core
 //! (`import::apply`); this file only fetches, prints and commits.
 
-use crate::cancel::Cancel;
 use crate::cli::{ImportCommand, ImportOpts};
 use crate::config::Config;
 use crate::error::{Error, Result};
@@ -162,7 +161,7 @@ fn request(cfg: &Config, name: &str, plan: &Apply) -> InstallRequest {
         // a newer one would be a different command.
         offer_update: false,
         allow_unverified: false,
-        cancel: Cancel::new(),
+        cancel: crate::interrupt::token(),
     }
 }
 
