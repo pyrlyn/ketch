@@ -62,7 +62,7 @@ New bugs and vulnerabilities from a read-only whole-project review of `main` at 
 | B102 | P2 | bug | fixed | `extract/archive.rs:71-127` (`materialize_symlink_as_copy`, `copy_dir_contents`) | On Windows without symlink rights, a member `d -> .` or `sub/d -> ..` passes `check_link_target` and is materialised by copying its target into itself while `WalkDir` walks it: endless recursion or a full disk. Refuse to materialise a directory link whose target is an ancestor of the link, or snapshot the entry list first. |
 | B103 | P2 | bug | fixed | `install.rs:262` (`prepare`), `install.rs:647` (`commit`); `lockfile.rs` plan | State is keyed by name and nothing compares `existing.source` with `manifest.source`. `ketch install otherowner/ripgrep --yes` silently replaces `BurntSushi/ripgrep`, takes over its `rg` link, runs update hooks and mixes retained versions from two sources; `ketch sync` plans a same-name, other-source lock entry as missing and does the same. Refuse in `prepare` when the sources differ and point at `--name`. |
 | B104 | P2 | bug | fixed | `platform/unix.rs:131, 473`; `platform/macos.rs:263, 430`; `platform/windows.rs:404, 543` | Placement clears each occupied destination (old symlink, copied `/Applications/X.app`, Windows bin copy) right before writing the new one; on a later failure only the new links are unplaced and the store restored, so the old version's links and app copy are gone while state still records them. A `copy_tree` of a large `.app` failing on a full disk loses the working app and leaves an unrecorded half copy. Move occupied destinations aside and restore them on failure. Adjacent to B79, which covers only the store. |
-| B105 | P2 | bug | confirmed | `platform/windows.rs:198-203` (`still_placed`, `CopiedFile`), `:404` (`copy_binary`) | Ownership of a copied bin is proven by `same_contents(link, record.target)`. On a same-version reinstall the swap changes `record.target` first, so `copy_binary`'s second `destination_available` reports "already exists and was not installed by ketch": `ketch sync` cannot repair a drifted payload and `--force` reinstalls fail (extras too). Decide ownership once in preflight, or compare against `<store>.old`. |
+| B105 | P2 | bug | fixed | `platform/windows.rs` (`retired_targets`) | A same-version reinstall compares a copied bin with `<store>.old`, so the copy ketch made is still recognised as ours. |
 | B106 | P2 | bug | confirmed | `platform/windows.rs:328`; `model.rs:1462` (`glob_match`) | A manifest `bin.path` written with `/` (`bin/tool.exe`) is matched against `rel.to_string_lossy()`, which uses `\` on Windows; `glob_match` does not normalise separators, so any manifest with a directory in `bin.path` fails with "payload does not contain it". Normalise both sides to `/`, add a Windows test, and check `extra::resolve_under`. |
 | B107 | P2 | bug | fixed | `self_update.rs` (`record_self_docs`) | Self install and self upgrade save the new package before linking man pages and completions. A user-owned file at a doc destination is a warning, so `state.json` names the version that is on disk and a later upgrade does not repeat the failure. |
 | B106 | P2 | bug | fixed | `model.rs` (`glob_match_path`); `platform/windows.rs`, `platform/unix.rs` | A manifest `bin.path` written with `/` (`bin/tool.exe`) was matched against `rel.to_string_lossy()`, which uses `\` on Windows, so any directory in `bin.path` failed. Both sides are folded to `/` before the glob. `extra::resolve_under` still refuses a backslash: `safe_member_path` treats one as an unsafe name, and `doc/rg.1` already resolves. |
@@ -148,6 +148,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B123 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
 | B118 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
 | B85 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
+| B105 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
 
 ### B85. Registry update and listing ignore cancel
 
@@ -179,6 +180,12 @@ Row B82 in the 2026-10-08 findings. An aggregate checksum file is keyed by basen
 ### R16. Fuzz seed script reads the old builtin path
 
 Row R16 in the 2026-10-08 findings. `fuzz/seed.sh` already reads `crates/ketch-core/src/builtin.toml`. The readme named the old `src/builtin.toml` path; it now matches the script.
+
+Status: done. See `done.md`.
+
+### B105. Windows same-version reinstall refuses its own copied bin
+
+Row B105 in the 2026-10-12 findings. `retired_targets` points recorded copies at `<store>.old` before the new payload is placed, so `still_placed` still recognises our copy after the swap.
 
 Status: done. See `done.md`.
 
