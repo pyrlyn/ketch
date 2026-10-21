@@ -155,6 +155,12 @@ Windows PowerShell 5.1 on older Windows 10 and Server defaults `[Net.ServicePoin
 
 Test: `the_script_enables_tls12_without_dropping_newer_protocols`.
 
+### B110. Changelog links open any URL scheme
+
+Client release notes are parsed as inline Markdown into `Text`. Every `.link` run was clickable through the default `openURL` action, including `zoommtg:` and `file:`. `KetchStore.render` now drops a link unless its scheme is `https`. The words stay.
+
+Test: `changelogLinksStayOnlyWhenTheyAreHTTPS` (with the existing https link test).
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.

@@ -310,6 +310,20 @@ import Testing
         #expect(plain == "1.2.0\n\n- see docs")
         #expect(text.runs.contains { $0.link == URL(string: "https://example.com") })
     }
+
+    @Test func changelogLinksStayOnlyWhenTheyAreHTTPS() {
+        let text = KetchStore.render(
+            markdown: "- [docs](https://example.com) [call](zoommtg://join) [local](file:///etc/passwd) [plain](http://example.com)"
+        )
+
+        let plain = String(text.characters)
+        #expect(plain.contains("docs"))
+        #expect(plain.contains("call"))
+        #expect(plain.contains("local"))
+        #expect(plain.contains("plain"))
+        let links = text.runs.compactMap(\.link).map(\.absoluteString)
+        #expect(links == ["https://example.com"])
+    }
 }
 
 @MainActor

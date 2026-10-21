@@ -65,7 +65,7 @@ New bugs and vulnerabilities from a read-only whole-project review of `main` at 
 | B107 | P2 | bug | confirmed | `self_update.rs:113` (`install_self`), `:402`, `:487` (`update`) | `expose_self_docs(...)?` runs after the new version is placed but before `state.save`. A user-owned completion or man file at the destination makes `clear_destination` fail: the new binary is on disk, `state.json` names the old one, and every later self upgrade repeats it. The `AlreadyInstalled` branch already warns instead. Save state first and make docs exposure a warning everywhere. |
 | B108 | P2 | bug | fixed | `process.rs:323-342` (`cmd_hits`) | A process counts as an occupant when its command line contains the path as a plain substring. Upgrading `rg` with `--yes` SIGTERMs, then SIGKILLs, a running `…/bin/rga`, `…/rg-helper`, or any editor or shell whose arguments mention the path (Linux, Windows). Match whole NUL-split arguments against exact canonical paths and prefer exe and open-fd evidence. Separate from B88. |
 | B109 | P2 | vuln | fixed | `state.rs:235-276` (`Lock::acquire_path`) | `create_new` and the pid write are not atomic: a second process that reads the still-empty file calls it stale and renames the live lock away. Two processes that judged one dead pid stale can each rename, the second over the first's fresh lock. Both then run, and the first `Drop` deletes the other's lock. Write the pid to a temp file and link it into place without replace, treat an empty lock as busy unless old, re-read before renaming, or use an OS advisory lock. |
-| B110 | P2 | vuln | confirmed | `desktop/macos/Ketch/Store/KetchStore.swift:197-211`; `Views/PackageDetailView.swift:127` | Client release notes are parsed as inline Markdown into `Text(AttributedString)`, which keeps `.link` runs clickable through the default `openURL` for any scheme: `[Release notes](zoommtg://…)` or a phishing `https` link is one click away. Strip `.link` attributes or install an `openURL` handler that allows only `https`. |
+| B110 | P2 | vuln | fixed | `desktop/macos/Ketch/Store/KetchStore.swift` | Changelog Markdown keeps a `.link` run only when its scheme is `https`. Other schemes stay as text, so the default `openURL` action cannot open them. |
 | B111 | P2 | bug | fixed | `desktop/macos/Ketch/Views/DiscoverView.swift:44-47`; `desktop/windows/Ketch.AppCore/FakeKetchCore.cs:131`; `crates/ketch-ffi/src/lib.rs:166-171` | Discover's shelf calls `search("")`. Both fakes return the whole registry; the real core returns `Other("nothing to search for")`, so with the live core (R9) Discover opens with an error and an empty shelf. No contract scenario covers it. Decide the semantics in `ketch-ffi` (or add `browse`) and add a scenario. |
 | B112 | P2 | bug | suspected | `desktop/windows/Ketch.App/Pages/InstalledPage.xaml.cs:63-74`; `MainWindow.xaml.cs:85-86, 124-151` | Uninstall and Install buttons stay enabled while an operation runs, so a confirm `ContentDialog` can be open when the core asks a decider question; WinUI allows one dialog, `ShowAsync` throws inside the fire-and-forget `AskAsync`, and the core thread blocks in `done.Wait()` until Cancel. Disable those buttons while `IsRunning`; catch dialog failures and answer `null`/`false`. |
 | B113 | P3 | vuln | fixed | `extract/mod.rs:81-136` (`safe_member_path`); `config.rs:471` (`sanitize_component`); `model.rs:1116` (`usable_file_name`) | DOS device names (`CON`, `NUL`, `AUX`, `PRN`, `COM1-9`, `LPT1-9`, also with an extension), names with a trailing dot or space, and `<>:"\|?*` pass. An archive member, bin, tag or package named `nul.txt` writes to a device, `foo.` collides with `foo`, a store dir can fail to create. Reject these case-insensitively per component on Windows. |
@@ -145,6 +145,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 Row B85 in the 2026-10-08 findings. `registry::update` downloads with `cx.cancel`. `ask_all` checks that token before each package, so a cancel stops the parallel lookup.
 
 Status: done. See `done.md`.
+| B110 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
 | B134 | done | P3 | 1 | 100% | Cursor / grok 4.7 |
 | B133 | done | P3 | 2 | 100% | Cursor / grok 4.7 |
 
@@ -582,6 +583,11 @@ Row B118 in the 2026-10-12 findings. Done: a package installed checksum-verified
 
 Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in `cli.rs`. Check: an end-to-end test of both paths.
 
+### B110. Changelog links open any URL scheme
+
+Row B110 in the 2026-10-12 findings. Release notes are a client app's Markdown, drawn as `Text`. A `.link` run stays only when the scheme is `https`; `zoommtg:`, `file:` and `http:` keep their words and lose the link, so the default `openURL` action cannot open them.
+
+Status: done. See `done.md`.
 ### B134. `install.ps1` leaves TLS 1.0 on older Windows
 
 Row B134 in the 2026-10-12 findings. Windows PowerShell 5.1 on older Windows 10 and Server defaults to TLS 1.0/1.1, and GitHub rejects that handshake. The installer adds `Tls12` with `-bor` to `[Net.ServicePointManager]::SecurityProtocol` before any request, so a host that already enabled TLS 1.3 keeps it.
