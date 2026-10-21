@@ -42,6 +42,10 @@ Windows PowerShell 5.1's `Join-Path` accepts one child path. `Join-Path $TempDir
 
 Test: `the_nested_archive_path_is_joined_for_windows_powershell_51`.
 
+### B119. A stray shell-block marker swallows the lines above the real block
+
+Row B119 in the 2026-10-12 findings. Done: an END pairs with the nearest BEGIN still before it, so an orphan BEGIN does not take the next block's END. Uninstall leaves the lines between them, and the next install rewrites the closed block instead of appending another.
+
 ### B85. Registry update and listing ignore cancel
 Each of the four switches can be turned off in Settings. They persist in `%LOCALAPPDATA%\ketch\settings.json`, so an unpackaged app and an MSIX share one file. A broken file loads the defaults rather than stopping the app.
 
