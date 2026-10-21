@@ -4,13 +4,15 @@
 
 //! ketch — catch releases straight from GitHub.
 //!
-//! `main` does three things and nothing else: parse arguments, build the
-//! `Config`, and hand off to a command. Every failure path converges here so a
-//! single place decides how errors are shown and what the process exits with.
+//! `main` parses arguments, builds the `Config`, and hands off to a command.
+//! It also arms Ctrl-C so a long command can stop. Every failure path
+//! converges here so a single place decides how errors are shown and what the
+//! process exits with.
 
 mod cli;
 mod cmd;
 mod complete;
+mod interrupt;
 mod man;
 mod self_docs;
 #[cfg(feature = "tui")]
@@ -21,9 +23,9 @@ mod ui;
 // when they lived here, so `crate::config` and the rest keep resolving in
 // `cmd/`, `ui` and `tui` and the binary's own paths did not have to change.
 use ketch_core::{
-    cancel, changelog, config, decide, diff, doctor, error, import, info, install, listing,
-    lockfile, log, manifest, model, platform, process, push, registry, releases, report, resolve,
-    self_update, shell, source, state, stats, text, wizard,
+    changelog, config, decide, diff, doctor, error, import, info, install, listing, lockfile, log,
+    manifest, model, platform, process, push, registry, releases, report, resolve, self_update,
+    shell, source, state, stats, text, wizard,
 };
 
 use clap::Parser;
@@ -31,6 +33,9 @@ use cli::{Cli, Command};
 use error::Result;
 
 fn main() {
+    // Before any command, so a download that starts on this run shares the
+    // token the handler cancels. A second Ctrl-C exits from the handler.
+    interrupt::install();
     let args: Vec<std::ffi::OsString> = std::env::args_os().collect();
     if let Some(code) = complete::intercept(&args) {
         std::process::exit(code);
