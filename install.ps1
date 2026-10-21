@@ -389,9 +389,12 @@ OPTIONS:
             }
 
             $BinaryPath = $null
+            # Windows PowerShell 5.1's Join-Path takes one child. A third
+            # positional argument is -AdditionalChildPath, which only exists in
+            # pwsh 6+, so the nested archive path is joined twice.
             $candidates = @(
                 (Join-Path $TempDir $BinaryName),
-                (Join-Path $TempDir 'ketch' $BinaryName)
+                (Join-Path (Join-Path $TempDir 'ketch') $BinaryName)
             )
             foreach ($candidate in $candidates) {
                 if (Test-Path -LiteralPath $candidate) {
