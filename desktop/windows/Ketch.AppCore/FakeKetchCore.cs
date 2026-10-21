@@ -4,8 +4,8 @@
 
 // A stand-in for the real core: canned packages, simulated pipeline stages and
 // progress, and switches for the states the UI must handle (a held lock, a
-// package with several binaries). Previews, tests and, until the binding is
-// wired, the app itself run on it. It never touches the disk, and it ports
+// package with several binaries). Previews and tests run on it, and so does
+// the app when `KETCH_APP_FAKE_CORE=1`. It never touches the disk, and it ports
 // `FakeKetchCore.swift` so the macOS and Windows fakes behave alike.
 
 namespace Ketch.AppCore;

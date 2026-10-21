@@ -5,9 +5,9 @@
 // The app's view of ketch's core: the operations, records, callbacks and
 // errors `ketch-ffi` exports, as the Windows app wants them.
 //
-// Pages and the store only ever see `IKetchCore`, so they run against
-// `FakeKetchCore` now and against the binding's adapter when D12 wires it;
-// nothing here moves when that happens.
+// Pages and the store only ever see `IKetchCore`, so the same code runs on
+// `FakeKetchCore` and on the binding's adapter, `FfiKetchCore` in
+// Ketch.FfiCore; the app's `CoreFactory` picks one.
 
 namespace Ketch.AppCore;
 

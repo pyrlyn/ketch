@@ -39,6 +39,9 @@ public sealed class AppSettings
     /// <summary>Whether <c>ketch://</c> links open this app. On until the user turns it off.</summary>
     public bool HandleLinks { get; set; } = true;
 
+    /// <summary><c>Default</c>, <c>Light</c> or <c>Dark</c>, as WinUI's <c>ElementTheme</c> names them.</summary>
+    public string Theme { get; set; } = "Default";
+
     /// <summary><see cref="UpdateNotices.Key"/>s already announced.</summary>
     public IReadOnlySet<string> NotifiedUpgrades => notified;
 
@@ -71,6 +74,7 @@ public sealed class AppSettings
             settings.NotifiesOfUpdates = stored.NotifiesOfUpdates;
             settings.OpenAtLogin = stored.OpenAtLogin;
             settings.HandleLinks = stored.HandleLinks;
+            settings.Theme = stored.Theme ?? settings.Theme;
             foreach (var key in stored.NotifiedUpgrades ?? [])
             {
                 if (!string.IsNullOrEmpty(key))
@@ -127,6 +131,7 @@ public sealed class AppSettings
             NotifiesOfUpdates = NotifiesOfUpdates,
             OpenAtLogin = OpenAtLogin,
             HandleLinks = HandleLinks,
+            Theme = Theme,
             NotifiedUpgrades = [.. notified.Order(StringComparer.Ordinal)],
         };
         var tmp = path + ".tmp";
@@ -143,6 +148,8 @@ public sealed class AppSettings
         public bool OpenAtLogin { get; set; }
 
         public bool HandleLinks { get; set; } = true;
+
+        public string? Theme { get; set; }
 
         public List<string>? NotifiedUpgrades { get; set; }
     }

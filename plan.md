@@ -8,7 +8,7 @@ New bugs, dead code and moves from a read-only Cursor cloud review of `main` at 
 
 | ID | Priority | Kind | Status | Where | Fix |
 | --- | --- | --- | --- | --- | --- |
-| B75 | P1 | bug | confirmed | `scripts/cask.sh:81-86`; tap run 37154989737 | The cask postflight `run /bin/sh` does not pass a GitHub token: the step had `GITHUB_TOKEN`/`KETCH_GITHUB_TOKEN` and still hit `API rate limit exceeded`. Forward the token into the cask `run` env, or smoke-test `ketch self install` outside Homebrew's isolated postflight. |
+| B75 | P1 | bug | fixed | `scripts/cask.sh:81-86`; tap run 37154989737 | The cask postflight `run /bin/sh` does not pass a GitHub token: the step had `GITHUB_TOKEN`/`KETCH_GITHUB_TOKEN` and still hit `API rate limit exceeded`. Forward the token into the cask `run` env, or smoke-test `ketch self install` outside Homebrew's isolated postflight. |
 | B76 | P1 | bug | fixed | `registry.rs:117-120` | After the live registry is moved aside, the rollback is `let _ = rename(aside, registry_dir)`; if it fails, `registry_dir` is left empty. Surface the failure and copy-restore. |
 | B77 | P1 | bug | fixed | `self_update.rs:932-937` | Uninstall runs `remove_file(exe)?` after packages are gone and state is saved; a busy Windows `.exe` aborts the rest. Warn and continue, like the other uninstall steps. |
 | B79 | P1 | bug | fixed | `install.rs:691-729`; `platform/unix.rs:423`; `platform/windows.rs:502` | `place` swaps the store, then links; `ScopedDir` is off when `existing.prefix == store_dir`, so a failure after the swap leaves state pointing at a tree that is not on disk. Restore `.old` on error. |
@@ -90,8 +90,8 @@ New bugs and vulnerabilities from a read-only whole-project review of `main` at 
 | B134 | P3 | bug | fixed | `install.ps1` | The installer adds `Tls12` with `-bor` before any download, so older Windows PowerShell can reach GitHub and a host that already enabled TLS 1.3 keeps it. |
 | B136 | P3 | bug | fixed | `Justfile` (`lint-cask`); `ci.yml` package job | `just check` and the macOS package job wrote `cask/Casks/ketch.rb` into the repo root and `cask/` was not ignored, so `scripts/release.sh --local` stopped at its clean-tree check. Both now write `target/cask/Casks/ketch.rb` (`target/` is gitignored; `brew style` still sees a `Casks/` directory). |
 | B135 | P3 | bug | fixed | `.github/workflows/ci.yml` `review` | `/review` dispatched `--ref` from the PR's `headRefName`. A fork's name is not a ref here, and a same-named branch can be `main`, so CI ran on the wrong commit while the comment named the PR head. The job now refuses a head outside this repository and a ref whose SHA is not `headRefOid`. |
-| B137 | P3 | bug | confirmed | `tests/commit-msg-breaking.sh`; `Justfile` `lint-commits`; `ci.yml` | `done.md:375` says the test is wired into `just lint-commits`, but neither the Justfile nor CI calls it. Add it to `lint-commits` and CI's shell step. |
 | B138 | P3 | vuln | fixed | `Cargo.lock` (cargo-deny 0.20.2, default config) | RUSTSEC-2026-0285: rustls 0.23.43 via ureq and octocrab, fixed in ≥ 0.23.45 (low impact; `cargo update -p rustls` needs creator permission). RUSTSEC-2023-0071: rsa 0.9.10 (Marvin) via pgp, sigstore and jsonwebtoken, no upstream fix, verification-only use; record an explicit ignore with that reason in a new `deny.toml`. |
+| B137 | P3 | bug | fixed | `tests/commit-msg-breaking.sh`; `Justfile` `lint-commits`; `ci.yml` | `done.md` said the breaking-marker test was wired into `just lint-commits`, but neither the Justfile nor CI called it. `lint-commits`, `lint-shell` and the package job's shell step now run it. |
 
 Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#307), B93 (#316), B95 (#308), B97 (#311), B101 (#302), B103 (#298), B104 (#296), B108 (#310), B109 (#309), B111 (#313), B114 (#304), B115 (#305), B124 (#299), B130 (#314).
 
@@ -100,6 +100,13 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | R5 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
 | F13 | in progress | P3 | 4 | 80% | Claude Code / opus-5.5 |
 | D12 | todo | P3 | 4 | 0% | |
+| F14 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
+| F18 | done | P2 | 4 | 100% | Cursor / grok 4.7 |
+| D11 | done | P3 | 5 | 100% | Cursor / grok 4.7 |
+| D12 | done | P3 | 4 | 100% | Cursor / grok 4.7 |
+| D13 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
+| D16 | done | P3 | 5 | 100% | Cursor / grok 4.7 |
+| D14 | done | P3 | 4 | 100% | Cursor / grok 4.7 |
 | D17 | todo | P3 | 4 | 0% | |
 | D18 | todo | P3 | 3 | 0% | |
 | D19 | todo | P3 | 4 | 0% | |
@@ -231,6 +238,30 @@ Swap the Windows app's fake core for the binding. Depends on D10, D11, D1 and D2
 Done when the app runs every screen on `ketch-ffi` through D10's binding, work runs off the UI thread with events marshalled to the `DispatcherQueue`, cancel and `Busy` behave as in the contract, and a manual pass against a scratch root is recorded.
 
 The app ships both as an MSIX and unpackaged (D14), and an unpackaged app has no `ApplicationData`, so settings go in a file under `%LOCALAPPDATA%\ketch` that works in both.
+
+Status: done. `FfiKetchCore` is the app's `IKetchCore` over the generated binding. Records, events and errors go through the same `ContractScenario` classes the fake replays, so the two cores show the same things. `KetchStore` already runs each call on its own thread and posts events and questions through the `DispatcherQueue`. `CoreFactory` picks the real core, or the fake when `KETCH_APP_FAKE_CORE=1`. Theme preferences live in `%LOCALAPPDATA%\ketch\app-settings.json`, which an MSIX redirects into its package data, so one path serves both forms. A declined binary choice or stop question cancels the operation; a leftover folder has no dialog and is kept. Discover still searches as you type, debounced (B130); an empty query browses the built-in shelf and asks no source. The manual Windows GUI pass (launch against a scratch `KETCH_ROOT`, walk every screen, confirm the choice dialog and a `Busy` retry) was not run here: this environment has no Windows desktop. The adapter tests cover the scratch-root install, cancel, `Busy` and `NotFound` paths, and `ketch-win-app` builds the WinUI project and checks `ketch_ffi.dll` sits beside `Ketch.exe`.
+
+### D13. Windows: tray icon, notifications, start at login, links
+
+The Windows counterparts of the macOS menu-bar extra, notifications, login item and URL scheme. WinUI has no tray control, so the icon is Win32's notification area. Research: sections 1 and 3c.
+
+Done when a notification-area icon opens the tray panel, `AppNotificationManager` posts update notices unpackaged, start at login and the `ketch` protocol are registered through `ActivationRegistrationManager` (with D8's validation rules), one instance runs at a time via `AppInstance`, and each can be switched off in Settings.
+
+Status: done. The WinUI shell adds the notification-area icon and its panel, posts one unpackaged app notification for upgrades that have not been announced, and registers startup and the `ketch` protocol through `ActivationRegistrationManager`. A second process redirects to the first. Each switch is stored in `%LOCALAPPDATA%\ketch\settings.json`, which an unpackaged app and an MSIX can both write. A link only opens a package page. The rules are tested in `Ketch.AppCore.Tests`; the WinUI project is built by the `ketch-win-app` job. See `done.md`.
+
+### D14. Windows: release pipeline
+
+How the Windows app reaches users and updates itself, separate from the CLI's release. R10's open decisions on distribution and the Windows App SDK licence come first.
+
+Done when CI builds, on `desktop-windows-v*` tags and without touching `/releases/latest`, both an MSIX and an unpackaged self-contained zip, signed (Artifact Signing or the creator's choice), updates arrive through the chosen route (Velopack or winget), and the creator's answers to R10's decisions are recorded. The creator chose to ship both forms. The MSIX is signed with a certificate held in repository secrets named the way the macOS ones are (`MACOS_CERTIFICATE`, `MACOS_CERTIFICATE_PWD`), and the release fails when they are missing rather than shipping unsigned.
+
+Settings persistence differs between the two: an MSIX has `ApplicationData`, an unpackaged app has none (D12 stores settings in a way that works in both).
+
+Status: the dispatch-only workflow `.github/workflows/release-windows-desktop.yml` publishes both artifacts under `desktop-windows-vX.Y.Z` and refuses to become `/releases/latest`. It is not triggered by the tag: the run creates the tag after the zip and the signed MSIX exist, the same way the macOS app release does, so a tag push cannot publish on its own. `select_release` drops `desktop-windows-v*` when a real version tag is present. Signing uses `WINDOWS_CERTIFICATE` (base64 pfx) and `WINDOWS_CERTIFICATE_PWD`, step env only, and the job stops before building when either is missing. Those are not `MACOS_CERTIFICATE`: an Apple Developer ID certificate cannot sign an MSIX, and a Windows job must not see it. The MSIX manifest is written on the runner (`unvirtualizedResources`, so PATH edits hit the real `HKCU`), and the unpackaged project in git stays `WindowsPackageType=None`. x64 only. Still the creator's: place the two Windows secrets (this workflow has not been dispatched, and no release was cut); an update channel (Velopack would change the app and cannot be checked here, winget submission needs a Microsoft account); and R10's open question of the Windows App SDK licence against the GPL-3.0-only build (`docs/research-desktop-windows-linux.md`, open decisions 3 and 4).
+
+### D16. Linux: Vala + GTK 4 app shell on a fake core
+
+Done. `desktop/linux` is a Meson project: a GLib core library (the contract in ketch-capi's shape, a fake that replays `desktop/contract/scenarios`, and the store) and a libadwaita app over it. The window is an `AdwNavigationSplitView` that collapses on a narrow breakpoint; Blueprint 0.22.2 (pinned wrap) is the markup. `AdwAlertDialog` asks the binary, process and uninstall questions, `AdwBanner` shows busy and the running operation, `AdwToast` reports finished work. Light, dark and high contrast come from libadwaita plus the token stylesheet's media queries (libadwaita 1.8). An empty search browses (`search-browse`). `just linux-app-test` runs the library tests; the `ketch-linux-app` job builds the app on Ubuntu 26.04. See `done.md`.
 
 ### D17. Linux: the app on the real core
 

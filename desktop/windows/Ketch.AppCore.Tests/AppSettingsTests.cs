@@ -22,8 +22,10 @@ public sealed class AppSettingsTests
             Assert.IsTrue(settings.ShowTray);
             Assert.IsFalse(settings.NotifiesOfUpdates);
             Assert.IsTrue(settings.HandleLinks);
+            Assert.AreEqual("Default", settings.Theme);
 
             settings.ShowTray = false;
+            settings.Theme = "Dark";
             settings.NotifiesOfUpdates = true;
             settings.OpenAtLogin = true;
             settings.HandleLinks = false;
@@ -35,6 +37,7 @@ public sealed class AppSettingsTests
             Assert.IsTrue(loaded.NotifiesOfUpdates);
             Assert.IsTrue(loaded.OpenAtLogin);
             Assert.IsFalse(loaded.HandleLinks);
+            Assert.AreEqual("Dark", loaded.Theme);
             Assert.IsTrue(loaded.NotifiedUpgrades.Contains("ripgrep@2"));
         }
         finally
@@ -56,6 +59,7 @@ public sealed class AppSettingsTests
             Assert.IsTrue(loaded.ShowTray);
             Assert.IsFalse(loaded.NotifiesOfUpdates);
             Assert.IsTrue(loaded.HandleLinks);
+            Assert.AreEqual("Default", loaded.Theme);
         }
         finally
         {
