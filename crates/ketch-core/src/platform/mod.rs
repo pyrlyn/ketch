@@ -48,9 +48,6 @@ pub struct AssetScore {
 /// Everything the platform needs to place an extracted payload.
 pub struct Placement<'a> {
     pub name: &'a str,
-    // Part of the public surface, with no caller in the tree yet.
-    #[allow(dead_code)]
-    pub version: &'a str,
     /// Directory holding the extracted release payload.
     pub payload_dir: &'a Path,
     /// Final home of this version inside the store.
@@ -822,7 +819,6 @@ mod tests {
         std::fs::create_dir_all(&bin).unwrap();
         let plan = Placement {
             name: "rtok",
-            version: "1.0",
             payload_dir: &payload,
             store_dir: &store,
             bin_dir: &bin,

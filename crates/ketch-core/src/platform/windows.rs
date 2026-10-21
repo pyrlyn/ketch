@@ -665,7 +665,6 @@ mod tests {
     ) -> Placement<'a> {
         Placement {
             name: "tool",
-            version: "1.0",
             payload_dir: payload,
             store_dir: store,
             bin_dir: bin,

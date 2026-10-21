@@ -19,7 +19,7 @@ use assert_fs::prelude::*;
 use assert_fs::TempDir;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 
 /// mise's directory for ketch under its current name, then under the name it
 /// had before it moved from listepo to pyrlyn, which older installs still use.
@@ -254,6 +254,17 @@ impl Sandbox {
         // The bin dir on PATH is the configuration ketch is installed into;
         // `doctor` is right to fail without it.
         self.ketch_with_path(args, self.path_with_bin())
+    }
+
+    /// Start ketch and return while it is still running. Stdin is closed so a
+    /// prompt cannot wait on the test; stdout and stderr are pipes.
+    pub fn spawn(&self, args: &[&str]) -> std::process::Child {
+        self.command(args, self.path_with_bin())
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn ketch")
     }
 
     /// Run ketch with the sandbox bin dir left off PATH, which is what an

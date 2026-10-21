@@ -11,7 +11,8 @@ using Microsoft.UI.Xaml;
 namespace KetchApp;
 
 /// <summary>An installed package as a row: with the version it could move to, and the lockfile holding it back.</summary>
-public sealed record InstalledRow(InstalledPackage Package, string? Update, string? HeldBy)
+/// <param name="CanAct">False while another operation is running, so Uninstall cannot open a second dialog.</param>
+public sealed record InstalledRow(InstalledPackage Package, string? Update, string? HeldBy, bool CanAct)
 {
     public string Name => Package.Name;
 
@@ -25,6 +26,9 @@ public sealed record InstalledRow(InstalledPackage Package, string? Update, stri
 
     public bool IsHeld => HeldBy is not null && Update is null;
 }
+
+/// <summary>A registry hit as a row. <paramref name="CanAct"/> is false while an operation is running.</summary>
+public sealed record DiscoverRow(string Name, string? Description, string? Latest, bool CanAct);
 
 internal static class Fmt
 {

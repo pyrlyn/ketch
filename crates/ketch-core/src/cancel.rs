@@ -20,14 +20,13 @@ use std::sync::Arc;
 pub struct Cancel(Arc<AtomicBool>);
 
 impl Cancel {
-    /// A token that is not cancelled. The CLI passes one that never is.
+    /// A token that is not cancelled. The CLI starts from one and cancels it
+    /// on Ctrl-C; a host that outlives the operation keeps a clone and calls
+    /// [`Cancel::cancel`] itself.
     pub fn new() -> Self {
         Self::default()
     }
 
-    // No caller in the CLI, which has no signal wiring; the host app is the one
-    // that cancels.
-    #[allow(dead_code)]
     /// Ask the operation holding a clone of this token to stop at its next check.
     pub fn cancel(&self) {
         self.0.store(true, Ordering::Relaxed);

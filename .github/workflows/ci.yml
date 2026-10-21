@@ -122,6 +122,49 @@ jobs:
           if ($errors) { $errors | Format-List *; exit 1 }
           ./install.ps1 --help
 
+      # pwsh 7 accepts Join-Path's third child; Windows PowerShell 5.1, the
+      # shell `irm | iex` runs in, does not. This step goes past extraction.
+      - name: Installer past extraction on Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = Join-Path $env:RUNNER_TEMP 'ketch-b94-release'
+          $nested = Join-Path $release 'staging\ketch'
+          New-Item -ItemType Directory -Path $nested -Force | Out-Null
+          $stub = Join-Path $nested 'ketch.exe'
+          Add-Type -OutputType ConsoleApplication -OutputAssembly $stub -TypeDefinition @'
+          using System;
+          using System.IO;
+          using System.Reflection;
+          public class Program {
+              public static int Main(string[] args) {
+                  if (args.Length >= 2 && args[0] == "self" && args[1] == "install") {
+                      string root = Environment.GetEnvironmentVariable("KETCH_ROOT");
+                      if (string.IsNullOrEmpty(root)) return 2;
+                      string bin = Path.Combine(root, "bin");
+                      Directory.CreateDirectory(bin);
+                      File.Copy(Assembly.GetExecutingAssembly().Location, Path.Combine(bin, "ketch.exe"), true);
+                      return 0;
+                  }
+                  Console.WriteLine("ketch (stub)");
+                  return 0;
+              }
+          }
+          '@
+          $tar = Join-Path $release 'payload.tar.gz'
+          & tar.exe -czf $tar -C (Join-Path $release 'staging') ketch
+          if ($LASTEXITCODE -ne 0) { throw "tar failed: $LASTEXITCODE" }
+          $name = 'ketch-x86_64-pc-windows-msvc.tar.gz'
+          $hash = (Get-FileHash -LiteralPath $tar -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -LiteralPath (Join-Path $release 'SHA256SUMS') -Encoding ascii -Value "$hash  $name"
+          $root = Join-Path $env:RUNNER_TEMP 'ketch-b94-root'
+          $env:KETCH_INSTALL_RELEASE_DIR = $release
+          $env:PROCESSOR_ARCHITECTURE = 'AMD64'
+          & .\install.ps1 --no-modify-path --root $root
+          if ($LASTEXITCODE -ne 0) { throw "install.ps1 exited $LASTEXITCODE" }
+          $installed = Join-Path $root 'bin\ketch.exe'
+          if (-not (Test-Path -LiteralPath $installed)) { throw "missing $installed" }
+
   # Which runner the macOS jobs use: pyrlyn/ci's macos-runner action reads the MACOS_RUNNER
   # variable (unset = the hosted labels below, xcode-27-local = the dedicated Mac).
   macos-runner:
@@ -471,6 +514,7 @@ jobs:
           sh tests/release-workflows.sh
           sh tests/ci-yml-triggers.sh
           sh tests/desktop-release.sh
+          python3 tests/desktop_windows_release.py
           sh tests/docs-i18n.sh
           python3 tests/install_truncation.py
 
