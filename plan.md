@@ -131,6 +131,29 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B118 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
 | B123 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B85 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
+| K1 | in progress | P2 | 3 | 60% | Claude Code / opus-5.5 |
+
+### K1. Track ketch tasks in rtok and check plan.md against them
+
+Tasks live in rtok's disk adapter (`tasks/`, prefix `K`); `plan.md`, `todo.md`
+and `done.md` stay as their human view. `tests/tasks.rs` fails when the two
+drift: a row written by hand, a status changed in one place only, a finished
+task still planned, `todo.md` out of step with the table, a `done.md` entry
+with no finished task file.
+
+Execution plan:
+
+1. `scripts/tasks-import.py` migrates every existing task into `tasks/`,
+   keeping its id (one-time; deleted once the final run lands).
+2. `tests/tasks.rs`: the check against the repository, plus fixture tests for
+   each rule.
+3. `AGENTS.md`: new tasks come from `rtok task create`, status changes from
+   `rtok task status`, and the three files are kept in step with them.
+4. After the open pull requests merge: rerun the import on the final
+   `plan.md`, clear the drift it reports, delete the script, and turn the
+   check green.
+
+Verify with `cargo nextest run -E 'binary(tasks)'`.
 
 ### B85. Registry update and listing ignore cancel
 
