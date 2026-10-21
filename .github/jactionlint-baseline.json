@@ -99,6 +99,14 @@
     },
     {
       "file": ".github/workflows/ci.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "a1a2019e8e6713e1",
+      "context": "6ae2df26fdc6c163",
+      "occurrence": 0,
+      "message": "action \"pyrlyn/ci/.github/actions/setup-rust@main\" must be pinned to a full-length commit SHA like \"{owner}/{repo}@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
       "rule": "missing-timeout",
       "fingerprint": "30eda6f9019d004e",
       "context": "fe261f0dd509035e",
