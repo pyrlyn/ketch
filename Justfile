@@ -247,12 +247,16 @@ macos-project:
     mkdir -p {{macos_dir}}/build
     printf 'Signature: 8a477f597d28d172789f06886806bc55\n# xcodebuild output for the macOS app; safe to delete.\n' > {{macos_dir}}/build/CACHEDIR.TAG
 
-# Apple Silicon (arm64) Debug build of Ketch.app
+# Apple Silicon (arm64) Debug build of Ketch.app. The app links KetchCore,
+# so the debug XCFramework and bindings have to exist first.
 macos-app: macos-project
+    scripts/xcframework.sh --debug
     {{macos_build}} -configuration Debug -destination 'generic/platform=macOS' ARCHS=arm64 ONLY_ACTIVE_ARCH=NO -quiet build
 
-# Swift Testing unit tests on the fake core, then the UI smoke test
+# Swift Testing unit tests on the fake core, then the UI smoke test.
+# The app binary links KetchCore, so the debug XCFramework has to exist first.
 macos-test: macos-project
+    scripts/xcframework.sh --debug
     {{macos_build}} -destination 'platform=macOS' test
 
 # Built into desktop/macos/KetchCore with the `ffi` profile the app ships.
