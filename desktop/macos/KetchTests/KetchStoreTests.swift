@@ -303,6 +303,28 @@ import Testing
         #expect(store.findings.contains { $0.severity == .warning && $0.fix != nil })
     }
 
+    @Test func aBackgroundRefreshLogsAFailureWithoutAnAlert() async {
+        let core = FakeKetchCore()
+        core.failReads(.network(message: "offline"))
+        let store = makeStore(core)
+
+        await store.refresh(alerting: false)
+
+        #expect(store.errorMessage == nil)
+        #expect(store.busy == nil)
+        #expect(store.log.contains { $0.level == .warning && $0.message.contains("offline") })
+    }
+
+    @Test func aRefreshStillAlertsWhenAsked() async {
+        let core = FakeKetchCore()
+        core.failReads(.network(message: "offline"))
+        let store = makeStore(core)
+
+        await store.refresh()
+
+        #expect(store.errorMessage?.contains("offline") == true)
+    }
+
     @Test func changelogHeadingsLoseTheirMarkersAndLinksSurvive() {
         let text = KetchStore.render(markdown: "## 1.2.0\n\n- see [docs](https://example.com)")
 
