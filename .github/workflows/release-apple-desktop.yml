@@ -52,13 +52,11 @@ jobs:
         > Dev build: the Debug configuration, Developer ID signed and notarised, published as a prerelease.
       # The runner and Xcode CI's macos-app job builds the app with.
       runs-on: macos-26
-      mise-install-args: xcodegen git-cliff
-      # TODO(R9): crates/ketch-ffi does not exist yet, so there is no
-      # XCFramework to link and the app runs on FakeKetchCore. When R9 lands:
-      # set pre-build-command to `just xcframework`, add `rust` to
-      # mise-install-args, and add the KetchCore package to project.yml
-      # (desktop/macos/README.md, "Wiring the real core").
-      pre-build-command: ""
+      # `rust` is the mise.toml pin. GITHUB_WORKSPACE stays the repo root when
+      # the archive step's cwd is desktop/macos. The script builds the
+      # XCFramework the app links.
+      mise-install-args: xcodegen git-cliff rust
+      pre-build-command: bash "$GITHUB_WORKSPACE/scripts/xcframework.sh"
       working-directory: desktop/macos
       xcodegen-spec: project.yml
       project: Ketch.xcodeproj
