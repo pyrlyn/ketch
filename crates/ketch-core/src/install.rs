@@ -3027,6 +3027,128 @@ mod tests {
         );
     }
 
+    /// What `prepare` hands `commit` for `rtok` at `version` when its
+    /// manifest, from `origin`'s tier, names no binary and the release holds
+    /// two that share the name — the case only the prompt can settle (R3).
+    /// Built by hand because no offline source can serve a user or registry
+    /// manifest to `prepare`; the choice and its write-back live in `commit`.
+    fn ambiguous_prepared(origin: crate::model::ManifestOrigin, version: &str) -> Prepared {
+        let unpack = tempfile::tempdir().unwrap();
+        let payload = unpack.path().to_path_buf();
+        ambiguous_payload(&payload);
+        let mut release = release(&["rtok.tar.gz"]);
+        release.version = Version::parse(version);
+        release.tag = format!("v{version}");
+        Prepared {
+            label: "rtok".into(),
+            manifest: crate::model::Manifest::inferred(PackageRef::github("owner/rtok")),
+            origin,
+            release,
+            asset_name: "rtok.tar.gz".into(),
+            sha256: "0".repeat(64),
+            checksum_verified: false,
+            trust: TrustResult::default(),
+            provenance: None,
+            link: true,
+            bin: None,
+            locked_bin: None,
+            payload,
+            unpack,
+            started: std::time::Instant::now(),
+            local_kind: None,
+            local_path: None,
+            cancel: Cancel::new(),
+            channel: Channel::Stable,
+        }
+    }
+
+    /// The commands a package links, `.exe` folded away so every OS spells
+    /// them alike.
+    fn linked_commands(package: &InstalledPackage) -> Vec<String> {
+        package
+            .links
+            .iter()
+            .filter(|l| l.role == crate::model::LinkRole::Binary)
+            .filter_map(|l| l.link.file_name())
+            .map(|f| bin_choice::command_name(&f.to_string_lossy()).to_string())
+            .collect()
+    }
+
+    #[test]
+    fn a_choice_asked_for_a_user_manifest_is_written_into_the_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let report = Report::silent();
+        let cfg = Config::load(Some(tmp.path().join("root")), &report).unwrap();
+        let file = crate::manifest::user_manifest_path(&cfg, "rtok");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        let original = "# mine\nname = \"rtok\"\nsource = \"github:owner/rtok\"\n";
+        std::fs::write(&file, original).unwrap();
+        let decider = Scripted::answering(Some(1));
+        let cx = Ctx::new(&cfg, &report).with_decider(&decider);
+        let mut state = State::default();
+
+        let prepared =
+            ambiguous_prepared(crate::model::ManifestOrigin::User(file.clone()), "1.0.0");
+        let installed = commit(&cx, &mut state, prepared).unwrap();
+
+        let asked = decider.asked.lock().unwrap();
+        assert_eq!(asked.len(), 1, "asked exactly once: {asked:?}");
+        let picked = asked[0].1[1].clone();
+        let command = bin_choice::command_name(&picked);
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            format!("{original}bin = [{{ name = \"{command}\" }}]\n"),
+            "the choice is appended and the rest of the file is left as written"
+        );
+        assert_eq!(linked_commands(&installed.package), [command]);
+        assert_eq!(
+            installed.package.bin_choice.as_deref(),
+            Some(picked.as_str())
+        );
+    }
+
+    #[test]
+    fn a_choice_asked_for_a_registry_package_is_remembered_in_state_and_reused() {
+        let tmp = tempfile::tempdir().unwrap();
+        let report = Report::silent();
+        let cfg = Config::load(Some(tmp.path().join("root")), &report).unwrap();
+        let folder = tmp.path().join("registry").join("rtok");
+        std::fs::create_dir_all(&folder).unwrap();
+        let original = "name = \"rtok\"\nsource = \"github:owner/rtok\"\n";
+        std::fs::write(folder.join("ketch.toml"), original).unwrap();
+        let origin = crate::model::ManifestOrigin::Registry(folder.clone());
+        let mut state = State::default();
+
+        let first = Scripted::answering(Some(0));
+        let cx = Ctx::new(&cfg, &report).with_decider(&first);
+        let installed =
+            commit(&cx, &mut state, ambiguous_prepared(origin.clone(), "1.0.0")).unwrap();
+        let picked = first.asked.lock().unwrap()[0].1[0].clone();
+        assert_eq!(
+            installed.package.bin_choice.as_deref(),
+            Some(picked.as_str())
+        );
+        assert_eq!(
+            std::fs::read_to_string(folder.join("ketch.toml")).unwrap(),
+            original,
+            "the registry's copy keeps updating, so it is never written to"
+        );
+
+        // A decider that declines would fail the upgrade if it were asked.
+        let second = Scripted::answering(None);
+        let cx = Ctx::new(&cfg, &report).with_decider(&second);
+        let upgraded = commit(&cx, &mut state, ambiguous_prepared(origin, "1.1.0")).unwrap();
+        assert!(second.asked.lock().unwrap().is_empty(), "not asked again");
+        assert_eq!(
+            linked_commands(&upgraded.package),
+            [bin_choice::command_name(&picked)]
+        );
+        assert_eq!(
+            state.get("rtok").and_then(|p| p.bin_choice.as_deref()),
+            Some(picked.as_str())
+        );
+    }
+
     #[test]
     fn a_package_on_the_pre_channel_looks_for_prereleases_without_pre() {
         let mut pkg = installed("tool", "1.0.0", PathBuf::from("/store/tool"));
