@@ -173,6 +173,12 @@ The update timer and the window becoming key both called `refresh`, and any erro
 
 Tests: `aBackgroundRefreshLogsAFailureWithoutAnAlert`, `aRefreshStillAlertsWhenAsked`.
 
+### B128. An unknown lock holder is pid 0
+
+A `Busy` error with no pid became `busy(pid: 0)`, and the banner read "pid 0". The pid is optional. The log and the banner name the holder only when there is one, which is what the Windows app already did.
+
+Test: `aLockWithNoKnownHolderStillOffersRetry`.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.
