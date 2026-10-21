@@ -271,7 +271,7 @@ struct BusyBanner: View {
                 Circle().fill(Tokens.Colors.Status.warning)
                     .frame(width: Tokens.Space.sm, height: Tokens.Space.sm)
                     .accessibilityHidden(true)
-                Text("Another ketch is running (pid \(String(busy.pid))). Retry when it finishes.")
+                Text(busy.message)
                     .textStyle(Tokens.Typography.body)
                     .foregroundStyle(Tokens.Colors.Text.primary)
                 Spacer(minLength: Tokens.Space.sm)

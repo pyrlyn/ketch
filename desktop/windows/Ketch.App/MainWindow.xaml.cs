@@ -53,6 +53,22 @@ public sealed partial class MainWindow : Window
     /// <summary>Opens a package's page inside the navigation.</summary>
     public void OpenPackage(string name) => ContentFrame.Navigate(typeof(PackageDetailPage), name);
 
+    /// <summary>Shows a section and the window, including after a notification or a tray command.</summary>
+    public void ShowSection(string tag)
+    {
+        if (!PageTypes.TryGetValue(tag, out var page))
+        {
+            return;
+        }
+
+        ContentFrame.Navigate(page);
+        Nav.SelectedItem = tag == "settings"
+            ? Nav.SettingsItem
+            : Nav.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(item => item.Tag as string == tag);
+        AppWindow.Show();
+        Activate();
+    }
+
     // ItemInvoked, not SelectionChanged: choosing the page that is already
     // selected has to leave a package's page and return to the list.
     private void OnNavigate(NavigationView sender, NavigationViewItemInvokedEventArgs args)
@@ -84,6 +100,15 @@ public sealed partial class MainWindow : Window
                 break;
             case nameof(KetchStore.PendingChoice) or nameof(KetchStore.PendingStop):
                 _ = AskAsync();
+                break;
+            case nameof(KetchStore.LinkedPackage) when App.Store.LinkedPackage is { } linked:
+                AppWindow.Show();
+                Activate();
+                OpenPackage(linked);
+                break;
+            case nameof(KetchStore.RequestedSection) when App.Store.RequestedSection is { } section:
+                App.Store.ClearRequestedSection();
+                ShowSection(section);
                 break;
         }
     }

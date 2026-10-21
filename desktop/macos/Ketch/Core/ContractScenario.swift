@@ -125,11 +125,10 @@ struct ContractScenario: Decodable, Sendable {
         var name: String?
         var message: String?
 
-        /// The app's error for it. A `Busy` with no known holder has no pid to
-        /// show, so it reads as pid 0.
+        /// The app's error for it. A `Busy` with no known holder has no pid.
         var asKetchError: KetchError {
             switch type {
-            case "busy": .busy(pid: pid ?? 0)
+            case "busy": .busy(pid: pid)
             case "cancelled": .cancelled
             case "not_found": .notFound(name: name ?? "")
             case "network": .network(message: message ?? "")
