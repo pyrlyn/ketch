@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
 
-// Settings: the theme, where ketch lives, and the fake core's scenario picker.
-// Nothing is saved yet: unpackaged apps have no ApplicationData settings, and
-// the real settings arrive with the live core (D12).
+// Settings: the theme, the tray, notices, login and ketch links, where ketch
+// lives, and the fake core's scenario picker. The switches persist in
+// %LOCALAPPDATA%\ketch\settings.json, which an unpackaged app and an MSIX can
+// both write. The theme still follows the window for this session.
 
 using Ketch.AppCore;
 using Microsoft.UI.Xaml;
@@ -36,6 +37,75 @@ public sealed partial class SettingsPage : Page
         }
 
         Scenario.SelectedIndex = 0;
+        Tray.IsOn = App.Settings.ShowTray;
+        Notices.IsOn = App.Settings.NotifiesOfUpdates;
+        Login.IsOn = App.Settings.OpenAtLogin;
+        Links.IsOn = App.Settings.HandleLinks;
+        ShellStatus.Text = App.ShellError ?? "";
+        loading = false;
+    }
+
+    private void OnTrayToggled(object sender, RoutedEventArgs e)
+    {
+        if (!loading)
+        {
+            Apply(Tray, App.Settings.ShowTray, App.SetShowTray(Tray.IsOn));
+        }
+    }
+
+    private void OnNoticesToggled(object sender, RoutedEventArgs e)
+    {
+        if (loading)
+        {
+            return;
+        }
+
+        try
+        {
+            App.Store.SetNotifies(Notices.IsOn);
+            ShellStatus.Text = "";
+        }
+        catch (Exception error)
+        {
+            ShellStatus.Text = error.Message;
+            loading = true;
+            Notices.IsOn = App.Settings.NotifiesOfUpdates;
+            loading = false;
+        }
+    }
+
+    private void OnLoginToggled(object sender, RoutedEventArgs e)
+    {
+        if (!loading)
+        {
+            Apply(Login, App.Settings.OpenAtLogin, App.SetOpenAtLogin(Login.IsOn));
+        }
+    }
+
+    private void OnLinksToggled(object sender, RoutedEventArgs e)
+    {
+        if (!loading)
+        {
+            Apply(Links, App.Settings.HandleLinks, App.SetHandleLinks(Links.IsOn));
+        }
+    }
+
+    /// <summary>A failed registration puts the switch back and says why.</summary>
+    private void Apply(ToggleSwitch toggle, bool saved, string? error)
+    {
+        if (loading)
+        {
+            return;
+        }
+
+        ShellStatus.Text = error ?? "";
+        if (error is null)
+        {
+            return;
+        }
+
+        loading = true;
+        toggle.IsOn = saved;
         loading = false;
     }
 

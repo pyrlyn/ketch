@@ -109,7 +109,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | F18 | done | P2 | 4 | 100% | Cursor / grok 4.7 |
 | D11 | in progress | P3 | 5 | 10% | Claude Code / sonnet-5.5 |
 | D12 | todo | P3 | 4 | 0% | |
-| D13 | todo | P3 | 3 | 0% | |
+| D13 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
 | D14 | todo | P3 | 4 | 0% | |
 | D16 | todo | P3 | 5 | 0% | |
 | D17 | todo | P3 | 4 | 0% | |
@@ -421,6 +421,8 @@ The app ships both as an MSIX and unpackaged (D14), and an unpackaged app has no
 The Windows counterparts of the macOS menu-bar extra, notifications, login item and URL scheme. WinUI has no tray control, so the icon is Win32's notification area. Research: sections 1 and 3c.
 
 Done when a notification-area icon opens the tray panel, `AppNotificationManager` posts update notices unpackaged, start at login and the `ketch` protocol are registered through `ActivationRegistrationManager` (with D8's validation rules), one instance runs at a time via `AppInstance`, and each can be switched off in Settings.
+
+Status: done. The WinUI shell adds the notification-area icon and its panel, posts one unpackaged app notification for upgrades that have not been announced, and registers startup and the `ketch` protocol through `ActivationRegistrationManager`. A second process redirects to the first. Each switch is stored in `%LOCALAPPDATA%\ketch\settings.json`, which an unpackaged app and an MSIX can both write. A link only opens a package page. The rules are tested in `Ketch.AppCore.Tests`; the WinUI project is built by the `ketch-win-app` job. See `done.md`.
 
 ### D14. Windows: release pipeline
 
