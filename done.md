@@ -1,3 +1,9 @@
+### B65. Binary selection regression test
+
+Add a fixture with two similarly named binaries (`rtok` and `rtok-hook`) and assert the intended one is chosen on every OS: macOS, Windows and Linux. This is the test that would have caught the Windows alphabetical-sort bug, where `rtok-hook` was selected instead of the intended binary.
+
+B64's `tests/bin_choice.rs` already linked `rtok` beside `rtok-hook` on every OS, but each host shipped its own names, so only the Windows job saw the order that broke: `rtok-hook.exe` sorts before `rtok.exe`. With discovery reverted to a plain sort and the chooser taking the first candidate, that test still passed on macOS. `windows_names_link_the_binary_named_like_the_package_on_every_os` now ships `rtok-hook.exe` and `rtok.exe` (both archive orders, and upper case) on every host and reads the linked target from `state.json`, so macOS and Linux CI fail on the same regression.
+
 ### R3. Cross-platform CI
 
 Run verification on macOS, Windows and Linux. A ketch config is either a local file in the project or pushed to a registry; keep that model. The cross-platform check must catch OS-specific binary selection bugs like the one in B64.
