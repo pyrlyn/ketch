@@ -133,7 +133,7 @@ jobs:
             echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           fi
       - name: "Install Rust from mise.toml"
-        uses: "jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca"
+        uses: "jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492"
         with:
           "cache_key_prefix": "mise-v1-release"
           "install_args": "rust"
@@ -503,7 +503,7 @@ jobs:
       "actions": "read"
       "issues": "write"
     steps:
-      - uses: pyrlyn/ci/.github/actions/notify-release-failure@341896b491b89d93a1940313c0149ddfd8fae9c2 # main
+      - uses: pyrlyn/ci/.github/actions/notify-release-failure@main
         with:
           ref: ${{ inputs.tag }}
           needs: ${{ toJSON(needs) }}
