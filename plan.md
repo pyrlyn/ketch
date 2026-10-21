@@ -16,6 +16,8 @@ New bugs, dead code and moves from a read-only Cursor cloud review of `main` at 
 | B81 | P2 | bug | fixed | `extract/archive.rs` `payload_mode` | Archive modes are masked to `0o777`, so setuid, setgid and sticky bits do not survive extraction. |
 | B80 | P2 | bug | fixed | `extract/archive.rs:397-399`; extractor order in `platform/linux.rs:62-66` | `TarXzExtractor` claims any `XZ_MAGIC` and is listed before `GzFileExtractor`; unlike gzip (`:508-509`), xz/bz2 never peek for ustar, so a lone `.xz` file fails as a tarball. Peek the decompressed head; add lone-file xz/bz2 extractors. |
 | B81 | P2 | bug | confirmed | `extract/archive.rs:280`, `:488` | Extraction keeps `mode & 0o7777`, so setuid/setgid/sticky bits from an archive survive. Mask `0o7000`. |
+| B82 | P2 | bug | confirmed | `source/github.rs:310-312` | Aggregate checksum files are keyed by basename; a later duplicate overwrites an earlier one. Reject or flag a basename that maps to two hashes. |
+| B83 | P2 | bug | fixed | `source/github.rs` `sidecar_hex` | A sidecar checksum uses the line that names the asset, and a single unnamed entry only when the file is unambiguous. |
 | B82 | P2 | bug | fixed | `source/github.rs` `parse_checksum_file` | A basename that maps to two different hashes is dropped, not overwritten by the later line. |
 | B83 | P2 | bug | confirmed | `source/github.rs:427-431` | A sidecar checksum takes the first sorted entry (`BTreeMap::into_values().next()`), not the asset's. Look up the asset name first; fall back to a single entry only when unambiguous. |
 | B84 | P2 | bug | fixed | `http.rs:118-186` | Downloads stream with no maximum size. Add a configurable download/unpacked cap and abort over it. |
@@ -25,7 +27,7 @@ New bugs, dead code and moves from a read-only Cursor cloud review of `main` at 
 | B88 | P2 | bug | fixed | `process.rs` `terminate` | After a polite stop, ketch waits until the pid is gone, bounded by five seconds, and only then sends the forceful kill. The replace that follows no longer races a process that is still exiting. |
 | R14 | P2 | dead code | confirmed | `scripts/b32_patch.py:8` | The script opens `src/self_update.rs`, which has moved, and nothing references it. Delete it. |
 | R15 | P2 | dead code | fixed | root `Cargo.toml:61` (`dirs`); `manifest.rs:137-148` (`Resolver::aliases`); `model.rs:596-599` (`Release::asset`); `platform/mod.rs:49-50` (`Placement::version`); `model.rs:329-331` | Drop the unused root `dirs` dependency, `Resolver::aliases` (or wire it to `__complete`/search), `Release::asset` and the never-read `Placement::version`; remove the stale `allow(dead_code)` on `PackageSpec::raw` (read at `state.rs:162`). |
-| R16 | P2 | dead code | confirmed | `fuzz/seed.sh:42` | The seed script reads `$root/src/builtin.toml`; the file is `crates/ketch-core/src/builtin.toml`. Fix the path. |
+| R16 | P2 | dead code | fixed | `fuzz/seed.sh` | The seed script and its readme name `crates/ketch-core/src/builtin.toml`. |
 | R17 | P2 | dead code | confirmed | `shell.rs:561-1092` | 23 `cfg_attr(not(windows), allow(dead_code))` on the Windows PATH helpers. Put them in one `#[cfg(any(windows, test))]` module. |
 | R18 | P2 | move | fixed | `platform/mod.rs` (`swap_into_store`) | Store swaps share one helper. macOS passes `ditto`; Linux and Windows pass `copy_tree`. |
 | R19 | P2 | move | suspected | `crates/ketch-core/Cargo.toml:49-66` | `stats` + diesel, `push` + octocrab/tokio, `trust` + sigstore/pgp and the `extract` codecs are always in core, so every desktop/FFI link pays for them (issue #222). Make them optional crates or features. |
@@ -164,11 +166,19 @@ Status: done. See `done.md`.
 | B110 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
 | B134 | done | P3 | 1 | 100% | Cursor / grok 4.7 |
 | B133 | done | P3 | 2 | 100% | Cursor / grok 4.7 |
-| B82 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
+| B83 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
 
-### B82. Duplicate checksum basenames overwrite each other
+### B83. A sidecar checksum takes the first sorted line
+
+Row B83 in the 2026-10-08 findings. `sidecar_hex` looks up the asset name first. A one-entry file is the usual sidecar; several names and no match are ignored.
+| B82 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
+| R16 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
 
 Row B82 in the 2026-10-08 findings. An aggregate checksum file is keyed by basename. Two different hashes for the same basename are removed instead of letting the later line win.
+### B82. Duplicate checksum basenames overwrite each other
+### R16. Fuzz seed script reads the old builtin path
+
+Row R16 in the 2026-10-08 findings. `fuzz/seed.sh` already reads `crates/ketch-core/src/builtin.toml`. The readme named the old `src/builtin.toml` path; it now matches the script.
 
 Status: done. See `done.md`.
 
