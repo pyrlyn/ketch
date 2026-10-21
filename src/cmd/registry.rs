@@ -314,17 +314,18 @@ fn install_from_fixture(
     let abs = crate::source::local::absolute_path(&payload.to_string_lossy())?;
     let mut rewritten = manifest.clone();
     rewritten.source = crate::source::local::package_ref(&abs);
+    // This file is written into the probe's user-manifest directory, the one
+    // origin allowed to run hooks. Drop them here as well as at validation:
+    // the probe must not gain a shell a registry author wrote.
+    rewritten.hooks = crate::model::Hooks::default();
     let path = crate::manifest::user_manifest_path(cfg, &rewritten.name);
     std::fs::write(&path, crate::manifest::to_toml(&rewritten)?)
         .map_err(|e| Error::io(&path, e))?;
     let sources = SourceRegistry::load(&crate::ui::ctx(cfg));
     let mut state = State::default();
-    install::install(
-        &crate::ui::ctx(cfg),
-        &sources,
-        &mut state,
-        &InstallRequest::new(PackageSpec::parse(&rewritten.name)),
-    )?;
+    let mut req = InstallRequest::new(PackageSpec::parse(&rewritten.name));
+    req.cancel = crate::interrupt::token();
+    install::install(&crate::ui::ctx(cfg), &sources, &mut state, &req)?;
     Ok(())
 }
 

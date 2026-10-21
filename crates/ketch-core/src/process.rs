@@ -89,11 +89,13 @@ fn unique_keys(paths: &[PathBuf]) -> Vec<(PathBuf, String)> {
 
 fn path_key(p: &Path) -> String {
     let p = fs_kit::path::canon(p);
-    if cfg!(windows) {
-        crate::shell::windows_path_key(&p)
-    } else {
-        p.to_string_lossy().into_owned()
-    }
+    // `windows_path_key` exists only on Windows (and in tests). A runtime
+    // `cfg!` would still name it on Unix.
+    #[cfg(windows)]
+    let key = crate::shell::windows_path_key(&p);
+    #[cfg(not(windows))]
+    let key = p.to_string_lossy().into_owned();
+    key
 }
 
 /// What [`run_bounded`] observed.
@@ -500,23 +502,23 @@ fn list(_keys: &[(PathBuf, String)], _report: &Report) -> Vec<Occupant> {
     Vec::new()
 }
 
+/// How long a process may take to leave after a polite stop. A fixed 200 ms
+/// returns while a program is still flushing, and the replace that follows
+/// then finds the file locked. Five seconds is the cap so an upgrade does not
+/// wait on a process that is ignoring the request.
+const STOP_GRACE: Duration = Duration::from_secs(5);
+
 fn terminate(pid: u32) {
+    terminate_within(pid, STOP_GRACE);
+}
+
+fn terminate_within(pid: u32, grace: Duration) {
     #[cfg(unix)]
     {
-        let _ = Command::new("kill")
-            .arg("-TERM")
-            .arg(pid.to_string())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
-        std::thread::sleep(Duration::from_millis(200));
-        if crate::state::process_alive(pid) {
-            let _ = Command::new("kill")
-                .arg("-KILL")
-                .arg(pid.to_string())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status();
+        signal(pid, "-TERM");
+        if !wait_until_gone(pid, grace) {
+            signal(pid, "-KILL");
+            let _ = wait_until_gone(pid, Duration::from_secs(2));
         }
     }
     #[cfg(windows)]
@@ -526,14 +528,42 @@ fn terminate(pid: u32) {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status();
-        std::thread::sleep(Duration::from_millis(200));
-        if crate::state::process_alive(pid) {
+        if !wait_until_gone(pid, grace) {
             let _ = Command::new("taskkill")
                 .args(["/PID", &pid.to_string(), "/F"])
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .status();
+            let _ = wait_until_gone(pid, Duration::from_secs(2));
         }
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = (pid, grace);
+    }
+}
+
+#[cfg(unix)]
+fn signal(pid: u32, sig: &str) {
+    let _ = Command::new("kill")
+        .arg(sig)
+        .arg(pid.to_string())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+}
+
+/// True once `pid` is gone, or false when `bound` elapses first.
+fn wait_until_gone(pid: u32, bound: Duration) -> bool {
+    let deadline = std::time::Instant::now() + bound;
+    loop {
+        if !crate::state::process_alive(pid) {
+            return true;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(50));
     }
 }
 
@@ -817,5 +847,58 @@ mod tests {
             !crate::state::process_alive(pid),
             "pid {pid} was not stopped"
         );
+    }
+
+    #[cfg(unix)]
+    fn detached_pid(script: &str) -> u32 {
+        let out = Command::new("sh")
+            .args(["-c", script])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .output()
+            .expect("start a detached process");
+        String::from_utf8_lossy(&out.stdout)
+            .trim()
+            .parse()
+            .expect("the script prints a pid")
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_process_that_exits_on_term_is_not_held_for_the_whole_grace() {
+        let pid = detached_pid("nohup sleep 30 >/dev/null 2>&1 & echo $!");
+        assert!(crate::state::process_alive(pid), "pid {pid} never started");
+        let start = std::time::Instant::now();
+        terminate_within(pid, Duration::from_secs(5));
+        assert!(
+            start.elapsed() < Duration::from_secs(2),
+            "a process that exits was held for {:?}",
+            start.elapsed()
+        );
+        assert!(!crate::state::process_alive(pid));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_process_that_ignores_term_is_killed_when_the_grace_ends() {
+        // TERM is ignored before the child starts, so it inherits the
+        // disposition: a `trap` inside the child races the signal sent next.
+        let pid = detached_pid(
+            "trap '' TERM; nohup sh -c 'while :; do :; done' >/dev/null 2>&1 & echo $!",
+        );
+        assert!(crate::state::process_alive(pid), "pid {pid} never started");
+        let grace = Duration::from_millis(700);
+        let start = std::time::Instant::now();
+        terminate_within(pid, grace);
+        let elapsed = start.elapsed();
+        assert!(
+            elapsed + Duration::from_millis(50) >= grace,
+            "returned in {elapsed:?}, before the grace"
+        );
+        assert!(
+            elapsed < Duration::from_secs(4),
+            "the forceful stop was not bounded: {elapsed:?}"
+        );
+        assert!(!crate::state::process_alive(pid), "pid {pid} still running");
     }
 }

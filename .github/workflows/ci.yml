@@ -17,8 +17,13 @@ on:
 permissions:
   contents: read
 
+# A /review comment must not share a group with a push to main. On
+# issue_comment there is no pull request number, so `ci-${{ github.ref }}`
+# was `ci-refs/heads/main`, and GitHub cancels the previous pending run in a
+# group — a comment replaced a push that had not started. The comment run
+# only dispatches CI, so it takes a group of its own.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.event_name == 'issue_comment' && format('review-{0}', github.event.issue.number) || format('ci-{0}', github.event.pull_request.number || github.ref) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -30,6 +35,10 @@ jobs:
   # then do no work but still report under their names, so the required checks pass. A failed
   # `config` runs everything.
   config:
+    # A comment only dispatches CI (the review job). This job, and every job
+    # but review, stays off that run: `pull_request.draft != true` is true
+    # when the event has no pull request.
+    if: github.event_name != 'issue_comment'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -52,7 +61,7 @@ jobs:
     # Draft PRs are skipped here and reported green: review happens when the PR
     # is marked ready, and a draft must not look broken meanwhile.
     needs: config
-    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
+    if: ${{ github.event_name != 'issue_comment' && !cancelled() && github.event.pull_request.draft != true }}
     uses: pyrlyn/ci/.github/workflows/ci-rust.yml@main
     # actions: write for infra's cancel-run (the first failing job cancels the run).
     permissions:
@@ -98,6 +107,7 @@ jobs:
   powershell:
     needs: config
     if: >-
+      github.event_name != 'issue_comment' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
     runs-on: windows-latest
@@ -112,9 +122,53 @@ jobs:
           if ($errors) { $errors | Format-List *; exit 1 }
           ./install.ps1 --help
 
+      # pwsh 7 accepts Join-Path's third child; Windows PowerShell 5.1, the
+      # shell `irm | iex` runs in, does not. This step goes past extraction.
+      - name: Installer past extraction on Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = Join-Path $env:RUNNER_TEMP 'ketch-b94-release'
+          $nested = Join-Path $release 'staging\ketch'
+          New-Item -ItemType Directory -Path $nested -Force | Out-Null
+          $stub = Join-Path $nested 'ketch.exe'
+          Add-Type -OutputType ConsoleApplication -OutputAssembly $stub -TypeDefinition @'
+          using System;
+          using System.IO;
+          using System.Reflection;
+          public class Program {
+              public static int Main(string[] args) {
+                  if (args.Length >= 2 && args[0] == "self" && args[1] == "install") {
+                      string root = Environment.GetEnvironmentVariable("KETCH_ROOT");
+                      if (string.IsNullOrEmpty(root)) return 2;
+                      string bin = Path.Combine(root, "bin");
+                      Directory.CreateDirectory(bin);
+                      File.Copy(Assembly.GetExecutingAssembly().Location, Path.Combine(bin, "ketch.exe"), true);
+                      return 0;
+                  }
+                  Console.WriteLine("ketch (stub)");
+                  return 0;
+              }
+          }
+          '@
+          $tar = Join-Path $release 'payload.tar.gz'
+          & tar.exe -czf $tar -C (Join-Path $release 'staging') ketch
+          if ($LASTEXITCODE -ne 0) { throw "tar failed: $LASTEXITCODE" }
+          $name = 'ketch-x86_64-pc-windows-msvc.tar.gz'
+          $hash = (Get-FileHash -LiteralPath $tar -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -LiteralPath (Join-Path $release 'SHA256SUMS') -Encoding ascii -Value "$hash  $name"
+          $root = Join-Path $env:RUNNER_TEMP 'ketch-b94-root'
+          $env:KETCH_INSTALL_RELEASE_DIR = $release
+          $env:PROCESSOR_ARCHITECTURE = 'AMD64'
+          & .\install.ps1 --no-modify-path --root $root
+          if ($LASTEXITCODE -ne 0) { throw "install.ps1 exited $LASTEXITCODE" }
+          $installed = Join-Path $root 'bin\ketch.exe'
+          if (-not (Test-Path -LiteralPath $installed)) { throw "missing $installed" }
+
   # Which runner the macOS jobs use: pyrlyn/ci's macos-runner action reads the MACOS_RUNNER
   # variable (unset = the hosted labels below, xcode-27-local = the dedicated Mac).
   macos-runner:
+    if: github.event_name != 'issue_comment'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -142,6 +196,7 @@ jobs:
   macos-app:
     needs: [config, macos-runner]
     if: >-
+      github.event_name != 'issue_comment' &&
       vars.MACOS_CI_DISABLED != 'true' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
@@ -172,6 +227,16 @@ jobs:
       - name: Format
         run: xcrun swift-format lint --strict -r Ketch KetchTests KetchUITests KetchCore/Package.swift KetchCore/Tests
 
+      # The app links KetchCore. The framework and the generated bindings are
+      # build output, same as the ketch-ffi job's `--debug` library.
+      - uses: pyrlyn/ci/.github/actions/setup-rust@main
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: XCFramework and bindings
+        working-directory: ${{ github.workspace }}
+        run: scripts/xcframework.sh --debug
+
       - name: Generate the project
         run: |
           xcodebuild -version
@@ -199,6 +264,7 @@ jobs:
   ketch-ffi:
     needs: [config, macos-runner]
     if: >-
+      github.event_name != 'issue_comment' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
     runs-on: ${{ fromJSON(needs.macos-runner.outputs.app)[0] }}
@@ -235,6 +301,7 @@ jobs:
   ketch-cs:
     needs: config
     if: >-
+      github.event_name != 'issue_comment' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
     runs-on: windows-latest
@@ -264,6 +331,7 @@ jobs:
   ketch-capi:
     needs: config
     if: >-
+      github.event_name != 'issue_comment' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
@@ -301,6 +369,7 @@ jobs:
   ketch-win-app:
     needs: config
     if: >-
+      github.event_name != 'issue_comment' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
     runs-on: windows-latest
@@ -351,6 +420,48 @@ jobs:
               sys.exit(1)
           PY
 
+  # The Linux app (desktop/linux): Meson builds the GTK shell and runs the
+  # fake core and store against the contract scenarios. What `just linux-app-test`
+  # runs for the library; this job also builds the app. The runner's Ubuntu
+  # has GTK 4.14 and libadwaita 1.5; the tokens' contrast queries need
+  # libadwaita 1.8, which 26.04 ships. The digest is the 26.04 index.
+  ketch-linux-app:
+    needs: config
+    if: >-
+      github.event_name != 'issue_comment' &&
+      !cancelled() && github.event.pull_request.draft != true
+      && needs.config.outputs.docs-only != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container: ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
+    steps:
+      # checkout runs git inside the container, and the image does not ship it.
+      - name: Git
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # python3-gi and the typelibs are what blueprint-compiler reads GTK and
+      # libadwaita's types from. git fetches the pinned subproject.
+      - name: Vala and GTK toolchain
+        run: |
+          apt-get install -y --no-install-recommends gcc libc6-dev valac \
+            meson ninja-build pkg-config libjson-glib-dev libgtk-4-dev \
+            libadwaita-1-dev python3-gi gir1.2-girepository-3.0 \
+            gir1.2-gtk-4.0 gir1.2-adw-1
+
+      - name: Build
+        run: |
+          meson setup target/linux-app-meson desktop/linux -Dgui=enabled
+          meson compile -C target/linux-app-meson
+
+      - name: Test
+        run: meson test -C target/linux-app-meson --print-errorlogs
+
   # The design tokens: every generated copy (Swift, XAML, GTK CSS, DESIGN.md,
   # preview.html) is what desktop/design/build.mjs writes from tokens.json, DESIGN.md passes
   # the DESIGN.md linter, and text meets WCAG AA on its glass backgrounds.
@@ -358,6 +469,7 @@ jobs:
   design:
     needs: config
     if: >-
+      github.event_name != 'issue_comment' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
@@ -392,7 +504,7 @@ jobs:
     # A matrix job skipped at job level reports one check under its raw name, so the required
     # `package (<os>, <target>)` checks would wait: on a docs-only change every step is a no-op.
     needs: [config, macos-runner]
-    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
+    if: ${{ github.event_name != 'issue_comment' && !cancelled() && github.event.pull_request.draft != true }}
     strategy:
       fail-fast: false
       matrix:
@@ -436,7 +548,9 @@ jobs:
           sh tests/release-workflows.sh
           sh tests/ci-yml-triggers.sh
           sh tests/desktop-release.sh
+          python3 tests/desktop_windows_release.py
           sh tests/docs-i18n.sh
+          python3 tests/install_truncation.py
 
       # src/lib.rs and the core's fuzz entry points exist only under
       # cfg(fuzzing), which no other build sets; checked on stable here so they
@@ -501,9 +615,11 @@ jobs:
       - name: The generated cask passes brew style
         if: env.RUN == 'true' && runner.os == 'macOS'
         run: |
-          mkdir -p cask/Casks
-          scripts/cask.sh 0.0.0 "$(printf '%064d' 0)" > cask/Casks/ketch.rb
-          brew style cask/Casks/ketch.rb
+          # target/ is gitignored, same as `just lint-cask`: brew style only
+          # needs a parent directory named Casks/.
+          mkdir -p target/cask/Casks
+          scripts/cask.sh 0.0.0 "$(printf '%064d' 0)" > target/cask/Casks/ketch.rb
+          brew style target/cask/Casks/ketch.rb
 
   # A `/review` comment in a pull request re-runs CI on that PR's head by
   # dispatching ci.yml on the PR's branch. The default token cannot dispatch
@@ -539,6 +655,7 @@ jobs:
   # Fails when workspace-hack drifts from the dependency graph (cargo-hakari
   # comes from mise.toml). Own job, so the required check names stay as they are.
   hakari:
+    if: github.event_name != 'issue_comment'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

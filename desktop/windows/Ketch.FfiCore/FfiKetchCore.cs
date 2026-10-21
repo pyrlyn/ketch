@@ -127,6 +127,8 @@ public sealed class FfiKetchCore : IKetchCore, IDisposable
             Fix = c.Fix,
         }.AsFinding()).ToList());
 
+    public string PackageName(string link) => Read(() => Ffi.KetchFfiMethods.PackageForLink(link));
+
     public void Dispose() => core.Dispose();
 
     /// <summary>The binding's error as the app's, with the wording the fake gives the same error.</summary>

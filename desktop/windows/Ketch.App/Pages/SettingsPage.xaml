@@ -27,6 +27,39 @@
                 </ComboBox>
             </StackPanel>
 
+            <StackPanel Spacing="8">
+                <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="App" />
+                <ToggleSwitch
+                    x:Name="Tray"
+                    Header="Show the notification area icon"
+                    OffContent="Off"
+                    OnContent="On"
+                    Toggled="OnTrayToggled" />
+                <ToggleSwitch
+                    x:Name="Notices"
+                    Header="Notify when updates are available"
+                    OffContent="Off"
+                    OnContent="On"
+                    Toggled="OnNoticesToggled" />
+                <ToggleSwitch
+                    x:Name="Login"
+                    Header="Start at login"
+                    OffContent="Off"
+                    OnContent="On"
+                    Toggled="OnLoginToggled" />
+                <ToggleSwitch
+                    x:Name="Links"
+                    Header="Open ketch links"
+                    OffContent="Off"
+                    OnContent="On"
+                    Toggled="OnLinksToggled" />
+                <TextBlock
+                    x:Name="ShellStatus"
+                    Foreground="{ThemeResource KetchColorStatusErrorBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
             <StackPanel Spacing="4">
                 <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="ketch root" />
                 <TextBlock

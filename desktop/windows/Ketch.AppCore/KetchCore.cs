@@ -195,4 +195,11 @@ public interface IKetchCore
     string Changelog(string name, string? from, string? to);
 
     IReadOnlyList<Finding> Doctor();
+
+    /// <summary>
+    /// The package a <c>ketch://package/&lt;name&gt;</c> link names. Everything in a
+    /// link is untrusted, so the core validates it; a link that names anything
+    /// but a package page throws. The real adapter calls <c>package_for_link</c>.
+    /// </summary>
+    string PackageName(string link);
 }

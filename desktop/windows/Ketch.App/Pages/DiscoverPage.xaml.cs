@@ -27,7 +27,7 @@ public sealed partial class DiscoverPage : Page
 
     private void OnStoreChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(KetchStore.SearchResults))
+        if (e.PropertyName is nameof(KetchStore.SearchResults) or nameof(KetchStore.IsRunning))
         {
             Render();
         }
@@ -46,7 +46,10 @@ public sealed partial class DiscoverPage : Page
 
     private void Render()
     {
-        var results = App.Store.SearchResults;
+        var store = App.Store;
+        var results = store.SearchResults
+            .Select(p => new DiscoverRow(p.Name, p.Description, p.Latest, !store.IsRunning))
+            .ToList();
         Results.ItemsSource = results;
         Results.Visibility = Fmt.ShowWhenAny(results.Count);
         Empty.Visibility = Fmt.ShowWhenEmpty(results.Count);
@@ -56,7 +59,7 @@ public sealed partial class DiscoverPage : Page
 
     private async void OnInstall(object sender, RoutedEventArgs e)
     {
-        if (sender is Button { Tag: string name })
+        if (sender is Button { Tag: string name } && !App.Store.IsRunning)
         {
             await App.Store.InstallAsync(name);
         }

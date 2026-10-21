@@ -1297,6 +1297,18 @@ mod tests {
         assert!(Bz2FileExtractor.detect(&plain, &head));
     }
 
+    #[cfg(feature = "bzip2")]
+    #[test]
+    fn a_lone_bz2_file_is_extracted_as_the_program() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("jq.bz2");
+        std::fs::write(&src, bz2_bytes(b"\x7fELF payload")).unwrap();
+        let dest = dir.path().join("out");
+        std::fs::create_dir_all(&dest).unwrap();
+        Bz2FileExtractor.extract(&src, &dest).unwrap();
+        assert_eq!(std::fs::read(dest.join("jq")).unwrap(), b"\x7fELF payload");
+    }
+
     #[test]
     fn refuses_links_that_escape_the_payload() {
         assert!(check_link_target(Path::new("bin/tool"), Path::new("../lib/x.dylib")).is_ok());
@@ -1353,6 +1365,30 @@ mod tests {
             .mode()
             & 0o7777;
         assert_eq!(mode, 0o644);
+    }
+
+    /// The link body is the target, read into memory. A compressed member
+    /// whose body is longer than any real path must not be inflated whole.
+    #[cfg(feature = "zip")]
+    #[cfg(unix)]
+    #[test]
+    fn an_overlong_zip_symlink_target_is_refused() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("links.zip");
+        let file = std::fs::File::create(&archive).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        // `unix_permissions` drops the file-type bits, so the symlink has to
+        // be written with `add_symlink`, which is what puts `S_IFLNK` back.
+        let target = "a".repeat((super::MAX_ZIP_LINK_TARGET as usize) + 1);
+        writer
+            .add_symlink("link", &target, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.finish().unwrap();
+        let dest = tmp.path().join("out");
+        std::fs::create_dir_all(&dest).unwrap();
+        let err = ZipExtractor.extract(&archive, &dest).unwrap_err();
+        assert!(err.to_string().contains("over-long"), "{err}");
+        assert!(!dest.join("link").exists());
     }
 
     #[cfg(feature = "gzip")]

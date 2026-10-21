@@ -66,4 +66,7 @@ the fake and the live core show the same things. Under
 `KETCH_APP_FAKE_CORE=1` it runs on the fake instead: the scenarios ship beside
 its binary, and Settings can play one for the next install, upgrade or
 uninstall.
-The Linux fake reads the same directory when that app exists.
+The Linux app's fake is `desktop/linux/src/fake-core.vala` (decoding in
+`scenario.vala`), tested by `desktop/linux/tests/fake-core-test.vala`. It keeps
+the scenarios as JSON and answers in ketch-capi's envelopes. An empty search
+browses (`search-browse`); a declined question goes on as the core does.

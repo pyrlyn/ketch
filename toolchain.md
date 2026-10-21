@@ -35,7 +35,10 @@ Project programs and direct packages from manifests.
 | mandoc | ships with macOS; `apt install mandoc` on Linux | `just lint-man` checks the generated man pages | https://mandoc.bsd.lv |
 | uniffi-bindgen-cs | mise (`cargo:` from git, PR #176's commit) | C# bindings for `ketch-ffi` (`just csharp`); no release supports UniFFI 0.32 yet | https://github.com/NordSecurity/uniffi-bindgen-cs |
 | .NET SDK | mise | Builds and runs the C# binding's test (`just csharp-test`), the Windows app's tests (`just windows-app-test`, `just windows-ffi-test`) and, on Windows, the WinUI app (`ketch-win-app` CI job) | https://github.com/dotnet/sdk |
-| valac, Meson, Ninja, json-glib | the distribution's packages (`apt install valac meson ninja-build libjson-glib-dev`); mise has no valac | `just capi-test`: builds and runs `ketch-capi`'s Vala test; Linux CI only | https://vala.dev |
+| valac, Meson, Ninja, json-glib | the distribution's packages (`apt install valac meson ninja-build libjson-glib-dev`); mise has no valac | `just capi-test` and `just linux-app-test`; Linux CI only | https://vala.dev |
+| GTK 4 (4.20 or newer) | the distribution's `libgtk-4-dev` (Ubuntu 26.04 in the `ketch-linux-app` container) | The Linux app's toolkit; without it `-Dgui=auto` builds only the core library and its tests | https://gitlab.gnome.org/GNOME/gtk |
+| libadwaita (1.8 or newer) | the distribution's `libadwaita-1-dev` | The Linux app's GNOME widgets: split view, breakpoints, banners, toasts, dialogs; 1.8 applies the token stylesheet's contrast queries | https://gitlab.gnome.org/GNOME/libadwaita |
+| blueprint-compiler 0.22.2 | Meson subproject (`desktop/linux/subprojects/blueprint-compiler.wrap`, pinned to the v0.22.2 commit); needs `python3-gi` and the GTK and libadwaita typelibs | Compiles the Linux app's `.blp` files to GtkBuilder XML | https://gitlab.gnome.org/GNOME/blueprint-compiler |
 
 ## cargo
 
@@ -52,6 +55,7 @@ Project programs and direct packages from manifests.
 | clap_mangen | local | https://crates.io/crates/clap_mangen | ketch's man pages, one per command (`src/man.rs`) |
 | console | local (Windows only) | https://crates.io/crates/console | Switches on virtual terminal processing so legacy conhost shows colour instead of escape codes; already in the tree through indicatif |
 | crossterm | local | https://crates.io/crates/crossterm | Terminal |
+| ctrlc | local | https://crates.io/crates/ctrlc | Ctrl-C on Unix and Windows; cancels the running command without unsafe in the binary |
 | diesel | local | https://crates.io/crates/diesel | SQLite ORM |
 | diesel_migrations | local | https://crates.io/crates/diesel_migrations | SQLite migrations |
 | dirs | local | https://crates.io/crates/dirs | Rust dependency |

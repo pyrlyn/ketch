@@ -74,6 +74,9 @@ and Swift bindings; `just ffi-test` builds a debug one and runs its Swift test.
 its C# bindings, and the .NET test in `desktop/windows`.
 `just capi-test` builds `ketch-capi` and runs its Vala test through Meson
 (Linux, with valac and json-glib installed).
+`just linux-app-test` builds the Linux app's core library in `desktop/linux`
+and runs its tests through Meson, on any OS that has the Vala toolchain;
+where GTK 4.20 and libadwaita 1.8 are installed it builds the GTK app too.
 
 The Justfile wraps the same commands with `--locked`: `just fmt`, `just clippy`
 (or `just lint`), `just test`, and `just check` runs what CI runs on this
@@ -240,6 +243,7 @@ differ by orders of magnitude — the cargo home is the small one. Set
 | `desktop/windows/` | the Windows app's C# side: `KetchCore` (the generated binding as a .NET library), its MSTest project, and `uniffi.toml` for the generator |
 | `desktop/windows/Ketch.AppCore/`, `Ketch.AppCore.Tests/`, `Ketch.App/` | the Windows app: the core contract, the fake that replays `desktop/contract/scenarios`, the store and the settings file (plain .NET with no native library, tested on any OS with `just windows-app-test`), and the WinUI 3 shell over them (`dotnet build -p:Platform=x64`, Windows only: the `ketch-win-app` CI job), whose `CoreFactory` alone picks the core: the real one, or the fake under `KETCH_APP_FAKE_CORE=1` |
 | `desktop/windows/Ketch.FfiCore/`, `Ketch.FfiCore.Tests/` | `FfiKetchCore`, the app's `IKetchCore` over the generated binding, mapping through the same classes the fake replays the scenarios with; tested against the real core on a scratch root with `just windows-ffi-test` |
+| `desktop/linux/` | the Linux app (Vala, GTK 4, libadwaita; Meson): `src/core.vala`, the core contract in ketch-capi's shape (JSON envelopes, the same operation names), so D17 swaps in the C ABI under it; `src/fake-core.vala`, which replays `desktop/contract/scenarios`; `src/store.vala` and `src/models.vala`, what the screens bind to (GLib only); `tests/` under `meson test` (`just linux-app-test`, the `ketch-linux-app` CI job); the GTK app over them, `src/application.vala` (which core it runs on), `src/window.vala` (with the alert dialogs, banner and toasts), `src/preferences.vala`, `data/style.css` over a build-time copy of `desktop/design/generated/ketch-tokens.css`, and the Blueprint files in `data/ui/`, compiled by the pinned `subprojects/blueprint-compiler.wrap` into a GResource; built when GTK 4.20 and libadwaita 1.8 are found (`-Dgui`, enabled in CI) |
 | `desktop/macos/KetchCore/` | the Swift package wrapping that XCFramework and bindings (both build output), and the Swift test that drives the real core through them |
 | `src/ui.rs` | all terminal output, `Terminal`: the `Reporter` that draws the core's events, and `TerminalDecider`: the `Decider` that prompts on the terminal |
 | `src/tui/` | the opt-in full-screen renderer (`tui` feature), driven by `ui.rs` |
@@ -267,6 +271,7 @@ differ by orders of magnitude — the cargo home is the small one. Set
 | `desktop/macos/DESIGN.md` | the macOS app's design system in the DESIGN.md format; its front matter is generated |
 | `desktop/design/` | `tokens.json`, the one source of design tokens, and `build.mjs`, which generates `generated/Tokens.swift` (macOS), `generated/KetchTokens.xaml` (Windows), `generated/ketch-tokens.css` (Linux), the macOS DESIGN.md front matter and `preview.html`'s CSS (`just design-tokens`) |
 | `.github/workflows/release-apple-desktop.yml` | the macOS app's release: a thin caller of pyrlyn/ci `release-apple-desktop.yml` (signed, notarised `.dmg` under a `desktop-v*` tag, and its Sparkle appcast) |
+| `.github/workflows/release-windows-desktop.yml` | the Windows app's release: dispatch-only, signed MSIX and unpackaged zip under a `desktop-windows-v*` tag, never `/releases/latest` |
 | `desktop/cliff.toml` | the app's release notes: commits under `desktop/` and `crates/ketch-ffi/` since the last `desktop-v*` tag |
 
 The rule that keeps `cmd/` thin: anything touching the install tree belongs in
@@ -332,17 +337,18 @@ call it in a small `macos-runner` job and read its output. The macOS targets of 
 shared `rust` job go through the same action inside `pyrlyn/ci`.
 `release-apple-desktop.yml` stays a thin caller (tests/desktop-release.sh), so it
 keeps the hosted default until pyrlyn/ci's workflow resolves the runner itself.
-It has no Rust in it and does not touch the CLI gate.
+Its `pre-build-command` builds the `ketch-ffi` XCFramework; it does not touch
+the CLI gate.
 
 Views talk to `KetchStore`, the store talks to `KetchCoreProtocol`, and
-`CoreFactory.swift` alone decides which core that is — `FakeKetchCore`
-until `ketch-ffi` (R9) exists. Keep it that way: no view or test reaches past
-the protocol. The UI uses system Liquid Glass (`glassEffect`, glass button
-styles), never a drawn imitation. The app updates itself with Sparkle
-(`Ketch/Store/AppUpdater.swift`, "Check for Updates…" in the app menu); only
-a Release build with a real `SUPublicEDKey` starts it. Releases are
-[Releasing → macOS app](#macos-app-releases). `desktop/macos/README.md` has
-the architecture and the steps to wire R9.
+`CoreFactory.swift` alone decides which core that is — `LiveKetchCore` over
+`ketch-ffi`, or `FakeKetchCore` when a test asks. Keep it that way: no view
+or test reaches past the protocol. The UI uses system Liquid Glass
+(`glassEffect`, glass button styles), never a drawn imitation. The app updates
+itself with Sparkle (`Ketch/Store/AppUpdater.swift`, "Check for Updates…" in
+the app menu); only a Release build with a real `SUPublicEDKey` starts it.
+Releases are [Releasing → macOS app](#macos-app-releases).
+`desktop/macos/README.md` has the architecture.
 
 ## Conventions
 
@@ -410,7 +416,9 @@ These are observed throughout; match them rather than introducing your own.
     `Source::download` take the token), and before `commit` places anything.
     A cancelled install has removed its temp dirs and written no state entry.
     New long-running steps must take the token and check it, not loop without
-    one. The CLI passes tokens that nothing cancels.
+    one. The CLI arms Ctrl-C on one token for the run: the first cancels, a
+    second exits 130 at once. Install requests, `self upgrade` and registry
+    downloads share it.
   - *Per operation.* Build `Config` per operation (`Config::load` re-reads
     `config.toml` and the environment) and call `log::init` per operation; do
     not cache either across operations. `push.rs` owns a tokio runtime and
@@ -701,9 +709,49 @@ stop before building:
   warns on a mismatch. Losing or rotating this key strands every installed
   copy on its version.
 
-The ketch-ffi XCFramework (R9) does not exist yet: the caller's
-`pre-build-command` is empty (marked `TODO(R9)`), so a release made before R9
-ships the app on `FakeKetchCore`.
+The app links `ketch-ffi`. `release-apple-desktop.yml`'s `pre-build-command`
+runs `scripts/xcframework.sh` before the archive, and CI's `macos-app` job
+does the same with `--debug` before `xcodebuild`. The UI smoke test sets
+`KETCH_USE_FAKE_CORE=1` so it still asserts the sample packages.
+
+### Windows app releases
+
+The app in `desktop/windows/` is released from this repository by
+`.github/workflows/release-windows-desktop.yml`. Tags are
+`desktop-windows-vX.Y.Z`, never `vX.Y.Z` and never `desktop-v*`, and the
+version is the workflow's input. The run is dispatch-only. It creates the
+tag itself, after both artifacts exist, rather than running because a tag
+was pushed.
+
+**No app release is ever the latest release.** The same rule as the macOS
+app: `install.sh`, `install.ps1` and `ketch self upgrade` follow
+`/releases/latest`. The workflow publishes with `--latest=false` and
+`--prerelease`, then reads `/releases/latest` back and restores the previous
+release if the pointer moved onto `desktop-windows-v*`. `select_release`
+drops that tag when any real version tag is in the list. `cliff.toml`,
+`tests/crate-version.sh`, `scripts/release.sh` and `scripts/tap-release-version.sh`
+already ignore a tag that does not start with `v`.
+
+To cut one: Actions → release-windows-desktop → Run workflow on `main` with
+the version, or
+`gh workflow run release-windows-desktop.yml --ref main -f version=X.Y.Z`.
+The version must be plain `X.Y.Z`, each part at most 65535, and above the
+last `desktop-windows-v*` tag. The run publishes an x64 unpackaged
+self-contained zip and an x64 MSIX. The MSIX manifest is generated on the
+runner so the unpackaged `dotnet build` in CI stays `WindowsPackageType=None`,
+and it declares `unvirtualizedResources` because ketch writes the real
+`HKCU\Environment\Path`. A failed run before the publish step creates
+nothing.
+
+Signing secrets, required, and not the Apple Developer ID pair (that
+certificate cannot sign an MSIX, and this job must not receive it):
+
+- `WINDOWS_CERTIFICATE` — a code-signing pfx, base64.
+- `WINDOWS_CERTIFICATE_PWD` — its password.
+
+Both are step env. The job stops before building when either is missing.
+`tests/desktop_windows_release.py` (in `just lint-shell`) checks the
+workflow stays dispatch-only, names those secrets, and does not print them.
 
 ## Documentation translations
 

@@ -61,7 +61,7 @@ struct ContentView: View {
         }
         // Installs made from the CLI show up when the user comes back.
         .onChange(of: appearsActive) { _, active in
-            if active { Task { await store.refresh() } }
+            if active { Task { await store.refresh(alerting: false) } }
         }
         .onChange(of: store.requestedSection, initial: true) { _, requested in
             guard let requested else { return }

@@ -297,6 +297,21 @@ public sealed class FakeKetchCore : IKetchCore
             """;
     }
 
+    public string PackageName(string link)
+    {
+        Record($"link {link}");
+        const string prefix = "ketch://package/";
+        // The real grammar is the core's (`ketch_core::link`); the fake only
+        // needs to tell a package page from everything else, same as the macOS fake.
+        var name = link.StartsWith(prefix, StringComparison.Ordinal) ? link[prefix.Length..] : "";
+        if (name.Length == 0 || !name.All(static c => char.IsAscii(c) && (char.IsLetterOrDigit(c) || "-_.+".Contains(c))))
+        {
+            throw KetchException.Other("ketch link is not a package page");
+        }
+
+        return name.ToLowerInvariant();
+    }
+
     public IReadOnlyList<Finding> Doctor()
     {
         Pause();

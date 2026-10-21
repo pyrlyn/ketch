@@ -53,6 +53,22 @@ public sealed partial class MainWindow : Window
     /// <summary>Opens a package's page inside the navigation.</summary>
     public void OpenPackage(string name) => ContentFrame.Navigate(typeof(PackageDetailPage), name);
 
+    /// <summary>Shows a section and the window, including after a notification or a tray command.</summary>
+    public void ShowSection(string tag)
+    {
+        if (!PageTypes.TryGetValue(tag, out var page))
+        {
+            return;
+        }
+
+        ContentFrame.Navigate(page);
+        Nav.SelectedItem = tag == "settings"
+            ? Nav.SettingsItem
+            : Nav.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(item => item.Tag as string == tag);
+        AppWindow.Show();
+        Activate();
+    }
+
     // ItemInvoked, not SelectionChanged: choosing the page that is already
     // selected has to leave a package's page and return to the list.
     private void OnNavigate(NavigationView sender, NavigationViewItemInvokedEventArgs args)
@@ -84,6 +100,15 @@ public sealed partial class MainWindow : Window
                 break;
             case nameof(KetchStore.PendingChoice) or nameof(KetchStore.PendingStop):
                 _ = AskAsync();
+                break;
+            case nameof(KetchStore.LinkedPackage) when App.Store.LinkedPackage is { } linked:
+                AppWindow.Show();
+                Activate();
+                OpenPackage(linked);
+                break;
+            case nameof(KetchStore.RequestedSection) when App.Store.RequestedSection is { } section:
+                App.Store.ClearRequestedSection();
+                ShowSection(section);
                 break;
         }
     }
@@ -133,14 +158,32 @@ public sealed partial class MainWindow : Window
         {
             while (App.Store.PendingChoice is { } || App.Store.PendingStop is { })
             {
-                if (App.Store.PendingChoice is { } choice)
+                try
                 {
-                    var picked = await Dialogs.ChooseBinaryAsync(Root, choice);
-                    App.Store.AnswerChoice(picked);
+                    if (App.Store.PendingChoice is { } choice)
+                    {
+                        var picked = await Dialogs.ChooseBinaryAsync(Root, choice);
+                        App.Store.AnswerChoice(picked);
+                    }
+                    else if (App.Store.PendingStop is { } stop)
+                    {
+                        App.Store.AnswerStop(await Dialogs.StopProcessesAsync(Root, stop));
+                    }
                 }
-                else if (App.Store.PendingStop is { } stop)
+                catch (Exception)
                 {
-                    App.Store.AnswerStop(await Dialogs.StopProcessesAsync(Root, stop));
+                    // WinUI allows one ContentDialog. A confirm already on screen
+                    // makes ShowAsync throw, and the core thread is blocked in
+                    // its wait until this question is answered.
+                    if (App.Store.PendingChoice is not null)
+                    {
+                        App.Store.AnswerChoice(null);
+                    }
+
+                    if (App.Store.PendingStop is not null)
+                    {
+                        App.Store.AnswerStop(false);
+                    }
                 }
             }
         }

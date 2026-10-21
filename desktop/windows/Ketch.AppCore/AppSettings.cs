@@ -2,72 +2,155 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
 
-// The app's own preferences, in a JSON file. Not `ApplicationData`: the app
-// also ships unpackaged (D14), and an unpackaged app has none. Anything ketch
-// itself is configured by stays in the CLI's config.toml, and no token is
-// ever stored here.
+// The Windows app's own preferences. An unpackaged app has no ApplicationData,
+// and an MSIX virtualises it, so both forms read one file under
+// %LOCALAPPDATA%\ketch. Tokens and ketch's own config stay in the CLI's
+// config.toml; this file never holds them.
 
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Ketch.AppCore;
 
+/// <summary>What the user can switch off: the tray, notices, login and ketch links.</summary>
 public sealed class AppSettings
 {
-    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions Json = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
 
-    /// <summary>`Default`, `Light` or `Dark`, as WinUI's `ElementTheme` names them.</summary>
+    private readonly string? path;
+    private readonly HashSet<string> notified = new(StringComparer.Ordinal);
+
+    private AppSettings(string? path) => this.path = path;
+
+    /// <summary>The notification-area icon. On until the user hides it.</summary>
+    public bool ShowTray { get; set; } = true;
+
+    /// <summary>Whether a new upgrade posts a system notification. Off until the user turns it on.</summary>
+    public bool NotifiesOfUpdates { get; set; }
+
+    /// <summary>Whether Windows starts the app at login.</summary>
+    public bool OpenAtLogin { get; set; }
+
+    /// <summary>Whether <c>ketch://</c> links open this app. On until the user turns it off.</summary>
+    public bool HandleLinks { get; set; } = true;
+
+    /// <summary><c>Default</c>, <c>Light</c> or <c>Dark</c>, as WinUI's <c>ElementTheme</c> names them.</summary>
     public string Theme { get; set; } = "Default";
 
-    /// <summary>
-    /// `%LOCALAPPDATA%\ketch\app-settings.json`. Beside the ketch root, not in
-    /// it, so `ketch self uninstall` never meets a file it did not create. An
-    /// MSIX's writes under `%LOCALAPPDATA%` are redirected into its package
-    /// data by Windows and read back from there, so the same path serves both
-    /// forms of the app.
-    /// </summary>
-    public static string DefaultPath =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ketch", "app-settings.json");
+    /// <summary><see cref="UpdateNotices.Key"/>s already announced.</summary>
+    public IReadOnlySet<string> NotifiedUpgrades => notified;
 
-    /// <summary>The settings in <paramref name="path"/>; the defaults when it is missing or unreadable.</summary>
-    public static AppSettings Load(string path)
+    /// <summary><c>%LOCALAPPDATA%\ketch</c>, the directory both the MSIX and the unpackaged app can write.</summary>
+    public static string DefaultDirectory() =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ketch");
+
+    /// <summary>
+    /// Reads <c>settings.json</c> from <paramref name="directory"/>, or the defaults
+    /// when the file is missing or not this app's JSON. A broken file must not
+    /// stop the app from opening.
+    /// </summary>
+    public static AppSettings Load(string directory)
     {
+        var settings = new AppSettings(Path.Combine(directory, "settings.json"));
+        if (!File.Exists(settings.path))
+        {
+            return settings;
+        }
+
         try
         {
-            return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), Json) ?? new AppSettings();
+            var stored = JsonSerializer.Deserialize<Stored>(File.ReadAllText(settings.path), Json);
+            if (stored is null)
+            {
+                return settings;
+            }
+
+            settings.ShowTray = stored.ShowTray;
+            settings.NotifiesOfUpdates = stored.NotifiesOfUpdates;
+            settings.OpenAtLogin = stored.OpenAtLogin;
+            settings.HandleLinks = stored.HandleLinks;
+            settings.Theme = stored.Theme ?? settings.Theme;
+            foreach (var key in stored.NotifiedUpgrades ?? [])
+            {
+                if (!string.IsNullOrEmpty(key))
+                {
+                    settings.notified.Add(key);
+                }
+            }
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
+        catch (JsonException)
         {
-            return new AppSettings();
+            // The next Save replaces the file. Until then the defaults apply.
+        }
+        catch (IOException)
+        {
+            // Same as a missing file: the app still runs, and the next Save retries.
+        }
+
+        return settings;
+    }
+
+    /// <summary>Remembers <paramref name="upgrades"/> so the next check stays quiet about them.</summary>
+    public void Remember(IEnumerable<Upgrade> upgrades)
+    {
+        var added = false;
+        foreach (var upgrade in upgrades)
+        {
+            added |= notified.Add(UpdateNotices.Key(upgrade));
+        }
+
+        if (added)
+        {
+            Save();
         }
     }
 
-    /// <summary>
-    /// Writes the settings to <paramref name="path"/>, whole or not at all.
-    /// False when it could not: a preference is not worth an error dialog,
-    /// and the choice still holds until the app quits.
-    /// </summary>
-    public bool Save(string path)
+    /// <summary>Writes the file, replacing it. A failure leaves the in-memory values as they are.</summary>
+    public void Save()
     {
-        var temporary = path + ".tmp";
-        try
+        if (path is null)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-            File.WriteAllText(temporary, JsonSerializer.Serialize(this, Json));
-            File.Move(temporary, path, overwrite: true);
-            return true;
+            return;
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-        {
-            try
-            {
-                File.Delete(temporary);
-            }
-            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
-            {
-                // The failed write is what the caller hears about.
-            }
 
-            return false;
+        var directory = Path.GetDirectoryName(path);
+        if (string.IsNullOrEmpty(directory))
+        {
+            return;
         }
+
+        Directory.CreateDirectory(directory);
+        var stored = new Stored
+        {
+            ShowTray = ShowTray,
+            NotifiesOfUpdates = NotifiesOfUpdates,
+            OpenAtLogin = OpenAtLogin,
+            HandleLinks = HandleLinks,
+            Theme = Theme,
+            NotifiedUpgrades = [.. notified.Order(StringComparer.Ordinal)],
+        };
+        var tmp = path + ".tmp";
+        File.WriteAllText(tmp, JsonSerializer.Serialize(stored, Json));
+        File.Move(tmp, path, overwrite: true);
+    }
+
+    private sealed class Stored
+    {
+        public bool ShowTray { get; set; } = true;
+
+        public bool NotifiesOfUpdates { get; set; }
+
+        public bool OpenAtLogin { get; set; }
+
+        public bool HandleLinks { get; set; } = true;
+
+        public string? Theme { get; set; }
+
+        public List<string>? NotifiedUpgrades { get; set; }
     }
 }
