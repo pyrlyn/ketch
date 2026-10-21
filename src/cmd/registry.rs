@@ -323,12 +323,9 @@ fn install_from_fixture(
         .map_err(|e| Error::io(&path, e))?;
     let sources = SourceRegistry::load(&crate::ui::ctx(cfg));
     let mut state = State::default();
-    install::install(
-        &crate::ui::ctx(cfg),
-        &sources,
-        &mut state,
-        &InstallRequest::new(PackageSpec::parse(&rewritten.name)),
-    )?;
+    let mut req = InstallRequest::new(PackageSpec::parse(&rewritten.name));
+    req.cancel = crate::interrupt::token();
+    install::install(&crate::ui::ctx(cfg), &sources, &mut state, &req)?;
     Ok(())
 }
 

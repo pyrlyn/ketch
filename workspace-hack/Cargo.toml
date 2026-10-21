@@ -106,6 +106,7 @@ winnow = { version = "1", features = ["simd"] }
 
 [target.x86_64-unknown-linux-gnu.dependencies]
 getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std", "sys_rng"] }
+libc = { version = "0.2", features = ["extra_traits"] }
 mio = { version = "1", features = ["net", "os-ext"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 sync_wrapper = { version = "1", default-features = false, features = ["futures"] }
@@ -115,11 +116,13 @@ tower-http = { version = "0.6", features = ["follow-redirect", "map-response-bod
 
 [target.x86_64-unknown-linux-gnu.build-dependencies]
 getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std", "sys_rng"] }
+libc = { version = "0.2", features = ["extra_traits"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 [target.aarch64-apple-darwin.dependencies]
 errno = { version = "0.3" }
 getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std", "sys_rng"] }
+libc = { version = "0.2", features = ["extra_traits"] }
 mio = { version = "1", features = ["net", "os-ext"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 sync_wrapper = { version = "1", default-features = false, features = ["futures"] }
@@ -130,6 +133,7 @@ tower-http = { version = "0.6", features = ["follow-redirect", "map-response-bod
 [target.aarch64-apple-darwin.build-dependencies]
 errno = { version = "0.3" }
 getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std", "sys_rng"] }
+libc = { version = "0.2", features = ["extra_traits"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 [target.x86_64-pc-windows-msvc.dependencies]

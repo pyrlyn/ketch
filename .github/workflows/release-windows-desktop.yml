@@ -1,0 +1,198 @@
+# Windows app release. Dispatch-only: Actions -> release-windows-desktop ->
+# Run workflow, or
+# `gh workflow run release-windows-desktop.yml --ref main -f version=X.Y.Z`.
+#
+# The app shares this repository with the CLI. install.sh, install.ps1 and
+# `ketch self upgrade` follow /releases/latest, so this release is a
+# prerelease created with --latest=false, tagged desktop-windows-vX.Y.Z, and
+# the last step fails (and puts the previous latest back) if that pointer
+# moved. The tag and the release are created only after both artifacts exist
+# and the MSIX is signed. A failed build leaves nothing.
+#
+# WINDOWS_CERTIFICATE is a base64 Windows code-signing pfx, and
+# WINDOWS_CERTIFICATE_PWD is its password. They are not the Apple Developer
+# ID secrets: that pfx cannot sign an MSIX, and a Windows job must not see
+# it. The job stops before building when either is missing, rather than
+# uploading an unsigned package. The values are step env, not job env, so
+# `dotnet` and its dependencies do not receive the pfx.
+name: release-windows-desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: App version to release, X.Y.Z (tagged desktop-windows-vX.Y.Z)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        with:
+          install_args: dotnet python
+          # A release job must not restore a cache another run could have poisoned.
+          cache: false
+
+      - name: Require the signing certificate
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PWD: ${{ secrets.WINDOWS_CERTIFICATE_PWD }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE) -or
+              [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PWD)) {
+            Write-Error 'WINDOWS_CERTIFICATE and WINDOWS_CERTIFICATE_PWD are required; refusing to ship an unsigned MSIX'
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'ketch-windows.pfx'
+          $raw = $env:WINDOWS_CERTIFICATE.Trim()
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($raw))
+          $cert = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
+            $pfx, $env:WINDOWS_CERTIFICATE_PWD)
+          # The subject is the MSIX publisher. It is not the pfx or the password.
+          Set-Content -Path (Join-Path $env:RUNNER_TEMP 'ketch-publisher.txt') -Value $cert.Subject -NoNewline
+
+      - name: Check the version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python scripts/windows_desktop_release.py check-version "$env:VERSION"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        env:
+          VERSION: ${{ inputs.version }}
+
+      - name: Write the MSIX manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $publisherFile = Join-Path $env:RUNNER_TEMP 'ketch-publisher.txt'
+          python scripts/windows_desktop_release.py manifest `
+            --version "$env:VERSION" `
+            --publisher-file $publisherFile `
+            --app-dir desktop/windows/Ketch.App
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Select-String -Path desktop/windows/Ketch.App/Package.appxmanifest -Pattern 'unvirtualizedResources' -Quiet)) {
+            Write-Error 'the MSIX manifest lost unvirtualizedResources'
+          }
+        env:
+          VERSION: ${{ inputs.version }}
+
+      - name: Unpackaged self-contained zip
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $out = Join-Path $env:RUNNER_TEMP 'ketch-unpackaged'
+          dotnet publish desktop/windows/Ketch.App/Ketch.App.csproj `
+            -c Release -p:Platform=x64 -p:RuntimeIdentifier=win-x64 `
+            -p:WindowsPackageType=None -p:SelfContained=true `
+            -p:WindowsAppSDKSelfContained=true `
+            -o $out
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $items = @(Get-ChildItem -LiteralPath $out -Force)
+          if ($items.Count -eq 0) { Write-Error 'the unpackaged publish folder is empty'; exit 1 }
+          $zip = Join-Path $env:RUNNER_TEMP "Ketch-windows-x64-$env:VERSION.zip"
+          Compress-Archive -LiteralPath $items.FullName -DestinationPath $zip
+          Set-Content -Path (Join-Path $env:RUNNER_TEMP 'ketch-zip-path.txt') -Value $zip -NoNewline
+        env:
+          VERSION: ${{ inputs.version }}
+
+      - name: Build the MSIX
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet publish desktop/windows/Ketch.App/Ketch.App.csproj `
+            -c Release -p:Platform=x64 -p:RuntimeIdentifier=win-x64 `
+            -p:WindowsPackageType=MSIX -p:GenerateAppxPackageOnBuild=true `
+            -p:AppxPackageSigningEnabled=false -p:AppxBundle=Never `
+            -p:WindowsAppSDKSelfContained=true -p:SelfContained=true
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $msix = Get-ChildItem -Path desktop/windows/Ketch.App -Recurse -Filter *.msix |
+            Select-Object -First 1
+          if (-not $msix) { Write-Error 'publish produced no msix'; exit 1 }
+          $dest = Join-Path $env:RUNNER_TEMP "Ketch-windows-x64-$env:VERSION.msix"
+          Copy-Item $msix.FullName $dest
+          Set-Content -Path (Join-Path $env:RUNNER_TEMP 'ketch-msix-path.txt') -Value $dest -NoNewline
+        env:
+          VERSION: ${{ inputs.version }}
+
+      - name: Sign the MSIX
+        env:
+          WINDOWS_CERTIFICATE_PWD: ${{ secrets.WINDOWS_CERTIFICATE_PWD }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $signtool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match '\\x64\\signtool.exe$' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if (-not $signtool) { Write-Error 'signtool.exe was not found'; exit 1 }
+          $msix = (Get-Content -Raw (Join-Path $env:RUNNER_TEMP 'ketch-msix-path.txt')).Trim()
+          & $signtool.FullName sign /fd SHA256 `
+            /f (Join-Path $env:RUNNER_TEMP 'ketch-windows.pfx') `
+            /p "$env:WINDOWS_CERTIFICATE_PWD" `
+            /tr http://timestamp.digicert.com /td SHA256 `
+            $msix
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Checksums
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = (Get-Content -Raw (Join-Path $env:RUNNER_TEMP 'ketch-zip-path.txt')).Trim()
+          $msix = (Get-Content -Raw (Join-Path $env:RUNNER_TEMP 'ketch-msix-path.txt')).Trim()
+          $sums = Join-Path $env:RUNNER_TEMP 'SHA256SUMS'
+          # Two spaces between hash and name, the form `sha256sum` writes.
+          $lines = @($zip, $msix) | ForEach-Object {
+            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $_).Hash.ToLowerInvariant()
+            '{0}  {1}' -f $hash, (Split-Path -Leaf $_)
+          }
+          Set-Content -Path $sums -Value ($lines -join "`n") -NoNewline
+          Set-Content -Path (Join-Path $env:RUNNER_TEMP 'ketch-sums-path.txt') -Value $sums -NoNewline
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = "desktop-windows-v$env:VERSION"
+          $notes = Join-Path $env:RUNNER_TEMP 'notes.md'
+          @(
+            "Ketch for Windows $env:VERSION."
+            ''
+            'Unpackaged self-contained zip and signed MSIX. This is not the CLI release: install.sh, install.ps1 and ketch self upgrade keep following /releases/latest, which this prerelease does not move.'
+          ) | Set-Content -Path $notes
+          $before = ''
+          $raw = gh api "repos/$env:GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>$null
+          if ($LASTEXITCODE -eq 0 -and $raw) { $before = "$raw".Trim() }
+          $zip = (Get-Content -Raw (Join-Path $env:RUNNER_TEMP 'ketch-zip-path.txt')).Trim()
+          $msix = (Get-Content -Raw (Join-Path $env:RUNNER_TEMP 'ketch-msix-path.txt')).Trim()
+          $sums = (Get-Content -Raw (Join-Path $env:RUNNER_TEMP 'ketch-sums-path.txt')).Trim()
+          gh release create $tag $zip $msix $sums `
+            --title "Ketch for Windows $env:VERSION" `
+            --latest=false `
+            --prerelease `
+            --notes-file $notes
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $after = ''
+          $raw = gh api "repos/$env:GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>$null
+          if ($LASTEXITCODE -eq 0 -and $raw) { $after = "$raw".Trim() }
+          if ($after -like 'desktop-windows-v*') {
+            if ($before) { gh release edit $before --latest | Out-Null }
+            Write-Error "/releases/latest moved to $after"
+            exit 1
+          }

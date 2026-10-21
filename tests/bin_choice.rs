@@ -250,6 +250,47 @@ fn sync_repeats_the_choice_the_lockfile_recorded_without_a_terminal() {
     assert!(!linked(&sandbox, "rtok-hook").exists());
 }
 
+/// File names of the binaries state says the package links, sorted.
+fn linked_targets(sandbox: &Sandbox) -> Vec<String> {
+    let path = sandbox.root().join("state.json");
+    let state: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).expect("read state"))
+            .expect("parse state");
+    let mut targets: Vec<String> = state["packages"]["rtok"]["links"]
+        .as_array()
+        .expect("links")
+        .iter()
+        .filter(|l| l.get("role").is_none())
+        .map(|l| {
+            let target = Path::new(l["target"].as_str().expect("target"));
+            target.file_name().unwrap().to_string_lossy().into_owned()
+        })
+        .collect();
+    targets.sort();
+    targets
+}
+
+// B65: the B64 bug was Windows-only because only `.exe` names put the helper
+// first in a sort ('-' < '.'). Shipping those names on every host makes macOS
+// and Linux CI catch a regression too, not just the Windows job. State is
+// read rather than the program run, because a fixture `.exe` cannot run on
+// Windows.
+#[rstest::rstest]
+#[case::helper_first(&["rtok-hook.exe", "rtok.exe"], "rtok.exe")]
+#[case::command_first(&["rtok.exe", "rtok-hook.exe"], "rtok.exe")]
+#[case::upper_case(&["RTOK-HOOK.EXE", "RTOK.EXE"], "RTOK.EXE")]
+fn windows_names_link_the_binary_named_like_the_package_on_every_os(
+    #[case] programs: &[&str],
+    #[case] wanted: &str,
+) {
+    let sandbox = Sandbox::new();
+    publish(&sandbox, "1.0.0", programs);
+
+    sandbox.ok(&["install", "test:rtok@1.0.0", "--yes"]);
+
+    assert_eq!(linked_targets(&sandbox), vec![wanted.to_string()]);
+}
+
 /// A user manifest whose one `bin` entry globs `rtok*`, with `extra` added
 /// to the entry.
 fn glob_manifest(sandbox: &Sandbox, extra: &str) {

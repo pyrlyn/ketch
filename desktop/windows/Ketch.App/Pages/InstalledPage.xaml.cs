@@ -27,7 +27,7 @@ public sealed partial class InstalledPage : Page
 
     private void OnStoreChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(KetchStore.Installed) or nameof(KetchStore.Outdated))
+        if (e.PropertyName is nameof(KetchStore.Installed) or nameof(KetchStore.Outdated) or nameof(KetchStore.IsRunning))
         {
             Render();
         }
@@ -44,7 +44,8 @@ public sealed partial class InstalledPage : Page
             .Select(p => new InstalledRow(
                 p,
                 store.OutdatedVersion(p.Name),
-                store.Held.FirstOrDefault(u => u.Name == p.Name)?.HeldBy))
+                store.Held.FirstOrDefault(u => u.Name == p.Name)?.HeldBy,
+                !store.IsRunning))
             .ToList();
         List.ItemsSource = rows;
         Empty.Visibility = Fmt.ShowWhenEmpty(rows.Count);
@@ -62,7 +63,7 @@ public sealed partial class InstalledPage : Page
 
     private async void OnUninstall(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { Tag: string name })
+        if (sender is not Button { Tag: string name } || App.Store.IsRunning)
         {
             return;
         }
