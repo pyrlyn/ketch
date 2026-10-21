@@ -3,7 +3,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
 
-
+# The body is a function, called on the last line. A `curl | bash` cut off
+# mid-download then has no call to run: bash does not execute a function it
+# never finishes reading (B133).
+main() {
 set -euo pipefail
 IFS=$'\n\t'
 
@@ -394,3 +397,6 @@ fi
 echo ""
 echo "Getting started:"
 "${INSTALL_PATH}" --help
+}
+
+main "$@"

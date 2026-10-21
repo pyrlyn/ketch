@@ -26,6 +26,23 @@ public sealed class KetchStoreTests
     }
 
     [TestMethod]
+    public async Task A_second_operation_while_one_is_running_says_so()
+    {
+        var store = new KetchStore(new FakeKetchCore(stepDelay: TimeSpan.FromMilliseconds(200)));
+
+        var running = store.InstallAsync("zoxide");
+        await store.UninstallAsync(["ripgrep"]);
+
+        Assert.AreEqual(
+            "Another operation is running. Wait for it or cancel it first.",
+            store.ErrorMessage);
+        Assert.IsTrue(store.IsRunning);
+
+        await running;
+        Assert.IsFalse(store.IsRunning);
+    }
+
+    [TestMethod]
     public async Task Install_logs_its_stages_and_refreshes_the_list()
     {
         var store = new KetchStore(new FakeKetchCore());
