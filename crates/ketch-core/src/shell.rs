@@ -1359,9 +1359,21 @@ fn mentions(text: &str, bin_dir: &str) -> bool {
 }
 
 /// Byte range of the ketch block, markers and trailing newline included.
+///
+/// The END pairs with the nearest BEGIN still before it. A stray BEGIN left
+/// by a hand edit or a crash has no END of its own; pairing it with the next
+/// block's END would delete the lines in between on uninstall, and the next
+/// install would append a second block (B119).
 fn block_span(text: &str) -> Option<(usize, usize)> {
-    let start = marker_at_line_start(text, BEGIN, 0)?;
-    let end_line = marker_at_line_start(text, END, start + BEGIN.len())?;
+    let mut from = 0;
+    let (start, end_line) = loop {
+        let begin = marker_at_line_start(text, BEGIN, from)?;
+        let end_line = marker_at_line_start(text, END, begin + BEGIN.len())?;
+        match marker_at_line_start(text, BEGIN, begin + BEGIN.len()) {
+            Some(closer) if closer < end_line => from = closer,
+            _ => break (begin, end_line),
+        }
+    };
     let mut end = end_line + END.len();
     // CRLF profiles (PowerShell, autocrlf dotfiles) end the marker line with
     // `\r\n`. Consuming only `\n` would leave the `\r` and, before the match
@@ -1572,6 +1584,25 @@ mod tests {
     ) {
         assert_eq!(quote_posix(dir), posix);
         assert_eq!(quote_fish(dir), fish);
+    }
+
+    #[test]
+    fn a_stray_begin_does_not_swallow_the_lines_before_the_real_block() {
+        let text =
+            format!("{BEGIN}\n# hand edited, no end\necho keep\n{BEGIN}\nexport PATH\n{END}\n");
+        let (start, end) = block_span(&text).expect("the closed block");
+        let span = &text[start..end];
+        assert!(span.starts_with(BEGIN), "{span}");
+        assert!(!span.contains("echo keep"), "{span}");
+        let gone = unsplice(&text).expect("removed");
+        assert!(gone.contains("echo keep"), "{gone}");
+        assert!(gone.contains("# hand edited"), "{gone}");
+        assert!(!gone.contains("export PATH"), "{gone}");
+        let rewritten = splice(&text, &format!("{BEGIN}\nnew\n{END}\n")).expect("rewritten");
+        assert_eq!(rewritten.matches(BEGIN).count(), 2, "{rewritten}");
+        assert!(rewritten.contains("echo keep"), "{rewritten}");
+        assert!(rewritten.contains("new\n"), "{rewritten}");
+        assert!(!rewritten.contains("export PATH"), "{rewritten}");
     }
 
     #[test]

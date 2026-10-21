@@ -122,6 +122,49 @@ jobs:
           if ($errors) { $errors | Format-List *; exit 1 }
           ./install.ps1 --help
 
+      # pwsh 7 accepts Join-Path's third child; Windows PowerShell 5.1, the
+      # shell `irm | iex` runs in, does not. This step goes past extraction.
+      - name: Installer past extraction on Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = Join-Path $env:RUNNER_TEMP 'ketch-b94-release'
+          $nested = Join-Path $release 'staging\ketch'
+          New-Item -ItemType Directory -Path $nested -Force | Out-Null
+          $stub = Join-Path $nested 'ketch.exe'
+          Add-Type -OutputType ConsoleApplication -OutputAssembly $stub -TypeDefinition @'
+          using System;
+          using System.IO;
+          using System.Reflection;
+          public class Program {
+              public static int Main(string[] args) {
+                  if (args.Length >= 2 && args[0] == "self" && args[1] == "install") {
+                      string root = Environment.GetEnvironmentVariable("KETCH_ROOT");
+                      if (string.IsNullOrEmpty(root)) return 2;
+                      string bin = Path.Combine(root, "bin");
+                      Directory.CreateDirectory(bin);
+                      File.Copy(Assembly.GetExecutingAssembly().Location, Path.Combine(bin, "ketch.exe"), true);
+                      return 0;
+                  }
+                  Console.WriteLine("ketch (stub)");
+                  return 0;
+              }
+          }
+          '@
+          $tar = Join-Path $release 'payload.tar.gz'
+          & tar.exe -czf $tar -C (Join-Path $release 'staging') ketch
+          if ($LASTEXITCODE -ne 0) { throw "tar failed: $LASTEXITCODE" }
+          $name = 'ketch-x86_64-pc-windows-msvc.tar.gz'
+          $hash = (Get-FileHash -LiteralPath $tar -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -LiteralPath (Join-Path $release 'SHA256SUMS') -Encoding ascii -Value "$hash  $name"
+          $root = Join-Path $env:RUNNER_TEMP 'ketch-b94-root'
+          $env:KETCH_INSTALL_RELEASE_DIR = $release
+          $env:PROCESSOR_ARCHITECTURE = 'AMD64'
+          & .\install.ps1 --no-modify-path --root $root
+          if ($LASTEXITCODE -ne 0) { throw "install.ps1 exited $LASTEXITCODE" }
+          $installed = Join-Path $root 'bin\ketch.exe'
+          if (-not (Test-Path -LiteralPath $installed)) { throw "missing $installed" }
+
   # Which runner the macOS jobs use: pyrlyn/ci's macos-runner action reads the MACOS_RUNNER
   # variable (unset = the hosted labels below, xcode-27-local = the dedicated Mac).
   macos-runner:
@@ -351,9 +394,11 @@ jobs:
   ketch-linux-app:
     needs: config
     if: >-
+      github.event_name != 'issue_comment' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     container: ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
     steps:
       # checkout runs git inside the container, and the image does not ship it.
@@ -363,6 +408,8 @@ jobs:
           apt-get install -y --no-install-recommends ca-certificates git
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # python3-gi and the typelibs are what blueprint-compiler reads GTK and
       # libadwaita's types from. git fetches the pinned subproject.
