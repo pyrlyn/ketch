@@ -23,27 +23,15 @@ Item 2 stays with B64. Item 1 is B65, which closes with B64's `tests/bin_choice.
 
 Status: done. CI already runs the whole suite on every OS, with no workflow edit: `ci.yml`'s `rust` job (pyrlyn/ci `ci-rust.yml`) runs clippy and `cargo nextest run --workspace --all-targets` on Linux x86_64 and aarch64, macOS aarch64 and Windows x86_64, and `package` runs `dist build` on all three OSes. `verify.yml` no longer exists; the per-OS `check` jobs named above became that shared job, which brings its own sccache. Item 1 is B65, its own task (it extends `tests/bin_choice.rs`, which every OS already runs). Item 2: `install.rs` tests `a_choice_asked_for_a_user_manifest_is_written_into_the_file` and `a_choice_asked_for_a_registry_package_is_remembered_in_state_and_reused` drive `commit` with a scripted `Decider` over a payload holding `rtok-cli` and `rtok-hook`: the user manifest gets `bin = [...]` appended with the rest of the file unchanged; a registry package keeps its choice in state, its registry copy is never written, and an upgrade reuses the choice without asking. They are not OS-gated, so every CI target runs them. Item 3: no second cache, for the reasons and numbers above.
 
-### B116. Do not run an installed client as a source plugin
+### B60. Windows self-update leaves `ketch.exe.old` behind
 
-Row B116 in the 2026-10-12 findings. Discovery walks `PATH`, and install puts client binaries on that `PATH`, so a package that ships `ketch-source-*` was executed on later commands.
+Windows will not delete the file backing a running image. `replace_binary` parks the old binary as `ketch.exe.old` and the process doing the cleanup is that image, so the delete at the end of a successful swap fails and used to be dropped. `install_self` on Windows uses `with_extension("old")`, which names the same leftover `ketch.old`. Both names are swept at the start of `self upgrade` (not on `--dry-run`) and `self install`, and again before `replace_binary` renames: by then the earlier updater has exited, so the delete works. A failure warns and continues. The end-of-swap delete stays one best-effort try. `ketch doctor` warns when a leftover is still in the bin dir, or beside the running binary when that binary lives somewhere else.
 
-Done: the bin directory and the store are not searched, and an executable whose path resolves into either is skipped. A plugin in the plugins directory, or elsewhere on `PATH`, is still found.
-
-### B138. Record the Marvin advisory and keep rustls past its fix
-
-Row B138 in the 2026-10-12 findings. rustls 0.23.43 (RUSTSEC-2026-0285) is already 0.23.46 in `Cargo.lock`, so it was not bumped again. rsa 0.9.10 (RUSTSEC-2023-0071, Marvin) has no upstream fix and is only reached to verify signatures.
-
-Done: `deny.toml` ignores that advisory and says why. `cargo deny` is not in CI.
+Tests: `aside_names_cover_the_swap_and_the_flat_install`, `a_previous_swap_backup_is_removed_and_a_missing_one_is_fine`, `doctor_notes_a_stale_aside_and_stays_quiet_without_one`.
 
 ### B85. Registry update and listing ignore cancel
 
 `registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
-
-### D16. Linux: Vala + GTK 4 app shell on a fake core
-
-The Linux app's screens live in `desktop/linux`, built before the C ABI is wired in (D17). The core contract, the fake and the store are a GLib static library, so `meson test` runs without a display. The app is Vala, GTK 4 and libadwaita: an `AdwNavigationSplitView` (Installed, Discover, Updates, Activity, Doctor) that collapses under 600px, a package page pushed on the content navigation view, and preferences for the colour scheme. Blueprint 0.22.2 is a pinned Meson subproject; its output and a copy of `ketch-tokens.css` go into one GResource. `AdwAlertDialog` covers binary choice, stopping processes, uninstall and upgrade-all; `AdwBanner` is the busy lock (Retry) and the running operation (Cancel); `AdwToast` is a finished operation. Dark and high contrast follow libadwaita 1.8, which applies the token stylesheet's `prefers-color-scheme` and `prefers-contrast` queries. An empty search plays `search-browse`; a typed query filters the search scenario. The fake answers in ketch-capi's JSON envelopes, so D17 can sit behind the same `Core` interface.
-
-Tests: `desktop/linux/tests/fake-core-test.vala` and `store-test.vala` (`just linux-app-test`). The `ketch-linux-app` CI job builds with `-Dgui=enabled` on Ubuntu 26.04, where GTK 4.20 and libadwaita 1.8 are the distribution's.
 
 ### B132. `install.ps1` omits the `v` on `--version`
 
@@ -106,14 +94,6 @@ A manifest's `[hooks]` table names one shell line for each of `before_install`, 
 Hooks are a trust boundary: they run only from a user-tier manifest (`~/.ketch/manifests`). A registry or built-in manifest carrying hooks is refused at install before anything is placed, and skipped with a warning on uninstall. `Manifest::validate` refuses a blank hook. Schema and semantics are in `docs/MANIFESTS.md`.
 
 Tests: `src/hooks.rs` (environment, working directory, stderr detail, origin gate), `src/model.rs` (parsing, blank hook, misspelt key), `tests/install.rs` (order across install, upgrade and uninstall; a failing before hook installs nothing).
-
-### B60. Windows self-update leaves `ketch.exe.old` behind
-
-Observed on Windows: `ketch self update` 0.4.4 → 0.5.1 succeeded, but the old binary stayed in the bin dir as `ketch.exe.old`. Windows will not delete the file backing a running image, and the process doing the cleanup at the end of `replace_binary` is that renamed image, so the delete failed and the error was dropped. `install_self` on Windows uses `with_extension("old")`, which names the same leftover `ketch.old`, and a stale aside also becomes a destination that can fail the next swap's rename.
-
-`aside_candidates` names both leftovers. `sweep_stale_asides` deletes them at the start of `self install` and `self upgrade` (not on `--dry-run`), and `replace_binary` sweeps its own destination again before the rename: by then the earlier updater has exited, so the delete works. A failure warns and continues. The end-of-swap delete stays one silent best-effort try, because on Windows it cannot succeed until this process exits. `ketch doctor` warns (`backup`) when a leftover is still in the bin dir, or beside the running binary when that binary lives somewhere else.
-
-Tests: `aside_names_cover_the_swap_and_the_flat_install`, `a_previous_swap_backup_is_removed_and_a_missing_one_is_fine`, `a_stale_sweep_clears_every_aside_and_warns_on_one_it_cannot_remove`, `doctor_notes_a_stale_aside_and_stays_quiet_without_one`.
 
 ### B61. `self update` swap fails on a transient Windows lock
 
@@ -1584,7 +1564,7 @@ Check: `retired_targets` in `platform/windows.rs`; not covered by a Windows test
 
 Found by the 2026-10-08 cloud review: `TarXzExtractor` claimed any xz stream without peeking for ustar. On re-check it was already fixed by 5152c87: detection peeks the decompressed head, and `XzFileExtractor` and `Bz2FileExtractor` are registered on all three platforms. A lone bz2 has only a detection test.
 Model: Claude Code / opus-5.5 · Status: done 2026-10-12 (already fixed in 5152c87) · Priority: P2 · Complexity: 3
-Check: the lone `.xz` extraction test in `extract/archive.rs`, and `a_lone_bz2_file_is_extracted_as_the_program` for bz2.
+Check: the lone `.xz` extraction test in `extract/archive.rs`.
 
 ### B84. Downloads have no size cap
 
