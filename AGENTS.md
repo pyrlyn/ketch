@@ -74,6 +74,9 @@ and Swift bindings; `just ffi-test` builds a debug one and runs its Swift test.
 its C# bindings, and the .NET test in `desktop/windows`.
 `just capi-test` builds `ketch-capi` and runs its Vala test through Meson
 (Linux, with valac and json-glib installed).
+`just linux-app-test` builds the Linux app's core library in `desktop/linux`
+and runs its tests through Meson, on any OS that has the Vala toolchain;
+where GTK 4.20 and libadwaita 1.8 are installed it builds the GTK app too.
 
 The Justfile wraps the same commands with `--locked`: `just fmt`, `just clippy`
 (or `just lint`), `just test`, and `just check` runs what CI runs on this
@@ -239,6 +242,7 @@ differ by orders of magnitude — the cargo home is the small one. Set
 | `scripts/csharp.sh` | `ketch-ffi` as a shared library and the C# bindings the pinned uniffi-bindgen-cs generates from it, into `desktop/windows/KetchCore/Generated/`; `just csharp`, `just csharp-test` |
 | `desktop/windows/` | the Windows app's C# side: `KetchCore` (the generated binding as a .NET library), its MSTest project, and `uniffi.toml` for the generator |
 | `desktop/windows/Ketch.AppCore/`, `Ketch.AppCore.Tests/`, `Ketch.App/` | the Windows app on a fake core: the core contract, the fake that replays `desktop/contract/scenarios` and the store (plain .NET, tested on any OS with `just windows-app-test`), and the WinUI 3 shell over them (`dotnet build -p:Platform=x64`, Windows only: the `ketch-win-app` CI job) |
+| `desktop/linux/` | the Linux app (Vala, GTK 4, libadwaita; Meson): `src/core.vala`, the core contract in ketch-capi's shape (JSON envelopes, the same operation names), so D17 swaps in the C ABI under it; `src/fake-core.vala`, which replays `desktop/contract/scenarios`; `src/store.vala` and `src/models.vala`, what the screens bind to (GLib only); `tests/` under `meson test` (`just linux-app-test`, the `ketch-linux-app` CI job); the GTK app over them, `src/application.vala` (which core it runs on), `src/window.vala` (with the alert dialogs, banner and toasts), `src/preferences.vala`, `data/style.css` over a build-time copy of `desktop/design/generated/ketch-tokens.css`, and the Blueprint files in `data/ui/`, compiled by the pinned `subprojects/blueprint-compiler.wrap` into a GResource; built when GTK 4.20 and libadwaita 1.8 are found (`-Dgui`, enabled in CI) |
 | `desktop/macos/KetchCore/` | the Swift package wrapping that XCFramework and bindings (both build output), and the Swift test that drives the real core through them |
 | `src/ui.rs` | all terminal output, `Terminal`: the `Reporter` that draws the core's events, and `TerminalDecider`: the `Decider` that prompts on the terminal |
 | `src/tui/` | the opt-in full-screen renderer (`tui` feature), driven by `ui.rs` |
@@ -331,17 +335,18 @@ call it in a small `macos-runner` job and read its output. The macOS targets of 
 shared `rust` job go through the same action inside `pyrlyn/ci`.
 `release-apple-desktop.yml` stays a thin caller (tests/desktop-release.sh), so it
 keeps the hosted default until pyrlyn/ci's workflow resolves the runner itself.
-It has no Rust in it and does not touch the CLI gate.
+Its `pre-build-command` builds the `ketch-ffi` XCFramework; it does not touch
+the CLI gate.
 
 Views talk to `KetchStore`, the store talks to `KetchCoreProtocol`, and
-`CoreFactory.swift` alone decides which core that is — `FakeKetchCore`
-until `ketch-ffi` (R9) exists. Keep it that way: no view or test reaches past
-the protocol. The UI uses system Liquid Glass (`glassEffect`, glass button
-styles), never a drawn imitation. The app updates itself with Sparkle
-(`Ketch/Store/AppUpdater.swift`, "Check for Updates…" in the app menu); only
-a Release build with a real `SUPublicEDKey` starts it. Releases are
-[Releasing → macOS app](#macos-app-releases). `desktop/macos/README.md` has
-the architecture and the steps to wire R9.
+`CoreFactory.swift` alone decides which core that is — `LiveKetchCore` over
+`ketch-ffi`, or `FakeKetchCore` when a test asks. Keep it that way: no view
+or test reaches past the protocol. The UI uses system Liquid Glass
+(`glassEffect`, glass button styles), never a drawn imitation. The app updates
+itself with Sparkle (`Ketch/Store/AppUpdater.swift`, "Check for Updates…" in
+the app menu); only a Release build with a real `SUPublicEDKey` starts it.
+Releases are [Releasing → macOS app](#macos-app-releases).
+`desktop/macos/README.md` has the architecture.
 
 ## Conventions
 
@@ -700,9 +705,10 @@ stop before building:
   warns on a mismatch. Losing or rotating this key strands every installed
   copy on its version.
 
-The ketch-ffi XCFramework (R9) does not exist yet: the caller's
-`pre-build-command` is empty (marked `TODO(R9)`), so a release made before R9
-ships the app on `FakeKetchCore`.
+The app links `ketch-ffi`. `release-apple-desktop.yml`'s `pre-build-command`
+runs `scripts/xcframework.sh` before the archive, and CI's `macos-app` job
+does the same with `--debug` before `xcodebuild`. The UI smoke test sets
+`KETCH_USE_FAKE_CORE=1` so it still asserts the sample packages.
 
 ## Documentation translations
 
