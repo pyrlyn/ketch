@@ -31,6 +31,12 @@ The desktop design lives in one Figma file, `v7OJLmQEyCFbJ63uSYpJ9g`: shared fou
 
 `registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
 
+### R6. A reporter instead of the global `ui::` sink
+
+The core reports typed events through `Report` and `Ctx`. It does not call `ui::` (the only match under `crates/ketch-core/src` is a comment in `config.rs`). The CLI's `ui.rs` is the renderer: colour, verbosity and emoji live there, and `log::record` is reached from that renderer. A non-CLI host uses `LogReporter`. The TUI is the same renderer's full-screen mode; `renderer_projects_state_without_a_real_terminal` draws it on `TestBackend`. `--tui` with no terminal falls back to the line renderer.
+
+Test: `a_local_install_reports_each_stage_through_the_reporter` records each install stage and asserts nothing was printed.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.
