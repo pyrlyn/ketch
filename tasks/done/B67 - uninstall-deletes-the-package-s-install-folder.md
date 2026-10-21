@@ -2,8 +2,8 @@
 id: B67
 title: Uninstall deletes the package's install folder
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Ivan: uninstall must delete the program's folder (for example the `ketch` folder).

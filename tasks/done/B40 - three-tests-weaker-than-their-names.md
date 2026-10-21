@@ -2,8 +2,8 @@
 id: B40
 title: Three tests weaker than their names
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `check_tree_treats_name_collisions_as_errors` passed against the old name-only `collisions()` too. The four Mach-O asserts in `recognises_program_headers` passed on 32-bit-only detection. `registry_validate_rejects_a_bin_name_that_would_escape` accepted either `.zshrc` or any `file name` mention.

@@ -2,8 +2,8 @@
 id: B13
 title: User copied `.app` deleted on stale `CopiedApp`
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 For a copied bundle any directory at the recorded path still counts as ours, so `unlink`/`uninstall` removes a user's own copy.

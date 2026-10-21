@@ -2,8 +2,8 @@
 id: F6
 title: Deterministic process-listing tests
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `process::tests::lists_a_child_running_from_a_copied_file` and `yes_stops_the_child_holding_the_file` fail under a loaded `just check` after ~14 s (`panicked at src/process.rs:337`, "no occupant") and pass alone. Done means both tests pass or fail on what they assert, not on scheduling, and neither assertion is weaker than today.

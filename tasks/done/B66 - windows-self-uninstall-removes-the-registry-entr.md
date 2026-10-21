@@ -2,8 +2,8 @@
 id: B66
 title: Windows self-uninstall removes the registry entries ketch wrote at install
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Ivan: uninstalling ketch on Windows must remove the registry entry that was added at install.

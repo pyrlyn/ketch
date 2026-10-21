@@ -2,8 +2,8 @@
 id: B77
 title: A busy `ketch.exe` aborts `self uninstall`
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Row B77 in the 2026-10-08 findings. `self uninstall` removed the running executable with `?`, so a busy Windows `.exe` stopped the rest of the uninstall.

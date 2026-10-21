@@ -2,8 +2,8 @@
 id: M9
 title: "`ketch list` refactor: `local`, `remote`, and both by default"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Today `ketch list` (`cmd/query.rs:40`) prints only installed packages from the state file (package, version with `(pinned)` / `(+N retained)`, source), with `--json` and `--names-only`. The registry is visible only through `ketch search`, and newer versions only through `ketch outdated`.
@@ -50,7 +50,6 @@ Execution plan:
 4. `--json` and `--names-only` for all three modes; offline and unreachable handling as specified.
 5. Tests as listed, snapshots with `insta`/`trycmd`, colour off; `docs/COMMANDS.md`, README link, `docs/TROUBLESHOOTING.md`, breaking-change commit (`feat!:`), examples copied from a real run against a scratch `KETCH_ROOT`.
 6. Verify: `just check` clean.
-
 
 Tests (required; all must pass in `just check` and CI on macOS, Linux and Windows):
 - Unit:

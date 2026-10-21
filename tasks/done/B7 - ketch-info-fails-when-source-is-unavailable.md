@@ -2,8 +2,8 @@
 id: B7
 title: "`ketch info` fails when source is unavailable"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 A missing or too-new plugin made `info` exit 1 with `no source is registered for scheme …`, though the comment above the manifest fallback promises that an installed package always has an answer, and `outdated` only warns.

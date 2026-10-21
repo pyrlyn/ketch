@@ -1,25 +1,9 @@
 # ketch — todo
 
-- B60. Windows self-update leaves `ketch.exe.old` behind
-- R3. Cross-platform CI
-- M17. `ketch import`: a package from winget, Homebrew or a Linux repository
 - R5. Workspace split: `ketch-core` library crate
-- F12. Native macOS app (SwiftUI) on `ketch-ffi`
 - F13. macOS app release pipeline
-- F14. Design system for the macOS app: `DESIGN.md` and tokens
-- D11. Windows: WinUI 3 app shell on a fake core
 - D12. Windows: the app on the real core
-- D13. Windows: tray icon, notifications, start at login, links
-- D14. Windows: release pipeline
 - D17. Linux: the app on the real core
 - D18. Linux: notifications, background and autostart
 - D19. Linux: packaging and release
-- R20. File and directory helpers from `fs-kit`
-- B98. `install.ps1` closes the user's PowerShell window on error
-- B102. Windows symlink materialisation can recurse forever
-- R19.1. `stats` as an optional core feature, checked alone
-- R19.2. Registry push as an optional core feature
-- R19.4. Archive codecs as optional core features
-- B113. Windows-reserved names pass the path guards
-- B118. An upgrade silently drops checksum verification
 - K1. Track ketch tasks in rtok and check plan.md against them

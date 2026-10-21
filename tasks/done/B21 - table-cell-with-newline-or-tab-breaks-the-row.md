@@ -2,8 +2,8 @@
 id: B21
 title: Table cell with newline or tab breaks the row
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 A registry `ketch.toml` with a multi-line `description` prints its second line unindented under `ketch search`'s table, and a literal tab shifts every later column. `table` has to fold its cells onto one line.

@@ -2,8 +2,8 @@
 id: M22
 title: Drafts and dev builds in listings
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `ketch releases` and `info --releases` take `--draft` (drafts and prereleases, the same token and push-access errors as `install --draft`; a `draft` install lists drafts without it). `ketch list` takes `--draft` for its `latest` column, and its update decision is the one `outdated` makes for every channel: a `draft` package is offered the published release and warned about when the draft is gone, a `dev` package shows a new build under its own tag. `install::is_upgrade` is the single rule; the listing cache keys and file format change so old entries are not misread. Done means the above with unit tests on the shared rule and the cache key, end-to-end cases, and the stale M21 docs fixed in all three languages.

@@ -2,8 +2,8 @@
 id: B9
 title: "`outdated --json` cannot report failed checks"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 The text output prints "N could not be checked"; `--json` printed `[]` at exit 0 for the same run, so a machine consumer could not tell "everything is current" from "the network was down".

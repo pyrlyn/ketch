@@ -2,8 +2,8 @@
 id: B45
 title: Breaking-change reminder skipped by `!` before the colon
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `case "${subject%%:*}" in *!*) exit 0` accepted `feat(api!): …`, which commitlint does not treat as a breaking marker.

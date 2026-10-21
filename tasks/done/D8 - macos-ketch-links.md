@@ -2,8 +2,8 @@
 id: D8
 title: "macOS: `ketch://` links"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 A link on a web page or in the registry could open a package in the app. Whatever a link carries is untrusted input, so it is validated by the core. A link only opens a package page and never starts an install (creator, 2026-10-01, open decision 10). Research: section 1, "Deep links".

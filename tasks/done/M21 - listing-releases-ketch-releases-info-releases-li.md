@@ -2,8 +2,8 @@
 id: M21
 title: "Listing releases: `ketch releases`, `info --releases`, `list`"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `ketch releases <pkg>` lists a package's releases newest first with tag, version, publication day and a kind mark (`stable`, `pre`, `dev`, `draft`), and marks the installed one; `--pre` widens it to prereleases, `-n/--limit` and `--json` as elsewhere. `ketch info <pkg> --releases` prints the same table under the details and adds a `releases` array to `--json`; both go through `releases::list` and one renderer in `cmd/query.rs`. `ketch list` shows a non-stable channel after the installed version (`(pre)`), adds `channel` to `list --json`, and takes `--pre` for its `latest` column. `releases` completes installed names like `info`. `ReleaseKind::of` in `crates/ketch-core/src/releases.rs` is the one place a kind is decided: draft, then dev (a tag that does not parse as a version), then pre, then stable.

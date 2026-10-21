@@ -2,8 +2,8 @@
 id: F8
 title: Spinner and progress bar
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Long steps used to sit silent until the download bar. `ui::activity` now draws a progress bar when the total is known and a spinner otherwise, in rtok's form (`{spinner:.cyan} {msg}` on stderr, 120ms tick, nothing when stderr is not a terminal). Resolve, extract, registry fetch and self-update hold one for the length of the work. `ketch list` counts packages with `counter` while `latest` is looked up. Quiet mode, a pipe and the full-screen renderer draw nothing.

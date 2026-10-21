@@ -2,8 +2,8 @@
 id: B22
 title: Log keeps bidi and zero-width characters
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `log::escape` drops `is_control()` characters but not the invisible formatting ones, though the file is meant to be `cat`ed.

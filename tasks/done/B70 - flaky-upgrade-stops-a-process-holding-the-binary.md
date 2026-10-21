@@ -2,8 +2,8 @@
 id: B70
 title: Flaky `upgrade_stops_a_process_holding_the_binary_when_yes`
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `tests/auto_update.rs` starts the installed sleeper, sleeps a fixed 400 ms, then runs `ketch upgrade --yes` and expects it to report the process as `in use`. On macOS under load (several cargo builds in parallel) it failed on 2026-09-30 and 2026-10-01 and passed when run alone. Done means the test waits on a condition, not a delay, and survives a stress loop.

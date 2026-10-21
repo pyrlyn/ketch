@@ -2,8 +2,8 @@
 id: B25
 title: Exact version older than newest 30 releases not found
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 The `v`-prefix retry covers the everyday spelling, but the fallback still lists one page: a tag spelled another way on a busy repository ends in `no release found`.

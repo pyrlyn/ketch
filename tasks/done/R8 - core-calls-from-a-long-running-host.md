@@ -1,10 +1,9 @@
 ---
 id: R8
 title: Core calls from a long-running host
-status: in-progress
-created_at: 1792583218
-updated_at: 1792583218
-priority: 3
+status: done
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 A GUI keeps running between operations and must not freeze. Core operations must be callable from a worker thread, and the process lock must be tryable: `state::Lock` gets a non-blocking acquire, so a frontend can report "another ketch is running" instead of waiting. Check that nothing in the core relies on process-global state that a second operation in the same process would see stale (config, the `ui` init, cached listings).
@@ -22,4 +21,4 @@ Plan:
 
 Check: unit tests — two locks in one process → second is `Busy`; lock released on drop and on error; a cancelled fixture install leaves no partial store folder and no state entry; an end-to-end test runs the CLI while a lock is held and asserts the busy message.
 
-Status: PR https://github.com/pyrlyn/ketch/pull/184 merged 2026-10-01. Pid re-entrancy had no callers and was removed. Remaining: SIGINT wiring for the CLI (no signal handler exists; tokens are never cancelled there), and `self upgrade` / registry downloads still pass a never-cancelled token.
+Status: done. PR https://github.com/pyrlyn/ketch/pull/184 merged 2026-10-01. Pid re-entrancy had no callers and was removed. Ctrl-C cancels the run's token (a second Ctrl-C exits 130 at once). Install requests, `self upgrade` and registry downloads share that token.

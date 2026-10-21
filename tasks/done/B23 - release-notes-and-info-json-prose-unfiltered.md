@@ -2,8 +2,8 @@
 id: B23
 title: Release notes and `info --json` prose unfiltered
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `ketch self update` prints the release body with `ui::out`, and `ketch info --json` serialises manifest prose as it stands; serde escapes C0 but not bidi overrides.

@@ -2,8 +2,8 @@
 id: B18
 title: "`registry push` skips registry extra checks"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `push` stopped at `Manifest::deserialize` + `Manifest::validate`, while `registry::read_package` also refused a `local:` source and a `name` that disagreed with the folder — so a manifest could open a pull request that registry CI then rejected.

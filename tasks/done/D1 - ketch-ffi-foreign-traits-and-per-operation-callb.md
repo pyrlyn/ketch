@@ -2,8 +2,8 @@
 id: D1
 title: "`ketch-ffi`: foreign traits and per-operation callbacks"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 UniFFI calls callback interfaces "(soft) deprecated" in favour of foreign traits (new in 0.32), and `KetchCore::new` takes the `Reporter` and `Decider` once, while every app wants them per operation so two screens can each watch their own work. Research: `docs/research-desktop-platforms.md`, section 3a, gap G1.

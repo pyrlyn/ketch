@@ -2,8 +2,8 @@
 id: B19
 title: "`local:` symlink to archive or `.app` never installs"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `classify` returned `Symlink` for any symlink, so `install --path link.tar.gz` forged a `bin` entry named after the link and then failed.

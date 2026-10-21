@@ -2,8 +2,8 @@
 id: B2
 title: "`install local:<fifo>` hang"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `source/local.rs` classifies by opening the path, so a FIFO with no writer blocks in `open(2)` before anything can time out, and a character device never reaches EOF. A user manifest or `--path` can still pass `local:`.

@@ -2,8 +2,8 @@
 id: B124
 title: Windows asides of running exes pile up
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Found by the 2026-10-12 review. Done: `*.old.*` siblings of recorded links are swept at commit, relink and uninstall. Plan: a sweep in `platform/windows.rs`.

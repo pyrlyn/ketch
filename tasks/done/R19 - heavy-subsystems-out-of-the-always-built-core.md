@@ -1,9 +1,9 @@
 ---
 id: R19
 title: Heavy subsystems out of the always-built core
-status: in-progress
-created_at: 1792583218
-updated_at: 1792583218
+status: done
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Row R19 in the 2026-10-08 findings (issue #222). Done: `stats` (diesel), `push` (octocrab, tokio), `trust` (sigstore, pgp) and the `extract` codecs are optional in `ketch-core`, so `ketch-ffi` and the desktop apps link only what they use, and the CLI keeps every feature on by default.

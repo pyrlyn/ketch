@@ -2,8 +2,8 @@
 id: B69
 title: "Uninstalling a package that is not installed prints only \"not found\""
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Ivan: uninstalling an already-removed program prints only "program not found".

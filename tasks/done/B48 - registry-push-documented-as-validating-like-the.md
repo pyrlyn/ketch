@@ -2,8 +2,8 @@
 id: B48
 title: "`registry push` documented as validating like the registry"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `docs/REGISTRY.md` still said push validated the file "exactly as the registry will" without spelling out the per-package checks B18 added, and it described fetching the registry before validation.

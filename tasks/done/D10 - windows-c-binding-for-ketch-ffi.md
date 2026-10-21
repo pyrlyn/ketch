@@ -2,8 +2,8 @@
 id: D10
 title: "Windows: C# binding for `ketch-ffi`"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 The Windows app is C# + WinUI 3 over `ketch-ffi` (creator, 2026-10-01). `uniffi-bindgen-cs` last released for UniFFI 0.31.0; `ketch-ffi` is on 0.32.2. Decided by the creator (2026-10-01, open decision 4): first try the generator built from PR #176 (UniFFI 0.32.0), pinned to commit `0fc022aa1d73fb1dda91a778b63f2824d7dca58b`; if it fails against 0.32.2, use the C ABI from D15 through `LibraryImport`. Downgrading `ketch-ffi` to UniFFI 0.31.2 is not an option. Research: section 4.

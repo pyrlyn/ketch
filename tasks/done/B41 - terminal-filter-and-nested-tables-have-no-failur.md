@@ -2,8 +2,8 @@
 id: B41
 title: Terminal filter and nested tables have no failure-path test
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `ui.rs` covered `table_lines` only: `step`, `success`, `warn`, `error`, `note`, and `debug` all filter client text through `ui::printable`, but nothing failed if one of them stopped calling it. `Registry`'s `deny_unknown_fields` had no test showing that a `[[package]]` file with a stray top-level key is refused.

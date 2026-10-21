@@ -2,8 +2,8 @@
 id: M12
 title: "Windows completion: PowerShell `Register-ArgumentCompleter` and doskey macros for cmd"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Today clap_complete emits `Register-ArgumentCompleter -Native -CommandName 'ketch'`, and `ketch completions powershell --install` writes it to `Documents\PowerShell\Completions`. PowerShell does not load that directory by itself, so nothing is active until the user dot-sources it.

@@ -2,8 +2,8 @@
 id: B4
 title: Process lock can be stolen
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 The process lock can be stolen from a live holder. B reads a dead pid, forks `ps` to check, and by the time it renames, A has reclaimed the lock — `rename` is not compare-and-swap. A failed pid write is also swallowed, leaving an empty lock everyone treats as stale. Fix: after the rename, re-read the moved file and claim it only if it still holds the value judged stale; otherwise rename it back and report `Locked`.

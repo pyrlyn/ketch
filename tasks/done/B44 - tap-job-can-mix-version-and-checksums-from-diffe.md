@@ -2,8 +2,8 @@
 id: B44
 title: "`tap` job can mix version and checksums from different releases"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `VERSION` came from `needs.version` (HEAD) while the tarballs were fetched by `TAG` from the published release, so a cask could advertise one version with checksums from another.

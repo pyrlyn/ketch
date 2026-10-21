@@ -2,8 +2,8 @@
 id: B101
 title: Read-only directory modes break extraction and removal
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Found by the 2026-10-12 review. Done: directory modes are applied after all members, always with `u+rwx`. Plan: defer directory modes in `extract/archive.rs`.

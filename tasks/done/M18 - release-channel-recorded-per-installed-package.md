@@ -2,8 +2,8 @@
 id: M18
 title: Release channel recorded per installed package
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 The foundation the other three build on. An installed package remembers which channel it came from, and `upgrade`/`outdated`/`list` read it instead of only today's `--pre`/config/manifest union. Done means: `InstalledPackage` has a `channel` (`stable`, `pre`; `draft` and `dev` are added by M19 and M20), state written before it still reads as `stable`, `install --pre` or `pkg@<prerelease tag>` records `pre`, and `upgrade`/`outdated` of a `pre` package consider prereleases without `--pre`. A stable install over a `pre` one moves it back to `stable`.

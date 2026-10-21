@@ -1,10 +1,9 @@
 ---
 id: R3
 title: Cross-platform CI
-status: in-progress
-created_at: 1792583218
-updated_at: 1792583218
-priority: 1
+status: done
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Run verification on macOS, Windows and Linux. A ketch config is either a local file in the project or pushed to a registry; keep that model. The cross-platform check must catch OS-specific binary selection bugs like the one in B64.
@@ -27,3 +26,5 @@ Do not add a second cache. `jdx/mise-action` already caches the toolchain, and `
 - Windows `check-windows`: 815 MB restored, and the restore itself was 2m52s of a 5m56s job. Another target cache would pay that download again.
 
 Item 2 stays with B64. Item 1 is B65, which closes with B64's `tests/bin_choice.rs`.
+
+Status: done. CI already runs the whole suite on every OS, with no workflow edit: `ci.yml`'s `rust` job (pyrlyn/ci `ci-rust.yml`) runs clippy and `cargo nextest run --workspace --all-targets` on Linux x86_64 and aarch64, macOS aarch64 and Windows x86_64, and `package` runs `dist build` on all three OSes. `verify.yml` no longer exists; the per-OS `check` jobs named above became that shared job, which brings its own sccache. Item 1 is B65, its own task (it extends `tests/bin_choice.rs`, which every OS already runs). Item 2: `install.rs` tests `a_choice_asked_for_a_user_manifest_is_written_into_the_file` and `a_choice_asked_for_a_registry_package_is_remembered_in_state_and_reused` drive `commit` with a scripted `Decider` over a payload holding `rtok-cli` and `rtok-hook`: the user manifest gets `bin = [...]` appended with the rest of the file unchanged; a registry package keeps its choice in state, its registry copy is never written, and an upgrade reuses the choice without asking. They are not OS-gated, so every CI target runs them. Item 3: no second cache, for the reasons and numbers above.

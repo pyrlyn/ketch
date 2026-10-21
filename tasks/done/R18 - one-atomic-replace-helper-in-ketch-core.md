@@ -2,8 +2,10 @@
 id: R18
 title: One atomic replace helper in `ketch-core`
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
-Done. File writes go through `fs_kit::write` (`replace_file` in `manifest.rs`, and the same helper the other file writers already used). The store swap is one `swap_into_store` in `platform/mod.rs`: stage beside the destination, retire the live tree to `.old`, and swap. Each backend passes its own copy (`ditto` on macOS, `copy_tree` on Linux and Windows) for the cross-filesystem case. `finalize_store_swap` and `restore_retired_store` live next to it. Behaviour is unchanged: `.old` stays until links succeed, and a path that is already the store is not retired.
+File replacements already went through `fs_kit::write`. The store swap was still three copies of the same rename: stage as `.incoming`, retire the live tree to `.old`, swap the stage in, and put `.old` back if the second rename fails. That sequence is now `swap_into_store` in `platform/mod.rs`. macOS passes `ditto`; Linux and Windows pass `copy_tree`, and the copy runs only when the rename onto the stage fails. `finalize_store_swap` and `restore_retired_store` moved with it. A payload that is already the store is not retired, and `.old` stays until placement finishes.
+
+Tests: `swap_into_store_of_the_same_path_does_not_retire_it`, `swap_into_store_retires_the_previous_tree_and_restore_puts_it_back`, `swap_into_store_copies_when_the_rename_onto_the_stage_fails`, plus the existing place-failure restore on Linux and macOS.

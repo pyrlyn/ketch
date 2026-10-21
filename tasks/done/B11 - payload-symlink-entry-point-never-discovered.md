@@ -2,8 +2,8 @@
 id: B11
 title: Payload symlink entry point never discovered
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `discover_executables` kept only regular files, so `bin/tool -> ../libexec/realtool` linked `realtool` under its internal name and left `tool` off `PATH`.

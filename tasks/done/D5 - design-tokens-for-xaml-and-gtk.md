@@ -2,8 +2,8 @@
 id: D5
 title: Design tokens for XAML and GTK
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `tokens.json` feeds only Swift today. The Windows and Linux apps should share ketch's brand (accent, status colours, spacing, radii, type scale) without imitating the glass. Style Dictionary has no XAML or GTK format, so it takes two custom ones. Research: section 2.

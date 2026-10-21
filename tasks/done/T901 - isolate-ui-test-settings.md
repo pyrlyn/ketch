@@ -2,8 +2,8 @@
 id: T901
 title: Isolate UI test settings
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Concurrent unit tests mutate COLOR, EMOJI and LEVEL while other tests render snapshot lines, producing mixed styles. The creator approved this narrow fix alongside the owned R6 task, whose ownership and scope remain unchanged.

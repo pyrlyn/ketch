@@ -2,8 +2,8 @@
 id: B63
 title: "`self update` hangs forever when a spawned process never starts"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `process::run_bounded` runs the child off the caller's wait, because an antivirus filter can hold process creation itself. After 30s a process listing is stopped and warned about by program and pid. After 60s `ketch --version` is stopped, the error says so, and restore puts the previous binary back. A spawn that never returns has no pid; the message says the wait was ended, and the spawn thread stops the child if creation later succeeds.

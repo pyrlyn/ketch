@@ -2,8 +2,8 @@
 id: B43
 title: "`force` dispatch republishes HEAD, not the repaired tag"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 The `version` job derived `TAG`/`VERSION` from `cargo metadata` at the checked-out commit and never looked at the dispatch inputs, while publish did `gh release upload "$TAG" dist/* --clobber`. After main moved, a force re-run could clobber a different release.

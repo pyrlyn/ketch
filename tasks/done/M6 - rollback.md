@@ -2,8 +2,8 @@
 id: M6
 title: Rollback
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Upgrade used to delete the previous prefix, so a rollback command would have promised versions that were already gone. State now keeps a retained-version record (version, prefix, asset digest, links, trust) plus a visible `retention.keep` policy (default 1). Old `state.json` files still load: missing fields mean keep-1 and no retained prefixes.

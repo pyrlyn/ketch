@@ -2,8 +2,8 @@
 id: M10
 title: Man pages in roff for every command
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Today `extra::render_manpage` writes one hand-rolled `ketch.1`, listing top-level commands with no options and no nested subcommands. `write_ketch_docs` places it under `share/man/man1/` at `self install`.

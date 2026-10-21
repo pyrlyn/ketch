@@ -2,8 +2,8 @@
 id: M5
 title: Registry maturity
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 This-repo half of registry maturity. `ketch registry validate` already failed on parse errors and name/alias collisions; it now also offline-installs `--changed` entries against `--fixture` (a file named after the package, or a folder of one file) in a throwaway root, so a `github:` source never hits the network. Clients (`ketch update`, lookup) still warn and skip a published bad registry.

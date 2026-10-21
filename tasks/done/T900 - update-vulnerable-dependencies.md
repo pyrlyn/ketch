@@ -2,8 +2,8 @@
 id: T900
 title: Update vulnerable dependencies
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 The creator authorized dependency updates across the audit. Update only vulnerable dependencies and the resolver-required graph without weakening existing guards or advisory policy.

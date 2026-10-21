@@ -2,8 +2,8 @@
 id: B38
 title: Plugin stderr dropped on timeout, oversize and non-UTF-8
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Only the non-zero-exit path carried stderr into the error; a plugin killed at the deadline, one that wrote more than 8 MiB, and one that wrote non-UTF-8 all reported without it.

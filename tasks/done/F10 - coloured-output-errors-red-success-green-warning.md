@@ -2,8 +2,8 @@
 id: F10
 title: "Coloured output: errors red, success green, warnings yellow"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Most of this exists. `src/ui.rs` paints the `error` label red, `warning` yellow, success verbs green, steps blue and notes dim. It honours `--no-color`, `NO_COLOR`, `CLICOLOR_FORCE` and non-TTY output, and there is no `println!` outside `ui`. F10 is an audit plus the gaps:

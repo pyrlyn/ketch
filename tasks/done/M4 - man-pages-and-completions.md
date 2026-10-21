@@ -2,8 +2,8 @@
 id: M4
 title: Man pages and completions
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `extra_paths` is classified as a man page or a completion from explicit `{ path, kind }` metadata or the path rules in `docs/MANIFESTS.md`. Ambiguous or untyped entries are refused at validate rather than guessed. Entries resolve only under the extracted payload; destinations go in `LinkRecord` with `role` man/completion so uninstall and relink use the same ownership proof as binaries. Old state without `role` still loads as binaries.

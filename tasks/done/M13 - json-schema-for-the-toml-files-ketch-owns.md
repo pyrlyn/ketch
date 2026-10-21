@@ -2,8 +2,8 @@
 id: M13
 title: JSON Schema for the TOML files ketch owns
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `AGENTS.md` requires every config file this project owns to have a schema generated from its types with `schemars`, committed and checked by a drift test. There was none. Requested by the creator in chat.

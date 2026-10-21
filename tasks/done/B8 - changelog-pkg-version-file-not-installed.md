@@ -2,8 +2,8 @@
 id: B8
 title: "`changelog <pkg>@<version> --file` not installed"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `elsewhere` treated any exact version as "not local", and `state.find` was handed the raw `pkg@version` string, which matches no key. The shipped `CHANGELOG.md` on disk was refused with "not installed".

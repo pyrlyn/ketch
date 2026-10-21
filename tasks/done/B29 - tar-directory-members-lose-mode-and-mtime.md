@@ -2,8 +2,8 @@
 id: B29
 title: tar directory members lose mode and mtime
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `EntryType::Directory` went through `walk_inside`/`create_dir` and never `entry.unpack`, so a `private/` member at 0700 landed 0755.

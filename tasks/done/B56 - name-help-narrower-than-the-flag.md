@@ -2,8 +2,8 @@
 id: B56
 title: "`--name` help narrower than the flag"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `--name` clap help said it applied only when installing with `--path`, but the flag accepts any single-package install and overrides the installed name.

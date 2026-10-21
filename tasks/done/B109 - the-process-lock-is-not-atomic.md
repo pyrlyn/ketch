@@ -2,8 +2,8 @@
 id: B109
 title: The process lock is not atomic
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Found by the 2026-10-12 review. Done: two processes can never both hold the lock, and one's `Drop` never deletes the other's. Plan: rework `Lock::acquire_path` in `state.rs` (temp file plus no-replace link, or an OS advisory lock).

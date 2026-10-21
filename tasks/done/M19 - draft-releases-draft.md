@@ -2,8 +2,8 @@
 id: M19
 title: "Draft releases: `--draft`"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `ListOpts` gains `include_draft`; the GitHub source keeps drafts when it is set and downloads their assets from the API asset URL with `Accept: application/octet-stream` and the token. `install`, `upgrade`, `outdated` and `list` take `--draft`; `pkg@tag` finds a draft by its intended tag when `--draft` is given. Selection keeps refusing drafts unless asked (`drafts_are_never_selected` stays true for the default). No token, or a token without push access, gives an error naming the reason. Channel `draft`; a published draft upgrades to the release, a deleted one warns. Plugins never receive drafts. Done means the above with unit tests on selection and an end-to-end case through the fixture source.

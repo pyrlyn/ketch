@@ -2,8 +2,8 @@
 id: R10
 title: Toolkit choice for the Windows and Linux desktop apps
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `ROADMAP.md` ("Native desktop apps for Windows and Linux", approved 2026-09-30) gives each OS a native UI over the same core: Windows reuses R9's UniFFI binding from a native front end, Linux may link `ketch-core` directly from a Rust toolkit native to the desktop. It says the toolkit choice is its own research task, with sources; the creator asked on 2026-10-01 to take it now. This task is that research only: the apps themselves stay on the roadmap, and no implementation task is added here.

@@ -2,8 +2,8 @@
 id: F11
 title: Emoji icons per operation, `emoji` config key (default true)
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Plan:

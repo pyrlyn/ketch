@@ -2,8 +2,8 @@
 id: M20
 title: "Dev builds: floating tags"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 A release whose tag is not a version (`nightly`, `dev`, …) installed by name, `pkg@nightly`, records channel `dev` with the tag and the build it got (publication date and asset digest). `outdated`/`upgrade` report it outdated when the same tag now points at a different build, and reinstall it. `ketch.lock` pins the build's checksum so a lock cannot silently move with the tag (row in `docs/LOCKFILE.md`). Done means tests on build comparison and an end-to-end case where the fixture republishes the tag.

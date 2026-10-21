@@ -2,8 +2,8 @@
 id: R11
 title: "Desktop apps on macOS, Windows and Linux: capabilities, shared layer and per-platform interfaces"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 The creator asked (2026-10-01) for research on the desktop app for Windows and Linux, macOS included: what the app can do, what is common and written once versus what each platform does its own way, the common interface and each platform's interface, and tasks for each platform. Decided by the creator the same day: Windows is C# + WinUI 3 (Windows App SDK) over `ketch-ffi` (UniFFI, kept at 0.32 for now); Linux is written in Vala, with the toolkit (GTK or Qt/KDE) and the UI markup to be chosen by this research.

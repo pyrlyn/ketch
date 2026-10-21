@@ -2,8 +2,8 @@
 id: B68
 title: Update installs into a fresh folder so stale files cannot interfere
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Ivan: update must clean or delete the program folder and install into a fresh one.

@@ -2,8 +2,8 @@
 id: B62
 title: A `bin` glob matching several payload files links the helper stub, not the binary
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Observed 2026-09-26: `ketch install pyrlyn/rtok` on Windows linked the 390 KB `rtok-hook.exe` dist ships beside the 34 MB `rtok.exe` into `~/.ketch/bin/rtok.exe`, and every `rtok` invocation then hung reading stdin for a hook payload. `resolve_bin_specs` takes the FIRST walkdir match of a glob; the registry entry's `bin = [{ path = "rtok*", name = "rtok" }]` also matches `rtok-hook.exe`, and NTFS lists `rtok-hook.exe` ahead of `rtok.exe`. Unix readdir order happens to keep `rtok` first, so only Windows broke — by luck, not design. No `*`/`?` pattern matches `rtok`+`rtok.exe` while excluding `rtok-hook.exe`, so manifests cannot spell their way out.

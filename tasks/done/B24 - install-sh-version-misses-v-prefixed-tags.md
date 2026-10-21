@@ -2,8 +2,8 @@
 id: B24
 title: "`install.sh --version` misses `v`-prefixed tags"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `release.yml` creates the tag as `v$version` and `install.sh` pasted `--version` straight into the download URL. The cask already builds `v#{version}` itself.

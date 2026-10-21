@@ -2,8 +2,8 @@
 id: B14
 title: "`--tui` confirmation hangs the terminal"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 The session entered raw mode before the command was dispatched, and in raw mode Enter is a carriage return while `ui::ask` reads a line — so `ketch upgrade --tui` hung at its confirmation with no way out. Reachable only from a source build with `--features tui`.

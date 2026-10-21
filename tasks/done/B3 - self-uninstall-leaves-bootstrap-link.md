@@ -2,8 +2,8 @@
 id: B3
 title: "`self uninstall` leaves bootstrap link"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `self uninstall` left `install.sh`'s bootstrap link dangling on `PATH`. An explicit `--install-dir` followed by `self uninstall --yes` removed the root and left `<install-dir>/ketch -> <root>/bin/ketch` pointing at nothing.

@@ -2,8 +2,8 @@
 id: B103
 title: Installing the same name from another source replaces a package
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Found by the 2026-10-12 review. Done: `prepare` refuses when `existing.source` differs from `manifest.source` and points at `--name`; `ketch sync` reports it. Plan: compare in `install.rs` `prepare` and the lockfile plan.

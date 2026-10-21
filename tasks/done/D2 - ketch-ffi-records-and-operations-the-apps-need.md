@@ -2,8 +2,8 @@
 id: D2
 title: "`ketch-ffi`: records and operations the apps need"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 The macOS app's protocol needs things `ketch-ffi` does not give: a changelog across a version range, pinned packages in `outdated` with what holds them, `latest` in search results, and an `uninstall` that can be cancelled, reports progress and removes a leftover store folder for a name with no record, as the CLI does. Research: section 3a, gaps G2–G5.

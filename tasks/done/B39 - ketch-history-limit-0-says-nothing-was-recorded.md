@@ -2,8 +2,8 @@
 id: B39
 title: "`ketch history --limit 0` says nothing was recorded"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `--limit` is a `u32`, `LIMIT 0` yields no rows, and the empty-result branch printed "no history recorded yet" (or "for {pkg}") for both an empty database and a limit that asked for nothing.

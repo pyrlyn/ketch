@@ -2,8 +2,8 @@
 id: B12
 title: "`registry validate` passes a symlinked `ketch.toml`"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 The guard that stopped `check_tree` reading through a symlink also dropped the folder from discovery, so a tree with one valid package and one symlinked `ketch.toml` could still report validated and exit 0.

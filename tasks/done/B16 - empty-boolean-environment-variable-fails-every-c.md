@@ -2,8 +2,8 @@
 id: B16
 title: Empty boolean environment variable fails every command
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `KETCH_LINK_APPS=`, `KETCH_PRERELEASE=`, `KETCH_ALLOW_EMULATION=`, `KETCH_STRIP_QUARANTINE=` and `KETCH_REQUIRE_CHECKSUMS=` each exited with "must be a boolean, not ``".

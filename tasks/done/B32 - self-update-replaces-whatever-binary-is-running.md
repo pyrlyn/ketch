@@ -2,8 +2,8 @@
 id: B32
 title: "`self update` replaces whatever binary is running"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 With no `ketch` entry in `state.json` it copied the release over `current_exe()` with no check that the path is inside the root.

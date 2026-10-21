@@ -2,8 +2,8 @@
 id: M11
 title: Bash completion for every command
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Today clap_complete generates a static bash script (`ketch completions bash`, installed at `self install` as `share/ketch/completions/ketch`). It knows commands and flags, but not values.

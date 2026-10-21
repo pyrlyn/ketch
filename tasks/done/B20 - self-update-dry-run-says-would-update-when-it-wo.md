@@ -2,8 +2,8 @@
 id: B20
 title: "`self update --dry-run` says would update when it would not"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `replaced: false` covered both "already current" and "dry run", and the verb was chosen from `dry_run` alone.

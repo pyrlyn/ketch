@@ -2,8 +2,8 @@
 id: B37
 title: Plugin `digest.algo` ignored
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 The wire type carries the algorithm and `docs/PLUGINS.md` never restricted it, but `install::verify_checksum` compared the hex against its own sha256 unconditionally.

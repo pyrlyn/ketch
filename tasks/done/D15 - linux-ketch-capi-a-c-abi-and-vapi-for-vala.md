@@ -2,8 +2,8 @@
 id: D15
 title: "Linux: `ketch-capi`, a C ABI and VAPI for Vala"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 UniFFI has no Vala or C generator, so the Vala app needs a C ABI. R11 recommends one small crate with an opaque core handle, callbacks with user data, records as JSON strings and a hand-written VAPI; it is also the fallback C# route in D10. Depends on D1 and D2 for the per-call shape. Research: section 5.

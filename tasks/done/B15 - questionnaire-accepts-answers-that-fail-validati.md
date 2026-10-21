@@ -2,8 +2,8 @@
 id: B15
 title: Questionnaire accepts answers that fail validation
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `cmd/config.rs` validated nothing while asking, and `Manifest::validate` ran once at the end, so every other answer was thrown away.

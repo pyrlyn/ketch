@@ -2,8 +2,8 @@
 id: B47
 title: "`release.sh` scrapes `cargo metadata` by regex"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 The regex depended on `"name"` immediately preceding `"version"` in `cargo metadata` output. When it failed, the script aborted on a leftover release branch with only "nothing was pushed" as guidance.

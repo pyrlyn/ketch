@@ -2,8 +2,8 @@
 id: B114
 title: Link targets are checked lexically
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Found by the 2026-10-12 review. Done: every link is canonicalized after extraction and must stay under the destination. Plan: canonicalize in `finish_deferred_links` and `payload_executable_entry`.

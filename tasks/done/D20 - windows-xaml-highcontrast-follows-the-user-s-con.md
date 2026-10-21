@@ -2,8 +2,8 @@
 id: D20
 title: "Windows: XAML `HighContrast` follows the user's contrast theme"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Requested by the creator (2026-10-03). `KetchTokens.xaml`'s `HighContrast` dictionary carries the tokens' `highContrast` hex values, which are macOS Increase Contrast ink tuned for a light background (AccentInk `#003A75`, StatusInstalled `#0B5A31`). Windows applies that one dictionary under all four contrast themes (Aquatic, Desert, Dusk, Night sky), three of them dark, so text becomes unreadable, and an app in a contrast theme is expected to use the user's palette rather than brand colours.

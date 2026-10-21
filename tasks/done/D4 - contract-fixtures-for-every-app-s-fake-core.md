@@ -2,8 +2,8 @@
 id: D4
 title: Contract fixtures for every app's fake core
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Three apps each test against a fake core; if each fake invents its own records and event streams, they will drift from the real one and from each other. Research: section 2, "Written once".

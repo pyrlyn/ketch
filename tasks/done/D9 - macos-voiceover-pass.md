@@ -2,8 +2,8 @@
 id: D9
 title: "macOS: VoiceOver pass"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 The macOS app's accessibility was only checked on the fake core. F14 keeps its own Accessibility Inspector pass on the real glass; this task covers labels. Localisation is not needed for now (creator, 2026-10-01, open decision 7), so no String Catalog. Research: section 1.

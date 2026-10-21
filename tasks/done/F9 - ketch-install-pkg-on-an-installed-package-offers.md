@@ -2,8 +2,8 @@
 id: F9
 title: "`ketch install <pkg>` on an installed package offers the update"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Ivan: `ketch install <program>` when it is already installed asks "update?". Yes updates. With no update available, it says it cannot install because the package is already installed.

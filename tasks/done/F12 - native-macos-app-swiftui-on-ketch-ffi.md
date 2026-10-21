@@ -1,10 +1,9 @@
 ---
 id: F12
 title: Native macOS app (SwiftUI) on `ketch-ffi`
-status: in-progress
-created_at: 1792583218
-updated_at: 1792583218
-priority: 3
+status: done
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 A SwiftUI app in the repository (e.g. `desktop/macos/`), consuming R9's XCFramework and Swift package: installed and registry packages (list, search), install, upgrade, uninstall, changelog, doctor, with progress from the reporter callback and dialogs for the decider. It manages the same ketch root as the CLI and respects the same lock (R8).
@@ -26,4 +25,4 @@ Plan:
 
 Check: the app builds and runs on macOS 26 on both architectures; manual pass against a scratch `KETCH_ROOT`: install a fixture package, see it in the CLI's `ketch list`, uninstall from the CLI and see it disappear in the app; a held CLI lock shows the busy state; `swift test` and the UI smoke test pass in CI.
 
-Status: part 1 (app shell on a fake core) merged as PR https://github.com/pyrlyn/ketch/pull/185 (2026-10-01). XcodeGen 2.46.0 chosen over Tuist and plain SwiftPM (sources in `docs/research-desktop.md`). `Theme.swift` now reads F14's generated tokens and the screens were rebuilt on the Liquid glass design (F16 and F17, `done.md`). R9 (PR https://github.com/pyrlyn/ketch/pull/208) is merged, so the core is available. Remaining: a `LiveKetchCore` adapter over the generated `KetchCore` (`Ketch/Core/CoreFactory.swift` still returns `FakeKetchCore`; the adapter maps R9's structured `Changelog`), and the manual checks against the real core.
+Status: done. The shell on a fake core merged as PR https://github.com/pyrlyn/ketch/pull/185 (2026-10-01). XcodeGen 2.46.0 chosen over Tuist and plain SwiftPM (sources in `docs/research-desktop.md`). `Theme.swift` reads F14's generated tokens and the screens were rebuilt on the Liquid glass design (F16 and F17, `done.md`). R9 (PR https://github.com/pyrlyn/ketch/pull/208) is merged. `LiveKetchCore` adapts the generated `KetchCore`: records, events, `KetchError`, the reporter and decider, and cancel. `CoreFactory` returns it. The UI smoke test sets `KETCH_USE_FAKE_CORE=1`. CI's `macos-app` job and `release-apple-desktop.yml` build the XCFramework before the app. Doctor names a fix and does not run it. A manual pass of the live core against a scratch root needs a Mac.

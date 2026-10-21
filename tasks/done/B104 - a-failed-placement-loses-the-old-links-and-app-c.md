@@ -2,8 +2,8 @@
 id: B104
 title: A failed placement loses the old links and app copy
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Found by the 2026-10-12 review. Done: occupied destinations are moved aside and restored on failure on every platform. Plan: an aside-and-restore step in `platform/unix.rs`, `macos.rs`, `windows.rs` placement, building on B79.

@@ -2,8 +2,8 @@
 id: B79
 title: Restore the swapped store when placement fails
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Found by the 2026-10-08 cloud review: a failure after the store swap could leave state naming a tree that was not on disk. On re-check it was already fixed by 5152c87: unix, macOS and Windows `place` keep `<ver>.old` and restore it on error, so `ScopedDir` being off for the same prefix is safe.

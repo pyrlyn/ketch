@@ -2,8 +2,8 @@
 id: B27
 title: "`.dmg`/`.pkg` detected by extension ahead of content"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 Both sat first in the macOS extractor list and accepted the file name alone, which `extract/mod.rs` says never happens.

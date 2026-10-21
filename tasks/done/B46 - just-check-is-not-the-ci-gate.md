@@ -2,8 +2,8 @@
 id: B46
 title: "`just check` is not the CI gate"
 status: done
-created_at: 1792583218
-updated_at: 1792583218
+created_at: 1792583854
+updated_at: 1792583854
 ---
 
 `just check` ran `cargo test --locked` where CI runs `--all-targets`, and it skipped `scripts/package.sh` and the cask `brew style` gate while `AGENTS.md` called it "the whole CI gate".
