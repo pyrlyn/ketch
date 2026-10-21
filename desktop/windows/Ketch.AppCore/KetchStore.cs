@@ -4,7 +4,9 @@
 
 // What every page binds to: the installed packages, the updates, the running
 // operation, the log and the questions the core is waiting on. It ports the
-// macOS `KetchStore` without its settings, tray or link handling.
+// macOS `KetchStore`, including which upgrades are worth a notice and which
+// package a ketch:// link may open. The tray icon and the OS registrations
+// stay in the WinUI project.
 //
 // The core blocks, so each call runs on its own thread; events and questions
 // come back on that thread and are handed to `post`, which the app points at
@@ -103,6 +105,8 @@ public sealed class KetchStore : INotifyPropertyChanged
 
     private readonly IKetchCore core;
     private readonly Action<Action> post;
+    private readonly AppSettings? settings;
+    private readonly IUpdateNotifier? notifier;
     private CancelToken? cancelToken;
     private long nextLogId;
 
@@ -119,13 +123,23 @@ public sealed class KetchStore : INotifyPropertyChanged
     private BinaryChoice? pendingChoice;
     private StopQuestion? pendingStop;
     private DateTimeOffset? lastChecked;
+    private string? linkedPackage;
+    private string? requestedSection;
 
     /// <param name="core">The core to drive.</param>
     /// <param name="post">Runs an action on the UI thread; the default runs it where it is called.</param>
-    public KetchStore(IKetchCore core, Action<Action>? post = null)
+    /// <param name="settings">App preferences. Notices are off when this is omitted.</param>
+    /// <param name="notifier">Where a new upgrade is announced. Unused without <paramref name="settings"/>.</param>
+    public KetchStore(
+        IKetchCore core,
+        Action<Action>? post = null,
+        AppSettings? settings = null,
+        IUpdateNotifier? notifier = null)
     {
         this.core = core;
         this.post = post ?? (action => action());
+        this.settings = settings;
+        this.notifier = notifier;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -158,6 +172,12 @@ public sealed class KetchStore : INotifyPropertyChanged
 
     public DateTimeOffset? LastChecked => lastChecked;
 
+    /// <summary>A <c>ketch://</c> link asked to show this package. It never starts an install.</summary>
+    public string? LinkedPackage => linkedPackage;
+
+    /// <summary>A notification click asked for this section; the window shows it and clears it.</summary>
+    public string? RequestedSection => requestedSection;
+
     public bool IsRunning => activity is not null;
 
     /// <summary>Upgrades that `upgrade` would apply.</summary>
@@ -186,12 +206,78 @@ public sealed class KetchStore : INotifyPropertyChanged
             outdated = upgrades;
             lastChecked = DateTimeOffset.Now;
             Changed(nameof(Installed), nameof(Outdated), nameof(Updates), nameof(Held), nameof(PendingUpgradeCount), nameof(LastChecked));
+            Announce();
         }
         catch (Exception error)
         {
             Report(error, RefreshAsync);
         }
     }
+
+    /// <summary>
+    /// Turns update notices on or off and, when turning them on, announces
+    /// whatever is already waiting. Permission is not a separate prompt:
+    /// Windows shows the toast or it does not.
+    /// </summary>
+    public void SetNotifies(bool on)
+    {
+        if (settings is null)
+        {
+            return;
+        }
+
+        var previous = settings.NotifiesOfUpdates;
+        settings.NotifiesOfUpdates = on;
+        try
+        {
+            settings.Save();
+        }
+        catch (Exception)
+        {
+            settings.NotifiesOfUpdates = previous;
+            throw;
+        }
+
+        if (on)
+        {
+            Announce();
+        }
+    }
+
+    /// <summary>Handles a <c>ketch://</c> link. It only ever shows a package page.</summary>
+    public async Task OpenLinkAsync(string link)
+    {
+        try
+        {
+            var name = await Background(c => c.PackageName(link));
+            var known = installed.Any(p => p.Name == name);
+            if (!known)
+            {
+                var results = await Background(c => c.Search(name));
+                if (!results.Any(p => p.Name == name))
+                {
+                    throw KetchException.NotFound(name);
+                }
+            }
+
+            linkedPackage = name;
+            Changed(nameof(LinkedPackage));
+        }
+        catch (Exception error)
+        {
+            Report(error, null);
+        }
+    }
+
+    /// <summary>Asks the window to show Updates, including when it was closed to the tray.</summary>
+    public void OpenUpdates()
+    {
+        requestedSection = "updates";
+        Changed(nameof(RequestedSection));
+    }
+
+    /// <summary>The window has shown <see cref="RequestedSection"/>.</summary>
+    public void ClearRequestedSection() => requestedSection = null;
 
     /// <summary>How long typing must pause before <see cref="SearchAfterTypingAsync"/> searches; the macOS app waits as long.</summary>
     public static readonly TimeSpan TypingPause = TimeSpan.FromMilliseconds(250);
@@ -357,6 +443,9 @@ public sealed class KetchStore : INotifyPropertyChanged
     {
         if (activity is not null)
         {
+            // A click while something is running used to return and leave the
+            // window unchanged, so a confirmed uninstall looked like it did nothing.
+            ErrorMessage = "Another operation is running. Wait for it or cancel it first.";
             return;
         }
 
@@ -483,6 +572,35 @@ public sealed class KetchStore : INotifyPropertyChanged
         pendingStop?.Answer(false);
         pendingStop = question;
         Changed(nameof(PendingStop));
+    }
+
+    /// <summary>
+    /// One notice for the upgrades no earlier one announced. Held packages
+    /// never count: upgrade would leave them where they are.
+    /// </summary>
+    private void Announce()
+    {
+        if (settings is not { NotifiesOfUpdates: true } || notifier is null)
+        {
+            return;
+        }
+
+        var fresh = UpdateNotices.Fresh(Updates, settings.NotifiedUpgrades);
+        if (fresh.Count == 0)
+        {
+            return;
+        }
+
+        var (title, body) = UpdateNotices.Message(fresh);
+        try
+        {
+            notifier.Post(title, body);
+            settings.Remember(fresh);
+        }
+        catch (Exception error)
+        {
+            Append(LogLevel.Warning, error.Message);
+        }
     }
 
     private void Append(LogLevel level, string message)

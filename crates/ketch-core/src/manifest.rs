@@ -132,21 +132,6 @@ impl Resolver {
         })
     }
 
-    /// Every alias the registry knows, for completion and `ketch search`.
-    // Part of the public surface, with no caller in the tree yet.
-    #[allow(dead_code)]
-    pub fn aliases(&self) -> Vec<&str> {
-        let mut out: Vec<&str> = self
-            .manifests()
-            .flat_map(|m| {
-                std::iter::once(m.name.as_str()).chain(m.provides.iter().map(String::as_str))
-            })
-            .collect();
-        out.sort_unstable();
-        out.dedup();
-        out
-    }
-
     /// Known packages matching a free-text query, highest tier first. A name
     /// is listed once, from whichever tier would actually install it.
     pub fn search(&self, query: &str) -> Vec<&Manifest> {

@@ -1297,6 +1297,18 @@ mod tests {
         assert!(Bz2FileExtractor.detect(&plain, &head));
     }
 
+    #[cfg(feature = "bzip2")]
+    #[test]
+    fn a_lone_bz2_file_is_extracted_as_the_program() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("jq.bz2");
+        std::fs::write(&src, bz2_bytes(b"\x7fELF payload")).unwrap();
+        let dest = dir.path().join("out");
+        std::fs::create_dir_all(&dest).unwrap();
+        Bz2FileExtractor.extract(&src, &dest).unwrap();
+        assert_eq!(std::fs::read(dest.join("jq")).unwrap(), b"\x7fELF payload");
+    }
+
     #[test]
     fn refuses_links_that_escape_the_payload() {
         assert!(check_link_target(Path::new("bin/tool"), Path::new("../lib/x.dylib")).is_ok());
