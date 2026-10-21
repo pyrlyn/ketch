@@ -6,8 +6,8 @@
 // errors R9's `ketch-ffi` will export through UniFFI.
 //
 // Views and the store only ever see this protocol, so they are testable
-// against `FakeKetchCore`, and wiring the real core is a change to
-// `CoreFactory.swift` plus one adapter file — nothing here moves.
+// against `FakeKetchCore`. `LiveKetchCore` is the adapter over `ketch-ffi`;
+// `CoreFactory` is the only place that chooses it.
 
 import Foundation
 import Synchronization
@@ -95,8 +95,9 @@ protocol Decider: Sendable {
 
 /// Errors the core reports, mirroring R9's `KetchError`.
 enum KetchError: Error, Sendable, Hashable {
-    /// Another process holds the ketch lock.
-    case busy(pid: UInt32)
+    /// Another process holds the ketch lock. `pid` is nil when the holder
+    /// could not be named; the message must not invent pid 0.
+    case busy(pid: UInt32?)
     case cancelled
     case notFound(name: String)
     case network(message: String)
@@ -107,7 +108,12 @@ enum KetchError: Error, Sendable, Hashable {
 extension KetchError: LocalizedError {
     var errorDescription: String? {
         switch self {
-        case .busy(let pid): "ketch is running in another process (pid \(pid))."
+        case .busy(let pid):
+            if let pid {
+                "ketch is running in another process (pid \(pid))."
+            } else {
+                "ketch is running in another process."
+            }
         case .cancelled: "Cancelled."
         case .notFound(let name): "No package named \(name)."
         case .network(let message): "Network error: \(message)"
