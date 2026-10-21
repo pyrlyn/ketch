@@ -4,6 +4,10 @@ Add a fixture with two similarly named binaries (`rtok` and `rtok-hook`) and ass
 
 B64's `tests/bin_choice.rs` already linked `rtok` beside `rtok-hook` on every OS, but each host shipped its own names, so only the Windows job saw the order that broke: `rtok-hook.exe` sorts before `rtok.exe`. With discovery reverted to a plain sort and the chooser taking the first candidate, that test still passed on macOS. `windows_names_link_the_binary_named_like_the_package_on_every_os` now ships `rtok-hook.exe` and `rtok.exe` (both archive orders, and upper case) on every host and reads the linked target from `state.json`, so macOS and Linux CI fail on the same regression.
 
+`tests/bin_choice.rs` publishes a release with `rtok` and `rtok-hook` and asserts only `rtok` is linked. The file is not gated by OS. `crates/ketch-core/src/bin_choice.rs` asserts the exact package name wins in Windows sort order (`rtok-hook.exe` before `rtok.exe`) and in Unix sort order.
+
+Tests: `the_binary_named_like_the_package_is_linked_and_its_helper_is_not`, `the_exact_name_wins_in_windows_sort_order`, `the_exact_name_wins_in_unix_sort_order`.
+
 ### R3. Cross-platform CI
 
 Run verification on macOS, Windows and Linux. A ketch config is either a local file in the project or pushed to a registry; keep that model. The cross-platform check must catch OS-specific binary selection bugs like the one in B64.
@@ -28,12 +32,6 @@ Do not add a second cache. `jdx/mise-action` already caches the toolchain, and `
 Item 2 stays with B64. Item 1 is B65, which closes with B64's `tests/bin_choice.rs`.
 
 Status: done. CI already runs the whole suite on every OS, with no workflow edit: `ci.yml`'s `rust` job (pyrlyn/ci `ci-rust.yml`) runs clippy and `cargo nextest run --workspace --all-targets` on Linux x86_64 and aarch64, macOS aarch64 and Windows x86_64, and `package` runs `dist build` on all three OSes. `verify.yml` no longer exists; the per-OS `check` jobs named above became that shared job, which brings its own sccache. Item 1 is B65, its own task (it extends `tests/bin_choice.rs`, which every OS already runs). Item 2: `install.rs` tests `a_choice_asked_for_a_user_manifest_is_written_into_the_file` and `a_choice_asked_for_a_registry_package_is_remembered_in_state_and_reused` drive `commit` with a scripted `Decider` over a payload holding `rtok-cli` and `rtok-hook`: the user manifest gets `bin = [...]` appended with the rest of the file unchanged; a registry package keeps its choice in state, its registry copy is never written, and an upgrade reuses the choice without asking. They are not OS-gated, so every CI target runs them. Item 3: no second cache, for the reasons and numbers above.
-### B65. Binary selection regression test
-
-`tests/bin_choice.rs` publishes a release with `rtok` and `rtok-hook` and asserts only `rtok` is linked. The file is not gated by OS. `crates/ketch-core/src/bin_choice.rs` asserts the exact package name wins in Windows sort order (`rtok-hook.exe` before `rtok.exe`) and in Unix sort order.
-
-Tests: `the_binary_named_like_the_package_is_linked_and_its_helper_is_not`, `the_exact_name_wins_in_windows_sort_order`, `the_exact_name_wins_in_unix_sort_order`.
-
 ### B117. A changelog file is read without a bound
 
 Row B117 in the 2026-10-12 findings. Done: `from_file` reads a regular file only, stops at 4 MiB, and decodes the bytes lossily. `find_file` skips a symlink, so the command falls through to the release notes instead of opening the link.
@@ -75,10 +73,15 @@ Check: unit tests — two locks in one process → second is `Busy`; lock releas
 
 Status: done. PR https://github.com/pyrlyn/ketch/pull/184 merged 2026-10-01. Pid re-entrancy had no callers and was removed. Ctrl-C cancels the run's token (a second Ctrl-C exits 130 at once). Install requests, `self upgrade` and registry downloads share that token.
 
-### B85. Registry update and listing ignore cancel
-Each of the four switches can be turned off in Settings. They persist in `%LOCALAPPDATA%\ketch\settings.json`, so an unpackaged app and an MSIX share one file. A broken file loads the defaults rather than stopping the app.
+### R17. Windows PATH helpers live in one module
 
-Tests: `UpdateNoticesTests`, `AppSettingsTests`, `LinkAndNoticeTests` (`dotnet test` on `Ketch.AppCore.Tests`). The WinUI project compiles in the `ketch-win-app` job; this machine is Linux, so the icon, the toast and the registrations were not run here.
+Row R17 in the 2026-10-08 findings. The Windows PATH, PowerShell profile and cmd AutoRun string helpers were compiled on every OS and silenced with `allow(dead_code)`.
+
+Done: they sit in `windows_env`, compiled on Windows and in tests. A Unix build that is not a test does not include them.
+
+### B85. Registry update and listing ignore cancel
+
+`registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
 
 ### D13. Windows: tray icon, notifications, start at login, links
 
@@ -88,12 +91,15 @@ Update notices use `AppNotificationManager`, which works unpackaged: `Register` 
 
 Start at login and the `ketch` protocol go through `ActivationRegistrationManager` (`RegisterForStartupActivation`, `RegisterForProtocolActivation`), with an empty executable path so the current process is what Windows starts. A second process hands its activation to the first via `AppInstance` and exits. A `ketch://` link only opens a package page: the fake core tells a package page from any other action, the same split as the macOS fake, and the real grammar stays in `ketch_core::link` for the D12 adapter (`package_for_link`).
 
+Each of the four switches can be turned off in Settings. They persist in `%LOCALAPPDATA%\ketch\settings.json`, so an unpackaged app and an MSIX share one file. A broken file loads the defaults rather than stopping the app.
+
+Tests: `UpdateNoticesTests`, `AppSettingsTests`, `LinkAndNoticeTests` (`dotnet test` on `Ketch.AppCore.Tests`). The WinUI project compiles in the `ketch-win-app` job; this machine is Linux, so the icon, the toast and the registrations were not run here.
+
 ### B99. Extraction has no byte or entry budget
 
 Every extractor shares one `Budget`: a byte cap, an entry cap, and a limit that scales with the archive between a 256 MiB floor and a 32 GiB ceiling (`MAX_EXPANSION_RATIO` 100). Zip, tar and the lone gzip, xz and bzip2 extractors refuse past it before the extra bytes are written.
 
 Tests: `a_lone_gzip_bomb_stops_at_the_budget`, `a_tar_member_larger_than_the_budget_is_refused_before_it_is_written`, `a_tar_with_too_many_members_is_refused`, `a_zip_with_too_many_members_is_refused`, `a_zip_bomb_stops_at_the_budget`, `the_budget_scales_with_the_archive_between_a_floor_and_a_ceiling`.
-Tests: `aside_names_cover_the_swap_and_the_flat_install`, `a_previous_swap_backup_is_removed_and_a_missing_one_is_fine`, `doctor_notes_a_stale_aside_and_stays_quiet_without_one`.
 ### B116. Do not run an installed client as a source plugin
 
 Row B116 in the 2026-10-12 findings. Discovery walks `PATH`, and install puts client binaries on that `PATH`, so a package that ships `ketch-source-*` was executed on later commands.
@@ -117,7 +123,6 @@ Done: both are gone. The root `dirs` dependency, `Release::asset` and the stale 
 Row B138 in the 2026-10-12 findings. rustls 0.23.43 (RUSTSEC-2026-0285) is already 0.23.46 in `Cargo.lock`, so it was not bumped again. rsa 0.9.10 (RUSTSEC-2023-0071, Marvin) has no upstream fix and is only reached to verify signatures.
 
 Done: `deny.toml` ignores that advisory and says why. `cargo deny` is not in CI.
-Row B123 in the 2026-10-12 findings. Done: the store is restored only when this call made the swap. `move_into_store` reports whether it retired a tree, and `restore_retired_store` runs only then. A stale `.old` left by an earlier interrupted swap stays aside when relink fails: `a_failed_relink_keeps_the_live_prefix_over_a_stale_old_copy` on macOS and on Linux.
 ### B60. Windows self-update leaves `ketch.exe.old` behind
 
 Observed on Windows: `ketch self update` 0.4.4 → 0.5.1 succeeded, but the old binary stayed in the bin dir as `ketch.exe.old`. Windows will not delete the file backing a running image, and the process doing the cleanup at the end of `replace_binary` is that renamed image, so the delete failed and the error was dropped. `install_self` on Windows uses `with_extension("old")`, which names the same leftover `ketch.old`, and a stale aside also becomes a destination that can fail the next swap's rename.
@@ -129,7 +134,6 @@ Tests: `aside_names_cover_the_swap_and_the_flat_install`, `a_previous_swap_backu
 ### B123. Relink and rollback restore a stale `.old`
 
 Row B123 in the 2026-10-12 findings. Done: the store is restored only when this call made the swap. `move_into_store` reports whether it retired a tree, and `restore_retired_store` runs only then. A stale `.old` left by an earlier interrupted swap stays aside when relink fails: `a_failed_relink_keeps_the_live_prefix_over_a_stale_old_copy` on macOS and on Linux.
-The desktop design lives in one Figma file, `v7OJLmQEyCFbJ63uSYpJ9g`: shared foundations and screen specs, macOS frames synced with the F17 app plus the decision screens, Windows (Fluent) and Linux (libadwaita) pages in light and dark, and prototype links on each page. `desktop/design/figma.md` names the pages, frame ids, variable collections (`Color`, `Platform`) and the Swift code syntax each variable carries. `tokens.json` stays the source of truth.
 ### R19.3. Publisher signatures as an optional core feature
 
 sigstore, minisign-verify and pgp are the `trust` feature of `ketch-core` (default on, so the CLI still verifies). A build without it still checks a policy's shape and still calls `verify`. That call cannot satisfy the policy: `require` refuses the install, `warn` installs on the checksum and says so, and a key the verifier would ignore is still refused. `ketch-ffi` keeps `trust` on. `scripts/core-features.sh` is what builds the core without the feature and runs `without_verifiers`.
@@ -149,35 +153,27 @@ Tests: `desktop/linux/tests/fake-core-test.vala` and `store-test.vala` (`just li
 Under `irm … | iex` the installer runs in the caller's session. The body is a scriptblock invoked with `@args`, so its variables, functions and `$ErrorActionPreference = 'Stop'` stay inside it. Error paths throw; the catch prints the message. `exit` runs only when `$PSCommandPath` is set, which is a file launch (`-File` or `.\install.ps1`). Piped into `iex` the status is `$global:LASTEXITCODE` and the session keeps running. The caller's `KETCH_ROOT` is restored in `finally`.
 
 Tests: `the_script_exits_only_when_run_as_a_file`, `a_failure_under_iex_leaves_the_callers_session_running`.
-Each of the four switches can be turned off in Settings. They persist in `%LOCALAPPDATA%\ketch\settings.json`, so an unpackaged app and an MSIX share one file. A broken file loads the defaults rather than stopping the app.
-
-Tests: `UpdateNoticesTests`, `AppSettingsTests`, `LinkAndNoticeTests` (`dotnet test` on `Ketch.AppCore.Tests`). The WinUI project compiles in the `ketch-win-app` job; this machine is Linux, so the icon, the toast and the registrations were not run here.
 ### R6. A reporter instead of the global `ui::` sink
 
 The core reports typed events through `Report` and `Ctx`. It does not call `ui::` (the only match under `crates/ketch-core/src` is a comment in `config.rs`). The CLI's `ui.rs` is the renderer: colour, verbosity and emoji live there, and `log::record` is reached from that renderer. A non-CLI host uses `LogReporter`. The TUI is the same renderer's full-screen mode; `renderer_projects_state_without_a_real_terminal` draws it on `TestBackend`. `--tui` with no terminal falls back to the line renderer.
 
 Test: `a_local_install_reports_each_stage_through_the_reporter` records each install stage and asserts nothing was printed.
-`stats` is a cargo feature of `ketch-core`: diesel, diesel_migrations and libsqlite3-sys are optional, and `stats::record` returns without writing when the feature is off. `scripts/core-features.sh` builds the core with no optional feature and then with each one alone, plus `ketch-ffi` on its own set. `just core-features` and the CI step run that script. Landed in #319.
 ### M17. `ketch import`: a package from winget, Homebrew or a Linux repository
 
 `ketch import winget|brew|linux <name>` converts a package whose artifacts are GitHub Release assets into a user manifest and installs it. Anything else writes nothing and exits non-zero. The three converters live in `crates/ketch-core/src/import/` (recorded fixtures, no network), the command is `src/cmd/import.rs`, and `tests/import.rs` drives it against a local mock. `docs/COMMANDS.md`, `docs/MANIFESTS.md` and the `docs/ru` and `docs/uk` translations describe it. Landed in #215.
 
 Two notes stay with the creator. `serde-saphyr`, which reads the winget YAML, declares MSRV 1.89, above ketch's declared 1.86, and nothing in CI checks that floor. A cask `binary` whose source starts with `$APPDIR` stays inside the app bundle; `kind = "app"` places the bundle and links nothing.
-Tests: `an_upgrade_that_drops_the_checksum_is_refused_without_consent`, `yes_consents_to_an_upgrade_that_drops_the_checksum`.
 ### R19.1. `stats` as an optional core feature, checked alone
 
 `stats` is a cargo feature of `ketch-core`: diesel, diesel_migrations and libsqlite3-sys are optional, and `stats::record` returns without writing when the feature is off. `scripts/core-features.sh` builds the core with no optional feature and then with each one alone, plus `ketch-ffi` on its own set. `just core-features` and the CI step run that script. Landed in #319.
-`desktop/macos/DESIGN.md` follows the DESIGN.md spec, with generated front matter. `desktop/design/tokens.json` is the one token source, and `desktop/design/build.mjs` writes the Swift, XAML and CSS copies plus the preview stylesheet. `just design-check` fails when a generated file drifts, when text misses WCAG AA on its glass background, or when the DESIGN.md lint fails. Landed in #188. An Accessibility Inspector pass on the real Liquid Glass material still needs a Mac; the contrast numbers the script checks are the ones in the tokens.
 ### B118. An upgrade silently drops checksum verification
 
 A package installed against a published checksum used to accept a later release that published none, with only the first-use warning. `refuse_checksum_downgrade` now refuses that upgrade. `--allow-unverified` or `--yes` consents, and a lockfile hash stands in for consent because it is a stronger pin than either.
 
 Tests: `an_upgrade_that_drops_the_checksum_is_refused_without_consent`, `yes_consents_to_an_upgrade_that_drops_the_checksum`.
-`gzip`, `xz`, `bzip2` and `zip` are cargo features of `ketch-core`. Plain tar stays on. `portable_extractors()` is the one list macOS, Linux and Windows extend, so a platform copy of the codec list is gone. A build that leaves a codec out reports `UnsupportedArchive` instead of treating the bytes as a program. `an_archive_whose_codec_is_left_out_is_unsupported` covers that, and `scripts/core-features.sh` builds each feature alone. The stacked pull request #322 was closed; the change came in with #354.
 ### F14. Design system for the macOS app: `DESIGN.md` and tokens
 
 `desktop/macos/DESIGN.md` follows the DESIGN.md spec, with generated front matter. `desktop/design/tokens.json` is the one token source, and `desktop/design/build.mjs` writes the Swift, XAML and CSS copies plus the preview stylesheet. `just design-check` fails when a generated file drifts, when text misses WCAG AA on its glass background, or when the DESIGN.md lint fails. Landed in #188. An Accessibility Inspector pass on the real Liquid Glass material still needs a Mac; the contrast numbers the script checks are the ones in the tokens.
-`desktop/windows` is a WinUI 3 app on the Windows App SDK and .NET 10, built with `dotnet build` and no Visual Studio. `Ketch.AppCore` holds the fake core and the store and tests on any OS. The app has Installed, Discover, Updates, Activity, Doctor, Settings and a package page, with `ContentDialog` and `InfoBar`, Mica, and light, dark and high contrast from the token file. The `ketch-win-app` job runs `dotnet test` and the Release build. Landed in #247.
 ### R19.4. Archive codecs as optional core features
 
 `gzip`, `xz`, `bzip2` and `zip` are cargo features of `ketch-core`. Plain tar stays on. `portable_extractors()` is the one list macOS, Linux and Windows extend, so a platform copy of the codec list is gone. A build that leaves a codec out reports `UnsupportedArchive` instead of treating the bytes as a program. `an_archive_whose_codec_is_left_out_is_unsupported` covers that, and `scripts/core-features.sh` builds each feature alone. The stacked pull request #322 was closed; the change came in with #354.
@@ -230,6 +226,11 @@ Found by the 2026-10-08 review: extraction kept `mode & 0o7777`, so setuid, setg
 
 Test: `setuid_bits_from_an_archive_are_dropped`.
 
+### B100. Zip symlink targets are read without a bound
+
+A zip symlink's target is the member body. It was read with an unbounded `read_to_string`, so a small, highly compressed member could expand to gigabytes. The read now stops at 4 KiB plus one byte and refuses anything longer.
+
+Test: `an_overlong_zip_symlink_target_is_refused`.
 ### R14. Delete the stale self-update patch script
 
 `scripts/b32_patch.py` opened `src/self_update.rs` after the core move, and nothing referenced it. The script is gone.
