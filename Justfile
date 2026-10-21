@@ -113,6 +113,7 @@ lint-shell:
     sh tests/ci-yml-triggers.sh
     sh tests/desktop-release.sh
     sh tests/docs-i18n.sh
+    python3 tests/install_truncation.py
 
 package:
     #!/usr/bin/env bash
@@ -146,9 +147,11 @@ lint-cask:
         echo "lint-cask: skipped (macOS only, like CI's package job)"
         exit 0
     fi
-    mkdir -p cask/Casks
-    scripts/cask.sh 0.0.0 "$(printf '%064d' 0)" > cask/Casks/ketch.rb
-    brew style cask/Casks/ketch.rb
+    # target/ is gitignored. A Casks/ directory at the repo root survives
+    # `just check` and then `scripts/release.sh --local` refuses the dirty tree.
+    mkdir -p target/cask/Casks
+    scripts/cask.sh 0.0.0 "$(printf '%064d' 0)" > target/cask/Casks/ketch.rb
+    brew style target/cask/Casks/ketch.rb
 
 # every generated man page through `mandoc -Tlint` at warning level; the
 # style notes it also prints come from clap_mangen's layout, not ketch's text
@@ -247,12 +250,16 @@ macos-project:
     mkdir -p {{macos_dir}}/build
     printf 'Signature: 8a477f597d28d172789f06886806bc55\n# xcodebuild output for the macOS app; safe to delete.\n' > {{macos_dir}}/build/CACHEDIR.TAG
 
-# Apple Silicon (arm64) Debug build of Ketch.app
+# Apple Silicon (arm64) Debug build of Ketch.app. The app links KetchCore,
+# so the debug XCFramework and bindings have to exist first.
 macos-app: macos-project
+    scripts/xcframework.sh --debug
     {{macos_build}} -configuration Debug -destination 'generic/platform=macOS' ARCHS=arm64 ONLY_ACTIVE_ARCH=NO -quiet build
 
-# Swift Testing unit tests on the fake core, then the UI smoke test
+# Swift Testing unit tests on the fake core, then the UI smoke test.
+# The app binary links KetchCore, so the debug XCFramework has to exist first.
 macos-test: macos-project
+    scripts/xcframework.sh --debug
     {{macos_build}} -destination 'platform=macOS' test
 
 # Built into desktop/macos/KetchCore with the `ffi` profile the app ships.
@@ -290,6 +297,15 @@ capi-test:
 # The WinUI project itself (desktop/windows/Ketch.App) only builds on Windows: the ketch-win-app job.
 windows-app-test:
     cd desktop/windows && dotnet test --project Ketch.AppCore.Tests
+
+# The Linux app's fake core and store against the contract scenarios.
+# Needs valac, Meson, Ninja, GLib and json-glib on PATH (the distribution's,
+# as `just capi-test`). Where GTK 4.20 and libadwaita 1.8 are installed the
+# GTK app is built too; the ketch-linux-app job builds that on Ubuntu 26.04.
+linux-app-test:
+    rm -rf target/linux-app-meson
+    meson setup target/linux-app-meson desktop/linux
+    meson test -C target/linux-app-meson --print-errorlogs
 
 # The library the fuzz targets link (src/lib.rs, cfg(fuzzing) only), checked on
 # stable: nothing else builds it, so `check` and CI would not notice it break.
