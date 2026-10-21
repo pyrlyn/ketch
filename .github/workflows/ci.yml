@@ -611,6 +611,22 @@ jobs:
           head="$(gh pr view "$PR" --json headRefOid -q .headRefOid)"
           [ -n "$head" ] || { echo "could not read the head of #$PR" >&2; exit 1; }
           branch="$(gh pr view "$PR" --json headRefName -q .headRefName)"
+          repo="$(gh pr view "$PR" --json headRepository -q .headRepository.nameWithOwner)"
+          # A fork's headRefName is a branch in the other repository. Dispatching
+          # that name here runs whatever this repo calls the same thing — often
+          # main — while the comment says it ran on the pull request.
+          if [ "$repo" != "pyrlyn/ketch" ]; then
+            gh pr comment "$PR" --body "CI was not dispatched: \`$branch\` is in \`$repo\`, not this repository."
+            exit 1
+          fi
+          # Slashes in the branch name must be encoded or the commits API
+          # splits them into extra path segments.
+          encoded="$(printf '%s' "$branch" | sed 's|/|%2F|g')"
+          tip="$(gh api "repos/pyrlyn/ketch/commits/$encoded" --jq .sha)"
+          if [ "$tip" != "$head" ]; then
+            gh pr comment "$PR" --body "CI was not dispatched: \`$branch\` is \`$tip\`, not the pull request head \`$head\`."
+            exit 1
+          fi
           # The default token cannot re-run a workflow run, and `gh run rerun`
           # re-runs the whole run including skipped-on-draft jobs — so dispatch
           # CI fresh on the PR's branch instead. A dispatch on the branch runs
