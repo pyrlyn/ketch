@@ -1,18 +1,10 @@
-### B65. Binary selection regression test
-
-`tests/bin_choice.rs` publishes a release with `rtok` and `rtok-hook` and asserts only `rtok` is linked. The file is not gated by OS. `crates/ketch-core/src/bin_choice.rs` asserts the exact package name wins in Windows sort order (`rtok-hook.exe` before `rtok.exe`) and in Unix sort order.
-
-Tests: `the_binary_named_like_the_package_is_linked_and_its_helper_is_not`, `the_exact_name_wins_in_windows_sort_order`, `the_exact_name_wins_in_unix_sort_order`.
-
 ### B85. Registry update and listing ignore cancel
 
 `registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
 
-### B118. An upgrade silently drops checksum verification
+### F14. Design system for the macOS app: `DESIGN.md` and tokens
 
-A package installed against a published checksum used to accept a later release that published none, with only the first-use warning. `refuse_checksum_downgrade` now refuses that upgrade. `--allow-unverified` or `--yes` consents, and a lockfile hash stands in for consent because it is a stronger pin than either.
-
-Tests: `an_upgrade_that_drops_the_checksum_is_refused_without_consent`, `yes_consents_to_an_upgrade_that_drops_the_checksum`.
+`desktop/macos/DESIGN.md` follows the DESIGN.md spec, with generated front matter. `desktop/design/tokens.json` is the one token source, and `desktop/design/build.mjs` writes the Swift, XAML and CSS copies plus the preview stylesheet. `just design-check` fails when a generated file drifts, when text misses WCAG AA on its glass background, or when the DESIGN.md lint fails. Landed in #188. An Accessibility Inspector pass on the real Liquid Glass material still needs a Mac; the contrast numbers the script checks are the ones in the tokens.
 
 ### B132. `install.ps1` omits the `v` on `--version`
 
