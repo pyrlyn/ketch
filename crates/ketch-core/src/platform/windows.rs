@@ -19,7 +19,7 @@ use crate::extra::ExtraPlacement;
 use crate::extract::archive::is_program_head;
 use crate::extract::Extractor;
 use crate::model::{
-    glob_match, glob_preferred, BinSpec, CompletionShell, LinkKind, LinkRecord, LinkRole,
+    glob_match_path, glob_preferred, BinSpec, CompletionShell, LinkKind, LinkRecord, LinkRole,
     PackageKind, TargetSpec,
 };
 use crate::source::local::copy_tree;
@@ -325,7 +325,7 @@ fn resolve_bin_specs(root: &Path, specs: &[BinSpec]) -> Result<Vec<(PathBuf, Str
                     .filter(|p| {
                         p.strip_prefix(root)
                             .ok()
-                            .is_some_and(|rel| glob_match(pattern, &rel.to_string_lossy()))
+                            .is_some_and(|rel| glob_match_path(pattern, &rel.to_string_lossy()))
                     })
                     .map(|p| p.as_path())
                     .collect();
