@@ -80,6 +80,7 @@
                             Grid.Column="2"
                             Click="OnUninstall"
                             Content="Uninstall"
+                            IsEnabled="{x:Bind CanAct}"
                             Tag="{x:Bind Name}" />
                     </Grid>
                 </DataTemplate>

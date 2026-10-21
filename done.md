@@ -1,3 +1,9 @@
+### B65. Binary selection regression test
+
+Add a fixture with two similarly named binaries (`rtok` and `rtok-hook`) and assert the intended one is chosen on every OS: macOS, Windows and Linux. This is the test that would have caught the Windows alphabetical-sort bug, where `rtok-hook` was selected instead of the intended binary.
+
+B64's `tests/bin_choice.rs` already linked `rtok` beside `rtok-hook` on every OS, but each host shipped its own names, so only the Windows job saw the order that broke: `rtok-hook.exe` sorts before `rtok.exe`. With discovery reverted to a plain sort and the chooser taking the first candidate, that test still passed on macOS. `windows_names_link_the_binary_named_like_the_package_on_every_os` now ships `rtok-hook.exe` and `rtok.exe` (both archive orders, and upper case) on every host and reads the linked target from `state.json`, so macOS and Linux CI fail on the same regression.
+
 ### R3. Cross-platform CI
 
 Run verification on macOS, Windows and Linux. A ketch config is either a local file in the project or pushed to a registry; keep that model. The cross-platform check must catch OS-specific binary selection bugs like the one in B64.
@@ -22,6 +28,52 @@ Do not add a second cache. `jdx/mise-action` already caches the toolchain, and `
 Item 2 stays with B64. Item 1 is B65, which closes with B64's `tests/bin_choice.rs`.
 
 Status: done. CI already runs the whole suite on every OS, with no workflow edit: `ci.yml`'s `rust` job (pyrlyn/ci `ci-rust.yml`) runs clippy and `cargo nextest run --workspace --all-targets` on Linux x86_64 and aarch64, macOS aarch64 and Windows x86_64, and `package` runs `dist build` on all three OSes. `verify.yml` no longer exists; the per-OS `check` jobs named above became that shared job, which brings its own sccache. Item 1 is B65, its own task (it extends `tests/bin_choice.rs`, which every OS already runs). Item 2: `install.rs` tests `a_choice_asked_for_a_user_manifest_is_written_into_the_file` and `a_choice_asked_for_a_registry_package_is_remembered_in_state_and_reused` drive `commit` with a scripted `Decider` over a payload holding `rtok-cli` and `rtok-hook`: the user manifest gets `bin = [...]` appended with the rest of the file unchanged; a registry package keeps its choice in state, its registry copy is never written, and an upgrade reuses the choice without asking. They are not OS-gated, so every CI target runs them. Item 3: no second cache, for the reasons and numbers above.
+### B65. Binary selection regression test
+
+`tests/bin_choice.rs` publishes a release with `rtok` and `rtok-hook` and asserts only `rtok` is linked. The file is not gated by OS. `crates/ketch-core/src/bin_choice.rs` asserts the exact package name wins in Windows sort order (`rtok-hook.exe` before `rtok.exe`) and in Unix sort order.
+
+Tests: `the_binary_named_like_the_package_is_linked_and_its_helper_is_not`, `the_exact_name_wins_in_windows_sort_order`, `the_exact_name_wins_in_unix_sort_order`.
+
+### B117. A changelog file is read without a bound
+
+Row B117 in the 2026-10-12 findings. Done: `from_file` reads a regular file only, stops at 4 MiB, and decodes the bytes lossily. `find_file` skips a symlink, so the command falls through to the release notes instead of opening the link.
+
+### B127. The C ABI error envelope repeats `message`
+
+Row B127 in the 2026-10-12 findings. Done: `ErrorBody` keeps the variant's own `message` and adds the sentence only for `Busy`, `Cancelled` and `NotFound`, which have no such field. A network error is one `"message"` key.
+
+### B94. `install.ps1` Join-Path takes three children
+
+Windows PowerShell 5.1's `Join-Path` accepts one child path. `Join-Path $TempDir 'ketch' $BinaryName` is `-AdditionalChildPath` in pwsh 6+ and throws in 5.1, which is the shell `irm | iex` runs in, after the archive has already been extracted. The nested member is joined twice. The `powershell` CI job runs the script under `shell: powershell` past extraction, with the binary only inside `ketch/`.
+
+Test: `the_nested_archive_path_is_joined_for_windows_powershell_51`.
+
+### B119. A stray shell-block marker swallows the lines above the real block
+
+Row B119 in the 2026-10-12 findings. Done: an END pairs with the nearest BEGIN still before it, so an orphan BEGIN does not take the next block's END. Uninstall leaves the lines between them, and the next install rewrites the closed block instead of appending another.
+
+### B107. A failed self-docs link leaves `state.json` on the old version
+
+Row B107 in the 2026-10-12 findings. `expose_self_docs(...)?` ran after the new version was placed but before `state.save`, so a user-owned completion or man file at the destination left the new binary on disk and `state.json` naming the old one, and every later self upgrade repeated it. Done: self install and self upgrade save the new package before linking man pages and completions, and a failure there is a warning.
+
+### R8. Core calls from a long-running host
+
+A GUI keeps running between operations and must not freeze. Core operations must be callable from a worker thread, and the process lock must be tryable: `state::Lock` gets a non-blocking acquire, so a frontend can report "another ketch is running" instead of waiting. Check that nothing in the core relies on process-global state that a second operation in the same process would see stale (config, the `ui` init, cached listings).
+
+Done when two operations in one process run one after the other in a test, and a held lock gives a typed "busy" error.
+
+Finding from the survey: `Lock::acquire_path` already fails fast with the holder's pid, but it treats a lock file holding *its own pid* as re-entrant (`owned: false`). In a GUI process two concurrent operations would both pass. That is the main fix here.
+
+Plan:
+1. Lock: keep the lock file for cross-process exclusion, and add an in-process guard (a `static` `Mutex<bool>`/`AtomicBool` "held by this process") so a second acquire in the same process fails with the same busy error instead of adopting the lock. Keep the existing re-entrancy only where the CLI relies on it (find the callers first; if none, remove it and say why in the commit).
+2. Typed error: `Error::Busy { pid: Option<u32> }` (today it is a message), so a frontend can show "ketch is busy (pid N)" and retry, and the CLI prints the same text as today.
+3. Cancellation: a `Cancel` token (`Arc<AtomicBool>`) in the context, checked between packages and between download chunks; a cancelled operation cleans up its temp dir and returns `Error::Cancelled`. The CLI wires it to Ctrl-C where it already handles SIGINT (the TUI's exit 130 path).
+4. Process globals: `Config::load` reads env and files on every call — the host rebuilds `Config` per operation, so config edits in `config.toml` are seen; `log::SINK` initialised once per process; the `listing.rs` cache is file-based, fine. `tokio` runtime for `push.rs` is created per call, confirm it is not nested inside a host runtime.
+5. `Send`: core entry points are callable from any thread (no `Rc`, no thread-locals in the pipeline).
+
+Check: unit tests — two locks in one process → second is `Busy`; lock released on drop and on error; a cancelled fixture install leaves no partial store folder and no state entry; an end-to-end test runs the CLI while a lock is held and asserts the busy message.
+
+Status: done. PR https://github.com/pyrlyn/ketch/pull/184 merged 2026-10-01. Pid re-entrancy had no callers and was removed. Ctrl-C cancels the run's token (a second Ctrl-C exits 130 at once). Install requests, `self upgrade` and registry downloads share that token.
 
 ### R17. Windows PATH helpers live in one module
 
@@ -30,8 +82,163 @@ Row R17 in the 2026-10-08 findings. The Windows PATH, PowerShell profile and cmd
 Done: they sit in `windows_env`, compiled on Windows and in tests. A Unix build that is not a test does not include them.
 
 ### B85. Registry update and listing ignore cancel
+Each of the four switches can be turned off in Settings. They persist in `%LOCALAPPDATA%\ketch\settings.json`, so an unpackaged app and an MSIX share one file. A broken file loads the defaults rather than stopping the app.
 
-`registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
+Tests: `UpdateNoticesTests`, `AppSettingsTests`, `LinkAndNoticeTests` (`dotnet test` on `Ketch.AppCore.Tests`). The WinUI project compiles in the `ketch-win-app` job; this machine is Linux, so the icon, the toast and the registrations were not run here.
+
+### D13. Windows: tray icon, notifications, start at login, links
+
+The Windows counterparts of the macOS menu-bar extra. WinUI has no tray control, so the icon is `Shell_NotifyIcon` on a message-only window, and the panel is a borderless Acrylic window that lists pending upgrades, the running operation, Update all (with the same confirmation as the Updates page), Open, Check, Settings and Quit. Closing the main window hides it while the icon is on; Quit removes the icon and leaves.
+
+Update notices use `AppNotificationManager`, which works unpackaged: `Register` runs before the process reads its activation, and a click opens Updates. Which upgrades count is the macOS rule (held packages never count, a package is new by `name@version`, control characters are stripped) in `UpdateNotices`, posted once from `KetchStore` after a refresh. Notices stay off until Settings turns them on.
+
+Start at login and the `ketch` protocol go through `ActivationRegistrationManager` (`RegisterForStartupActivation`, `RegisterForProtocolActivation`), with an empty executable path so the current process is what Windows starts. A second process hands its activation to the first via `AppInstance` and exits. A `ketch://` link only opens a package page: the fake core tells a package page from any other action, the same split as the macOS fake, and the real grammar stays in `ketch_core::link` for the D12 adapter (`package_for_link`).
+
+### B99. Extraction has no byte or entry budget
+
+Every extractor shares one `Budget`: a byte cap, an entry cap, and a limit that scales with the archive between a 256 MiB floor and a 32 GiB ceiling (`MAX_EXPANSION_RATIO` 100). Zip, tar and the lone gzip, xz and bzip2 extractors refuse past it before the extra bytes are written.
+
+Tests: `a_lone_gzip_bomb_stops_at_the_budget`, `a_tar_member_larger_than_the_budget_is_refused_before_it_is_written`, `a_tar_with_too_many_members_is_refused`, `a_zip_with_too_many_members_is_refused`, `a_zip_bomb_stops_at_the_budget`, `the_budget_scales_with_the_archive_between_a_floor_and_a_ceiling`.
+Tests: `aside_names_cover_the_swap_and_the_flat_install`, `a_previous_swap_backup_is_removed_and_a_missing_one_is_fine`, `doctor_notes_a_stale_aside_and_stays_quiet_without_one`.
+### B116. Do not run an installed client as a source plugin
+
+Row B116 in the 2026-10-12 findings. Discovery walks `PATH`, and install puts client binaries on that `PATH`, so a package that ships `ketch-source-*` was executed on later commands.
+
+Done: the bin directory and the store are not searched, and an executable whose path resolves into either is skipped. A plugin in the plugins directory, or elsewhere on `PATH`, is still found.
+
+### B126. C ABI yes/no callbacks return a full int
+
+Row B126 in the 2026-10-12 findings. `KetchStopFn` and `KetchConfirmFn` returned C `bool`, while a Vala `bool` is `gboolean` (an `int`). GCC 14 rejects that function-pointer mismatch, and the return ABI does not agree.
+
+Done: both callbacks return `int32_t`, and any non-zero answer is yes. The Vala test asks which of two binaries to link and passes a stop callback, so the binding is compiled against those types.
+
+### R15. Drop the unread placement version and registry alias list
+
+Row R15 in the 2026-10-08 findings. `Placement::version` was carried into every place call and never read. `Resolver::aliases` had no caller.
+
+Done: both are gone. The root `dirs` dependency, `Release::asset` and the stale `allow(dead_code)` on `PackageSpec::raw` were already gone.
+
+### B138. Record the Marvin advisory and keep rustls past its fix
+
+Row B138 in the 2026-10-12 findings. rustls 0.23.43 (RUSTSEC-2026-0285) is already 0.23.46 in `Cargo.lock`, so it was not bumped again. rsa 0.9.10 (RUSTSEC-2023-0071, Marvin) has no upstream fix and is only reached to verify signatures.
+
+Done: `deny.toml` ignores that advisory and says why. `cargo deny` is not in CI.
+Row B123 in the 2026-10-12 findings. Done: the store is restored only when this call made the swap. `move_into_store` reports whether it retired a tree, and `restore_retired_store` runs only then. A stale `.old` left by an earlier interrupted swap stays aside when relink fails: `a_failed_relink_keeps_the_live_prefix_over_a_stale_old_copy` on macOS and on Linux.
+### B60. Windows self-update leaves `ketch.exe.old` behind
+
+Observed on Windows: `ketch self update` 0.4.4 → 0.5.1 succeeded, but the old binary stayed in the bin dir as `ketch.exe.old`. Windows will not delete the file backing a running image, and the process doing the cleanup at the end of `replace_binary` is that renamed image, so the delete failed and the error was dropped. `install_self` on Windows uses `with_extension("old")`, which names the same leftover `ketch.old`, and a stale aside also becomes a destination that can fail the next swap's rename.
+
+`aside_candidates` names both leftovers. `sweep_stale_asides` deletes them at the start of `self install` and `self upgrade` (not on `--dry-run`), and `replace_binary` sweeps its own destination again before the rename: by then the earlier updater has exited, so the delete works. A failure warns and continues. The end-of-swap delete stays one silent best-effort try, because on Windows it cannot succeed until this process exits. `ketch doctor` warns (`backup`) when a leftover is still in the bin dir, or beside the running binary when that binary lives somewhere else.
+
+Tests: `aside_names_cover_the_swap_and_the_flat_install`, `a_previous_swap_backup_is_removed_and_a_missing_one_is_fine`, `a_stale_sweep_clears_every_aside_and_warns_on_one_it_cannot_remove`, `doctor_notes_a_stale_aside_and_stays_quiet_without_one`.
+
+### B123. Relink and rollback restore a stale `.old`
+
+Row B123 in the 2026-10-12 findings. Done: the store is restored only when this call made the swap. `move_into_store` reports whether it retired a tree, and `restore_retired_store` runs only then. A stale `.old` left by an earlier interrupted swap stays aside when relink fails: `a_failed_relink_keeps_the_live_prefix_over_a_stale_old_copy` on macOS and on Linux.
+The desktop design lives in one Figma file, `v7OJLmQEyCFbJ63uSYpJ9g`: shared foundations and screen specs, macOS frames synced with the F17 app plus the decision screens, Windows (Fluent) and Linux (libadwaita) pages in light and dark, and prototype links on each page. `desktop/design/figma.md` names the pages, frame ids, variable collections (`Color`, `Platform`) and the Swift code syntax each variable carries. `tokens.json` stays the source of truth.
+### R19.3. Publisher signatures as an optional core feature
+
+sigstore, minisign-verify and pgp are the `trust` feature of `ketch-core` (default on, so the CLI still verifies). A build without it still checks a policy's shape and still calls `verify`. That call cannot satisfy the policy: `require` refuses the install, `warn` installs on the checksum and says so, and a key the verifier would ignore is still refused. `ketch-ffi` keeps `trust` on. `scripts/core-features.sh` is what builds the core without the feature and runs `without_verifiers`.
+
+Tests: `a_required_signature_refuses_the_install`, `a_warn_policy_installs_on_the_checksum_alone`, `keys_a_verifier_ignores_are_still_refused`.
+### F18. Figma design for macOS, Windows and Linux
+
+The desktop design lives in one Figma file, `v7OJLmQEyCFbJ63uSYpJ9g`: shared foundations and screen specs, macOS frames synced with the F17 app plus the decision screens, Windows (Fluent) and Linux (libadwaita) pages in light and dark, and prototype links on each page. `desktop/design/figma.md` names the pages, frame ids, variable collections (`Color`, `Platform`) and the Swift code syntax each variable carries. `tokens.json` stays the source of truth.
+
+### D16. Linux: Vala + GTK 4 app shell on a fake core
+
+The Linux app's screens live in `desktop/linux`, built before the C ABI is wired in (D17). The core contract, the fake and the store are a GLib static library, so `meson test` runs without a display. The app is Vala, GTK 4 and libadwaita: an `AdwNavigationSplitView` (Installed, Discover, Updates, Activity, Doctor) that collapses under 600px, a package page pushed on the content navigation view, and preferences for the colour scheme. Blueprint 0.22.2 is a pinned Meson subproject; its output and a copy of `ketch-tokens.css` go into one GResource. `AdwAlertDialog` covers binary choice, stopping processes, uninstall and upgrade-all; `AdwBanner` is the busy lock (Retry) and the running operation (Cancel); `AdwToast` is a finished operation. Dark and high contrast follow libadwaita 1.8, which applies the token stylesheet's `prefers-color-scheme` and `prefers-contrast` queries. An empty search plays `search-browse`; a typed query filters the search scenario. The fake answers in ketch-capi's JSON envelopes, so D17 can sit behind the same `Core` interface.
+
+Tests: `desktop/linux/tests/fake-core-test.vala` and `store-test.vala` (`just linux-app-test`). The `ketch-linux-app` CI job builds with `-Dgui=enabled` on Ubuntu 26.04, where GTK 4.20 and libadwaita 1.8 are the distribution's.
+### B98. `install.ps1` closes the user's PowerShell window on error
+
+Under `irm … | iex` the installer runs in the caller's session. The body is a scriptblock invoked with `@args`, so its variables, functions and `$ErrorActionPreference = 'Stop'` stay inside it. Error paths throw; the catch prints the message. `exit` runs only when `$PSCommandPath` is set, which is a file launch (`-File` or `.\install.ps1`). Piped into `iex` the status is `$global:LASTEXITCODE` and the session keeps running. The caller's `KETCH_ROOT` is restored in `finally`.
+
+Tests: `the_script_exits_only_when_run_as_a_file`, `a_failure_under_iex_leaves_the_callers_session_running`.
+Each of the four switches can be turned off in Settings. They persist in `%LOCALAPPDATA%\ketch\settings.json`, so an unpackaged app and an MSIX share one file. A broken file loads the defaults rather than stopping the app.
+
+Tests: `UpdateNoticesTests`, `AppSettingsTests`, `LinkAndNoticeTests` (`dotnet test` on `Ketch.AppCore.Tests`). The WinUI project compiles in the `ketch-win-app` job; this machine is Linux, so the icon, the toast and the registrations were not run here.
+### R6. A reporter instead of the global `ui::` sink
+
+The core reports typed events through `Report` and `Ctx`. It does not call `ui::` (the only match under `crates/ketch-core/src` is a comment in `config.rs`). The CLI's `ui.rs` is the renderer: colour, verbosity and emoji live there, and `log::record` is reached from that renderer. A non-CLI host uses `LogReporter`. The TUI is the same renderer's full-screen mode; `renderer_projects_state_without_a_real_terminal` draws it on `TestBackend`. `--tui` with no terminal falls back to the line renderer.
+
+Test: `a_local_install_reports_each_stage_through_the_reporter` records each install stage and asserts nothing was printed.
+`stats` is a cargo feature of `ketch-core`: diesel, diesel_migrations and libsqlite3-sys are optional, and `stats::record` returns without writing when the feature is off. `scripts/core-features.sh` builds the core with no optional feature and then with each one alone, plus `ketch-ffi` on its own set. `just core-features` and the CI step run that script. Landed in #319.
+### M17. `ketch import`: a package from winget, Homebrew or a Linux repository
+
+`ketch import winget|brew|linux <name>` converts a package whose artifacts are GitHub Release assets into a user manifest and installs it. Anything else writes nothing and exits non-zero. The three converters live in `crates/ketch-core/src/import/` (recorded fixtures, no network), the command is `src/cmd/import.rs`, and `tests/import.rs` drives it against a local mock. `docs/COMMANDS.md`, `docs/MANIFESTS.md` and the `docs/ru` and `docs/uk` translations describe it. Landed in #215.
+
+Two notes stay with the creator. `serde-saphyr`, which reads the winget YAML, declares MSRV 1.89, above ketch's declared 1.86, and nothing in CI checks that floor. A cask `binary` whose source starts with `$APPDIR` stays inside the app bundle; `kind = "app"` places the bundle and links nothing.
+Tests: `an_upgrade_that_drops_the_checksum_is_refused_without_consent`, `yes_consents_to_an_upgrade_that_drops_the_checksum`.
+### R19.1. `stats` as an optional core feature, checked alone
+
+`stats` is a cargo feature of `ketch-core`: diesel, diesel_migrations and libsqlite3-sys are optional, and `stats::record` returns without writing when the feature is off. `scripts/core-features.sh` builds the core with no optional feature and then with each one alone, plus `ketch-ffi` on its own set. `just core-features` and the CI step run that script. Landed in #319.
+`desktop/macos/DESIGN.md` follows the DESIGN.md spec, with generated front matter. `desktop/design/tokens.json` is the one token source, and `desktop/design/build.mjs` writes the Swift, XAML and CSS copies plus the preview stylesheet. `just design-check` fails when a generated file drifts, when text misses WCAG AA on its glass background, or when the DESIGN.md lint fails. Landed in #188. An Accessibility Inspector pass on the real Liquid Glass material still needs a Mac; the contrast numbers the script checks are the ones in the tokens.
+### B118. An upgrade silently drops checksum verification
+
+A package installed against a published checksum used to accept a later release that published none, with only the first-use warning. `refuse_checksum_downgrade` now refuses that upgrade. `--allow-unverified` or `--yes` consents, and a lockfile hash stands in for consent because it is a stronger pin than either.
+
+Tests: `an_upgrade_that_drops_the_checksum_is_refused_without_consent`, `yes_consents_to_an_upgrade_that_drops_the_checksum`.
+`gzip`, `xz`, `bzip2` and `zip` are cargo features of `ketch-core`. Plain tar stays on. `portable_extractors()` is the one list macOS, Linux and Windows extend, so a platform copy of the codec list is gone. A build that leaves a codec out reports `UnsupportedArchive` instead of treating the bytes as a program. `an_archive_whose_codec_is_left_out_is_unsupported` covers that, and `scripts/core-features.sh` builds each feature alone. The stacked pull request #322 was closed; the change came in with #354.
+### F14. Design system for the macOS app: `DESIGN.md` and tokens
+
+`desktop/macos/DESIGN.md` follows the DESIGN.md spec, with generated front matter. `desktop/design/tokens.json` is the one token source, and `desktop/design/build.mjs` writes the Swift, XAML and CSS copies plus the preview stylesheet. `just design-check` fails when a generated file drifts, when text misses WCAG AA on its glass background, or when the DESIGN.md lint fails. Landed in #188. An Accessibility Inspector pass on the real Liquid Glass material still needs a Mac; the contrast numbers the script checks are the ones in the tokens.
+`desktop/windows` is a WinUI 3 app on the Windows App SDK and .NET 10, built with `dotnet build` and no Visual Studio. `Ketch.AppCore` holds the fake core and the store and tests on any OS. The app has Installed, Discover, Updates, Activity, Doctor, Settings and a package page, with `ContentDialog` and `InfoBar`, Mica, and light, dark and high contrast from the token file. The `ketch-win-app` job runs `dotnet test` and the Release build. Landed in #247.
+### R19.4. Archive codecs as optional core features
+
+`gzip`, `xz`, `bzip2` and `zip` are cargo features of `ketch-core`. Plain tar stays on. `portable_extractors()` is the one list macOS, Linux and Windows extend, so a platform copy of the codec list is gone. A build that leaves a codec out reports `UnsupportedArchive` instead of treating the bytes as a program. `an_archive_whose_codec_is_left_out_is_unsupported` covers that, and `scripts/core-features.sh` builds each feature alone. The stacked pull request #322 was closed; the change came in with #354.
+
+### D11. Windows: WinUI 3 app shell on a fake core
+
+`desktop/windows` is a WinUI 3 app on the Windows App SDK and .NET 10, built with `dotnet build` and no Visual Studio. `Ketch.AppCore` holds the fake core and the store and tests on any OS. The app has Installed, Discover, Updates, Activity, Doctor, Settings and a package page, with `ContentDialog` and `InfoBar`, Mica, and light, dark and high contrast from the token file. The `ketch-win-app` job runs `dotnet test` and the Release build. Landed in #247.
+
+### B134. `install.ps1` leaves TLS 1.0 on older Windows
+
+Windows PowerShell 5.1 on older Windows 10 and Server defaults `[Net.ServicePointManager]::SecurityProtocol` to TLS 1.0/1.1. GitHub refuses those, so `irm | iex` failed before the archive was fetched. The installer now adds `Tls12` with `-bor`, which turns TLS 1.2 on and leaves TLS 1.3 in place where the host already enabled it.
+
+Test: `the_script_enables_tls12_without_dropping_newer_protocols`.
+
+### B110. Changelog links open any URL scheme
+
+Client release notes are parsed as inline Markdown into `Text`. Every `.link` run was clickable through the default `openURL` action, including `zoommtg:` and `file:`. `KetchStore.render` now drops a link unless its scheme is `https`. The words stay.
+
+Test: `changelogLinksStayOnlyWhenTheyAreHTTPS` (with the existing https link test).
+
+### R16. Fuzz seed script reads the old builtin path
+
+`fuzz/seed.sh` looked for `src/builtin.toml` after that file moved into `ketch-core`. The script already reads `crates/ketch-core/src/builtin.toml`. The readme still named the old path; it now matches.
+
+### B83. A sidecar checksum takes the first sorted line
+
+A `.sha256` sidecar used to take the alphabetically first hash. It now prefers the line that names the asset, and falls back to a lone entry only when the file has exactly one.
+
+Test: `a_sidecar_prefers_the_named_asset_over_the_alphabetically_first_line`.
+### B82. Duplicate checksum basenames overwrite each other
+
+An aggregate checksum list is keyed by file name. Two lines that name the same file with different hashes used to let the later one win. Conflicting names are dropped, so neither hash is trusted.
+
+Test: `an_ambiguous_basename_is_dropped_rather_than_overwritten`.
+### B129. Background refresh raises an error sheet
+
+The update timer and the window becoming key both called `refresh`, and any error set `errorMessage`. Offline, with the real core, the modal appeared on every interval and every time the window came forward. Those callers now pass `alerting: false`. The failure is a warning in the activity log, and a refresh the user started still alerts.
+
+Tests: `aBackgroundRefreshLogsAFailureWithoutAnAlert`, `aRefreshStillAlertsWhenAsked`.
+
+### B128. An unknown lock holder is pid 0
+
+A `Busy` error with no pid became `busy(pid: 0)`, and the banner read "pid 0". The pid is optional. The log and the banner name the holder only when there is one, which is what the Windows app already did.
+
+Test: `aLockWithNoKnownHolderStillOffersRetry`.
+
+### B81. Archive extraction keeps setuid bits
+
+Found by the 2026-10-08 review: extraction kept `mode & 0o7777`, so setuid, setgid and sticky bits from an archive survived. `payload_mode` now keeps `0o777`, and tar, zip and the directory-mode path all go through it.
+
+Test: `setuid_bits_from_an_archive_are_dropped`.
+
+### R14. Delete the stale self-update patch script
+
+`scripts/b32_patch.py` opened `src/self_update.rs` after the core move, and nothing referenced it. The script is gone.
 
 ### B132. `install.ps1` omits the `v` on `--version`
 
@@ -648,6 +855,7 @@ Result: `src/complete.rs` owns the completion scripts and `ketch __complete [--r
 Status: done 2026-09-30
 Model: Claude Code / opus-5.5
 
+
 ### M12. Windows completion: PowerShell `Register-ArgumentCompleter` and doskey macros for cmd
 
 Today clap_complete emits `Register-ArgumentCompleter -Native -CommandName 'ketch'`, and `ketch completions powershell --install` writes it to `Documents\PowerShell\Completions`. PowerShell does not load that directory by itself, so nothing is active until the user dot-sources it.
@@ -757,29 +965,6 @@ Check: Windows e2e (`tests/install_windows.rs` or `tests/install_ps1.rs`): after
 Decisions (Ivan): no Apps & Features entry; only clean up what ketch writes.
 
 Result: `shell::registry_entries(cfg)` is the one inventory of registry values ketch writes (`RegistryEntry::UserPath` today; M12's AutoRun joins it), and `self uninstall` removes each one through `shell::remove_registry_entry`, before the root so the bin dir can still be resolved. A Path entry now matches the bin dir by spelling (case, quotes, slashes, trailing separator — as `install.ps1`'s `Normalize-PathKey`) or, while the folder exists, by resolving both paths, which covers 8.3 short names. `install.ps1 -InstallDir` never puts that dir on the user PATH — it always adds `<root>\bin` — so there was no second entry to chase. `--keep-packages` keeps the entry, like the shell blocks, because the packages left in the bin dir still need it. `ketch doctor` warns about user PATH entries that name a ketch bin dir whose folder is gone. Tests: unit tests for resolution matching, stale detection and the empty inventory off Windows; `tests/install_windows.rs` writes a quoted, upper-case, trailing-backslash entry for the sandbox bin dir and checks `self uninstall --yes` removes it. The Windows parts were verified only in CI.
-
-### M11. Bash completion for every command
-
-Today clap_complete generates a static bash script (`ketch completions bash`, installed at `self install` as `share/ketch/completions/ketch`). It knows commands and flags, but not values.
-
-Plan:
-1. Test coverage: a test walks `Cli::command()` and asserts every visible subcommand, alias and flag appears in the generated script.
-2. Dynamic values: installed package names for `uninstall`, `upgrade`, `pin`, `unpin`, `link`, `unlink`, `info`, `why`, `changelog` and `rollback`, read from the state file; registry names for `install` and `search`, read from the local registry copy. No network in completion. Use clap_complete `CompleteEnv` (`unstable-dynamic`) or a hidden `ketch __complete <kind>`; decide after checking how stable the feature is.
-3. Docs: the bash ≥ 4 and bash-completion 2 note for macOS.
-
-Check: bash smoke on Linux and macOS CI (`COMP_WORDS=(ketch un) COMP_CWORD=1` → `uninstall unlink unpin`; `ketch uninstall r<TAB>` → an installed name from a scratch root); `just check`.
-
-Execution plan (as carried out):
-1. Decision: a hidden `ketch __complete <installed|registry> [PREFIX]` command, not `CompleteEnv`. clap_complete 4.6's `unstable-dynamic` sits outside semver and its docs say the shell-to-binary protocol may change between releases, while ketch writes its bash script to disk at `self install`; a cargo patch update could break every installed script.
-2. New `src/complete.rs`: the shell-agnostic candidate lists (state file, local registry copy, no network) and the bash script: clap_complete's static script plus a wrapper, generated from `Cli::command()`, that asks `ketch __complete` for positional package names. `main.rs` and `extra::write_ketch_docs` both call it.
-3. Tests in `src/complete.rs`: every visible subcommand, alias and flag appears in the script; candidate filtering. `tests/`: bash smoke (`ketch un` → `uninstall unlink unpin`; `ketch uninstall r` → an installed fixture name) with `KETCH_ROOT` and `HOME` in a temp dir, skipped when no bash ≥ 4 is found.
-4. Docs: `docs/COMMANDS.md` completions section, the bash ≥ 4 + bash-completion 2 note for macOS.
-
-Result: `src/complete.rs` owns the completion scripts and `ketch __complete [--root DIR] <installed|registry> [PREFIX]`, intercepted in `main` before clap parses so no generated script, help or man page lists it. The bash script is clap_complete's plus `_ketch_packages`, registered in its place; the value-taking options it skips come from the clap tree, and names reach the command line only when they are plain (`[A-Za-z0-9._+@-]`), since registry folder names are someone else's input and `compgen -W` would expand them. Tests: unit tests in `src/complete.rs` (every visible subcommand, alias and flag in the script; candidate filtering; `self install` writes the same script); `tests/completion.rs` drives the script through the `bash` on PATH (3.2 on macOS) against a sandbox root. Docs: `docs/COMMANDS.md`.
-
-Status: done 2026-09-30
-Model: Claude Code / opus-5.5
-
 
 ### B68. Update installs into a fresh folder so stale files cannot interfere
 
@@ -1271,22 +1456,6 @@ Execution plan (Claude Code / opus-5.5):
 
 Status: done. `crates/ketch-capi` wraps `ketch_ffi::KetchCore` one function per method, from `installed` to `config`, so the C ABI and the UniFFI bindings run the same calls. The Vala test also runs a real install with a closure reporter. The error envelope is tagged `type`, not the `kind` first planned, because D4's contract scenarios already publish `KetchError` that way and one wire shape serves every fake. Linux CI installs valac, Meson and json-glib from apt; nothing is pinned in `mise.toml` for them, because mise has no backend for them. The `rust.md` rows for cbindgen and libc were not written here: that file lives outside this repository.
 
-### D3. `ketch-ffi`: the remaining CLI operations
-
-Screens the apps already draw (Activity history, package info, pin, rollback, Doctor fixes, PATH status) have no core call behind them. Research: section 3a, gap G6.
-
-Done when history (`stats.db`), info, pin/unpin, rollback, prune, registry refresh, `path` status and install, a doctor fix action and reading ketch's config are exported as thin calls into existing core code, each with a test; `registry push` stays out (it owns a tokio runtime).
-
-Execution plan (Claude Code / opus-5.5):
-
-1. Core first, so the CLI and the binding share one path: `shell::status`, `shell::detected` and `shell::install_here` (the PATH report and setup the CLI computed inline), `doctor::fix` (moved from `cmd/system.rs`), `install::pin` (from `cmd/pkg.rs`), `Resolver::resolve_or_recorded` (the registry, else the manifest recorded at install time), and a new `info` module whose `gather` is what `ketch info` assembled. The CLI commands call these and only format.
-2. `crates/ketch-ffi`: `history`, `info`, `pin`/`unpin`, `rollback`, `prune`, `registry_refresh`, `path_status`, `path_install`, `doctor_fix` and `config`, each a thin call into step 1 or existing core code, with records `HistoryEvent`, `PackageInfo`, `Pruned`, `PathStatus`, `ShellSetup`, `PathChange` and `Settings`. Mutating calls hold the lock, as the CLI does.
-3. A Rust unit test per call in `lib.rs`; `doctor_fix` runs against a scratch `HOME` on Unix only.
-4. Swift binding test: pin holds an upgrade, unpin lets it through, rollback undoes it, history records all three, info carries the record, and path status plus settings describe the scratch root.
-5. Verify: `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo nextest run --workspace`, `just ffi-test`.
-
-Status: done. `Settings` reports only whether a GitHub token is set, never the token. `prune` with a `keep` stores it as the retention setting, as `ketch prune --keep` does. An empty name list means every installed package for `pin`, `unpin` and `prune`, as on the command line. `registry push` stays out: it owns a tokio runtime. `changelog::manifest_for` from D2 became `Resolver::resolve_or_recorded`, shared with `info`.
-
 ### Config file I/O in one module (M16.x)
 
 `AGENTS.md`: one module owns all config loading, validation and editing, and the rest of the code does not import `toml` or `toml_edit`. Every use today is in `crates/ketch-core`: `config.rs` (`config.toml`, and the schema drift helper `assert_schema_current`), `registry.rs` (`registry.toml` update metadata and package folders), `push.rs` (a project's `ketch.toml`), `wizard.rs` (TOML string and array literals), `manifest.rs` (user manifests and `builtin.toml`, the only `toml_edit` user), `lockfile.rs` (`ketch.lock`), and tests in `model.rs` and `extra.rs`. The binary (`src/`) and `crates/ketch-ffi` import neither; `tests/` is a separate crate that writes fixtures and stays out of scope.
@@ -1556,15 +1725,15 @@ Also through `commit`: `install::tests::a_reinstall_whose_linking_fails_after_th
 
 ### B105. Windows same-version reinstall refuses its own copied bin
 
-Found by the 2026-10-12 review: ownership of a copied bin was proven against `record.target` after the swap had changed it. On re-check it was already fixed by 13efcf9: `retired_targets` compares bin and extra copies against `<store>.old` after the swap. A Windows end-to-end test (`install`, then `install --force`) is still missing.
+Found by the 2026-10-12 review: ownership of a copied bin was proven against `record.target` after the swap had changed it. On re-check it was already fixed by 13efcf9: `retired_targets` compares bin and extra copies against `<store>.old` after the swap.
 Model: Claude Code / opus-5.5 · Status: done 2026-10-12 (already fixed in 13efcf9) · Priority: P2 · Complexity: 3
-Check: `retired_targets` in `platform/windows.rs`; not covered by a Windows test.
+Check: `placing_a_new_build_into_the_same_store_path_replaces_our_copy` in `platform/windows.rs`.
 
 ### B80. A lone `.xz`/`.bz2` file fails as a tarball
 
 Found by the 2026-10-08 cloud review: `TarXzExtractor` claimed any xz stream without peeking for ustar. On re-check it was already fixed by 5152c87: detection peeks the decompressed head, and `XzFileExtractor` and `Bz2FileExtractor` are registered on all three platforms. A lone bz2 has only a detection test.
 Model: Claude Code / opus-5.5 · Status: done 2026-10-12 (already fixed in 5152c87) · Priority: P2 · Complexity: 3
-Check: the lone `.xz` extraction test in `extract/archive.rs`.
+Check: the lone `.xz` extraction test in `extract/archive.rs`, and `a_lone_bz2_file_is_extracted_as_the_program` for bz2.
 
 ### B84. Downloads have no size cap
 

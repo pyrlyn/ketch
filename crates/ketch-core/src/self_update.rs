@@ -110,19 +110,14 @@ pub fn install_self(
             if let Some(dir) = link_dir {
                 record_bootstrap_link(cx, &mut state, dir)?;
             }
-            expose_self_docs(cx, &mut state, docs)?;
-            state.save(cfg)?;
+            record_self_docs(cx, &mut state, docs)?;
             Ok(out)
         })(),
         Err(Error::AlreadyInstalled { name, version }) => {
             if let Some(dir) = link_dir {
                 record_bootstrap_link(cx, &mut state, dir)?;
             }
-            if let Err(e) = expose_self_docs(cx, &mut state, docs) {
-                report.warn(&format!("could not install man page and completions: {e}"));
-            } else if let Err(e) = state.save(cfg) {
-                report.warn(&format!("could not record man page and completions: {e}"));
-            }
+            record_self_docs(cx, &mut state, docs)?;
             Err(Error::AlreadyInstalled { name, version })
         }
         Err(e) => Err(e),
@@ -281,6 +276,47 @@ fn create_bootstrap_link(link: &Path, target: &Path) -> Result<LinkRecord> {
     })
 }
 
+/// Save the package that was just placed, then link its man pages and
+/// completions.
+///
+/// The new binary is already on disk when this runs. Saving first means a
+/// completion or man file the user owns — `clear_destination` refuses it —
+/// cannot leave `state.json` naming the previous version, which made every
+/// later self upgrade repeat the same failure (B107). Docs stay best effort,
+/// the way the already-installed branch treated them.
+fn record_self_docs(cx: &Ctx<'_>, state: &mut State, docs: SelfDocs) -> Result<bool> {
+    persist_around_docs(cx.cfg, cx.report, state, |state| {
+        expose_self_docs(cx, state, docs)
+    })
+}
+
+/// `state.save`, then `expose`, then save again when the doc links changed.
+///
+/// `Ok(true)` when both saves and `expose` succeeded. A failure from `expose`
+/// or from the second save is a warning and `Ok(false)`; only the first save
+/// failing is an error, because that is the record of the binary itself.
+fn persist_around_docs(
+    cfg: &Config,
+    report: &Report,
+    state: &mut State,
+    expose: impl FnOnce(&mut State) -> Result<()>,
+) -> Result<bool> {
+    state.save(cfg)?;
+    match expose(state) {
+        Ok(()) => match state.save(cfg) {
+            Ok(()) => Ok(true),
+            Err(e) => {
+                report.warn(&format!("could not record man page and completions: {e}"));
+                Ok(false)
+            }
+        },
+        Err(e) => {
+            report.warn(&format!("could not install man page and completions: {e}"));
+            Ok(false)
+        }
+    }
+}
+
 /// Generate ketch's man page and completions into the store prefix and link
 /// them into the user directories `doctor` reports.
 fn expose_self_docs(cx: &Ctx<'_>, state: &mut State, docs: SelfDocs) -> Result<()> {
@@ -390,14 +426,14 @@ pub fn install_completion_script(
             "ketch is not installed as a package; run `ketch self install` first",
         ));
     }
-    expose_self_docs(cx, &mut state, docs)?;
-    state.save(cfg)?;
-    let platform = crate::platform::host()?;
-    let dest = platform.completion_dir(want);
-    report.success(
-        "installed",
-        &format!("{} completions in {}", want.as_str(), dest.display()),
-    );
+    if record_self_docs(cx, &mut state, docs)? {
+        let platform = crate::platform::host()?;
+        let dest = platform.completion_dir(want);
+        report.success(
+            "installed",
+            &format!("{} completions in {}", want.as_str(), dest.display()),
+        );
+    }
     Ok(())
 }
 
@@ -493,8 +529,7 @@ pub fn update(
         req.force = force;
         req.require_checksum = true;
         install::install(cx, &sources, &mut state, &req)?;
-        expose_self_docs(cx, &mut state, docs)?;
-        state.save(cfg)?;
+        record_self_docs(cx, &mut state, docs)?;
         return Ok(SelfUpdate {
             from,
             to,
@@ -1795,6 +1830,87 @@ mod tests {
         }
     }
 
+    fn failing_man_pages(_: &Path) -> Result<Vec<PathBuf>> {
+        Err(Error::msg("destination is not ours"))
+    }
+
+    fn empty_completion(_: clap_complete::Shell) -> Vec<u8> {
+        Vec::new()
+    }
+
+    #[test]
+    fn a_docs_failure_still_records_the_new_self_package() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let cfg = Config::load(
+            Some(tmp.path().join("root")),
+            &crate::report::Report::silent(),
+        )
+        .expect("config");
+        let recorder = std::sync::Arc::new(crate::report::Recorder::default());
+        let report = Report::shared(recorder.clone());
+        let mut state = State::default();
+        let mut pkg = installed_ketch(cfg.store_dir.join(SELF_NAME));
+        pkg.version = Version::parse("2.0.0");
+        state.insert(pkg);
+
+        let placed = record_self_docs(
+            &Ctx::new(&cfg, &report),
+            &mut state,
+            SelfDocs {
+                man_pages: failing_man_pages,
+                completion: empty_completion,
+            },
+        )
+        .expect("a docs failure is a warning, not a failed install");
+
+        assert!(!placed);
+        let saved = State::load(&cfg).expect("state");
+        assert_eq!(
+            saved.get(SELF_NAME).expect("ketch recorded").version,
+            Version::parse("2.0.0")
+        );
+        assert!(
+            recorder.events().iter().any(|event| matches!(
+                event,
+                crate::report::Event::Warn { detail } if detail.contains("could not install man page")
+            )),
+            "the docs failure must be visible"
+        );
+    }
+
+    #[test]
+    fn doc_links_added_while_exposing_are_saved() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let cfg = Config::load(
+            Some(tmp.path().join("root")),
+            &crate::report::Report::silent(),
+        )
+        .expect("config");
+        let mut state = State::default();
+        state.insert(installed_ketch(cfg.store_dir.join(SELF_NAME)));
+        let link = tmp.path().join("man").join("ketch.1");
+
+        let placed = persist_around_docs(&cfg, &Report::silent(), &mut state, |state| {
+            state
+                .get_mut(SELF_NAME)
+                .expect("ketch")
+                .links
+                .push(LinkRecord {
+                    link: link.clone(),
+                    target: tmp.path().join("prefix").join("ketch.1"),
+                    kind: LinkKind::Symlink,
+                    role: LinkRole::Man,
+                });
+            Ok(())
+        })
+        .expect("exposure succeeded");
+
+        assert!(placed);
+        let saved = State::load(&cfg).expect("state");
+        assert_eq!(saved.get(SELF_NAME).expect("ketch").links.len(), 1);
+        assert_eq!(saved.get(SELF_NAME).expect("ketch").links[0].link, link);
+    }
+
     #[test]
     fn a_bootstrap_link_dir_is_recorded_and_placed() {
         let tmp = tempfile::tempdir().unwrap();
@@ -1919,6 +2035,35 @@ mod tests {
         sweep_aside(&backup, &Report::silent());
         assert!(!backup.exists());
         sweep_aside(&backup, &Report::silent());
+    }
+
+    #[test]
+    fn a_stale_sweep_clears_every_aside_and_warns_on_one_it_cannot_remove() {
+        let tmp = tempfile::tempdir().unwrap();
+        let asides = aside_candidates(&tmp.path().join(bootstrap_binary_name()));
+        for aside in &asides {
+            std::fs::write(aside, b"old").unwrap();
+        }
+        sweep_stale_asides(tmp.path(), &Report::silent());
+        for aside in &asides {
+            assert!(!aside.exists(), "{} survived the sweep", aside.display());
+        }
+
+        // A directory stands in for the image Windows will not let go of:
+        // `remove_file` refuses it on every OS.
+        let stuck = &asides[0];
+        std::fs::create_dir(stuck).unwrap();
+        let recorder = std::sync::Arc::new(crate::report::Recorder::default());
+        sweep_stale_asides(tmp.path(), &Report::shared(recorder.clone()));
+        let shown = stuck.display().to_string();
+        assert!(
+            recorder.events().iter().any(|event| matches!(
+                event,
+                crate::report::Event::Warn { detail } if detail.contains(&shown)
+            )),
+            "no warning named the stuck aside: {:?}",
+            recorder.events()
+        );
     }
 
     #[test]

@@ -1359,9 +1359,21 @@ fn mentions(text: &str, bin_dir: &str) -> bool {
 }
 
 /// Byte range of the ketch block, markers and trailing newline included.
+///
+/// The END pairs with the nearest BEGIN still before it. A stray BEGIN left
+/// by a hand edit or a crash has no END of its own; pairing it with the next
+/// block's END would delete the lines in between on uninstall, and the next
+/// install would append a second block (B119).
 fn block_span(text: &str) -> Option<(usize, usize)> {
-    let start = marker_at_line_start(text, BEGIN, 0)?;
-    let end_line = marker_at_line_start(text, END, start + BEGIN.len())?;
+    let mut from = 0;
+    let (start, end_line) = loop {
+        let begin = marker_at_line_start(text, BEGIN, from)?;
+        let end_line = marker_at_line_start(text, END, begin + BEGIN.len())?;
+        match marker_at_line_start(text, BEGIN, begin + BEGIN.len()) {
+            Some(closer) if closer < end_line => from = closer,
+            _ => break (begin, end_line),
+        }
+    };
     let mut end = end_line + END.len();
     // CRLF profiles (PowerShell, autocrlf dotfiles) end the marker line with
     // `\r\n`. Consuming only `\n` would leave the `\r` and, before the match
@@ -1440,12 +1452,53 @@ fn write(file: &Path, text: &str) -> Result<()> {
     // A startup file is very often a symlink into a dotfiles repository.
     // Renaming over the link would replace it with a regular file and quietly
     // detach the user from their own dotfiles, so the write follows it first.
-    let target = fs_kit::path::canon(file);
+    // `canon` only resolves a link whose target exists; a dangling one (the
+    // checkout is missing) has to be followed by `read_link`, or the rename
+    // replaces the link itself.
+    let target = startup_target(file)?;
     fs_kit::write::Options::new()
         .create_parent(true)
         .follow_symlinks(false)
         .write(&target, text)
         .map_err(|e| Error::fs_kit(&target, e))
+}
+
+/// The file `write` should replace: `file` itself, or the end of a symlink
+/// chain. A dangling link whose parent directory is not there is refused,
+/// rather than created, so a missing dotfiles checkout stays missing.
+fn startup_target(file: &Path) -> Result<PathBuf> {
+    let mut path = file.to_path_buf();
+    let mut followed = false;
+    for _ in 0..40 {
+        if let Ok(real) = fs_kit::path::canonicalize(&path) {
+            return Ok(real);
+        }
+        match std::fs::read_link(&path) {
+            Ok(next) => {
+                followed = true;
+                path = path.parent().unwrap_or(Path::new("")).join(next);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                if followed {
+                    if let Some(parent) = path.parent() {
+                        if !parent.as_os_str().is_empty() && !parent.is_dir() {
+                            return Err(Error::msg(format!(
+                                "{} is a symlink to {}, which is not there",
+                                file.display(),
+                                path.display()
+                            )));
+                        }
+                    }
+                }
+                return Ok(path);
+            }
+            Err(e) => return Err(Error::io(&path, e)),
+        }
+    }
+    Err(Error::msg(format!(
+        "too many symbolic links resolving {}",
+        file.display()
+    )))
 }
 
 #[cfg(test)]
@@ -1531,6 +1584,25 @@ mod tests {
     ) {
         assert_eq!(quote_posix(dir), posix);
         assert_eq!(quote_fish(dir), fish);
+    }
+
+    #[test]
+    fn a_stray_begin_does_not_swallow_the_lines_before_the_real_block() {
+        let text =
+            format!("{BEGIN}\n# hand edited, no end\necho keep\n{BEGIN}\nexport PATH\n{END}\n");
+        let (start, end) = block_span(&text).expect("the closed block");
+        let span = &text[start..end];
+        assert!(span.starts_with(BEGIN), "{span}");
+        assert!(!span.contains("echo keep"), "{span}");
+        let gone = unsplice(&text).expect("removed");
+        assert!(gone.contains("echo keep"), "{gone}");
+        assert!(gone.contains("# hand edited"), "{gone}");
+        assert!(!gone.contains("export PATH"), "{gone}");
+        let rewritten = splice(&text, &format!("{BEGIN}\nnew\n{END}\n")).expect("rewritten");
+        assert_eq!(rewritten.matches(BEGIN).count(), 2, "{rewritten}");
+        assert!(rewritten.contains("echo keep"), "{rewritten}");
+        assert!(rewritten.contains("new\n"), "{rewritten}");
+        assert!(!rewritten.contains("export PATH"), "{rewritten}");
     }
 
     #[test]
@@ -1872,6 +1944,55 @@ mod tests {
 
     // The Windows case is an 8.3 short name; a link is how the same folder
     // gets a second spelling on a unix test host.
+    #[cfg(unix)]
+    #[test]
+    fn a_startup_symlink_is_kept_and_its_target_is_what_changes() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let real = tmp.path().join("real");
+        let link = tmp.path().join(".bashrc");
+        std::fs::write(&real, "old\n").expect("real");
+        std::os::unix::fs::symlink(&real, &link).expect("link");
+        write(&link, "new\n").expect("write");
+        assert!(std::fs::symlink_metadata(&link)
+            .expect("meta")
+            .file_type()
+            .is_symlink());
+        assert_eq!(std::fs::read_to_string(&real).expect("read"), "new\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_dangling_startup_symlink_is_not_replaced_with_a_file() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let link = tmp.path().join(".bashrc");
+        std::os::unix::fs::symlink("bashrc", &link).expect("link");
+        write(&link, "export PATH\n").expect("write");
+        assert!(std::fs::symlink_metadata(&link)
+            .expect("meta")
+            .file_type()
+            .is_symlink());
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("bashrc")).expect("target"),
+            "export PATH\n"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_dangling_startup_symlink_whose_checkout_is_missing_is_left_alone() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let link = tmp.path().join(".bashrc");
+        let gone = tmp.path().join("dotfiles").join("bashrc");
+        std::os::unix::fs::symlink(&gone, &link).expect("link");
+        let err = write(&link, "export PATH\n").expect_err("missing checkout");
+        assert!(err.to_string().contains("which is not there"), "{err}");
+        assert!(std::fs::symlink_metadata(&link)
+            .expect("meta")
+            .file_type()
+            .is_symlink());
+        assert!(!gone.exists());
+    }
+
     #[cfg(unix)]
     #[test]
     fn a_path_entry_that_resolves_to_the_bin_dir_is_the_bin_dir() {
