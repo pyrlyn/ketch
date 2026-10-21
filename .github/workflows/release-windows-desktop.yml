@@ -40,11 +40,10 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # No cache: this job publishes what it builds, so a poisoned cache entry
-      # would ship in the release.
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           install_args: dotnet python
+          # A release job must not restore a cache another run could have poisoned.
           cache: false
 
       - name: Require the signing certificate

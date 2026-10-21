@@ -88,8 +88,8 @@ New bugs and vulnerabilities from a read-only whole-project review of `main` at 
 | B132 | P3 | bug | fixed | `install.ps1` | `--version 0.10.0` is given a leading `v` before the download URL is built, the same as `install.sh`. A tag that already starts with `v` is left alone. |
 | B133 | P3 | vuln | fixed | `install.sh:7-359` | The body is not wrapped in a function, so under `curl \| bash` a truncated download runs whatever complete lines arrived. Low impact today, but the guard is missing. Put the body in `main() { … }` and call `main "$@"` last. |
 | B134 | P3 | bug | fixed | `install.ps1` | The installer adds `Tls12` with `-bor` before any download, so older Windows PowerShell can reach GitHub and a host that already enabled TLS 1.3 keeps it. |
-| B135 | P3 | bug | confirmed | `.github/workflows/ci.yml:439-445` | `/review` dispatches with `--ref "$branch"` from the PR's `headRefName`; for a fork PR that ref is missing (the job fails) or names a base branch such as `main`, and CI runs on `main` while the bot says it ran on the PR head. Refuse when `headRepository` is not this repo, or check the dispatched ref's SHA equals the head SHA. |
 | B136 | P3 | bug | fixed | `Justfile` (`lint-cask`); `ci.yml` package job | `just check` and the macOS package job wrote `cask/Casks/ketch.rb` into the repo root and `cask/` was not ignored, so `scripts/release.sh --local` stopped at its clean-tree check. Both now write `target/cask/Casks/ketch.rb` (`target/` is gitignored; `brew style` still sees a `Casks/` directory). |
+| B135 | P3 | bug | fixed | `.github/workflows/ci.yml` `review` | `/review` dispatched `--ref` from the PR's `headRefName`. A fork's name is not a ref here, and a same-named branch can be `main`, so CI ran on the wrong commit while the comment named the PR head. The job now refuses a head outside this repository and a ref whose SHA is not `headRefOid`. |
 | B137 | P3 | bug | confirmed | `tests/commit-msg-breaking.sh`; `Justfile` `lint-commits`; `ci.yml` | `done.md:375` says the test is wired into `just lint-commits`, but neither the Justfile nor CI calls it. Add it to `lint-commits` and CI's shell step. |
 | B138 | P3 | vuln | fixed | `Cargo.lock` (cargo-deny 0.20.2, default config) | RUSTSEC-2026-0285: rustls 0.23.43 via ureq and octocrab, fixed in ≥ 0.23.45 (low impact; `cargo update -p rustls` needs creator permission). RUSTSEC-2023-0071: rsa 0.9.10 (Marvin) via pgp, sigstore and jsonwebtoken, no upstream fix, verification-only use; record an explicit ignore with that reason in a new `deny.toml`. |
 
@@ -204,7 +204,7 @@ Plan:
 
 Check: `just check` clean; `cargo nextest run --workspace` passes with no snapshot changes; `dist build` for the host produces `ketch-<target>.tar.gz` with the same layout; `just dist-generate` leaves `release.yml` unchanged; `scripts/release.sh --dry-run` prints the right next version.
 
-Status: PR https://github.com/pyrlyn/ketch/pull/187 merged 2026-10-01. The version moved to `[workspace.package]`; `release.sh` and `crate-version.sh` read it there, and v0.9.0 was released after the merge. Remaining: the doc examples that became doctests are marked `ignore` and should be rewritten (18 `ignore` fences under `crates/` at the last check).
+Status: PR https://github.com/pyrlyn/ketch/pull/187 merged 2026-10-01. The version moved to `[workspace.package]`; `release.sh` and `crate-version.sh` read it there, and v0.9.0 was released after the merge. The 18 `ignore` fences under `crates/` are examples that compile (`no_run` only where running would touch GitHub or the real ketch root). `tests/workspace.rs` rejects a new `ignore` fence there. Remaining: step 5, `clap` and `clap_complete` still in `ketch-core`.
 
 ### F13. macOS app release pipeline
 
