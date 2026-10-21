@@ -330,7 +330,8 @@ pub struct Ctx<'a> {
     /// Asked what inference cannot decide. [`NoDecider`] unless a front end
     /// with a person in front of it says otherwise.
     pub decider: &'a dyn Decider,
-    /// Stop the operation at the next check. The CLI passes one that never fires.
+    /// Stop the operation at the next check. The CLI passes the process token,
+    /// which Ctrl-C cancels.
     pub cancel: Cancel,
 }
 
