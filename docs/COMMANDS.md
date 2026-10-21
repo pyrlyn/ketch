@@ -8,6 +8,10 @@ a different ketch tree, `-v/--verbose` shows what ketch is doing, `-q/--quiet`
 prints only errors and requested data, `--no-color` disables colour, and
 `--no-emoji` drops the icons in front of status lines.
 
+Ctrl-C stops a running command. The first one asks the install, upgrade,
+download or registry update to stop at its next check and leave nothing
+half-installed (exit 130, `cancelled`). A second Ctrl-C exits at once.
+
 **Icons.** On a terminal, each status line starts with an icon for what it
 reports: 📦 install, ⏫ upgrade or update, 🧹 uninstall or remove, ⏬ download,
 🔗 link, ⏪ rollback, 🔍 search, 🩺 doctor, and otherwise ✅ success, ❗ warning,

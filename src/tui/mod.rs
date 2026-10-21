@@ -296,8 +296,15 @@ impl Controller {
             }
             match key.code {
                 KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    state.apply(Event::Leave);
-                    interrupted = true;
+                    // Raw mode delivers Ctrl-C as a key, so the signal handler
+                    // never sees it. The same rule: the first one cancels the
+                    // operation, the second leaves the terminal and exits.
+                    if crate::interrupt::note(&crate::interrupt::token())
+                        == crate::interrupt::Ask::Exit
+                    {
+                        state.apply(Event::Leave);
+                        interrupted = true;
+                    }
                 }
                 KeyCode::Char('?') => state.apply(Event::ToggleHelp),
                 KeyCode::Char('q') | KeyCode::Esc => state.apply(Event::Leave),

@@ -180,8 +180,9 @@ impl Http {
         let mut written: u64 = 0;
         loop {
             // `staged` deletes itself on drop, so stopping here leaves no file.
-            cancel.check()?;
-            let n = reader.read(&mut buffer).map_err(|e| Error::io(url, e))?;
+            // A Ctrl-C during the read comes back as EINTR; `read_chunk` checks
+            // the token and reports `Cancelled` instead of the syscall error.
+            let n = read_chunk(&mut reader, &mut buffer, cancel, url)?;
             if n == 0 {
                 break;
             }
@@ -210,6 +211,25 @@ impl Http {
         staged.persist(dest).map_err(|e| Error::io(dest, e.error))?;
         progress.finish(&format!("{label} ({})", crate::text::bytes(written)));
         Ok(hex::encode(hasher.finalize()))
+    }
+}
+
+/// One chunk from `reader`. An interrupted read is retried after `cancel` is
+/// checked: Ctrl-C both sets the token and wakes a blocked `read` with EINTR,
+/// and that has to be a cancellation, not "Interrupted system call".
+fn read_chunk<R: Read>(
+    reader: &mut R,
+    buf: &mut [u8],
+    cancel: &Cancel,
+    what: &str,
+) -> Result<usize> {
+    loop {
+        cancel.check()?;
+        match reader.read(buf) {
+            Ok(n) => return Ok(n),
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(err) => return Err(Error::io(what, err)),
+        }
     }
 }
 
@@ -467,5 +487,62 @@ mod tests {
             "no staging file"
         );
         server.join().unwrap();
+    }
+
+    /// A reader whose first `read` is EINTR and which cancels while doing so,
+    /// the way Ctrl-C wakes a download blocked in the kernel.
+    struct InterruptAndCancel {
+        cancel: Cancel,
+        saw: bool,
+    }
+
+    impl Read for InterruptAndCancel {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if !self.saw {
+                self.saw = true;
+                self.cancel.cancel();
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Interrupted,
+                    "interrupted",
+                ));
+            }
+            buf[0] = 1;
+            Ok(1)
+        }
+    }
+
+    #[test]
+    fn an_interrupted_read_after_cancel_is_cancelled_not_an_io_error() {
+        let cancel = Cancel::new();
+        let mut reader = InterruptAndCancel {
+            cancel: cancel.clone(),
+            saw: false,
+        };
+        let mut buf = [0u8; 8];
+        let err = super::read_chunk(&mut reader, &mut buf, &cancel, "download").unwrap_err();
+        assert!(matches!(err, Error::Cancelled), "{err}");
+        assert!(reader.saw);
+    }
+
+    #[test]
+    fn an_interrupted_read_is_retried_when_nobody_cancelled() {
+        struct Once(bool);
+        impl Read for Once {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                if !self.0 {
+                    self.0 = true;
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Interrupted,
+                        "interrupted",
+                    ));
+                }
+                buf[0] = 9;
+                Ok(1)
+            }
+        }
+        let mut buf = [0u8; 4];
+        let n = super::read_chunk(&mut Once(false), &mut buf, &Cancel::new(), "download").unwrap();
+        assert_eq!(n, 1);
+        assert_eq!(buf[0], 9);
     }
 }

@@ -190,3 +190,55 @@ fn core_examples_are_not_marked_ignore() {
         ignored.join("\n")
     );
 }
+
+/// RUSTSEC-2023-0071 (Marvin) has no upstream fix. The ignore must stay
+/// explicit so a later `cargo deny` does not treat verification-only `rsa`
+/// as a new hole, and does not drop the reason.
+#[test]
+fn the_marvin_advisory_is_ignored_as_verification_only() {
+    let deny = manifest("deny.toml");
+    let ignores = get(&deny, &["advisories", "ignore"])
+        .and_then(|v| v.as_array())
+        .expect("deny.toml lists ignored advisories");
+    let marvin = ignores
+        .iter()
+        .find(|entry| entry.get("id").and_then(|id| id.as_str()) == Some("RUSTSEC-2023-0071"))
+        .expect("RUSTSEC-2023-0071 is ignored");
+    let reason = marvin.get("reason").and_then(|r| r.as_str()).unwrap_or("");
+    assert!(
+        reason.to_ascii_lowercase().contains("verif"),
+        "the ignore must say why rsa stays: {reason}"
+    );
+}
+
+/// RUSTSEC-2026-0285 is fixed in rustls 0.23.45. The lock already moved past
+/// it; this fails if a downgrade brings the vulnerable release back.
+#[test]
+fn the_locked_rustls_is_past_rustsec_2026_0285() {
+    let lock = manifest("Cargo.lock");
+    let packages = lock
+        .get("package")
+        .and_then(|v| v.as_array())
+        .expect("Cargo.lock has packages");
+    let version = packages
+        .iter()
+        .find(|pkg| pkg.get("name").and_then(|n| n.as_str()) == Some("rustls"))
+        .and_then(|pkg| pkg.get("version"))
+        .and_then(|v| v.as_str())
+        .expect("Cargo.lock pins rustls");
+    let mut parts = version.split('.');
+    let major: u64 = parts.next().unwrap_or("0").parse().unwrap_or(0);
+    let minor: u64 = parts.next().unwrap_or("0").parse().unwrap_or(0);
+    let patch: u64 = parts
+        .next()
+        .unwrap_or("0")
+        .split(['-', '+'])
+        .next()
+        .unwrap_or("0")
+        .parse()
+        .unwrap_or(0);
+    assert!(
+        (major, minor, patch) >= (0, 23, 45),
+        "rustls {version} is older than the 0.23.45 fix"
+    );
+}
