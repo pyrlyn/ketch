@@ -1,0 +1,21 @@
+/*
+ * Copyright (c) 2026 Ivan Tugay
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+ *
+ * The stylesheet libadwaita autoloads from the resource base path. The
+ * colours come from the design tokens (tokens.css, a build-time copy of
+ * desktop/design/generated/ketch-tokens.css), so dark and high contrast
+ * follow from the tokens' media queries rather than from rules here.
+ */
+@import url("resource:///io/github/pyrlyn/Ketch/tokens.css");
+
+.ketch-badge {
+  min-width: 12px;
+  padding: 1px 6px;
+  border-radius: var(--ketch-radius-full);
+  background-color: var(--ketch-color-status-update-subtle);
+  color: var(--ketch-color-status-update);
+  font-size: var(--ketch-typography-badge-font-size);
+  font-weight: var(--ketch-typography-badge-font-weight);
+}
