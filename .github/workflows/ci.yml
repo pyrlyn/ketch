@@ -17,8 +17,13 @@ on:
 permissions:
   contents: read
 
+# A /review comment must not share a group with a push to main. On
+# issue_comment there is no pull request number, so `ci-${{ github.ref }}`
+# was `ci-refs/heads/main`, and GitHub cancels the previous pending run in a
+# group — a comment replaced a push that had not started. The comment run
+# only dispatches CI, so it takes a group of its own.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.event_name == 'issue_comment' && format('review-{0}', github.event.issue.number) || format('ci-{0}', github.event.pull_request.number || github.ref) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -30,6 +35,10 @@ jobs:
   # then do no work but still report under their names, so the required checks pass. A failed
   # `config` runs everything.
   config:
+    # A comment only dispatches CI (the review job). This job, and every job
+    # but review, stays off that run: `pull_request.draft != true` is true
+    # when the event has no pull request.
+    if: github.event_name != 'issue_comment'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -52,7 +61,7 @@ jobs:
     # Draft PRs are skipped here and reported green: review happens when the PR
     # is marked ready, and a draft must not look broken meanwhile.
     needs: config
-    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
+    if: ${{ github.event_name != 'issue_comment' && !cancelled() && github.event.pull_request.draft != true }}
     uses: pyrlyn/ci/.github/workflows/ci-rust.yml@main
     # actions: write for infra's cancel-run (the first failing job cancels the run).
     permissions:
@@ -98,6 +107,7 @@ jobs:
   powershell:
     needs: config
     if: >-
+      github.event_name != 'issue_comment' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
     runs-on: windows-latest
@@ -115,6 +125,7 @@ jobs:
   # Which runner the macOS jobs use: pyrlyn/ci's macos-runner action reads the MACOS_RUNNER
   # variable (unset = the hosted labels below, xcode-27-local = the dedicated Mac).
   macos-runner:
+    if: github.event_name != 'issue_comment'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -142,6 +153,7 @@ jobs:
   macos-app:
     needs: [config, macos-runner]
     if: >-
+      github.event_name != 'issue_comment' &&
       vars.MACOS_CI_DISABLED != 'true' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
@@ -209,6 +221,7 @@ jobs:
   ketch-ffi:
     needs: [config, macos-runner]
     if: >-
+      github.event_name != 'issue_comment' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
     runs-on: ${{ fromJSON(needs.macos-runner.outputs.app)[0] }}
@@ -245,6 +258,7 @@ jobs:
   ketch-cs:
     needs: config
     if: >-
+      github.event_name != 'issue_comment' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
     runs-on: windows-latest
@@ -274,6 +288,7 @@ jobs:
   ketch-capi:
     needs: config
     if: >-
+      github.event_name != 'issue_comment' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
@@ -307,6 +322,7 @@ jobs:
   ketch-win-app:
     needs: config
     if: >-
+      github.event_name != 'issue_comment' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
     runs-on: windows-latest
@@ -372,6 +388,7 @@ jobs:
   design:
     needs: config
     if: >-
+      github.event_name != 'issue_comment' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
@@ -406,7 +423,7 @@ jobs:
     # A matrix job skipped at job level reports one check under its raw name, so the required
     # `package (<os>, <target>)` checks would wait: on a docs-only change every step is a no-op.
     needs: [config, macos-runner]
-    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
+    if: ${{ github.event_name != 'issue_comment' && !cancelled() && github.event.pull_request.draft != true }}
     strategy:
       fail-fast: false
       matrix:
@@ -555,6 +572,7 @@ jobs:
   # Fails when workspace-hack drifts from the dependency graph (cargo-hakari
   # comes from mise.toml). Own job, so the required check names stay as they are.
   hakari:
+    if: github.event_name != 'issue_comment'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
