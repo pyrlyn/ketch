@@ -351,9 +351,11 @@ jobs:
   ketch-linux-app:
     needs: config
     if: >-
+      github.event_name != 'issue_comment' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     container: ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
     steps:
       # checkout runs git inside the container, and the image does not ship it.
@@ -363,6 +365,8 @@ jobs:
           apt-get install -y --no-install-recommends ca-certificates git
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # python3-gi and the typelibs are what blueprint-compiler reads GTK and
       # libadwaita's types from. git fetches the pinned subproject.
