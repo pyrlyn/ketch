@@ -350,11 +350,13 @@ pub fn store_ketch_link(cfg: &Config) -> PathBuf {
 pub fn same_binary(a: &Path, b: &Path) -> bool {
     let left = fs_kit::path::canon(a);
     let right = fs_kit::path::canon(b);
-    if cfg!(windows) {
-        shell::windows_path_key(&left) == shell::windows_path_key(&right)
-    } else {
-        left == right
-    }
+    // `windows_path_key` exists only on Windows (and in tests). A runtime
+    // `cfg!` would still name it on Unix.
+    #[cfg(windows)]
+    let same = shell::windows_path_key(&left) == shell::windows_path_key(&right);
+    #[cfg(not(windows))]
+    let same = left == right;
+    same
 }
 
 /// First `ketch`/`ketch.exe` on PATH, canonicalised when the file exists.

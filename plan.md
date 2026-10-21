@@ -12,14 +12,10 @@ New bugs, dead code and moves from a read-only Cursor cloud review of `main` at 
 | B76 | P1 | bug | fixed | `registry.rs:117-120` | After the live registry is moved aside, the rollback is `let _ = rename(aside, registry_dir)`; if it fails, `registry_dir` is left empty. Surface the failure and copy-restore. |
 | B77 | P1 | bug | fixed | `self_update.rs:932-937` | Uninstall runs `remove_file(exe)?` after packages are gone and state is saved; a busy Windows `.exe` aborts the rest. Warn and continue, like the other uninstall steps. |
 | B79 | P1 | bug | fixed | `install.rs:691-729`; `platform/unix.rs:423`; `platform/windows.rs:502` | `place` swaps the store, then links; `ScopedDir` is off when `existing.prefix == store_dir`, so a failure after the swap leaves state pointing at a tree that is not on disk. Restore `.old` on error. |
-| B80 | P2 | bug | confirmed | `extract/archive.rs:397-399`; extractor order in `platform/linux.rs:62-66` | `TarXzExtractor` claims any `XZ_MAGIC` and is listed before `GzFileExtractor`; unlike gzip (`:508-509`), xz/bz2 never peek for ustar, so a lone `.xz` file fails as a tarball. Peek the decompressed head; add lone-file xz/bz2 extractors. |
-| B81 | P2 | bug | fixed | `extract/archive.rs` `payload_mode` | Archive modes are masked to `0o777`, so setuid, setgid and sticky bits do not survive extraction. |
 | B80 | P2 | bug | fixed | `extract/archive.rs:397-399`; extractor order in `platform/linux.rs:62-66` | `TarXzExtractor` claims any `XZ_MAGIC` and is listed before `GzFileExtractor`; unlike gzip (`:508-509`), xz/bz2 never peek for ustar, so a lone `.xz` file fails as a tarball. Peek the decompressed head; add lone-file xz/bz2 extractors. |
-| B81 | P2 | bug | confirmed | `extract/archive.rs:280`, `:488` | Extraction keeps `mode & 0o7777`, so setuid/setgid/sticky bits from an archive survive. Mask `0o7000`. |
-| B82 | P2 | bug | confirmed | `source/github.rs:310-312` | Aggregate checksum files are keyed by basename; a later duplicate overwrites an earlier one. Reject or flag a basename that maps to two hashes. |
-| B83 | P2 | bug | fixed | `source/github.rs` `sidecar_hex` | A sidecar checksum uses the line that names the asset, and a single unnamed entry only when the file is unambiguous. |
+| B81 | P2 | bug | fixed | `extract/archive.rs` `payload_mode` | Archive modes are masked to `0o777`, so setuid, setgid and sticky bits do not survive extraction. |
 | B82 | P2 | bug | fixed | `source/github.rs` `parse_checksum_file` | A basename that maps to two different hashes is dropped, not overwritten by the later line. |
-| B83 | P2 | bug | confirmed | `source/github.rs:427-431` | A sidecar checksum takes the first sorted entry (`BTreeMap::into_values().next()`), not the asset's. Look up the asset name first; fall back to a single entry only when unambiguous. |
+| B83 | P2 | bug | fixed | `source/github.rs` `sidecar_hex` | A sidecar checksum uses the line that names the asset, and a single unnamed entry only when the file is unambiguous. |
 | B84 | P2 | bug | fixed | `http.rs:118-186` | Downloads stream with no maximum size. Add a configurable download/unpacked cap and abort over it. |
 | B85 | P2 | bug | fixed | `registry.rs` `update`; `listing.rs` `ask_all` | Registry download uses the caller's `Cancel`, and `ask_all` stops between packages when it fires. |
 | B86 | P2 | bug | fixed | `source/plugin.rs` `allowed_asset_url`, `plugin_fetch_headers` | ketch fetches a plugin asset only for `https` or loopback `http`. `Authorization` and hop-by-hop headers, including names listed by `Connection`, are dropped before the request. |
@@ -28,7 +24,7 @@ New bugs, dead code and moves from a read-only Cursor cloud review of `main` at 
 | R14 | P2 | dead code | confirmed | `scripts/b32_patch.py:8` | The script opens `src/self_update.rs`, which has moved, and nothing references it. Delete it. |
 | R15 | P2 | dead code | fixed | root `Cargo.toml:61` (`dirs`); `manifest.rs:137-148` (`Resolver::aliases`); `model.rs:596-599` (`Release::asset`); `platform/mod.rs:49-50` (`Placement::version`); `model.rs:329-331` | Drop the unused root `dirs` dependency, `Resolver::aliases` (or wire it to `__complete`/search), `Release::asset` and the never-read `Placement::version`; remove the stale `allow(dead_code)` on `PackageSpec::raw` (read at `state.rs:162`). |
 | R16 | P2 | dead code | fixed | `fuzz/seed.sh` | The seed script and its readme name `crates/ketch-core/src/builtin.toml`. |
-| R17 | P2 | dead code | confirmed | `shell.rs:561-1092` | 23 `cfg_attr(not(windows), allow(dead_code))` on the Windows PATH helpers. Put them in one `#[cfg(any(windows, test))]` module. |
+| R17 | P2 | dead code | fixed | `shell.rs:561-1092` | 23 `cfg_attr(not(windows), allow(dead_code))` on the Windows PATH helpers. Put them in one `#[cfg(any(windows, test))]` module. |
 | R18 | P2 | move | fixed | `platform/mod.rs` (`swap_into_store`) | Store swaps share one helper. macOS passes `ditto`; Linux and Windows pass `copy_tree`. |
 | R19 | P2 | move | suspected | `crates/ketch-core/Cargo.toml:49-66` | `stats` + diesel, `push` + octocrab/tokio, `trust` + sigstore/pgp and the `extract` codecs are always in core, so every desktop/FFI link pays for them (issue #222). Make them optional crates or features. |
 
@@ -57,16 +53,14 @@ New bugs and vulnerabilities from a read-only whole-project review of `main` at 
 | B97 | P2 | vuln | fixed | `.github/workflows/release.yml:117-120`, produced by `scripts/dist-generate.sh:80-87` | `CODESIGN_CERTIFICATE`, its password and `GH_TOKEN` (with `contents: write`) are job-level env on all four build runners, so every dependency `build.rs` and proc-macro can read the Developer ID `.p12`. Patch the env so the certificate reaches only the macOS signing step, and drop `GH_TOKEN` where builds do not need it. |
 | B98 | P2 | bug | confirmed | `install.ps1:3`, `:149-326` (every `exit`) | Under `irm … \| iex` the script runs in the caller's session: any error path's `exit 1` closes the user's PowerShell window before the message can be read, and `$ErrorActionPreference = 'Stop'` and script variables leak into the session. Wrap the body in a function or scriptblock, `throw`/`return` instead of `exit`, restore the preference. |
 | B99 | P2 | vuln | fixed | `extract/archive.rs` ~604 (zip `io::copy`), 462-469 (tar `unpack_member`), ~643, ~659 (lone gz/xz/bz2) | No extractor bounds the bytes written or the number of entries; a small gzip/bzip2 bomb or a zip with millions of tiny entries fills the disk under the root. B84 caps only the download. One shared extraction budget (bytes and entries, ratio of compressed size plus an absolute ceiling) across every extractor. |
-| B100 | P2 | vuln | confirmed | `extract/archive.rs` ~595 (zip symlink branch) | A zip symlink's target is read with an unbounded `read_to_string`; a symlink entry whose body is gigabytes of highly compressed bytes is decompressed into memory. Read through `take(4097)` and reject targets over 4 KiB. |
+| B100 | P2 | vuln | fixed | `extract/archive.rs` `MAX_ZIP_LINK_TARGET` | A zip symlink target is read through `take(4097)` and refused when it is longer than 4 KiB. |
 | B101 | P2 | bug | fixed | `extract/archive.rs:462-469`, `:420-423` | `payload_mode` is applied to directories as they are written. A `0o555` directory before its children fails extraction with EACCES (Nix and some reproducible tarballs; GNU tar copes); one after its children stays read-only, so `remove_any` (`platform/unix.rs:46`) fails on uninstall and upgrade and temp dirs leak. Apply directory modes after all members are written and always force `u+rwx` on directories. |
 | B102 | P2 | bug | fixed | `extract/archive.rs:71-127` (`materialize_symlink_as_copy`, `copy_dir_contents`) | On Windows without symlink rights, a member `d -> .` or `sub/d -> ..` passes `check_link_target` and is materialised by copying its target into itself while `WalkDir` walks it: endless recursion or a full disk. Refuse to materialise a directory link whose target is an ancestor of the link, or snapshot the entry list first. |
 | B103 | P2 | bug | fixed | `install.rs:262` (`prepare`), `install.rs:647` (`commit`); `lockfile.rs` plan | State is keyed by name and nothing compares `existing.source` with `manifest.source`. `ketch install otherowner/ripgrep --yes` silently replaces `BurntSushi/ripgrep`, takes over its `rg` link, runs update hooks and mixes retained versions from two sources; `ketch sync` plans a same-name, other-source lock entry as missing and does the same. Refuse in `prepare` when the sources differ and point at `--name`. |
 | B104 | P2 | bug | fixed | `platform/unix.rs:131, 473`; `platform/macos.rs:263, 430`; `platform/windows.rs:404, 543` | Placement clears each occupied destination (old symlink, copied `/Applications/X.app`, Windows bin copy) right before writing the new one; on a later failure only the new links are unplaced and the store restored, so the old version's links and app copy are gone while state still records them. A `copy_tree` of a large `.app` failing on a full disk loses the working app and leaves an unrecorded half copy. Move occupied destinations aside and restore them on failure. Adjacent to B79, which covers only the store. |
 | B105 | P2 | bug | fixed | `platform/windows.rs` (`retired_targets`) | A same-version reinstall compares a copied bin with `<store>.old`, so the copy ketch made is still recognised as ours. |
-| B106 | P2 | bug | confirmed | `platform/windows.rs:328`; `model.rs:1462` (`glob_match`) | A manifest `bin.path` written with `/` (`bin/tool.exe`) is matched against `rel.to_string_lossy()`, which uses `\` on Windows; `glob_match` does not normalise separators, so any manifest with a directory in `bin.path` fails with "payload does not contain it". Normalise both sides to `/`, add a Windows test, and check `extra::resolve_under`. |
-| B107 | P2 | bug | fixed | `self_update.rs` (`record_self_docs`) | Self install and self upgrade save the new package before linking man pages and completions. A user-owned file at a doc destination is a warning, so `state.json` names the version that is on disk and a later upgrade does not repeat the failure. |
 | B106 | P2 | bug | fixed | `model.rs` (`glob_match_path`); `platform/windows.rs`, `platform/unix.rs` | A manifest `bin.path` written with `/` (`bin/tool.exe`) was matched against `rel.to_string_lossy()`, which uses `\` on Windows, so any directory in `bin.path` failed. Both sides are folded to `/` before the glob. `extra::resolve_under` still refuses a backslash: `safe_member_path` treats one as an unsafe name, and `doc/rg.1` already resolves. |
-| B107 | P2 | bug | confirmed | `self_update.rs:113` (`install_self`), `:402`, `:487` (`update`) | `expose_self_docs(...)?` runs after the new version is placed but before `state.save`. A user-owned completion or man file at the destination makes `clear_destination` fail: the new binary is on disk, `state.json` names the old one, and every later self upgrade repeats it. The `AlreadyInstalled` branch already warns instead. Save state first and make docs exposure a warning everywhere. |
+| B107 | P2 | bug | fixed | `self_update.rs` (`record_self_docs`) | Self install and self upgrade save the new package before linking man pages and completions. A user-owned file at a doc destination is a warning, so `state.json` names the version that is on disk and a later upgrade does not repeat the failure. |
 | B108 | P2 | bug | fixed | `process.rs:323-342` (`cmd_hits`) | A process counts as an occupant when its command line contains the path as a plain substring. Upgrading `rg` with `--yes` SIGTERMs, then SIGKILLs, a running `…/bin/rga`, `…/rg-helper`, or any editor or shell whose arguments mention the path (Linux, Windows). Match whole NUL-split arguments against exact canonical paths and prefer exe and open-fd evidence. Separate from B88. |
 | B109 | P2 | vuln | fixed | `state.rs:235-276` (`Lock::acquire_path`) | `create_new` and the pid write are not atomic: a second process that reads the still-empty file calls it stale and renames the live lock away. Two processes that judged one dead pid stale can each rename, the second over the first's fresh lock. Both then run, and the first `Drop` deletes the other's lock. Write the pid to a temp file and link it into place without replace, treat an empty lock as busy unless old, re-read before renaming, or use an OS advisory lock. |
 | B110 | P2 | vuln | fixed | `desktop/macos/Ketch/Store/KetchStore.swift` | Changelog Markdown keeps a `.link` run only when its scheme is `https`. Other schemes stay as text, so the default `openURL` action cannot open them. |
@@ -75,36 +69,25 @@ New bugs and vulnerabilities from a read-only whole-project review of `main` at 
 | B113 | P3 | vuln | fixed | `extract/mod.rs:81-136` (`safe_member_path`); `config.rs:471` (`sanitize_component`); `model.rs:1116` (`usable_file_name`) | DOS device names (`CON`, `NUL`, `AUX`, `PRN`, `COM1-9`, `LPT1-9`, also with an extension), names with a trailing dot or space, and `<>:"\|?*` pass. An archive member, bin, tag or package named `nul.txt` writes to a device, `foo.` collides with `foo`, a store dir can fail to create. Reject these case-insensitively per component on Windows. |
 | B114 | P3 | vuln | fixed | `extract/archive.rs:304-331` (`check_link_target`); readers `extra.rs:197`, `changelog.rs` `find_file`, `platform/unix.rs:61, 227`, `platform/windows.rs` `payload_executable_entry` | Link targets are checked lexically, ignoring links created earlier: `L -> .` then `N -> L/L/../../..` passes but escapes. `resolve_under`, `find_file`, `ensure_executable` (chmod follows links) and `payload_executable_entry` (checks one hop) then follow it, so local files outside the store can be linked into bin, man or completion dirs and `chmod u+rx`'d. Canonicalize every link in `finish_deferred_links` and require it under the destination; canonicalize in `payload_executable_entry`. |
 | B115 | P3 | vuln | fixed | `extract/macos.rs:175-199` (DMG `copy_volume`), `:210-237` (PKG) | DMG copy skips only top-level symlinks; `ditto` keeps nested absolute or escaping links, and PKG payloads get no link checks. The B114 readers then follow them outside the payload. After the copy, walk the tree with `symlink_metadata` and run every link through the containment check. |
-| B116 | P3 | vuln | confirmed | `source/plugin.rs:204-244` (`discover`) | Plugin discovery scans the plugin dir and every PATH entry, including ketch's own bin dir, and runs each `ketch-source-*` with `capabilities`. A client app that ships such a binary is executed by every later ketch command that loads sources. Discover only in the plugin dir, or exclude `cfg.bin_dir` and anything resolving into the store. |
-| B117 | P3 | bug | fixed | `changelog.rs:~99` (`from_file`), `src/cmd/query.rs:589` | The client changelog is read with an unbounded `read_to_string(...)?`: a multi-GB file or a link to `/dev/zero` exhausts memory, and a non-UTF-8 file makes `ketch changelog` fail instead of falling back to release notes. Require a regular file (`symlink_metadata`), read through `take` with a cap of a few MiB, decode lossily. |
-| B118 | P3 | vuln | suspected | `install.rs` ~1420-1465 (`verify_checksum`); `src/cmd/pkg.rs:540` | When a release that was installed checksum-verified is followed by one without checksums (or an attacker controlling the release removes them), the upgrade installs with only the generic first-use warning; `checksum_verified` is never consulted. Refuse such a downgrade unless `--yes` or an explicit flag. |
-| B119 | P3 | bug | fixed | `shell.rs:1302-1310` (`block_span`) | It pairs the first BEGIN with the first END after it. A stray BEGIN without END (hand edit, crash mid-write) makes `splice` append a second block, and a later `unsplice` deletes every user line between the orphan BEGIN and the real END. Pair END with the nearest preceding BEGIN or refuse when marker counts differ. |
 | B116 | P3 | vuln | fixed | `source/plugin.rs:204-244` (`discover`) | Plugin discovery scans the plugin dir and every PATH entry, including ketch's own bin dir, and runs each `ketch-source-*` with `capabilities`. A client app that ships such a binary is executed by every later ketch command that loads sources. Discover only in the plugin dir, or exclude `cfg.bin_dir` and anything resolving into the store. |
-| B117 | P3 | bug | confirmed | `changelog.rs:~99` (`from_file`), `src/cmd/query.rs:589` | The client changelog is read with an unbounded `read_to_string(...)?`: a multi-GB file or a link to `/dev/zero` exhausts memory, and a non-UTF-8 file makes `ketch changelog` fail instead of falling back to release notes. Require a regular file (`symlink_metadata`), read through `take` with a cap of a few MiB, decode lossily. |
+| B117 | P3 | bug | fixed | `changelog.rs:~99` (`from_file`), `src/cmd/query.rs:589` | The client changelog is read with an unbounded `read_to_string(...)?`: a multi-GB file or a link to `/dev/zero` exhausts memory, and a non-UTF-8 file makes `ketch changelog` fail instead of falling back to release notes. Require a regular file (`symlink_metadata`), read through `take` with a cap of a few MiB, decode lossily. |
 | B118 | P3 | vuln | fixed | `install.rs` (`refuse_checksum_downgrade`); `src/cli.rs` `--allow-unverified` | A package installed against a published checksum refuses a release that publishes none. `--allow-unverified` or `--yes` consents; a lockfile hash stands in for that consent. |
-| B119 | P3 | bug | confirmed | `shell.rs:1302-1310` (`block_span`) | It pairs the first BEGIN with the first END after it. A stray BEGIN without END (hand edit, crash mid-write) makes `splice` append a second block, and a later `unsplice` deletes every user line between the orphan BEGIN and the real END. Pair END with the nearest preceding BEGIN or refuse when marker counts differ. |
+| B119 | P3 | bug | fixed | `shell.rs:1302-1310` (`block_span`) | It pairs the first BEGIN with the first END after it. A stray BEGIN without END (hand edit, crash mid-write) makes `splice` append a second block, and a later `unsplice` deletes every user line between the orphan BEGIN and the real END. Pair END with the nearest preceding BEGIN or refuse when marker counts differ. |
 | B120 | P3 | bug | fixed | `shell.rs` (`marker_at_line_start`, `block_span`) | A marker line may end in `\r\n` or `\r`. The span consumes that ending, so a CRLF profile is updated in place instead of gaining a second block. |
 | B121 | P3 | bug | fixed | `shell.rs` `startup_target` | A dangling startup symlink is followed with `read_link`. The target file is written when its directory exists; a missing checkout is refused, and the symlink is left in place either way. |
 | B122 | P3 | bug | fixed | `src/ui.rs` (`BarProgress::start`) | The download label reaches `set_message` through `printable` before it is truncated, the same filter as every other status line. |
 | B123 | P3 | bug | fixed | `platform/{macos,unix,windows}.rs` `restore_retired_store`, from `relink`/`rollback` | In these paths `move_into_store` is a no-op and `sweep_swap_leftovers` does not run; if linking fails while a stale `<ver>.old` from an earlier interrupted swap exists, the error path deletes the live prefix and renames the stale copy over it. Restore only when this call made the swap (have `move_into_store` say so). |
 | B124 | P3 | bug | fixed | `platform/windows.rs:80-104` (`busy_aside`, `clear_for_replace`) | `tool.exe.old.<pid>-<ms>` files left when a running exe is renamed aside are never swept (only ketch's own asides are), so they pile up with every upgrade of a running tool. Sweep `*.old.*` siblings of recorded links at the start of commit, relink and uninstall. |
-| B125 | P3 | vuln | confirmed | `crates/ketch-ffi/src/callbacks.rs:128-162`; `crates/ketch-ffi/src/records.rs:238-241` | Event `detail`/`verb`/`name`/`label` and `Changelog.version` carry client asset names and tags to Swift, C# and Vala unsanitised, though the `records.rs` header says they pass through `changelog::sanitize`; GUIs get bidi overrides raw. Sanitise string fields in `From<report::Event>` and `Changelog::new`. |
-| B126 | P3 | bug | fixed | `crates/ketch-capi/vapi/ketch.vapi` (`StopFunc`); `crates/ketch-capi/include/ketch.h:37` | `KetchStopFn` returns C `bool`, the Vala delegate returns `gboolean` (int): an incompatible function-pointer type (error by default on GCC ≥ 14) and a return-ABI mismatch. `tests/capi.vala` never passes a `ChooseFunc` or `StopFunc`. Return `int32_t` and cover both callbacks in the Vala test. |
-| B127 | P3 | bug | confirmed | `crates/ketch-capi/src/lib.rs:61-65` (`ErrorBody`) | `ErrorBody` flattens `KetchError`, whose `Network`/`Verification`/`Other` variants already have `message`, and adds its own: the JSON envelope has a duplicate `"message"` key that strict parsers reject. Skip or rename the outer field. |
-| B128 | P3 | bug | fixed | `desktop/macos/Ketch/Core/KetchCoreProtocol.swift` | `busy(pid:)` is optional. An unknown holder is logged and shown without a pid, the same as the Windows app. |
-| B129 | P3 | bug | confirmed | `desktop/macos/Ketch/Store/KetchStore.swift:135-145, 312-321` | The background update loop and window-key refresh report errors through `report`, which sets `errorMessage`; offline with the real core, a modal alert pops on every interval and focus change. Log background failures without alerting. |
 | B125 | P3 | vuln | fixed | `crates/ketch-ffi/src/callbacks.rs` `From<report::Event>`; `records.rs` `Changelog::new` | Event strings and `Changelog` name/version pass through `changelog::sanitize` before they reach Swift, C# and Vala. |
-| B126 | P3 | bug | suspected | `crates/ketch-capi/vapi/ketch.vapi` (`StopFunc`); `crates/ketch-capi/include/ketch.h:37` | `KetchStopFn` returns C `bool`, the Vala delegate returns `gboolean` (int): an incompatible function-pointer type (error by default on GCC ≥ 14) and a return-ABI mismatch. `tests/capi.vala` never passes a `ChooseFunc` or `StopFunc`. Return `int32_t` and cover both callbacks in the Vala test. |
+| B126 | P3 | bug | fixed | `crates/ketch-capi/vapi/ketch.vapi` (`StopFunc`); `crates/ketch-capi/include/ketch.h:37` | `KetchStopFn` returns C `bool`, the Vala delegate returns `gboolean` (int): an incompatible function-pointer type (error by default on GCC ≥ 14) and a return-ABI mismatch. `tests/capi.vala` never passes a `ChooseFunc` or `StopFunc`. Return `int32_t` and cover both callbacks in the Vala test. |
 | B127 | P3 | bug | fixed | `crates/ketch-capi/src/lib.rs:61-65` (`ErrorBody`) | `ErrorBody` flattens `KetchError`, whose `Network`/`Verification`/`Other` variants already have `message`, and adds its own: the JSON envelope has a duplicate `"message"` key that strict parsers reject. Skip or rename the outer field. |
-| B128 | P3 | bug | confirmed | `desktop/macos/Ketch/Core/ContractScenario.swift:132`; `KetchCoreProtocol.swift:99` | `Busy` with an unknown holder becomes `pid 0`, and the user reads "ketch is running in another process (pid 0)". Make `busy(pid:)` optional, as on Windows. |
+| B128 | P3 | bug | fixed | `desktop/macos/Ketch/Core/KetchCoreProtocol.swift` | `busy(pid:)` is optional. An unknown holder is logged and shown without a pid, the same as the Windows app. |
 | B129 | P3 | bug | fixed | `desktop/macos/Ketch/Store/KetchStore.swift` | The update timer and a window becoming key call `refresh(alerting: false)`. A failure is a log line. A refresh the user asked for still sets `errorMessage`. |
 | B130 | P3 | bug | fixed | `desktop/macos/Ketch/Views/DiscoverView.swift:44-47`, `PackageDetailView.swift:59-62`; `desktop/windows/Ketch.App/Pages/DiscoverPage.xaml.cs:36-42` | Core calls ignore task cancellation, so an older, slower search or changelog reply can land after a newer one (Windows also searches on every keystroke). Tag requests and drop out-of-date replies; debounce search. |
 | B131 | P3 | bug | fixed | `desktop/windows/Ketch.AppCore/KetchStore.cs` (`Operate`) | When an operation is already running, `Operate` returned silently: a confirmed Uninstall or a clicked Install did nothing. It now sets `ErrorMessage` to the same sentence macOS uses. `A_second_operation_while_one_is_running_says_so` covers it. |
 | B132 | P3 | bug | fixed | `install.ps1` | `--version 0.10.0` is given a leading `v` before the download URL is built, the same as `install.sh`. A tag that already starts with `v` is left alone. |
-| B133 | P3 | vuln | confirmed | `install.sh:7-359` | The body is not wrapped in a function, so under `curl \| bash` a truncated download runs whatever complete lines arrived. Low impact today, but the guard is missing. Put the body in `main() { … }` and call `main "$@"` last. |
-| B134 | P3 | bug | fixed | `install.ps1` | The installer adds `Tls12` with `-bor` before any download, so older Windows PowerShell can reach GitHub and a host that already enabled TLS 1.3 keeps it. |
 | B133 | P3 | vuln | fixed | `install.sh:7-359` | The body is not wrapped in a function, so under `curl \| bash` a truncated download runs whatever complete lines arrived. Low impact today, but the guard is missing. Put the body in `main() { … }` and call `main "$@"` last. |
-| B134 | P3 | bug | suspected | `install.ps1:229, 263` | `[Net.ServicePointManager]::SecurityProtocol` is never set; on older Windows 10/Server, PowerShell 5.1 defaults to TLS 1.0/1.1, which GitHub rejects. OR in `Tls12` at the top. |
+| B134 | P3 | bug | fixed | `install.ps1` | The installer adds `Tls12` with `-bor` before any download, so older Windows PowerShell can reach GitHub and a host that already enabled TLS 1.3 keeps it. |
 | B135 | P3 | bug | confirmed | `.github/workflows/ci.yml:439-445` | `/review` dispatches with `--ref "$branch"` from the PR's `headRefName`; for a fork PR that ref is missing (the job fails) or names a base branch such as `main`, and CI runs on `main` while the bot says it ran on the PR head. Refuse when `headRepository` is not this repo, or check the dispatched ref's SHA equals the head SHA. |
 | B136 | P3 | bug | fixed | `Justfile` (`lint-cask`); `ci.yml` package job | `just check` and the macOS package job wrote `cask/Casks/ketch.rb` into the repo root and `cask/` was not ignored, so `scripts/release.sh --local` stopped at its clean-tree check. Both now write `target/cask/Casks/ketch.rb` (`target/` is gitignored; `brew style` still sees a `Casks/` directory). |
 | B137 | P3 | bug | confirmed | `tests/commit-msg-breaking.sh`; `Justfile` `lint-commits`; `ci.yml` | `done.md:375` says the test is wired into `just lint-commits`, but neither the Justfile nor CI calls it. Add it to `lint-commits` and CI's shell step. |
@@ -127,8 +110,8 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | D11 | done | P3 | 5 | 100% | Cursor / grok 4.7 |
 | D12 | todo | P3 | 4 | 0% | |
 | D13 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
-| D14 | todo | P3 | 4 | 0% | |
 | D16 | done | P3 | 5 | 100% | Cursor / grok 4.7 |
+| D14 | done | P3 | 4 | 100% | Cursor / grok 4.7 |
 | D17 | todo | P3 | 4 | 0% | |
 | D18 | todo | P3 | 3 | 0% | |
 | D19 | todo | P3 | 4 | 0% | |
@@ -148,34 +131,40 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B118 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
 | B85 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
 | B105 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
-
-### B85. Registry update and listing ignore cancel
-
-Row B85 in the 2026-10-08 findings. `registry::update` downloads with `cx.cancel`. `ask_all` checks that token before each package, so a cancel stops the parallel lookup.
-
-Status: done. See `done.md`.
 | B81 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
-
-### B81. Archive extraction keeps setuid bits
-
-Row B81 in the 2026-10-08 findings. `payload_mode` keeps only `0o777`, and every extractor applies that before `set_unix_mode`. A setuid archive member lands as `0755`.
-
-Status: done. See `done.md`.
 | B128 | done | P3 | 1 | 100% | Cursor / grok 4.7 |
 | B129 | done | P3 | 2 | 100% | Cursor / grok 4.7 |
 | B110 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
 | B134 | done | P3 | 1 | 100% | Cursor / grok 4.7 |
 | B133 | done | P3 | 2 | 100% | Cursor / grok 4.7 |
 | B83 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
+| B82 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
+| R16 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
+
+### B85. Registry update and listing ignore cancel
+
+Row B85 in the 2026-10-08 findings. `registry::update` downloads with `cx.cancel`. `ask_all` checks that token before each package, so a cancel stops the parallel lookup.
+
+Status: done. See `done.md`.
+
+### B81. Archive extraction keeps setuid bits
+
+Row B81 in the 2026-10-08 findings. `payload_mode` keeps only `0o777`, and every extractor applies that before `set_unix_mode`. A setuid archive member lands as `0755`.
+
+Status: done. See `done.md`.
+
+### B82. Duplicate checksum basenames overwrite each other
+
+Row B82 in the 2026-10-08 findings. An aggregate checksum file is keyed by basename. Two different hashes for the same basename are removed instead of letting the later line win.
+
+Status: done. See `done.md`.
 
 ### B83. A sidecar checksum takes the first sorted line
 
 Row B83 in the 2026-10-08 findings. `sidecar_hex` looks up the asset name first. A one-entry file is the usual sidecar; several names and no match are ignored.
-| B82 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
-| R16 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
 
-Row B82 in the 2026-10-08 findings. An aggregate checksum file is keyed by basename. Two different hashes for the same basename are removed instead of letting the later line win.
-### B82. Duplicate checksum basenames overwrite each other
+Status: done. See `done.md`.
+
 ### R16. Fuzz seed script reads the old builtin path
 
 Row R16 in the 2026-10-08 findings. `fuzz/seed.sh` already reads `crates/ketch-core/src/builtin.toml`. The readme named the old `src/builtin.toml` path; it now matches the script.
@@ -469,6 +458,8 @@ Done when CI builds, on `desktop-windows-v*` tags and without touching `/release
 
 Settings persistence differs between the two: an MSIX has `ApplicationData`, an unpackaged app has none (D12 stores settings in a way that works in both).
 
+Status: the dispatch-only workflow `.github/workflows/release-windows-desktop.yml` publishes both artifacts under `desktop-windows-vX.Y.Z` and refuses to become `/releases/latest`. It is not triggered by the tag: the run creates the tag after the zip and the signed MSIX exist, the same way the macOS app release does, so a tag push cannot publish on its own. `select_release` drops `desktop-windows-v*` when a real version tag is present. Signing uses `WINDOWS_CERTIFICATE` (base64 pfx) and `WINDOWS_CERTIFICATE_PWD`, step env only, and the job stops before building when either is missing. Those are not `MACOS_CERTIFICATE`: an Apple Developer ID certificate cannot sign an MSIX, and a Windows job must not see it. The MSIX manifest is written on the runner (`unvirtualizedResources`, so PATH edits hit the real `HKCU`), and the unpackaged project in git stays `WindowsPackageType=None`. x64 only. Still the creator's: place the two Windows secrets (this workflow has not been dispatched, and no release was cut); an update channel (Velopack would change the app and cannot be checked here, winget submission needs a Microsoft account); and R10's open question of the Windows App SDK licence against the GPL-3.0-only build (`docs/research-desktop-windows-linux.md`, open decisions 3 and 4).
+
 ### D16. Linux: Vala + GTK 4 app shell on a fake core
 
 Done. `desktop/linux` is a Meson project: a GLib core library (the contract in ketch-capi's shape, a fake that replays `desktop/contract/scenarios`, and the store) and a libadwaita app over it. The window is an `AdwNavigationSplitView` that collapses on a narrow breakpoint; Blueprint 0.22.2 (pinned wrap) is the markup. `AdwAlertDialog` asks the binary, process and uninstall questions, `AdwBanner` shows busy and the running operation, `AdwToast` reports finished work. Light, dark and high contrast come from libadwaita plus the token stylesheet's media queries (libadwaita 1.8). An empty search browses (`search-browse`). `just linux-app-test` runs the library tests; the `ketch-linux-app` job builds the app on Ubuntu 26.04. See `done.md`.
@@ -586,6 +577,8 @@ Row B118 in the 2026-10-12 findings. Done: a package installed checksum-verified
 
 Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in `cli.rs`. Check: an end-to-end test of both paths.
 
+Status: done. `refuse_checksum_downgrade` refuses the upgrade unless `--allow-unverified`, `--yes`, or a lockfile hash is set. `an_upgrade_that_drops_the_checksum_is_refused_without_consent` and `yes_consents_to_an_upgrade_that_drops_the_checksum` cover both paths. See `done.md`.
+
 ### B128. An unknown lock holder is pid 0
 
 Row B128 in the 2026-10-12 findings. `Busy` with no pid was stored as pid 0, so the banner and the log said another process was pid 0. `busy(pid:)` is optional. A missing holder is named without a pid, as on Windows.
@@ -606,7 +599,6 @@ Status: done. See `done.md`.
 Row B134 in the 2026-10-12 findings. Windows PowerShell 5.1 on older Windows 10 and Server defaults to TLS 1.0/1.1, and GitHub rejects that handshake. The installer adds `Tls12` with `-bor` to `[Net.ServicePointManager]::SecurityProtocol` before any request, so a host that already enabled TLS 1.3 keeps it.
 
 Status: done. See `done.md`.
-Status: done. `refuse_checksum_downgrade` refuses the upgrade unless `--allow-unverified`, `--yes`, or a lockfile hash is set. `an_upgrade_that_drops_the_checksum_is_refused_without_consent` and `yes_consents_to_an_upgrade_that_drops_the_checksum` cover both paths. See `done.md`.
 
 ### B123. Relink and rollback restore a stale `.old`
 
