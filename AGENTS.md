@@ -168,6 +168,29 @@ pin is a reviewed change like any other and every machine — and every agent �
 runs the same version. `just deps` installs everything currently pinned. A
 tool that is a crate dependency belongs in `Cargo.toml` instead, not here.
 
+## Tasks
+
+Tasks are rtok tasks in its disk adapter: one file per task in `tasks/`,
+finished ones in `tasks/done/`, prefix `K` (`.rtok.toml`). rtok hands out the
+ids, so parallel agents never collide; never write a task file or an id by
+hand.
+
+- A new task: `rtok task create "<title>" -d "<why, and what done means>"`,
+  then its row and card in `plan.md` and its line in `todo.md` under the id
+  rtok printed.
+- Taking one: `rtok task claim <id> --agent <id>`, and the row's status and
+  agent in `plan.md`.
+- Finishing one: `rtok task status <id> done`, then its card moves to
+  `done.md` and its row and `todo.md` line go.
+
+rtok is the one way in. `tests/tasks.rs` checks `plan.md`, `todo.md` and
+`done.md` against `tasks/`, and refuses a task file rtok did not write: an
+unknown front matter key, a missing field, an id that does not match its
+file name, a subtask whose `parent` is not the id it names, or a new task
+without rtok's prefix. Ids from before rtok (`B60`, `R19.4`, …) keep their
+prefixes; every task created since is `K<n>`. Each failure names the
+`rtok task` command that does the job.
+
 ## Cargo cache maintenance
 
 `cargo-cache` is a developer utility, not a crate dependency, and it is pinned
@@ -263,6 +286,7 @@ differ by orders of magnitude — the cargo home is the small one. Set
 | `release-plz.toml` | release-plz kept from tagging, releasing or publishing (local preview only) |
 | `cliff.toml` | the `CHANGELOG.md` entry format, for release-plz and `scripts/release.sh` alike |
 | `plan.md` | what is being built next, and what each piece would take |
+| `tasks/`, `.rtok.toml` | the tasks themselves, written by rtok; `tests/tasks.rs` holds `plan.md`, `todo.md` and `done.md` to them |
 | `scripts/cask.sh` | the Homebrew cask, generated into `pyrlyn/homebrew-tap` on release |
 | `install.sh` | the `curl | bash` installer for macOS and Linux; only bootstraps `ketch self install` |
 | `install.ps1` | the `irm | iex` installer for Windows; same bootstrap as `install.sh` |

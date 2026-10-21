@@ -1,0 +1,3 @@
+[tasks]
+adapter = "disk"
+prefix = "K"
