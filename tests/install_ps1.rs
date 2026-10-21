@@ -17,12 +17,24 @@ use predicates::prelude::*;
 fn pwsh_bin() -> Option<std::path::PathBuf> {
     // Resolve before tests clear PATH — otherwise `Command::new("pwsh")` cannot
     // spawn even when PowerShell is installed on the runner.
-    std::env::var_os("PATH").and_then(|path| {
-        std::env::split_paths(&path).find_map(|dir| {
-            let candidate = dir.join(if cfg!(windows) { "pwsh.exe" } else { "pwsh" });
-            candidate.is_file().then_some(candidate)
+    std::env::var_os("PATH")
+        .and_then(|path| {
+            std::env::split_paths(&path).find_map(|dir| {
+                let candidate = dir.join(if cfg!(windows) { "pwsh.exe" } else { "pwsh" });
+                candidate.is_file().then_some(candidate)
+            })
         })
-    })
+        // A version-manager shim (mise, asdf) can sit on PATH without a PowerShell
+        // behind it; treat a pwsh that cannot start as absent.
+        .filter(|pwsh| {
+            std::process::Command::new(pwsh)
+                .args(["-NoProfile", "-NonInteractive", "-Command", "exit 0"])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .is_ok_and(|status| status.success())
+        })
 }
 
 #[cfg(windows)]
@@ -109,6 +121,21 @@ fn fails_after_flag_parse() -> impl predicates::Predicate<str> {
         .or(predicate::str::contains("Failed to fetch"))
 }
 
+/// Windows PowerShell 5.1 throws on `Join-Path $a $b $c`. The nested archive
+/// member has to be joined twice or extraction dies before the binary is found.
+#[test]
+fn the_nested_archive_path_is_joined_for_windows_powershell_51() {
+    let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1"));
+    assert!(
+        src.contains("Join-Path (Join-Path $TempDir 'ketch') $BinaryName"),
+        "{src}"
+    );
+    assert!(
+        !src.contains("Join-Path $TempDir 'ketch' $BinaryName"),
+        "a third positional child is the 5.1 failure"
+    );
+}
+
 #[test]
 fn the_script_names_the_windows_release_tarball() {
     let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1"));
@@ -153,6 +180,21 @@ fn the_script_edits_path_unexpanded_through_the_registry_not_setx() {
     assert!(!src.contains("GetEnvironmentVariable('Path'"), "{src}");
     assert!(!src.contains("SetEnvironmentVariable('Path'"), "{src}");
     assert!(!src.contains("setx"), "{src}");
+}
+
+/// Windows PowerShell 5.1 defaults to TLS 1.0/1.1 on older Windows, and GitHub
+/// refuses those. OR-ing Tls12 leaves a newer protocol the host already set.
+#[test]
+fn the_script_enables_tls12_without_dropping_newer_protocols() {
+    let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1"));
+    let line = src
+        .lines()
+        .find(|line| line.contains("SecurityProtocol"))
+        .expect("install.ps1 must set ServicePointManager.SecurityProtocol");
+    assert!(
+        line.contains("-bor") && line.contains("[Net.SecurityProtocolType]::Tls12"),
+        "Tls12 must be added, not assigned over whatever the host already allows: {line}"
+    );
 }
 
 /// Under `irm … | iex` an `exit` closes the user's PowerShell window, so the

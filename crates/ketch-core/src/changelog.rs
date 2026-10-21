@@ -24,7 +24,13 @@ use crate::manifest::Resolver;
 use crate::model::{InstalledPackage, PackageSpec, Release, Version, VersionSpec};
 use crate::report::Ctx;
 use crate::source::{ListOpts, SourceRegistry};
+use std::io::Read;
 use std::path::{Path, PathBuf};
+
+/// A changelog is prose. Four mebibytes is more than any project's history;
+/// the read stops there so a link to `/dev/zero` or a multi-gigabyte member
+/// cannot exhaust memory (B117).
+const MAX_CHANGELOG_BYTES: u64 = 4 * 1024 * 1024;
 
 /// File names worth looking for, most conventional first.
 const NAMES: &[&str] = &[
@@ -74,7 +80,7 @@ pub fn find_file(prefix: &Path) -> Option<PathBuf> {
         };
         for name in NAMES {
             let path = base.join(name);
-            if path.is_file() {
+            if is_regular_file(&path) {
                 return Some(path);
             }
         }
@@ -84,7 +90,7 @@ pub fn find_file(prefix: &Path) -> Option<PathBuf> {
             for entry in entries.flatten().filter(|e| e.path().is_dir()) {
                 for name in NAMES {
                     let path = entry.path().join(name);
-                    if path.is_file() {
+                    if is_regular_file(&path) {
                         return Some(path);
                     }
                 }
@@ -96,8 +102,14 @@ pub fn find_file(prefix: &Path) -> Option<PathBuf> {
 
 /// Read a changelog file and take the section for `version`, or the whole file
 /// when no section matches.
+///
+/// The path must be a regular file. A symlink is not followed: the payload is
+/// untrusted, and `is_file` would happily open whatever the link names.
+/// Bytes past four mebibytes are refused rather than sliced, and
+/// anything that is not UTF-8 is kept with the replacement character so a
+/// binary file does not fail the command.
 pub fn from_file(path: &Path, version: Option<&str>) -> Result<Entry> {
-    let raw = std::fs::read_to_string(path).map_err(|e| crate::error::Error::io(path, e))?;
+    let raw = read_capped(path, MAX_CHANGELOG_BYTES)?;
     let text = sanitize(&raw);
     let (heading, body) = match version.and_then(|v| section(&text, v)) {
         Some(found) => found,
@@ -108,6 +120,38 @@ pub fn from_file(path: &Path, version: Option<&str>) -> Result<Entry> {
         heading,
         body,
     })
+}
+
+/// A regular file, without following a symlink.
+fn is_regular_file(path: &Path) -> bool {
+    std::fs::symlink_metadata(path)
+        .map(|meta| meta.file_type().is_file())
+        .unwrap_or(false)
+}
+
+/// At most `cap` bytes of a regular file, decoded lossily.
+fn read_capped(path: &Path, cap: u64) -> Result<String> {
+    if !is_regular_file(path) {
+        return Err(Error::msg(format!(
+            "{} is not a regular file, so it is not read as a changelog",
+            path.display()
+        )));
+    }
+    let file = std::fs::File::open(path).map_err(|e| Error::io(path, e))?;
+    // One past the cap is enough to tell a file that fits from one that does
+    // not, without reading the rest of a hostile member.
+    let mut limited = file.take(cap.saturating_add(1));
+    let mut bytes = Vec::new();
+    limited
+        .read_to_end(&mut bytes)
+        .map_err(|e| Error::io(path, e))?;
+    if bytes.len() as u64 > cap {
+        return Err(Error::msg(format!(
+            "{} is larger than {cap} bytes, so it is not read as a changelog",
+            path.display()
+        )));
+    }
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 /// The notes a release published, if it published any.
@@ -617,6 +661,52 @@ ketch install demo@1.2.2
         std::fs::create_dir_all(&nested).expect("mkdir");
         std::fs::write(nested.join("CHANGELOG.md"), "# Changelog\n").expect("write");
         assert_eq!(find_file(tmp.path()), Some(nested.join("CHANGELOG.md")));
+    }
+
+    #[test]
+    fn a_changelog_larger_than_a_few_mebibytes_is_refused() {
+        assert_eq!(MAX_CHANGELOG_BYTES, 4 * 1024 * 1024);
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let path = tmp.path().join("CHANGELOG.md");
+        std::fs::write(&path, b"0123456789").expect("write");
+        let err = read_capped(&path, 4).expect_err("over the cap").to_string();
+        assert!(err.contains("larger than 4"), "{err}");
+        assert_eq!(read_capped(&path, 16).expect("under the cap"), "0123456789");
+    }
+
+    #[test]
+    fn a_non_utf8_changelog_is_read_lossy_instead_of_failing() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let path = tmp.path().join("CHANGELOG.md");
+        std::fs::write(&path, b"## 1.0\n\nbad \xff byte\n").expect("write");
+        let entry = from_file(&path, Some("1.0")).expect("lossy read");
+        assert!(entry.body.contains("bad"), "{entry:?}");
+        assert!(entry.body.contains('\u{fffd}'), "{entry:?}");
+        assert!(entry.body.contains("byte"), "{entry:?}");
+    }
+
+    #[test]
+    fn a_directory_is_not_read_as_a_changelog() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let err = from_file(tmp.path(), None)
+            .expect_err("directory")
+            .to_string();
+        assert!(err.contains("not a regular file"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_changelog_symlink_is_not_followed() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let real = tmp.path().join("real.md");
+        std::fs::write(&real, "## 1.0\n\nbody\n").expect("write");
+        let link = tmp.path().join("CHANGELOG.md");
+        std::os::unix::fs::symlink(&real, &link).expect("symlink");
+        let err = from_file(&link, Some("1.0"))
+            .expect_err("symlink")
+            .to_string();
+        assert!(err.contains("not a regular file"), "{err}");
+        assert_eq!(find_file(tmp.path()), None);
     }
 
     #[test]
