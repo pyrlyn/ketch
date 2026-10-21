@@ -1,0 +1,11 @@
+# Advisory exceptions for `cargo deny check advisories` (cargo-deny 0.20).
+# The check is not in CI: it needs the RustSec database. This file is the
+# record of the one advisory the tree still accepts (B138).
+
+[advisories]
+ignore = [
+  # Marvin: a timing side channel in RSA PKCS#1 v1.5. There is no upstream
+  # fix. rsa 0.9.10 is reached through pgp and through openidconnect (sigstore)
+  # and is used to verify signatures, not to decrypt.
+  { id = "RUSTSEC-2023-0071", reason = "verification only, via pgp and sigstore's openidconnect; no upstream fix" },
+]

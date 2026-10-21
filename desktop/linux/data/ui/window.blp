@@ -1,0 +1,251 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
+// The main window: a sidebar of sections beside their content, collapsing to
+// one pane at a time on narrow windows (GNOME HIG, adaptive layouts). The
+// content side is a navigation view, so a package's detail is pushed onto it.
+// Each list section is a stack of an empty state and its list; the window
+// shows whichever the store's list calls for.
+using Gtk 4.0;
+using Adw 1;
+
+template $KetchAppWindow: Adw.ApplicationWindow {
+  title: _("Ketch");
+  default-width: 960;
+  default-height: 640;
+  width-request: 360;
+  height-request: 294;
+
+  Adw.Breakpoint {
+    condition ("max-width: 600sp")
+
+    setters {
+      split_view.collapsed: true;
+    }
+  }
+
+  content: Adw.ToastOverlay toasts {
+    Adw.NavigationSplitView split_view {
+      sidebar: Adw.NavigationPage {
+        title: _("Ketch");
+
+        child: Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {
+            [end]
+            MenuButton {
+              icon-name: "open-menu-symbolic";
+              menu-model: primary_menu;
+              primary: true;
+              tooltip-text: _("Main Menu");
+            }
+          }
+
+          content: ListBox sidebar {
+            styles ["navigation-sidebar"]
+            row-activated => $on_section_activated();
+
+            Adw.ActionRow {
+              name: "installed";
+              title: _("Installed");
+              activatable: true;
+              [prefix]
+              Image { icon-name: "view-list-symbolic"; }
+            }
+
+            Adw.ActionRow {
+              name: "discover";
+              title: _("Discover");
+              activatable: true;
+              [prefix]
+              Image { icon-name: "system-search-symbolic"; }
+            }
+
+            Adw.ActionRow {
+              name: "updates";
+              title: _("Updates");
+              activatable: true;
+              [prefix]
+              Image { icon-name: "software-update-available-symbolic"; }
+              [suffix]
+              Label updates_badge { visible: false; valign: center; styles ["ketch-badge"] }
+            }
+
+            Adw.ActionRow {
+              name: "activity";
+              title: _("Activity");
+              activatable: true;
+              [prefix]
+              Image { icon-name: "document-open-recent-symbolic"; }
+            }
+
+            Adw.ActionRow {
+              name: "doctor";
+              title: _("Doctor");
+              activatable: true;
+              [prefix]
+              Image { icon-name: "emblem-ok-symbolic"; }
+            }
+          };
+        };
+      };
+
+      content: Adw.NavigationPage content_page {
+        title: _("Installed");
+
+        child: Adw.NavigationView nav {
+          Adw.NavigationPage section_page {
+            title: _("Installed");
+
+            child: Adw.ToolbarView {
+              [top]
+              Adw.HeaderBar {}
+
+              [top]
+              Adw.Banner banner {}
+
+              content: Stack sections {
+                transition-type: crossfade;
+
+                StackPage {
+                  name: "installed";
+                  child: Stack installed_state {
+                    StackPage {
+                      name: "empty";
+                      child: Adw.StatusPage {
+                        icon-name: "view-list-symbolic";
+                        title: _("Nothing Installed");
+                        description: _("Packages you install from Discover appear here");
+                      };
+                    }
+
+                    StackPage {
+                      name: "list";
+                      child: Adw.PreferencesPage {
+                        Adw.PreferencesGroup {
+                          ListBox installed_list { selection-mode: none; styles ["boxed-list"] }
+                        }
+                      };
+                    }
+                  };
+                }
+
+                StackPage {
+                  name: "discover";
+                  child: Box {
+                    orientation: vertical;
+
+                    SearchBar {
+                      search-mode-enabled: true;
+                      child: SearchEntry discover_entry {
+                        placeholder-text: _("Search the registry");
+                        search-changed => $on_search_changed();
+                      };
+                    }
+
+                    Stack discover_state {
+                      vexpand: true;
+
+                      StackPage {
+                        name: "empty";
+                        child: Adw.StatusPage {
+                          icon-name: "system-search-symbolic";
+                          title: _("No Results");
+                          description: _("Try another name or description");
+                        };
+                      }
+
+                      StackPage {
+                        name: "list";
+                        child: Adw.PreferencesPage {
+                          Adw.PreferencesGroup {
+                            ListBox discover_list { selection-mode: none; styles ["boxed-list"] }
+                          }
+                        };
+                      }
+                    }
+                  };
+                }
+
+                StackPage {
+                  name: "updates";
+                  child: Stack updates_state {
+                    StackPage {
+                      name: "empty";
+                      child: Adw.StatusPage {
+                        icon-name: "emblem-ok-symbolic";
+                        title: _("Everything Is up to Date");
+                      };
+                    }
+
+                    StackPage {
+                      name: "list";
+                      child: Adw.PreferencesPage {
+
+                        Adw.PreferencesGroup {
+                          title: _("Available");
+                          header-suffix: Button {
+                            label: _("Update All");
+                            valign: center;
+                            clicked => $on_update_all();
+                            styles ["suggested-action"]
+                          };
+                          ListBox updates_list { selection-mode: none; styles ["boxed-list"] }
+                        }
+
+                        Adw.PreferencesGroup {
+                          title: _("Held Back");
+                          description: _("A lock file or a pin keeps these at their version");
+                          ListBox held_list { selection-mode: none; styles ["boxed-list"] }
+                        }
+                      };
+                    }
+                  };
+                }
+
+                StackPage {
+                  name: "activity";
+                  child: Adw.PreferencesPage {
+                    Adw.PreferencesGroup activity_group {
+                      title: _("Running");
+                      visible: false;
+
+                      ProgressBar activity_progress { show-text: true; }
+                    }
+
+                    Adw.PreferencesGroup {
+                      title: _("Log");
+                      ListBox log_list { selection-mode: none; styles ["boxed-list"] }
+                    }
+                  };
+                }
+
+                StackPage {
+                  name: "doctor";
+                  child: Adw.PreferencesPage {
+                    Adw.PreferencesGroup {
+                      title: _("Checks");
+                      header-suffix: Button {
+                        label: _("Run Again");
+                        valign: center;
+                        clicked => $on_run_doctor();
+                      };
+                      ListBox findings_list { selection-mode: none; styles ["boxed-list"] }
+                    }
+                  };
+                }
+              };
+            };
+          }
+        };
+      };
+    }
+  };
+}
+
+menu primary_menu {
+  section {
+    item (_("_Preferences"), "win.preferences")
+  }
+}

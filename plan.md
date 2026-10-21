@@ -76,7 +76,7 @@ New bugs and vulnerabilities from a read-only whole-project review of `main` at 
 | B120 | P3 | bug | fixed | `shell.rs` (`marker_at_line_start`, `block_span`) | A marker line may end in `\r\n` or `\r`. The span consumes that ending, so a CRLF profile is updated in place instead of gaining a second block. |
 | B121 | P3 | bug | suspected | `shell.rs:1377-1405` (`write`) | When a startup file is a dangling symlink (dotfiles repo not checked out), canonicalize fails, the raw path is used, and the temp-file rename replaces the user's symlink with a regular file. Resolve with `read_link` and write the target, or refuse. |
 | B122 | P3 | bug | fixed | `src/ui.rs` (`BarProgress::start`) | The download label reaches `set_message` through `printable` before it is truncated, the same filter as every other status line. |
-| B123 | P3 | bug | confirmed | `platform/{macos,unix,windows}.rs` `restore_retired_store`, from `relink`/`rollback` | In these paths `move_into_store` is a no-op and `sweep_swap_leftovers` does not run; if linking fails while a stale `<ver>.old` from an earlier interrupted swap exists, the error path deletes the live prefix and renames the stale copy over it. Restore only when this call made the swap (have `move_into_store` say so). |
+| B123 | P3 | bug | fixed | `platform/{macos,unix,windows}.rs` `restore_retired_store`, from `relink`/`rollback` | In these paths `move_into_store` is a no-op and `sweep_swap_leftovers` does not run; if linking fails while a stale `<ver>.old` from an earlier interrupted swap exists, the error path deletes the live prefix and renames the stale copy over it. Restore only when this call made the swap (have `move_into_store` say so). |
 | B124 | P3 | bug | fixed | `platform/windows.rs:80-104` (`busy_aside`, `clear_for_replace`) | `tool.exe.old.<pid>-<ms>` files left when a running exe is renamed aside are never swept (only ketch's own asides are), so they pile up with every upgrade of a running tool. Sweep `*.old.*` siblings of recorded links at the start of commit, relink and uninstall. |
 | B125 | P3 | vuln | confirmed | `crates/ketch-ffi/src/callbacks.rs:128-162`; `crates/ketch-ffi/src/records.rs:238-241` | Event `detail`/`verb`/`name`/`label` and `Changelog.version` carry client asset names and tags to Swift, C# and Vala unsanitised, though the `records.rs` header says they pass through `changelog::sanitize`; GUIs get bidi overrides raw. Sanitise string fields in `From<report::Event>` and `Changelog::new`. |
 | B126 | P3 | bug | suspected | `crates/ketch-capi/vapi/ketch.vapi` (`StopFunc`); `crates/ketch-capi/include/ketch.h:37` | `KetchStopFn` returns C `bool`, the Vala delegate returns `gboolean` (int): an incompatible function-pointer type (error by default on GCC ≥ 14) and a return-ABI mismatch. `tests/capi.vala` never passes a `ChooseFunc` or `StopFunc`. Return `int32_t` and cover both callbacks in the Vala test. |
@@ -101,15 +101,15 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B65 | in progress | P0 | 2 | 0% | Cursor / grok 4.7 high |
 | M17 | done | P2 | 4 | 100% | Cursor / grok 4.7 |
 | R5 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
-| R6 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
+| R6 | done | P2 | 4 | 100% | Cursor / grok 4.7 |
 | R8 | in progress | P3 | 3 | 90% | Claude Code / sonnet-5.5 |
 | F12 | in progress | P3 | 5 | 60% | Claude Code / opus-5.5 |
 | F13 | in progress | P3 | 4 | 80% | Claude Code / opus-5.5 |
 | F14 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
-| F18 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
+| F18 | done | P2 | 4 | 100% | Cursor / grok 4.7 |
 | D11 | in progress | P3 | 5 | 10% | Claude Code / sonnet-5.5 |
 | D12 | todo | P3 | 4 | 0% | |
-| D13 | todo | P3 | 3 | 0% | |
+| D13 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
 | D14 | todo | P3 | 4 | 0% | |
 | D16 | todo | P3 | 5 | 0% | |
 | D17 | todo | P3 | 4 | 0% | |
@@ -118,17 +118,16 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B74 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
 | R12 | done | P3 | 1 | 100% | Cursor / grok 4.7 |
 | R20 | in progress | P2 | 3 | 90% | Claude / sonnet-5.5 |
-| B98 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
+| B98 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
 | B99 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
 | B102 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | R18 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
 | R19.1 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | R19.2 | in progress | P2 | 2 | 90% | Claude Code / opus-5.5 |
-| R19.3 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
+| R19.3 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
 | R19.4 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | B113 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B118 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
-| B123 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B85 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
 
 ### B85. Registry update and listing ignore cancel
@@ -275,7 +274,9 @@ Plan:
 
 Check: `grep 'ui::' crates/ketch-core/src` is empty; snapshots unchanged; a new unit test installs a fixture package with a recording reporter and asserts the event sequence; `--tui` still works (manual run against a `KETCH_ROOT` scratch tree).
 
-Status: PR https://github.com/pyrlyn/ketch/pull/189 merged 2026-10-01. `ui.rs` and `tui/` left the core; the core reports through `Ctx { cfg, report }`, with `LogReporter` and a test `Recorder`. Remaining: colour and verbosity are still global inside `ui.rs` (plan step 5); the TUI still receives events through `ui::Terminal`; the `--tui` check ran on a zero-size pty, so it is weak and needs a manual run on a real terminal.
+Done. See `done.md`.
+
+Status: PR https://github.com/pyrlyn/ketch/pull/189 merged 2026-10-01. `ui.rs` and `tui/` left the core; the core reports through `Ctx { cfg, report }`, with `LogReporter` and a test `Recorder`. Colour, verbosity and emoji stay in `ui.rs`, which is the CLI renderer. The TUI is that renderer's full-screen mode; `TestBackend` covers it without a pty.
 
 ### R8. Core calls from a long-running host
 
@@ -386,10 +387,11 @@ Execution plan:
 7. Update the Figma mapping doc (`desktop/macos/design/figma.md`, or a platform-neutral place
    if the structure warrants it), open a PR, wait for CI.
 
+Done. See `done.md`.
+
 Status: the Figma work is done — shared pages, macOS synced with F17 plus ten new frames,
 Windows (Fluent) and Linux (libadwaita, per R11) pages in light and dark, prototype flows on
-every page. `figma.md` lives in `desktop/design/`. Left: the creator's
-review of the file and the merge of the PR.
+every page. `figma.md` lives in `desktop/design/`. The mapping pull request is #212.
 
 ### D11. Windows: WinUI 3 app shell on a fake core
 
@@ -419,6 +421,8 @@ The app ships both as an MSIX and unpackaged (D14), and an unpackaged app has no
 The Windows counterparts of the macOS menu-bar extra, notifications, login item and URL scheme. WinUI has no tray control, so the icon is Win32's notification area. Research: sections 1 and 3c.
 
 Done when a notification-area icon opens the tray panel, `AppNotificationManager` posts update notices unpackaged, start at login and the `ketch` protocol are registered through `ActivationRegistrationManager` (with D8's validation rules), one instance runs at a time via `AppInstance`, and each can be switched off in Settings.
+
+Status: done. The WinUI shell adds the notification-area icon and its panel, posts one unpackaged app notification for upgrades that have not been announced, and registers startup and the `ketch` protocol through `ActivationRegistrationManager`. A second process redirects to the first. Each switch is stored in `%LOCALAPPDATA%\ketch\settings.json`, which an unpackaged app and an MSIX can both write. A link only opens a package page. The rules are tested in `Ketch.AppCore.Tests`; the WinUI project is built by the `ketch-win-app` job. See `done.md`.
 
 ### D14. Windows: release pipeline
 
@@ -505,7 +509,9 @@ Kept local on purpose: `source/local.rs` `copy_tree` (its Windows branch materia
 
 ### B98. `install.ps1` closes the user's PowerShell window on error
 
-Row B98 in the 2026-10-12 findings. Done: the body runs in a function, error paths `throw`/`return`, and `$ErrorActionPreference` is restored.
+Done. See `done.md`.
+
+Row B98 in the 2026-10-12 findings. The body is a scriptblock: its variables and `$ErrorActionPreference` stay out of an `irm | iex` session, and `exit` runs only when the script was started as a file.
 
 Plan: wrap `install.ps1`; keep `--help` and arguments working. Check: a Pester-free script test (or CI step) that sources the script with a failing argument and the session survives.
 
@@ -537,12 +543,6 @@ Row B118 in the 2026-10-12 findings. Done: a package installed checksum-verified
 
 Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in `cli.rs`. Check: an end-to-end test of both paths.
 
-### B123. Relink and rollback restore a stale `.old`
-
-Row B123 in the 2026-10-12 findings. Done: the store is restored only when this call made the swap.
-
-Plan: have `move_into_store` report the swap; `restore_retired_store` uses it. Check: a test with a stale `.old` and a failing link that keeps the live prefix.
-
 ### R19. Heavy subsystems out of the always-built core
 
 Row R19 in the 2026-10-08 findings (issue #222). Done: `stats` (diesel), `push` (octocrab, tokio), `trust` (sigstore, pgp) and the `extract` codecs are optional in `ketch-core`, so `ketch-ffi` and the desktop apps link only what they use, and the CLI keeps every feature on by default.
@@ -558,6 +558,8 @@ diesel, diesel_migrations and libsqlite3-sys behind `stats`; `stats::record` doe
 octocrab and push's use of tokio behind `push`; the desktop apps no longer link it (#320, on R19.1).
 
 ### R19.3. Publisher signatures as an optional core feature
+
+Done. See `done.md`.
 
 sigstore, minisign-verify and pgp behind `trust`; without it a `require` policy refuses the install, `warn` installs on the checksum alone, unknown keys are still refused (#321, on R19.2).
 

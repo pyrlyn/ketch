@@ -19,6 +19,9 @@ final class KetchUITests: XCTestCase {
 
         let app = XCUIApplication()
         app.launchEnvironment["KETCH_ROOT"] = root.path
+        // The sample shelf (ripgrep, two updates) is FakeKetchCore. The app
+        // otherwise talks to ketch-ffi, and an empty scratch root has neither.
+        app.launchEnvironment["KETCH_USE_FAKE_CORE"] = "1"
         app.launch()
         defer { app.terminate() }
 
@@ -46,6 +49,7 @@ final class KetchUITests: XCTestCase {
 
         let app = XCUIApplication()
         app.launchEnvironment["KETCH_ROOT"] = root.path
+        app.launchEnvironment["KETCH_USE_FAKE_CORE"] = "1"
         app.launch()
         defer { app.terminate() }
 
