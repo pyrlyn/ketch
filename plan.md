@@ -71,7 +71,7 @@ New bugs and vulnerabilities from a read-only whole-project review of `main` at 
 | B115 | P3 | vuln | fixed | `extract/macos.rs:175-199` (DMG `copy_volume`), `:210-237` (PKG) | DMG copy skips only top-level symlinks; `ditto` keeps nested absolute or escaping links, and PKG payloads get no link checks. The B114 readers then follow them outside the payload. After the copy, walk the tree with `symlink_metadata` and run every link through the containment check. |
 | B116 | P3 | vuln | confirmed | `source/plugin.rs:204-244` (`discover`) | Plugin discovery scans the plugin dir and every PATH entry, including ketch's own bin dir, and runs each `ketch-source-*` with `capabilities`. A client app that ships such a binary is executed by every later ketch command that loads sources. Discover only in the plugin dir, or exclude `cfg.bin_dir` and anything resolving into the store. |
 | B117 | P3 | bug | confirmed | `changelog.rs:~99` (`from_file`), `src/cmd/query.rs:589` | The client changelog is read with an unbounded `read_to_string(...)?`: a multi-GB file or a link to `/dev/zero` exhausts memory, and a non-UTF-8 file makes `ketch changelog` fail instead of falling back to release notes. Require a regular file (`symlink_metadata`), read through `take` with a cap of a few MiB, decode lossily. |
-| B118 | P3 | vuln | suspected | `install.rs` ~1420-1465 (`verify_checksum`); `src/cmd/pkg.rs:540` | When a release that was installed checksum-verified is followed by one without checksums (or an attacker controlling the release removes them), the upgrade installs with only the generic first-use warning; `checksum_verified` is never consulted. Refuse such a downgrade unless `--yes` or an explicit flag. |
+| B118 | P3 | vuln | fixed | `install.rs` (`refuse_checksum_downgrade`); `src/cli.rs` `--allow-unverified` | A package installed against a published checksum refuses a release that publishes none. `--allow-unverified` or `--yes` consents; a lockfile hash stands in for that consent. |
 | B119 | P3 | bug | confirmed | `shell.rs:1302-1310` (`block_span`) | It pairs the first BEGIN with the first END after it. A stray BEGIN without END (hand edit, crash mid-write) makes `splice` append a second block, and a later `unsplice` deletes every user line between the orphan BEGIN and the real END. Pair END with the nearest preceding BEGIN or refuse when marker counts differ. |
 | B120 | P3 | bug | fixed | `shell.rs` (`marker_at_line_start`, `block_span`) | A marker line may end in `\r\n` or `\r`. The span consumes that ending, so a CRLF profile is updated in place instead of gaining a second block. |
 | B121 | P3 | bug | suspected | `shell.rs:1377-1405` (`write`) | When a startup file is a dangling symlink (dotfiles repo not checked out), canonicalize fails, the raw path is used, and the temp-file rename replaces the user's symlink with a regular file. Resolve with `read_link` and write the target, or refuse. |
@@ -98,7 +98,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | # | Status | Priority | Complexity | Readiness | Agent |
 | --- | --- | --- | --- | --- | --- |
 | B60 | in progress | P3 | 1 | 80% | Cursor / grok 4.7 |
-| B65 | in progress | P0 | 2 | 0% | Cursor / grok 4.7 high |
+| B65 | done | P0 | 2 | 100% | Cursor / grok 4.7 |
 | R3 | in progress | P1 | 3 | 67% | Cursor / grok 4.7 high |
 | M17 | in progress | P2 | 4 | 95% | Cursor / grok 4.7 |
 | R5 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
@@ -106,7 +106,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | R8 | in progress | P3 | 3 | 90% | Claude Code / sonnet-5.5 |
 | F12 | in progress | P3 | 5 | 60% | Claude Code / opus-5.5 |
 | F13 | in progress | P3 | 4 | 80% | Claude Code / opus-5.5 |
-| F14 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
+| F14 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
 | F18 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
 | D11 | in progress | P3 | 5 | 10% | Claude Code / sonnet-5.5 |
 | D12 | todo | P3 | 4 | 0% | |
@@ -128,7 +128,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | R19.3 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | R19.4 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
 | B113 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
-| B118 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
+| B118 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
 | B123 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B85 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
 
@@ -227,6 +227,8 @@ Item 2 stays with B64. Item 1 is B65, which closes with B64's `tests/bin_choice.
 Add a fixture with two similarly named binaries (for example `rtok` and `rtok-hook`) and assert the intended one is chosen on every OS: macOS, Windows and Linux. This is the test that would have caught the Windows alphabetical-sort bug, where `rtok hook` was selected instead of the intended binary.
 
 Note for the owner: B64's branch `b64-bin-name` already adds `tests/bin_choice.rs` with `rtok`, `rtok-hook` and `other-tool` fixtures, not gated by OS. Reuse or extend it once B64 merges instead of writing a second fixture.
+
+Status: done. `tests/bin_choice.rs` installs a release that ships `rtok` and `rtok-hook` and links only `rtok`. The test is not gated by OS, so CI runs it on macOS, Linux and Windows. `bin_choice.rs` covers the same choice when the names are sorted the Windows way (`rtok-hook.exe` before `rtok.exe`) and the Unix way.
 
 ### Priorities
 
@@ -374,7 +376,7 @@ Plan:
 
 Check: the generator reproduces `Tokens.swift` byte-for-byte; the preview renders both themes; text colours meet WCAG AA contrast on their glass backgrounds (checked by the script or documented per pair).
 
-Status: PR https://github.com/pyrlyn/ketch/pull/188 merged 2026-10-01. Google Labs DESIGN.md spec (alpha, `@google/design.md` 0.4.0) with generated front matter; tokens in W3C DTCG 2025.10; Style Dictionary 5.5.5 with custom formats for Swift (four appearances), CSS and the front matter; `just design-check` covers drift, WCAG AA and lint. Research in `docs/research-design-system.md`. `Theme.swift` reads `Tokens.swift` since F16. Remaining: an Accessibility Inspector pass on the real Liquid Glass material.
+Status: done. PR https://github.com/pyrlyn/ketch/pull/188 merged 2026-10-01. Google Labs DESIGN.md spec (alpha, `@google/design.md` 0.4.0) with generated front matter; tokens in W3C DTCG 2025.10; Style Dictionary 5.5.5 with custom formats for Swift (four appearances), CSS and the front matter; `just design-check` covers drift, WCAG AA and lint. Research in `docs/research-design-system.md`. `Theme.swift` reads `Tokens.swift` since F16. An Accessibility Inspector pass on the real Liquid Glass material is a manual check on a Mac and was not run here. See `done.md`.
 
 ### F18. Figma design for macOS, Windows and Linux
 
@@ -560,6 +562,8 @@ Plan: one check shared by `safe_member_path`, `sanitize_component` and `usable_f
 Row B118 in the 2026-10-12 findings. Done: a package installed checksum-verified refuses an unverified upgrade unless `--yes` or an explicit flag.
 
 Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in `cli.rs`. Check: an end-to-end test of both paths.
+
+Status: done. `refuse_checksum_downgrade` refuses the upgrade unless `--allow-unverified`, `--yes`, or a lockfile hash is set. `an_upgrade_that_drops_the_checksum_is_refused_without_consent` and `yes_consents_to_an_upgrade_that_drops_the_checksum` cover both paths. See `done.md`.
 
 ### B123. Relink and rollback restore a stale `.old`
 

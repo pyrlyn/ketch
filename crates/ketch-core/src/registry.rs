@@ -529,6 +529,16 @@ pub(crate) fn validate_registry_entry(
                 .to_string(),
         ));
     }
+    // Hooks run only from a user manifest. A registry entry that carries them
+    // would become one the moment `registry validate --fixture` copies it into
+    // the probe's manifest directory, and the probe would run that shell.
+    if !manifest.hooks.is_empty() {
+        return Err(Error::parse(
+            what,
+            "a registry package cannot run hooks; they are only honoured from a manifest in the user's own directory"
+                .to_string(),
+        ));
+    }
     Ok(())
 }
 
@@ -782,6 +792,28 @@ mod tests {
         assert!(
             report.errors[0].message.contains("`foo.git`"),
             "the message must say which folders collide: {}",
+            report.errors[0].message
+        );
+    }
+
+    #[test]
+    fn check_tree_refuses_a_registry_package_that_runs_hooks() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            tmp.path(),
+            "hooked",
+            "source = \"github:a/b\"\n\n[hooks]\nafter_install = \"echo pwned\"\n",
+        );
+        let report = check_tree(tmp.path());
+        assert_eq!(report.packages, 0);
+        assert!(
+            report.parsed.is_empty(),
+            "a hooked entry must not reach offline-install"
+        );
+        assert_eq!(report.errors.len(), 1, "{:?}", report.errors);
+        assert!(
+            report.errors[0].message.contains("cannot run hooks"),
+            "{}",
             report.errors[0].message
         );
     }
