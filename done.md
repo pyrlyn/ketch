@@ -28,12 +28,6 @@ Do not add a second cache. `jdx/mise-action` already caches the toolchain, and `
 Item 2 stays with B64. Item 1 is B65, which closes with B64's `tests/bin_choice.rs`.
 
 Status: done. CI already runs the whole suite on every OS, with no workflow edit: `ci.yml`'s `rust` job (pyrlyn/ci `ci-rust.yml`) runs clippy and `cargo nextest run --workspace --all-targets` on Linux x86_64 and aarch64, macOS aarch64 and Windows x86_64, and `package` runs `dist build` on all three OSes. `verify.yml` no longer exists; the per-OS `check` jobs named above became that shared job, which brings its own sccache. Item 1 is B65, its own task (it extends `tests/bin_choice.rs`, which every OS already runs). Item 2: `install.rs` tests `a_choice_asked_for_a_user_manifest_is_written_into_the_file` and `a_choice_asked_for_a_registry_package_is_remembered_in_state_and_reused` drive `commit` with a scripted `Decider` over a payload holding `rtok-cli` and `rtok-hook`: the user manifest gets `bin = [...]` appended with the rest of the file unchanged; a registry package keeps its choice in state, its registry copy is never written, and an upgrade reuses the choice without asking. They are not OS-gated, so every CI target runs them. Item 3: no second cache, for the reasons and numbers above.
-### B65. Binary selection regression test
-
-`tests/bin_choice.rs` publishes a release with `rtok` and `rtok-hook` and asserts only `rtok` is linked. The file is not gated by OS. `crates/ketch-core/src/bin_choice.rs` asserts the exact package name wins in Windows sort order (`rtok-hook.exe` before `rtok.exe`) and in Unix sort order.
-
-Tests: `the_binary_named_like_the_package_is_linked_and_its_helper_is_not`, `the_exact_name_wins_in_windows_sort_order`, `the_exact_name_wins_in_unix_sort_order`.
-
 ### B117. A changelog file is read without a bound
 
 Row B117 in the 2026-10-12 findings. Done: `from_file` reads a regular file only, stops at 4 MiB, and decodes the bytes lossily. `find_file` skips a symlink, so the command falls through to the release notes instead of opening the link.
@@ -74,6 +68,12 @@ Plan:
 Check: unit tests — two locks in one process → second is `Busy`; lock released on drop and on error; a cancelled fixture install leaves no partial store folder and no state entry; an end-to-end test runs the CLI while a lock is held and asserts the busy message.
 
 Status: done. PR https://github.com/pyrlyn/ketch/pull/184 merged 2026-10-01. Pid re-entrancy had no callers and was removed. Ctrl-C cancels the run's token (a second Ctrl-C exits 130 at once). Install requests, `self upgrade` and registry downloads share that token.
+
+### R17. Windows PATH helpers live in one module
+
+Row R17 in the 2026-10-08 findings. The Windows PATH, PowerShell profile and cmd AutoRun string helpers were compiled on every OS and silenced with `allow(dead_code)`.
+
+Done: they sit in `windows_env`, compiled on Windows and in tests. A Unix build that is not a test does not include them.
 
 ### B85. Registry update and listing ignore cancel
 Each of the four switches can be turned off in Settings. They persist in `%LOCALAPPDATA%\ketch\settings.json`, so an unpackaged app and an MSIX share one file. A broken file loads the defaults rather than stopping the app.
@@ -230,6 +230,11 @@ Found by the 2026-10-08 review: extraction kept `mode & 0o7777`, so setuid, setg
 
 Test: `setuid_bits_from_an_archive_are_dropped`.
 
+### B100. Zip symlink targets are read without a bound
+
+A zip symlink's target is the member body. It was read with an unbounded `read_to_string`, so a small, highly compressed member could expand to gigabytes. The read now stops at 4 KiB plus one byte and refuses anything longer.
+
+Test: `an_overlong_zip_symlink_target_is_refused`.
 ### R14. Delete the stale self-update patch script
 
 `scripts/b32_patch.py` opened `src/self_update.rs` after the core move, and nothing referenced it. The script is gone.

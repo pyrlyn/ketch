@@ -89,11 +89,13 @@ fn unique_keys(paths: &[PathBuf]) -> Vec<(PathBuf, String)> {
 
 fn path_key(p: &Path) -> String {
     let p = fs_kit::path::canon(p);
-    if cfg!(windows) {
-        crate::shell::windows_path_key(&p)
-    } else {
-        p.to_string_lossy().into_owned()
-    }
+    // `windows_path_key` exists only on Windows (and in tests). A runtime
+    // `cfg!` would still name it on Unix.
+    #[cfg(windows)]
+    let key = crate::shell::windows_path_key(&p);
+    #[cfg(not(windows))]
+    let key = p.to_string_lossy().into_owned();
+    key
 }
 
 /// What [`run_bounded`] observed.
