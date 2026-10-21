@@ -130,7 +130,6 @@ mod tests {
     ) -> Placement<'a> {
         Placement {
             name: "rg",
-            version: "1.0",
             payload_dir: payload,
             store_dir: store,
             bin_dir: bin,
@@ -231,6 +230,51 @@ mod tests {
             .unwrap_err();
         assert!(err.to_string().contains("already exists"));
         assert_eq!(std::fs::read(bin.join("tool")).unwrap(), b"mine");
+    }
+
+    #[test]
+    fn a_failed_relink_keeps_the_live_prefix_over_a_stale_old_copy() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = tmp.path().join("store/tool/1.0");
+        program(&store, "tool", b"#!/bin/sh\necho live\n");
+        std::fs::write(store.join("README"), b"live").unwrap();
+        // Left by an earlier swap that was interrupted before its cleanup.
+        // Relink places a payload that is already the store, so this copy
+        // must not be put back when linking fails.
+        let stale = tmp.path().join("store/tool/1.0.old");
+        std::fs::create_dir_all(&stale).unwrap();
+        std::fs::write(stale.join("tool"), b"stale").unwrap();
+        let blocker = tmp.path().join("blocker");
+        std::fs::write(&blocker, b"not a folder").unwrap();
+        let extras = [crate::extra::ExtraPlacement {
+            rel_path: "README".into(),
+            dest: blocker.join("README"),
+            role: LinkRole::Man,
+        }];
+        let bin = tmp.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+
+        let placed = LinuxPlatform::new().place(&Placement {
+            name: "tool",
+            version: "1.0",
+            payload_dir: &store,
+            store_dir: &store,
+            bin_dir: &bin,
+            apps_dir: tmp.path(),
+            kind: PackageKind::Binary,
+            bin_specs: &[],
+            replacing: &[],
+            link_apps: false,
+            link: true,
+            extras: &extras,
+        });
+
+        assert!(placed.is_err(), "{placed:?}");
+        assert_eq!(
+            std::fs::read(store.join("tool")).unwrap(),
+            b"#!/bin/sh\necho live\n"
+        );
+        assert_eq!(std::fs::read(stale.join("tool")).unwrap(), b"stale");
     }
 
     #[test]
