@@ -173,6 +173,11 @@ Client release notes are parsed as inline Markdown into `Text`. Every `.link` ru
 
 Test: `changelogLinksStayOnlyWhenTheyAreHTTPS` (with the existing https link test).
 
+### B83. A sidecar checksum takes the first sorted line
+
+A `.sha256` sidecar used to take the alphabetically first hash. It now prefers the line that names the asset, and falls back to a lone entry only when the file has exactly one.
+
+Test: `a_sidecar_prefers_the_named_asset_over_the_alphabetically_first_line`.
 ### B82. Duplicate checksum basenames overwrite each other
 
 An aggregate checksum list is keyed by file name. Two lines that name the same file with different hashes used to let the later one win. Conflicting names are dropped, so neither hash is trusted.
