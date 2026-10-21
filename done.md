@@ -145,6 +145,12 @@ Tests: `an_upgrade_that_drops_the_checksum_is_refused_without_consent`, `yes_con
 
 `desktop/windows` is a WinUI 3 app on the Windows App SDK and .NET 10, built with `dotnet build` and no Visual Studio. `Ketch.AppCore` holds the fake core and the store and tests on any OS. The app has Installed, Discover, Updates, Activity, Doctor, Settings and a package page, with `ContentDialog` and `InfoBar`, Mica, and light, dark and high contrast from the token file. The `ketch-win-app` job runs `dotnet test` and the Release build. Landed in #247.
 
+### B134. `install.ps1` leaves TLS 1.0 on older Windows
+
+Windows PowerShell 5.1 on older Windows 10 and Server defaults `[Net.ServicePointManager]::SecurityProtocol` to TLS 1.0/1.1. GitHub refuses those, so `irm | iex` failed before the archive was fetched. The installer now adds `Tls12` with `-bor`, which turns TLS 1.2 on and leaves TLS 1.3 in place where the host already enabled it.
+
+Test: `the_script_enables_tls12_without_dropping_newer_protocols`.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.

@@ -8,6 +8,11 @@
 & {
     $ErrorActionPreference = 'Stop'
 
+    # Windows PowerShell 5.1 on older Windows 10 and Server still defaults to
+    # TLS 1.0/1.1, which GitHub rejects. OR keeps TLS 1.3 where the host
+    # already enabled it.
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
     $SelfRepo = 'pyrlyn/ketch'
     $BinaryName = 'ketch.exe'
     $DefaultRoot = Join-Path $env:USERPROFILE '.ketch'

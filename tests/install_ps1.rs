@@ -182,6 +182,21 @@ fn the_script_edits_path_unexpanded_through_the_registry_not_setx() {
     assert!(!src.contains("setx"), "{src}");
 }
 
+/// Windows PowerShell 5.1 defaults to TLS 1.0/1.1 on older Windows, and GitHub
+/// refuses those. OR-ing Tls12 leaves a newer protocol the host already set.
+#[test]
+fn the_script_enables_tls12_without_dropping_newer_protocols() {
+    let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1"));
+    let line = src
+        .lines()
+        .find(|line| line.contains("SecurityProtocol"))
+        .expect("install.ps1 must set ServicePointManager.SecurityProtocol");
+    assert!(
+        line.contains("-bor") && line.contains("[Net.SecurityProtocolType]::Tls12"),
+        "Tls12 must be added, not assigned over whatever the host already allows: {line}"
+    );
+}
+
 /// Under `irm … | iex` an `exit` closes the user's PowerShell window, so the
 /// only one left is the one that runs when the script is a file.
 #[test]
