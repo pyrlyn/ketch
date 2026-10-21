@@ -179,6 +179,15 @@ Client release notes are parsed as inline Markdown into `Text`. Every `.link` ru
 
 Test: `changelogLinksStayOnlyWhenTheyAreHTTPS` (with the existing https link test).
 
+### R16. Fuzz seed script reads the old builtin path
+
+`fuzz/seed.sh` looked for `src/builtin.toml` after that file moved into `ketch-core`. The script already reads `crates/ketch-core/src/builtin.toml`. The readme still named the old path; it now matches.
+
+### B83. A sidecar checksum takes the first sorted line
+
+A `.sha256` sidecar used to take the alphabetically first hash. It now prefers the line that names the asset, and falls back to a lone entry only when the file has exactly one.
+
+Test: `a_sidecar_prefers_the_named_asset_over_the_alphabetically_first_line`.
 ### B82. Duplicate checksum basenames overwrite each other
 
 An aggregate checksum list is keyed by file name. Two lines that name the same file with different hashes used to let the later one win. Conflicting names are dropped, so neither hash is trusted.
@@ -201,6 +210,10 @@ Test: `aLockWithNoKnownHolderStillOffersRetry`.
 Found by the 2026-10-08 review: extraction kept `mode & 0o7777`, so setuid, setgid and sticky bits from an archive survived. `payload_mode` now keeps `0o777`, and tar, zip and the directory-mode path all go through it.
 
 Test: `setuid_bits_from_an_archive_are_dropped`.
+
+### R14. Delete the stale self-update patch script
+
+`scripts/b32_patch.py` opened `src/self_update.rs` after the core move, and nothing referenced it. The script is gone.
 
 ### B132. `install.ps1` omits the `v` on `--version`
 
@@ -1687,9 +1700,9 @@ Also through `commit`: `install::tests::a_reinstall_whose_linking_fails_after_th
 
 ### B105. Windows same-version reinstall refuses its own copied bin
 
-Found by the 2026-10-12 review: ownership of a copied bin was proven against `record.target` after the swap had changed it. On re-check it was already fixed by 13efcf9: `retired_targets` compares bin and extra copies against `<store>.old` after the swap. A Windows end-to-end test (`install`, then `install --force`) is still missing.
+Found by the 2026-10-12 review: ownership of a copied bin was proven against `record.target` after the swap had changed it. On re-check it was already fixed by 13efcf9: `retired_targets` compares bin and extra copies against `<store>.old` after the swap.
 Model: Claude Code / opus-5.5 · Status: done 2026-10-12 (already fixed in 13efcf9) · Priority: P2 · Complexity: 3
-Check: `retired_targets` in `platform/windows.rs`; not covered by a Windows test.
+Check: `placing_a_new_build_into_the_same_store_path_replaces_our_copy` in `platform/windows.rs`.
 
 ### B80. A lone `.xz`/`.bz2` file fails as a tarball
 
