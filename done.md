@@ -29,6 +29,12 @@ Row R15 in the 2026-10-08 findings. `Placement::version` was carried into every 
 
 Done: both are gone. The root `dirs` dependency, `Release::asset` and the stale `allow(dead_code)` on `PackageSpec::raw` were already gone.
 
+### B138. Record the Marvin advisory and keep rustls past its fix
+
+Row B138 in the 2026-10-12 findings. rustls 0.23.43 (RUSTSEC-2026-0285) is already 0.23.46 in `Cargo.lock`, so it was not bumped again. rsa 0.9.10 (RUSTSEC-2023-0071, Marvin) has no upstream fix and is only reached to verify signatures.
+
+Done: `deny.toml` ignores that advisory and says why. `cargo deny` is not in CI.
+
 ### B85. Registry update and listing ignore cancel
 
 `registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
@@ -94,6 +100,14 @@ A manifest's `[hooks]` table names one shell line for each of `before_install`, 
 Hooks are a trust boundary: they run only from a user-tier manifest (`~/.ketch/manifests`). A registry or built-in manifest carrying hooks is refused at install before anything is placed, and skipped with a warning on uninstall. `Manifest::validate` refuses a blank hook. Schema and semantics are in `docs/MANIFESTS.md`.
 
 Tests: `src/hooks.rs` (environment, working directory, stderr detail, origin gate), `src/model.rs` (parsing, blank hook, misspelt key), `tests/install.rs` (order across install, upgrade and uninstall; a failing before hook installs nothing).
+
+### B60. Windows self-update leaves `ketch.exe.old` behind
+
+Observed on Windows: `ketch self update` 0.4.4 → 0.5.1 succeeded, but the old binary stayed in the bin dir as `ketch.exe.old`. Windows will not delete the file backing a running image, and the process doing the cleanup at the end of `replace_binary` is that renamed image, so the delete failed and the error was dropped. `install_self` on Windows uses `with_extension("old")`, which names the same leftover `ketch.old`, and a stale aside also becomes a destination that can fail the next swap's rename.
+
+`aside_candidates` names both leftovers. `sweep_stale_asides` deletes them at the start of `self install` and `self upgrade` (not on `--dry-run`), and `replace_binary` sweeps its own destination again before the rename: by then the earlier updater has exited, so the delete works. A failure warns and continues. The end-of-swap delete stays one silent best-effort try, because on Windows it cannot succeed until this process exits. `ketch doctor` warns (`backup`) when a leftover is still in the bin dir, or beside the running binary when that binary lives somewhere else.
+
+Tests: `aside_names_cover_the_swap_and_the_flat_install`, `a_previous_swap_backup_is_removed_and_a_missing_one_is_fine`, `a_stale_sweep_clears_every_aside_and_warns_on_one_it_cannot_remove`, `doctor_notes_a_stale_aside_and_stays_quiet_without_one`.
 
 ### B61. `self update` swap fails on a transient Windows lock
 
