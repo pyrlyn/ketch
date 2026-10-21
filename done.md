@@ -28,12 +28,6 @@ Do not add a second cache. `jdx/mise-action` already caches the toolchain, and `
 Item 2 stays with B64. Item 1 is B65, which closes with B64's `tests/bin_choice.rs`.
 
 Status: done. CI already runs the whole suite on every OS, with no workflow edit: `ci.yml`'s `rust` job (pyrlyn/ci `ci-rust.yml`) runs clippy and `cargo nextest run --workspace --all-targets` on Linux x86_64 and aarch64, macOS aarch64 and Windows x86_64, and `package` runs `dist build` on all three OSes. `verify.yml` no longer exists; the per-OS `check` jobs named above became that shared job, which brings its own sccache. Item 1 is B65, its own task (it extends `tests/bin_choice.rs`, which every OS already runs). Item 2: `install.rs` tests `a_choice_asked_for_a_user_manifest_is_written_into_the_file` and `a_choice_asked_for_a_registry_package_is_remembered_in_state_and_reused` drive `commit` with a scripted `Decider` over a payload holding `rtok-cli` and `rtok-hook`: the user manifest gets `bin = [...]` appended with the rest of the file unchanged; a registry package keeps its choice in state, its registry copy is never written, and an upgrade reuses the choice without asking. They are not OS-gated, so every CI target runs them. Item 3: no second cache, for the reasons and numbers above.
-### B65. Binary selection regression test
-
-`tests/bin_choice.rs` publishes a release with `rtok` and `rtok-hook` and asserts only `rtok` is linked. The file is not gated by OS. `crates/ketch-core/src/bin_choice.rs` asserts the exact package name wins in Windows sort order (`rtok-hook.exe` before `rtok.exe`) and in Unix sort order.
-
-Tests: `the_binary_named_like_the_package_is_linked_and_its_helper_is_not`, `the_exact_name_wins_in_windows_sort_order`, `the_exact_name_wins_in_unix_sort_order`.
-
 ### B117. A changelog file is read without a bound
 
 Row B117 in the 2026-10-12 findings. Done: `from_file` reads a regular file only, stops at 4 MiB, and decodes the bytes lossily. `find_file` skips a symlink, so the command falls through to the release notes instead of opening the link.
