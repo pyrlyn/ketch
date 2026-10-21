@@ -7,7 +7,6 @@
 //! Each one takes the lock for the whole batch and writes `state.json` once at
 //! the end, so an interrupted run leaves the file either fully old or fully new.
 
-use crate::cancel::Cancel;
 use crate::cli::{InstallArgs, NameArgs, PruneArgs, RollbackArgs, UninstallArgs, UpgradeArgs};
 use crate::config::Config;
 use crate::error::{Error, Result};
@@ -91,7 +90,7 @@ pub fn install(cfg: &Config, args: InstallArgs) -> Result<()> {
             // `--yes` has already answered the question this would ask.
             offer_update: !args.yes,
             allow_unverified: args.allow_unverified || args.yes,
-            cancel: Cancel::new(),
+            cancel: crate::interrupt::token(),
         })
         .collect();
 
@@ -379,7 +378,13 @@ pub fn upgrade(cfg: &Config, args: UpgradeArgs) -> Result<()> {
         .iter()
         .map(|(pkg, release)| InstallRequest {
             allow_unverified: args.allow_unverified || args.yes,
-            ..install::upgrade_request(cfg, pkg, &release.tag, args.bin.clone(), Cancel::new())
+            ..install::upgrade_request(
+                cfg,
+                pkg,
+                &release.tag,
+                args.bin.clone(),
+                crate::interrupt::token(),
+            )
         })
         .collect();
 

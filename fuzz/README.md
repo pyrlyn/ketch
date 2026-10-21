@@ -27,7 +27,7 @@ cargo +nightly fuzz build     # build every target
 ```
 
 `fuzz/seed.sh` fills `fuzz/corpus/<target>/` from `tests/fixtures`, the root
-`ketch.toml`, `src/builtin.toml`, the code blocks in `docs/`, the example
+`ketch.toml`, `crates/ketch-core/src/builtin.toml`, the code blocks in `docs/`, the example
 plugin, and small archives it makes itself. `corpus/`, `artifacts/` and
 `target/` are ignored.
 

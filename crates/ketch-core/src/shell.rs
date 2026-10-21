@@ -556,20 +556,351 @@ pub fn stale_registry_check(cfg: &Config) -> Option<DoctorCheck> {
     }
 }
 
-/// Entries of a Windows PATH that are a ketch bin dir whose folder is gone:
-/// this root's own, or the `bin` of any `.ketch` root, the name every
-/// installer defaults to.
-#[cfg_attr(not(windows), allow(dead_code))]
-fn stale_path_entries<'a>(path: &'a str, bin_dir: &Path) -> Vec<&'a str> {
-    windows_path_entries(path)
-        .filter(|entry| {
-            let entry = expanded_entry(entry);
-            let key = windows_path_key(Path::new(&entry));
-            let ketch_bin = key == windows_path_key(bin_dir) || key.ends_with(r"\.ketch\bin");
-            ketch_bin && !Path::new(entry.trim().trim_matches('"')).exists()
-        })
-        .collect()
+/// Windows PATH, PowerShell profile and cmd AutoRun string helpers.
+///
+/// Registry and process calls stay in the parent, behind `cfg(windows)`.
+/// This module is compiled on Windows and in tests on every OS, so the
+/// string logic is not silenced with `allow(dead_code)` on Unix (R17).
+#[cfg(any(windows, test))]
+mod windows_env {
+    use super::{splice, Outcome, BEGIN, END};
+    use crate::error::{Error, Result};
+    use std::path::{Path, PathBuf};
+
+    /// Entries of a Windows PATH that are a ketch bin dir whose folder is gone:
+    /// this root's own, or the `bin` of any `.ketch` root, the name every
+    /// installer defaults to.
+    pub(crate) fn stale_path_entries<'a>(path: &'a str, bin_dir: &Path) -> Vec<&'a str> {
+        windows_path_entries(path)
+            .filter(|entry| {
+                let entry = expanded_entry(entry);
+                let key = windows_path_key(Path::new(&entry));
+                let ketch_bin = key == windows_path_key(bin_dir) || key.ends_with(r"\.ketch\bin");
+                ketch_bin && !Path::new(entry.trim().trim_matches('"')).exists()
+            })
+            .collect()
+    }
+
+    /// Whether `dir` already appears as an entry in a Windows PATH string.
+    pub(crate) fn windows_path_has(path: &str, dir: &Path) -> bool {
+        windows_path_entries(path).any(|entry| windows_path_eq(entry, dir))
+    }
+
+    /// Prepend `dir` if it is missing. `None` when it is already present.
+    pub(crate) fn windows_path_prepend(path: &str, dir: &Path) -> Option<String> {
+        if windows_path_has(path, dir) {
+            return None;
+        }
+        let dir = dir.to_string_lossy();
+        if path.is_empty() {
+            Some(dir.into_owned())
+        } else {
+            Some(format!("{dir};{path}"))
+        }
+    }
+
+    /// Drop `dir` if it is present. `None` when it was not there.
+    pub(crate) fn windows_path_remove(path: &str, dir: &Path) -> Option<String> {
+        if !windows_path_has(path, dir) {
+            return None;
+        }
+        let kept: Vec<&str> = windows_path_entries(path)
+            .filter(|entry| !windows_path_eq(entry, dir))
+            .collect();
+        Some(kept.join(";"))
+    }
+
+    /// Split a Windows PATH on `;`, keeping `;` inside quotes as part of one entry.
+    ///
+    /// Registry PATH values are sometimes quoted. A folder name may contain `;`
+    /// (`C:\weird;name`), so a naive `split(';')` would shatter `"C:\weird;name"`
+    /// into two entries and miss the bin dir on doctor/install.
+    pub(crate) fn windows_path_entries(path: &str) -> impl Iterator<Item = &str> {
+        windows_path_entry_list(path).into_iter()
+    }
+
+    pub(crate) fn windows_path_entry_list(path: &str) -> Vec<&str> {
+        let mut entries = Vec::new();
+        let mut start = 0;
+        let mut in_quotes = false;
+        for (i, c) in path.char_indices() {
+            match c {
+                '"' => in_quotes = !in_quotes,
+                ';' if !in_quotes => {
+                    let entry = &path[start..i];
+                    if !entry.is_empty() {
+                        entries.push(entry);
+                    }
+                    start = i + c.len_utf8();
+                }
+                _ => {}
+            }
+        }
+        if start < path.len() && !path[start..].is_empty() {
+            entries.push(&path[start..]);
+        }
+        entries
+    }
+
+    pub(crate) fn windows_path_eq(entry: &str, dir: &Path) -> bool {
+        let entry = expanded_entry(entry);
+        if windows_path_key(Path::new(&entry)) == windows_path_key(dir) {
+            return true;
+        }
+        // The same folder spelled another way: `install.ps1` writes the path
+        // `Resolve-Path` gives, while the root ketch was started with may be an
+        // 8.3 short name (`RUNNER~1`) or go through a link. Folding text cannot
+        // see through either; resolving both can, while the folder still exists.
+        let entry = entry.trim().trim_matches('"').trim_matches('\'');
+        match (
+            fs_kit::path::canonicalize(entry),
+            fs_kit::path::canonicalize(dir),
+        ) {
+            (Ok(a), Ok(b)) => windows_path_key(&a) == windows_path_key(&b),
+            _ => false,
+        }
+    }
+
+    pub fn windows_path_key(p: &Path) -> String {
+        // Registry PATH values are sometimes quoted (`"C:\\Program Files\\…"`).
+        // Strip the quotes before folding so doctor/install see the same entry as
+        // an unquoted bin dir and do not prepend a duplicate.
+        let s = p.to_string_lossy().replace('/', "\\");
+        let s = s.trim().trim_matches('"').trim_matches('\'');
+        s.trim_end_matches('\\').to_ascii_lowercase()
+    }
+
+    /// `%NAME%` replaced the way Windows expands a `REG_EXPAND_SZ` value; a
+    /// variable `lookup` does not know stays as written.
+    pub(crate) fn expand_percent_vars(s: &str, lookup: impl Fn(&str) -> Option<String>) -> String {
+        let mut out = String::with_capacity(s.len());
+        let mut rest = s;
+        while let Some(open) = rest.find('%') {
+            out.push_str(&rest[..open]);
+            let after = &rest[open + 1..];
+            let Some(close) = after.find('%') else {
+                out.push_str(&rest[open..]);
+                return out;
+            };
+            let name = &after[..close];
+            match (!name.is_empty()).then(|| lookup(name)).flatten() {
+                Some(value) => out.push_str(&value),
+                None => out.push_str(&rest[open..open + close + 2]),
+            }
+            rest = &after[close + 1..];
+        }
+        out.push_str(rest);
+        out
+    }
+
+    /// A PATH entry as Windows would use it: `%VAR%` expanded from this process's
+    /// environment. The registry value is read unexpanded, so an entry written as
+    /// `%USERPROFILE%\.ketch\bin` must still be recognised as the bin dir.
+    pub(crate) fn expanded_entry(entry: &str) -> String {
+        expand_percent_vars(entry, |name| std::env::var(name).ok())
+    }
+
+    /// The registry kind to write the user Path back as: the one it has, so a
+    /// `REG_EXPAND_SZ` keeps expanding its `%VAR%` entries, or `ExpandString` —
+    /// what Windows itself creates — when there is none yet.
+    pub(crate) fn user_path_kind(existing: Option<&str>) -> &str {
+        existing
+            .filter(|kind| matches!(*kind, "String" | "ExpandString"))
+            .unwrap_or("ExpandString")
+    }
+
+    /// Where the user environment lives, under `HKEY_CURRENT_USER`.
+    #[cfg(windows)]
+    pub(crate) const ENVIRONMENT_KEY: &str = "Environment";
+
+    /// The Windows PowerShell editions, each with its own profile directory.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum PowerShell {
+        /// PowerShell 7 (`pwsh`), profile in `Documents\PowerShell`.
+        Core,
+        /// Windows PowerShell 5.1 (`powershell`), profile in
+        /// `Documents\WindowsPowerShell`.
+        Desktop,
+    }
+
+    impl PowerShell {
+        /// Both editions, the current one first.
+        pub const ALL: [PowerShell; 2] = [PowerShell::Core, PowerShell::Desktop];
+
+        /// What the user calls it.
+        pub fn label(self) -> &'static str {
+            match self {
+                PowerShell::Core => "PowerShell 7",
+                PowerShell::Desktop => "Windows PowerShell",
+            }
+        }
+
+        #[cfg(windows)]
+        fn exe(self) -> &'static str {
+            match self {
+                PowerShell::Core => "pwsh",
+                PowerShell::Desktop => "powershell",
+            }
+        }
+
+        /// The CurrentUserAllHosts profile under `documents`: what `$PROFILE.
+        /// CurrentUserAllHosts` names, read by the console and every editor host.
+        pub fn profile(self, documents: &Path) -> PathBuf {
+            let dir = match self {
+                PowerShell::Core => "PowerShell",
+                PowerShell::Desktop => "WindowsPowerShell",
+            };
+            documents.join(dir).join("profile.ps1")
+        }
+    }
+
+    /// What happened to one PowerShell profile.
+    #[derive(Debug, Clone)]
+    pub struct ProfileChange {
+        pub shell: PowerShell,
+        pub file: PathBuf,
+        /// `Err` carries why the profile was left alone; it is not a failure.
+        pub outcome: std::result::Result<Outcome, String>,
+    }
+
+    /// The profile block: dot-source `script` when it is there.
+    ///
+    /// `Test-Path` first, because the script is a link `self uninstall` removes
+    /// and a profile that errors on every start is worse than no completion.
+    pub(crate) fn powershell_block(script: &str) -> String {
+        let path = quote_powershell(script);
+        format!("{BEGIN}\nif (Test-Path -LiteralPath {path}) {{ . {path} }}\n{END}\n")
+    }
+
+    /// Single-quote for PowerShell. It treats the typographic single quotes as
+    /// quote characters too, so each of those is doubled like `'` itself.
+    pub(crate) fn quote_powershell(text: &str) -> String {
+        let mut out = String::with_capacity(text.len() + 2);
+        out.push('\'');
+        for c in text.chars() {
+            if matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') {
+                out.push(c);
+            }
+            out.push(c);
+        }
+        out.push('\'');
+        out
+    }
+
+    /// `text` with the profile block for `script` in it, or `None` when it
+    /// already says exactly that.
+    ///
+    /// Windows PowerShell 5.1 reads a profile without a byte order mark in the
+    /// ANSI code page, so a new file whose block names a non-ASCII path starts
+    /// with one. An existing file keeps whatever encoding its owner chose.
+    pub(crate) fn splice_profile(text: &str, script: &str) -> Option<String> {
+        let block = powershell_block(script);
+        if text.is_empty() && !block.is_ascii() {
+            return Some(format!("\u{FEFF}{block}"));
+        }
+        splice(text, &block)
+    }
+
+    pub(crate) fn runs_local_scripts(policy: &str) -> bool {
+        ["Unrestricted", "RemoteSigned", "Bypass"]
+            .iter()
+            .any(|p| policy.trim().eq_ignore_ascii_case(p))
+    }
+
+    /// The macros cmd.exe gets. cmd has no programmable completion, so short
+    /// names for the common commands are what it can have.
+    pub const DOSKEY_MACROS: &str =
+        "ki=ketch install $*\r\nku=ketch upgrade $*\r\nkl=ketch list $*\r\nkun=ketch uninstall $*\r\n";
+
+    /// The command ketch adds to AutoRun to load `file`.
+    ///
+    /// cmd expands `%…%` in AutoRun and has no escape for `"` inside quotes, so a
+    /// path holding either is refused rather than written and hoped for.
+    pub(crate) fn autorun_command(file: &Path) -> Result<String> {
+        let path = file.to_str().ok_or_else(|| {
+            Error::msg(format!(
+                "{} is not valid UTF-8, so cmd cannot be told about it",
+                file.display()
+            ))
+        })?;
+        if path.contains(['"', '%', '\n', '\r']) {
+            return Err(Error::msg(format!(
+                "{path} holds a character cmd's AutoRun cannot quote"
+            )));
+        }
+        Ok(format!("doskey /macrofile=\"{path}\""))
+    }
+
+    /// What to do with the AutoRun value.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub(crate) enum AutoRunEdit {
+        /// Leave it as it is.
+        Unchanged,
+        /// Write this value.
+        Set(String),
+        /// Delete the value: nothing but ketch's command was in it.
+        Delete,
+    }
+
+    pub(crate) fn autorun_has(current: &str, ours: &str) -> bool {
+        current == ours
+            || current.ends_with(&format!(" & {ours}"))
+            || current.starts_with(&format!("{ours} & "))
+            || current.contains(&format!(" & {ours} & "))
+    }
+
+    /// Add `ours` to an AutoRun value, after whatever the user already runs
+    /// there. Appending exactly ` & ours` is what lets [`autorun_remove`] give
+    /// the earlier value back byte for byte.
+    pub(crate) fn autorun_add(current: Option<&str>, ours: &str) -> AutoRunEdit {
+        match current {
+            Some(current) if autorun_has(current, ours) => AutoRunEdit::Unchanged,
+            // A blank value runs nothing; `  & cmd` would be a syntax error.
+            Some(current) if !current.trim().is_empty() => {
+                AutoRunEdit::Set(format!("{current} & {ours}"))
+            }
+            _ => AutoRunEdit::Set(ours.to_string()),
+        }
+    }
+
+    /// Take `ours` back out of an AutoRun value, leaving the rest as it was.
+    pub(crate) fn autorun_remove(current: &str, ours: &str) -> AutoRunEdit {
+        if current == ours {
+            return AutoRunEdit::Delete;
+        }
+        if let Some(head) = current.strip_suffix(&format!(" & {ours}")) {
+            return AutoRunEdit::Set(head.to_string());
+        }
+        let middle = format!(" & {ours} & ");
+        if let Some(at) = current.find(&middle) {
+            return AutoRunEdit::Set(format!(
+                "{} & {}",
+                &current[..at],
+                &current[at + middle.len()..]
+            ));
+        }
+        if let Some(tail) = current.strip_prefix(&format!("{ours} & ")) {
+            return AutoRunEdit::Set(tail.to_string());
+        }
+        AutoRunEdit::Unchanged
+    }
+
+    /// The value AutoRun lives in.
+    #[cfg(windows)]
+    pub(crate) const AUTORUN_KEY: &str = r"Software\Microsoft\Command Processor";
 }
+
+#[cfg(any(windows, test))]
+use windows_env::{
+    autorun_add, autorun_command, autorun_remove, expand_percent_vars, powershell_block,
+    quote_powershell, runs_local_scripts, splice_profile, stale_path_entries, user_path_kind,
+    windows_path_entry_list, windows_path_has, windows_path_prepend, windows_path_remove,
+    AutoRunEdit,
+};
+#[cfg(windows)]
+use windows_env::{autorun_has, AUTORUN_KEY, ENVIRONMENT_KEY};
+#[cfg(any(windows, test))]
+pub use windows_env::{windows_path_key, PowerShell, ProfileChange, DOSKEY_MACROS};
 
 /// Remove one registry value ketch wrote.
 #[cfg(windows)]
@@ -596,148 +927,6 @@ pub fn uninstall_user(cfg: &Config, dry_run: bool) -> Result<Outcome> {
         }
     }
 }
-
-/// Whether `dir` already appears as an entry in a Windows PATH string.
-#[cfg_attr(not(windows), allow(dead_code))]
-pub(crate) fn windows_path_has(path: &str, dir: &Path) -> bool {
-    windows_path_entries(path).any(|entry| windows_path_eq(entry, dir))
-}
-
-/// Prepend `dir` if it is missing. `None` when it is already present.
-#[cfg_attr(not(windows), allow(dead_code))]
-pub(crate) fn windows_path_prepend(path: &str, dir: &Path) -> Option<String> {
-    if windows_path_has(path, dir) {
-        return None;
-    }
-    let dir = dir.to_string_lossy();
-    if path.is_empty() {
-        Some(dir.into_owned())
-    } else {
-        Some(format!("{dir};{path}"))
-    }
-}
-
-/// Drop `dir` if it is present. `None` when it was not there.
-#[cfg_attr(not(windows), allow(dead_code))]
-pub(crate) fn windows_path_remove(path: &str, dir: &Path) -> Option<String> {
-    if !windows_path_has(path, dir) {
-        return None;
-    }
-    let kept: Vec<&str> = windows_path_entries(path)
-        .filter(|entry| !windows_path_eq(entry, dir))
-        .collect();
-    Some(kept.join(";"))
-}
-
-/// Split a Windows PATH on `;`, keeping `;` inside quotes as part of one entry.
-///
-/// Registry PATH values are sometimes quoted. A folder name may contain `;`
-/// (`C:\weird;name`), so a naive `split(';')` would shatter `"C:\weird;name"`
-/// into two entries and miss the bin dir on doctor/install.
-#[cfg_attr(not(windows), allow(dead_code))]
-fn windows_path_entries(path: &str) -> impl Iterator<Item = &str> {
-    windows_path_entry_list(path).into_iter()
-}
-
-#[cfg_attr(not(windows), allow(dead_code))]
-fn windows_path_entry_list(path: &str) -> Vec<&str> {
-    let mut entries = Vec::new();
-    let mut start = 0;
-    let mut in_quotes = false;
-    for (i, c) in path.char_indices() {
-        match c {
-            '"' => in_quotes = !in_quotes,
-            ';' if !in_quotes => {
-                let entry = &path[start..i];
-                if !entry.is_empty() {
-                    entries.push(entry);
-                }
-                start = i + c.len_utf8();
-            }
-            _ => {}
-        }
-    }
-    if start < path.len() && !path[start..].is_empty() {
-        entries.push(&path[start..]);
-    }
-    entries
-}
-
-#[cfg_attr(not(windows), allow(dead_code))]
-fn windows_path_eq(entry: &str, dir: &Path) -> bool {
-    let entry = expanded_entry(entry);
-    if windows_path_key(Path::new(&entry)) == windows_path_key(dir) {
-        return true;
-    }
-    // The same folder spelled another way: `install.ps1` writes the path
-    // `Resolve-Path` gives, while the root ketch was started with may be an
-    // 8.3 short name (`RUNNER~1`) or go through a link. Folding text cannot
-    // see through either; resolving both can, while the folder still exists.
-    let entry = entry.trim().trim_matches('"').trim_matches('\'');
-    match (
-        fs_kit::path::canonicalize(entry),
-        fs_kit::path::canonicalize(dir),
-    ) {
-        (Ok(a), Ok(b)) => windows_path_key(&a) == windows_path_key(&b),
-        _ => false,
-    }
-}
-
-#[cfg_attr(not(windows), allow(dead_code))]
-pub fn windows_path_key(p: &Path) -> String {
-    // Registry PATH values are sometimes quoted (`"C:\\Program Files\\…"`).
-    // Strip the quotes before folding so doctor/install see the same entry as
-    // an unquoted bin dir and do not prepend a duplicate.
-    let s = p.to_string_lossy().replace('/', "\\");
-    let s = s.trim().trim_matches('"').trim_matches('\'');
-    s.trim_end_matches('\\').to_ascii_lowercase()
-}
-
-/// `%NAME%` replaced the way Windows expands a `REG_EXPAND_SZ` value; a
-/// variable `lookup` does not know stays as written.
-#[cfg_attr(not(windows), allow(dead_code))]
-fn expand_percent_vars(s: &str, lookup: impl Fn(&str) -> Option<String>) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut rest = s;
-    while let Some(open) = rest.find('%') {
-        out.push_str(&rest[..open]);
-        let after = &rest[open + 1..];
-        let Some(close) = after.find('%') else {
-            out.push_str(&rest[open..]);
-            return out;
-        };
-        let name = &after[..close];
-        match (!name.is_empty()).then(|| lookup(name)).flatten() {
-            Some(value) => out.push_str(&value),
-            None => out.push_str(&rest[open..open + close + 2]),
-        }
-        rest = &after[close + 1..];
-    }
-    out.push_str(rest);
-    out
-}
-
-/// A PATH entry as Windows would use it: `%VAR%` expanded from this process's
-/// environment. The registry value is read unexpanded, so an entry written as
-/// `%USERPROFILE%\.ketch\bin` must still be recognised as the bin dir.
-#[cfg_attr(not(windows), allow(dead_code))]
-fn expanded_entry(entry: &str) -> String {
-    expand_percent_vars(entry, |name| std::env::var(name).ok())
-}
-
-/// The registry kind to write the user Path back as: the one it has, so a
-/// `REG_EXPAND_SZ` keeps expanding its `%VAR%` entries, or `ExpandString` —
-/// what Windows itself creates — when there is none yet.
-#[cfg_attr(not(windows), allow(dead_code))]
-fn user_path_kind(existing: Option<&str>) -> &str {
-    existing
-        .filter(|kind| matches!(*kind, "String" | "ExpandString"))
-        .unwrap_or("ExpandString")
-}
-
-/// Where the user environment lives, under `HKEY_CURRENT_USER`.
-#[cfg_attr(not(windows), allow(dead_code))]
-const ENVIRONMENT_KEY: &str = "Environment";
 
 /// The user Path's registry kind and raw value, `%VAR%` unexpanded; `None`
 /// when it is unset. `[Environment]::GetEnvironmentVariable` would expand
@@ -808,100 +997,6 @@ fn write_user_value(key: &str, name: &str, kind: &str, value: &str, then: &str) 
         ],
     )
     .map(|_| ())
-}
-
-/// The Windows PowerShell editions, each with its own profile directory.
-#[cfg_attr(not(windows), allow(dead_code))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PowerShell {
-    /// PowerShell 7 (`pwsh`), profile in `Documents\PowerShell`.
-    Core,
-    /// Windows PowerShell 5.1 (`powershell`), profile in
-    /// `Documents\WindowsPowerShell`.
-    Desktop,
-}
-
-#[cfg_attr(not(windows), allow(dead_code))]
-impl PowerShell {
-    /// Both editions, the current one first.
-    pub const ALL: [PowerShell; 2] = [PowerShell::Core, PowerShell::Desktop];
-
-    /// What the user calls it.
-    pub fn label(self) -> &'static str {
-        match self {
-            PowerShell::Core => "PowerShell 7",
-            PowerShell::Desktop => "Windows PowerShell",
-        }
-    }
-
-    #[cfg_attr(not(windows), allow(dead_code))]
-    fn exe(self) -> &'static str {
-        match self {
-            PowerShell::Core => "pwsh",
-            PowerShell::Desktop => "powershell",
-        }
-    }
-
-    /// The CurrentUserAllHosts profile under `documents`: what `$PROFILE.
-    /// CurrentUserAllHosts` names, read by the console and every editor host.
-    pub fn profile(self, documents: &Path) -> PathBuf {
-        let dir = match self {
-            PowerShell::Core => "PowerShell",
-            PowerShell::Desktop => "WindowsPowerShell",
-        };
-        documents.join(dir).join("profile.ps1")
-    }
-}
-
-/// What happened to one PowerShell profile.
-#[cfg_attr(not(windows), allow(dead_code))]
-#[derive(Debug, Clone)]
-pub struct ProfileChange {
-    pub shell: PowerShell,
-    pub file: PathBuf,
-    /// `Err` carries why the profile was left alone; it is not a failure.
-    pub outcome: std::result::Result<Outcome, String>,
-}
-
-/// The profile block: dot-source `script` when it is there.
-///
-/// `Test-Path` first, because the script is a link `self uninstall` removes
-/// and a profile that errors on every start is worse than no completion.
-#[cfg_attr(not(windows), allow(dead_code))]
-pub(crate) fn powershell_block(script: &str) -> String {
-    let path = quote_powershell(script);
-    format!("{BEGIN}\nif (Test-Path -LiteralPath {path}) {{ . {path} }}\n{END}\n")
-}
-
-/// Single-quote for PowerShell. It treats the typographic single quotes as
-/// quote characters too, so each of those is doubled like `'` itself.
-#[cfg_attr(not(windows), allow(dead_code))]
-fn quote_powershell(text: &str) -> String {
-    let mut out = String::with_capacity(text.len() + 2);
-    out.push('\'');
-    for c in text.chars() {
-        if matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') {
-            out.push(c);
-        }
-        out.push(c);
-    }
-    out.push('\'');
-    out
-}
-
-/// `text` with the profile block for `script` in it, or `None` when it
-/// already says exactly that.
-///
-/// Windows PowerShell 5.1 reads a profile without a byte order mark in the
-/// ANSI code page, so a new file whose block names a non-ASCII path starts
-/// with one. An existing file keeps whatever encoding its owner chose.
-#[cfg_attr(not(windows), allow(dead_code))]
-pub(crate) fn splice_profile(text: &str, script: &str) -> Option<String> {
-    let block = powershell_block(script);
-    if text.is_empty() && !block.is_ascii() {
-        return Some(format!("\u{FEFF}{block}"));
-    }
-    splice(text, &block)
 }
 
 /// Take the block out of a profile. `Some(None)` means nothing but the block
@@ -1016,13 +1111,6 @@ pub fn uninstall_powershell_profile(file: &Path) -> Result<bool> {
     }
 }
 
-#[cfg_attr(not(windows), allow(dead_code))]
-fn runs_local_scripts(policy: &str) -> bool {
-    ["Unrestricted", "RemoteSigned", "Bypass"]
-        .iter()
-        .any(|p| policy.trim().eq_ignore_ascii_case(p))
-}
-
 /// The effective execution policy of one edition, or `None` when it does not
 /// run.
 #[cfg(windows)]
@@ -1079,99 +1167,11 @@ fn powershell(exe: &str, script: &str, env: &[(&str, &str)]) -> Result<String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-/// The macros cmd.exe gets. cmd has no programmable completion, so short
-/// names for the common commands are what it can have.
-#[cfg_attr(not(windows), allow(dead_code))]
-pub const DOSKEY_MACROS: &str =
-    "ki=ketch install $*\r\nku=ketch upgrade $*\r\nkl=ketch list $*\r\nkun=ketch uninstall $*\r\n";
-
 /// Where the macro file lives: in the root, not the versioned store prefix,
 /// so the AutoRun line that names it survives every `self upgrade`.
 pub fn doskey_file(cfg: &Config) -> PathBuf {
     cfg.root.join("share").join("ketch").join("ketch.doskey")
 }
-
-/// The command ketch adds to AutoRun to load `file`.
-///
-/// cmd expands `%…%` in AutoRun and has no escape for `"` inside quotes, so a
-/// path holding either is refused rather than written and hoped for.
-#[cfg_attr(not(windows), allow(dead_code))]
-pub(crate) fn autorun_command(file: &Path) -> Result<String> {
-    let path = file.to_str().ok_or_else(|| {
-        Error::msg(format!(
-            "{} is not valid UTF-8, so cmd cannot be told about it",
-            file.display()
-        ))
-    })?;
-    if path.contains(['"', '%', '\n', '\r']) {
-        return Err(Error::msg(format!(
-            "{path} holds a character cmd's AutoRun cannot quote"
-        )));
-    }
-    Ok(format!("doskey /macrofile=\"{path}\""))
-}
-
-/// What to do with the AutoRun value.
-#[cfg_attr(not(windows), allow(dead_code))]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum AutoRunEdit {
-    /// Leave it as it is.
-    Unchanged,
-    /// Write this value.
-    Set(String),
-    /// Delete the value: nothing but ketch's command was in it.
-    Delete,
-}
-
-#[cfg_attr(not(windows), allow(dead_code))]
-fn autorun_has(current: &str, ours: &str) -> bool {
-    current == ours
-        || current.ends_with(&format!(" & {ours}"))
-        || current.starts_with(&format!("{ours} & "))
-        || current.contains(&format!(" & {ours} & "))
-}
-
-/// Add `ours` to an AutoRun value, after whatever the user already runs
-/// there. Appending exactly ` & ours` is what lets [`autorun_remove`] give
-/// the earlier value back byte for byte.
-#[cfg_attr(not(windows), allow(dead_code))]
-pub(crate) fn autorun_add(current: Option<&str>, ours: &str) -> AutoRunEdit {
-    match current {
-        Some(current) if autorun_has(current, ours) => AutoRunEdit::Unchanged,
-        // A blank value runs nothing; `  & cmd` would be a syntax error.
-        Some(current) if !current.trim().is_empty() => {
-            AutoRunEdit::Set(format!("{current} & {ours}"))
-        }
-        _ => AutoRunEdit::Set(ours.to_string()),
-    }
-}
-
-/// Take `ours` back out of an AutoRun value, leaving the rest as it was.
-#[cfg_attr(not(windows), allow(dead_code))]
-pub(crate) fn autorun_remove(current: &str, ours: &str) -> AutoRunEdit {
-    if current == ours {
-        return AutoRunEdit::Delete;
-    }
-    if let Some(head) = current.strip_suffix(&format!(" & {ours}")) {
-        return AutoRunEdit::Set(head.to_string());
-    }
-    let middle = format!(" & {ours} & ");
-    if let Some(at) = current.find(&middle) {
-        return AutoRunEdit::Set(format!(
-            "{} & {}",
-            &current[..at],
-            &current[at + middle.len()..]
-        ));
-    }
-    if let Some(tail) = current.strip_prefix(&format!("{ours} & ")) {
-        return AutoRunEdit::Set(tail.to_string());
-    }
-    AutoRunEdit::Unchanged
-}
-
-/// The value AutoRun lives in.
-#[cfg_attr(not(windows), allow(dead_code))]
-const AUTORUN_KEY: &str = r"Software\Microsoft\Command Processor";
 
 /// Write the doskey macro file and load it from cmd's AutoRun, after
 /// whatever AutoRun already runs.

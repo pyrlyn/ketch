@@ -74,10 +74,21 @@ public sealed partial class PackageDetailPage : Page
         }
     }
 
-    private async void OnUpgrade(object sender, RoutedEventArgs e) => await App.Store.UpgradeAsync([name]);
+    private async void OnUpgrade(object sender, RoutedEventArgs e)
+    {
+        if (!App.Store.IsRunning)
+        {
+            await App.Store.UpgradeAsync([name]);
+        }
+    }
 
     private async void OnUninstall(object sender, RoutedEventArgs e)
     {
+        if (App.Store.IsRunning)
+        {
+            return;
+        }
+
         if (await Dialogs.ConfirmAsync(
                 this, $"Uninstall {name}?", $"{name} and its links are removed from the ketch root.", "Uninstall"))
         {
