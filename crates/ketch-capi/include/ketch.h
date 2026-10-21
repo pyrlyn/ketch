@@ -32,13 +32,18 @@ typedef void (*KetchEventFn)(const char *event, void *user_data);
 typedef int64_t (*KetchChooseFn)(const char *package, const char *candidates, void *user_data);
 
 // Whether to stop the processes that hold files about to be replaced:
-// `holders` is a JSON array of `Holder`. `false` leaves them running. NULL:
-// always `false`.
-typedef bool (*KetchStopFn)(const char *holders, void *user_data);
+// `holders` is a JSON array of `Holder`. Zero leaves them running. NULL:
+// always no.
+//
+// An `int32_t`, not `bool`: a Vala `bool` is `gboolean` (an `int`), and a
+// function pointer between those two is a type error on GCC 14 (B126).
+typedef int32_t (*KetchStopFn)(const char *holders, void *user_data);
 
 // Whether to remove `path`, a package folder an earlier uninstall left
-// behind with nothing recorded in it. `false` keeps it. NULL: always `false`.
-typedef bool (*KetchConfirmFn)(const char *path, void *user_data);
+// behind with nothing recorded in it. Zero keeps it. NULL: always no.
+//
+// An `int32_t` for the same reason as `KetchStopFn`.
+typedef int32_t (*KetchConfirmFn)(const char *path, void *user_data);
 
 #ifdef __cplusplus
 extern "C" {

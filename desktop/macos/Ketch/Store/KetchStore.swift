@@ -142,7 +142,10 @@ final class KetchStore {
 
     /// Re-reads installed and outdated packages; called on launch, when the
     /// window becomes key (so CLI installs show up) and after every operation.
-    func refresh() async {
+    /// `alerting` is false for the timer and for becoming key: offline, those
+    /// would raise the error sheet on every interval and every focus change.
+    /// The failure is still a log line.
+    func refresh(alerting: Bool = true) async {
         do {
             let (installed, outdated) = try await background { core in
                 (try core.installed(), try core.outdated())
@@ -151,6 +154,10 @@ final class KetchStore {
             self.outdated = outdated
             lastChecked = Date()
         } catch {
+            guard alerting else {
+                append(.warning, error.localizedDescription)
+                return
+            }
             report(error, retry: { [weak self] in await self?.refresh() })
         }
     }
@@ -215,7 +222,9 @@ final class KetchStore {
     /// Changelog Markdown as styled text. The core has already stripped
     /// escape sequences and bidi overrides; this only parses it. Headings are
     /// styled line by line because SwiftUI's `Text` drops the block structure
-    /// a full Markdown parse produces.
+    /// a full Markdown parse produces. A link stays only for `https`: the
+    /// notes are a client app's, and `Text` opens a `.link` run with the
+    /// default `openURL` action.
     nonisolated static func render(markdown: String) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace, failurePolicy: .returnPartiallyParsedIfPossible)
@@ -227,10 +236,22 @@ final class KetchStore {
             let isHeading = level > 0 && body.first == " "
             let source = String(isHeading ? body.drop { $0 == " " } : line)
             var text = (try? AttributedString(markdown: source, options: options)) ?? AttributedString(source)
+            keepHTTPSLinks(&text)
             if isHeading { text.font = level <= 2 ? .title3.bold() : .headline }
             result += text
         }
         return result
+    }
+
+    /// Drops every link that is not `https`. The visible words stay.
+    private nonisolated static func keepHTTPSLinks(_ text: inout AttributedString) {
+        let dropped = text.runs.compactMap { run -> Range<AttributedString.Index>? in
+            guard let url = run.link, url.scheme?.lowercased() != "https" else { return nil }
+            return run.range
+        }
+        for range in dropped {
+            text[range].link = nil
+        }
     }
 
     // MARK: Operations
@@ -335,7 +356,7 @@ final class KetchStore {
             while !Task.isCancelled {
                 guard let self else { return }
                 if !self.isRunning {
-                    await self.refresh()
+                    await self.refresh(alerting: false)
                     await self.notifyOfNewUpdates()
                 }
                 let interval = self.settings.updateCheckInterval
