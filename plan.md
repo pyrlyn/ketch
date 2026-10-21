@@ -27,7 +27,7 @@ New bugs, dead code and moves from a read-only Cursor cloud review of `main` at 
 | B88 | P2 | bug | fixed | `process.rs` `terminate` | After a polite stop, ketch waits until the pid is gone, bounded by five seconds, and only then sends the forceful kill. The replace that follows no longer races a process that is still exiting. |
 | R14 | P2 | dead code | confirmed | `scripts/b32_patch.py:8` | The script opens `src/self_update.rs`, which has moved, and nothing references it. Delete it. |
 | R15 | P2 | dead code | fixed | root `Cargo.toml:61` (`dirs`); `manifest.rs:137-148` (`Resolver::aliases`); `model.rs:596-599` (`Release::asset`); `platform/mod.rs:49-50` (`Placement::version`); `model.rs:329-331` | Drop the unused root `dirs` dependency, `Resolver::aliases` (or wire it to `__complete`/search), `Release::asset` and the never-read `Placement::version`; remove the stale `allow(dead_code)` on `PackageSpec::raw` (read at `state.rs:162`). |
-| R16 | P2 | dead code | confirmed | `fuzz/seed.sh:42` | The seed script reads `$root/src/builtin.toml`; the file is `crates/ketch-core/src/builtin.toml`. Fix the path. |
+| R16 | P2 | dead code | fixed | `fuzz/seed.sh` | The seed script and its readme name `crates/ketch-core/src/builtin.toml`. |
 | R17 | P2 | dead code | confirmed | `shell.rs:561-1092` | 23 `cfg_attr(not(windows), allow(dead_code))` on the Windows PATH helpers. Put them in one `#[cfg(any(windows, test))]` module. |
 | R18 | P2 | move | fixed | `platform/mod.rs` (`swap_into_store`) | Store swaps share one helper. macOS passes `ditto`; Linux and Windows pass `copy_tree`. |
 | R19 | P2 | move | suspected | `crates/ketch-core/Cargo.toml:49-66` | `stats` + diesel, `push` + octocrab/tokio, `trust` + sigstore/pgp and the `extract` codecs are always in core, so every desktop/FFI link pays for them (issue #222). Make them optional crates or features. |
@@ -172,10 +172,13 @@ Status: done. See `done.md`.
 
 Row B83 in the 2026-10-08 findings. `sidecar_hex` looks up the asset name first. A one-entry file is the usual sidecar; several names and no match are ignored.
 | B82 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
-
-### B82. Duplicate checksum basenames overwrite each other
+| R16 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
 
 Row B82 in the 2026-10-08 findings. An aggregate checksum file is keyed by basename. Two different hashes for the same basename are removed instead of letting the later line win.
+### B82. Duplicate checksum basenames overwrite each other
+### R16. Fuzz seed script reads the old builtin path
+
+Row R16 in the 2026-10-08 findings. `fuzz/seed.sh` already reads `crates/ketch-core/src/builtin.toml`. The readme named the old `src/builtin.toml` path; it now matches the script.
 
 Status: done. See `done.md`.
 
