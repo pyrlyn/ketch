@@ -117,6 +117,7 @@ lint-shell:
     python3 tests/desktop_windows_release.py
     sh tests/docs-i18n.sh
     sh tests/commit-msg-breaking.sh
+    python3 tests/cask_smoke.py
     python3 tests/install_truncation.py
 
 package:
