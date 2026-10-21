@@ -291,6 +291,15 @@ capi-test:
 windows-app-test:
     cd desktop/windows && dotnet test --project Ketch.AppCore.Tests
 
+# The Linux app's fake core and store against the contract scenarios.
+# Needs valac, Meson, Ninja, GLib and json-glib on PATH (the distribution's,
+# as `just capi-test`). Where GTK 4.20 and libadwaita 1.8 are installed the
+# GTK app is built too; the ketch-linux-app job builds that on Ubuntu 26.04.
+linux-app-test:
+    rm -rf target/linux-app-meson
+    meson setup target/linux-app-meson desktop/linux
+    meson test -C target/linux-app-meson --print-errorlogs
+
 # The library the fuzz targets link (src/lib.rs, cfg(fuzzing) only), checked on
 # stable: nothing else builds it, so `check` and CI would not notice it break.
 fuzz-check:

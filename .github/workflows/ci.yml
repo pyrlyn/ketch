@@ -122,12 +122,12 @@ jobs:
       package: ${{ steps.package.outputs.value }}
     steps:
       - id: app
-        uses: pyrlyn/ci/.github/actions/macos-runner@97fe5e56c8e5fc8980fa8d3ca7043bb9ea727f21 # main
+        uses: pyrlyn/ci/.github/actions/macos-runner@main
         with:
           runner: ${{ vars.MACOS_RUNNER }}
           value: '["macos-26"]'
       - id: package
-        uses: pyrlyn/ci/.github/actions/macos-runner@97fe5e56c8e5fc8980fa8d3ca7043bb9ea727f21 # main
+        uses: pyrlyn/ci/.github/actions/macos-runner@main
         with:
           runner: ${{ vars.MACOS_RUNNER }}
           key: runner
@@ -316,6 +316,44 @@ jobs:
 
       - name: Build the WinUI app
         run: dotnet build Ketch.App/Ketch.App.csproj -c Release -p:Platform=x64
+
+  # The Linux app (desktop/linux): Meson builds the GTK shell and runs the
+  # fake core and store against the contract scenarios. What `just linux-app-test`
+  # runs for the library; this job also builds the app. The runner's Ubuntu
+  # has GTK 4.14 and libadwaita 1.5; the tokens' contrast queries need
+  # libadwaita 1.8, which 26.04 ships. The digest is the 26.04 index.
+  ketch-linux-app:
+    needs: config
+    if: >-
+      !cancelled() && github.event.pull_request.draft != true
+      && needs.config.outputs.docs-only != 'true'
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
+    steps:
+      # checkout runs git inside the container, and the image does not ship it.
+      - name: Git
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # python3-gi and the typelibs are what blueprint-compiler reads GTK and
+      # libadwaita's types from. git fetches the pinned subproject.
+      - name: Vala and GTK toolchain
+        run: |
+          apt-get install -y --no-install-recommends gcc libc6-dev valac \
+            meson ninja-build pkg-config libjson-glib-dev libgtk-4-dev \
+            libadwaita-1-dev python3-gi gir1.2-girepository-3.0 \
+            gir1.2-gtk-4.0 gir1.2-adw-1
+
+      - name: Build
+        run: |
+          meson setup target/linux-app-meson desktop/linux -Dgui=enabled
+          meson compile -C target/linux-app-meson
+
+      - name: Test
+        run: meson test -C target/linux-app-meson --print-errorlogs
 
   # The design tokens: every generated copy (Swift, XAML, GTK CSS, DESIGN.md,
   # preview.html) is what desktop/design/build.mjs writes from tokens.json, DESIGN.md passes
