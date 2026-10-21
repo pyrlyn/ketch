@@ -56,12 +56,29 @@ enum Envelope<T> {
 }
 
 /// An error, with the sentence a person can be shown next to its kind.
-#[derive(Serialize)]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 struct ErrorBody {
-    #[serde(flatten)]
+    #[cfg_attr(test, serde(flatten))]
     error: KetchError,
     message: String,
+}
+
+// `Network`, `Verification` and `Other` already carry `message`. Flattening
+// the enum and then writing that field again emits the key twice, which a
+// strict parser rejects (B127). The sentence is added only for the variants
+// that have no field of their own.
+impl Serialize for ErrorBody {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut value = serde_json::to_value(&self.error).map_err(serde::ser::Error::custom)?;
+        let Some(obj) = value.as_object_mut() else {
+            return Err(serde::ser::Error::custom(
+                "a ketch error did not serialize as an object",
+            ));
+        };
+        obj.entry("message".to_string())
+            .or_insert_with(|| serde_json::Value::String(self.message.clone()));
+        value.serialize(serializer)
+    }
 }
 
 /// Run one call and render its answer as the JSON envelope.
@@ -138,9 +155,24 @@ pub(crate) mod tests {
     #[test]
     fn an_error_carries_its_type_its_fields_and_a_sentence() {
         let rendered = respond::<()>(|| Err(KetchError::NotFound { name: "jq".into() }));
+        assert_eq!(rendered.matches("\"message\"").count(), 1, "{rendered}");
         assert_eq!(
             serde_json::from_str::<Value>(&rendered).unwrap(),
             json!({"error": {"type": "not_found", "name": "jq", "message": "`jq` not found"}})
+        );
+    }
+
+    #[test]
+    fn an_error_that_already_names_its_message_does_not_repeat_the_key() {
+        let rendered = respond::<()>(|| {
+            Err(KetchError::Network {
+                message: "could not reach github.com".into(),
+            })
+        });
+        assert_eq!(rendered.matches("\"message\"").count(), 1, "{rendered}");
+        assert_eq!(
+            serde_json::from_str::<Value>(&rendered).unwrap(),
+            json!({"error": {"type": "network", "message": "could not reach github.com"}})
         );
     }
 
