@@ -12,6 +12,8 @@ New bugs, dead code and moves from a read-only Cursor cloud review of `main` at 
 | B76 | P1 | bug | fixed | `registry.rs:117-120` | After the live registry is moved aside, the rollback is `let _ = rename(aside, registry_dir)`; if it fails, `registry_dir` is left empty. Surface the failure and copy-restore. |
 | B77 | P1 | bug | fixed | `self_update.rs:932-937` | Uninstall runs `remove_file(exe)?` after packages are gone and state is saved; a busy Windows `.exe` aborts the rest. Warn and continue, like the other uninstall steps. |
 | B79 | P1 | bug | fixed | `install.rs:691-729`; `platform/unix.rs:423`; `platform/windows.rs:502` | `place` swaps the store, then links; `ScopedDir` is off when `existing.prefix == store_dir`, so a failure after the swap leaves state pointing at a tree that is not on disk. Restore `.old` on error. |
+| B80 | P2 | bug | confirmed | `extract/archive.rs:397-399`; extractor order in `platform/linux.rs:62-66` | `TarXzExtractor` claims any `XZ_MAGIC` and is listed before `GzFileExtractor`; unlike gzip (`:508-509`), xz/bz2 never peek for ustar, so a lone `.xz` file fails as a tarball. Peek the decompressed head; add lone-file xz/bz2 extractors. |
+| B81 | P2 | bug | fixed | `extract/archive.rs` `payload_mode` | Archive modes are masked to `0o777`, so setuid, setgid and sticky bits do not survive extraction. |
 | B80 | P2 | bug | fixed | `extract/archive.rs:397-399`; extractor order in `platform/linux.rs:62-66` | `TarXzExtractor` claims any `XZ_MAGIC` and is listed before `GzFileExtractor`; unlike gzip (`:508-509`), xz/bz2 never peek for ustar, so a lone `.xz` file fails as a tarball. Peek the decompressed head; add lone-file xz/bz2 extractors. |
 | B81 | P2 | bug | confirmed | `extract/archive.rs:280`, `:488` | Extraction keeps `mode & 0o7777`, so setuid/setgid/sticky bits from an archive survive. Mask `0o7000`. |
 | B82 | P2 | bug | fixed | `source/github.rs` `parse_checksum_file` | A basename that maps to two different hashes is dropped, not overwritten by the later line. |
@@ -22,7 +24,7 @@ New bugs, dead code and moves from a read-only Cursor cloud review of `main` at 
 | B87 | P2 | bug | fixed | `source/local.rs` `sha256_tree` | The local tree hash framed only `path\0bytes`. It now frames kind, path, permission bits and length, and hashes a symlink's target. A lock from before this framing does not match until `ketch lock`. |
 | B88 | P2 | bug | fixed | `process.rs` `terminate` | After a polite stop, ketch waits until the pid is gone, bounded by five seconds, and only then sends the forceful kill. The replace that follows no longer races a process that is still exiting. |
 | R14 | P2 | dead code | confirmed | `scripts/b32_patch.py:8` | The script opens `src/self_update.rs`, which has moved, and nothing references it. Delete it. |
-| R15 | P2 | dead code | confirmed | root `Cargo.toml:61` (`dirs`); `manifest.rs:137-148` (`Resolver::aliases`); `model.rs:596-599` (`Release::asset`); `platform/mod.rs:49-50` (`Placement::version`); `model.rs:329-331` | Drop the unused root `dirs` dependency, `Resolver::aliases` (or wire it to `__complete`/search), `Release::asset` and the never-read `Placement::version`; remove the stale `allow(dead_code)` on `PackageSpec::raw` (read at `state.rs:162`). |
+| R15 | P2 | dead code | fixed | root `Cargo.toml:61` (`dirs`); `manifest.rs:137-148` (`Resolver::aliases`); `model.rs:596-599` (`Release::asset`); `platform/mod.rs:49-50` (`Placement::version`); `model.rs:329-331` | Drop the unused root `dirs` dependency, `Resolver::aliases` (or wire it to `__complete`/search), `Release::asset` and the never-read `Placement::version`; remove the stale `allow(dead_code)` on `PackageSpec::raw` (read at `state.rs:162`). |
 | R16 | P2 | dead code | confirmed | `fuzz/seed.sh:42` | The seed script reads `$root/src/builtin.toml`; the file is `crates/ketch-core/src/builtin.toml`. Fix the path. |
 | R17 | P2 | dead code | confirmed | `shell.rs:561-1092` | 23 `cfg_attr(not(windows), allow(dead_code))` on the Windows PATH helpers. Put them in one `#[cfg(any(windows, test))]` module. |
 | R18 | P2 | move | fixed | `platform/mod.rs` (`swap_into_store`) | Store swaps share one helper. macOS passes `ditto`; Linux and Windows pass `copy_tree`. |
@@ -84,11 +86,16 @@ New bugs and vulnerabilities from a read-only whole-project review of `main` at 
 | B122 | P3 | bug | fixed | `src/ui.rs` (`BarProgress::start`) | The download label reaches `set_message` through `printable` before it is truncated, the same filter as every other status line. |
 | B123 | P3 | bug | fixed | `platform/{macos,unix,windows}.rs` `restore_retired_store`, from `relink`/`rollback` | In these paths `move_into_store` is a no-op and `sweep_swap_leftovers` does not run; if linking fails while a stale `<ver>.old` from an earlier interrupted swap exists, the error path deletes the live prefix and renames the stale copy over it. Restore only when this call made the swap (have `move_into_store` say so). |
 | B124 | P3 | bug | fixed | `platform/windows.rs:80-104` (`busy_aside`, `clear_for_replace`) | `tool.exe.old.<pid>-<ms>` files left when a running exe is renamed aside are never swept (only ketch's own asides are), so they pile up with every upgrade of a running tool. Sweep `*.old.*` siblings of recorded links at the start of commit, relink and uninstall. |
+| B125 | P3 | vuln | confirmed | `crates/ketch-ffi/src/callbacks.rs:128-162`; `crates/ketch-ffi/src/records.rs:238-241` | Event `detail`/`verb`/`name`/`label` and `Changelog.version` carry client asset names and tags to Swift, C# and Vala unsanitised, though the `records.rs` header says they pass through `changelog::sanitize`; GUIs get bidi overrides raw. Sanitise string fields in `From<report::Event>` and `Changelog::new`. |
+| B126 | P3 | bug | fixed | `crates/ketch-capi/vapi/ketch.vapi` (`StopFunc`); `crates/ketch-capi/include/ketch.h:37` | `KetchStopFn` returns C `bool`, the Vala delegate returns `gboolean` (int): an incompatible function-pointer type (error by default on GCC ≥ 14) and a return-ABI mismatch. `tests/capi.vala` never passes a `ChooseFunc` or `StopFunc`. Return `int32_t` and cover both callbacks in the Vala test. |
+| B127 | P3 | bug | confirmed | `crates/ketch-capi/src/lib.rs:61-65` (`ErrorBody`) | `ErrorBody` flattens `KetchError`, whose `Network`/`Verification`/`Other` variants already have `message`, and adds its own: the JSON envelope has a duplicate `"message"` key that strict parsers reject. Skip or rename the outer field. |
+| B128 | P3 | bug | fixed | `desktop/macos/Ketch/Core/KetchCoreProtocol.swift` | `busy(pid:)` is optional. An unknown holder is logged and shown without a pid, the same as the Windows app. |
+| B129 | P3 | bug | confirmed | `desktop/macos/Ketch/Store/KetchStore.swift:135-145, 312-321` | The background update loop and window-key refresh report errors through `report`, which sets `errorMessage`; offline with the real core, a modal alert pops on every interval and focus change. Log background failures without alerting. |
 | B125 | P3 | vuln | fixed | `crates/ketch-ffi/src/callbacks.rs` `From<report::Event>`; `records.rs` `Changelog::new` | Event strings and `Changelog` name/version pass through `changelog::sanitize` before they reach Swift, C# and Vala. |
 | B126 | P3 | bug | suspected | `crates/ketch-capi/vapi/ketch.vapi` (`StopFunc`); `crates/ketch-capi/include/ketch.h:37` | `KetchStopFn` returns C `bool`, the Vala delegate returns `gboolean` (int): an incompatible function-pointer type (error by default on GCC ≥ 14) and a return-ABI mismatch. `tests/capi.vala` never passes a `ChooseFunc` or `StopFunc`. Return `int32_t` and cover both callbacks in the Vala test. |
 | B127 | P3 | bug | fixed | `crates/ketch-capi/src/lib.rs:61-65` (`ErrorBody`) | `ErrorBody` flattens `KetchError`, whose `Network`/`Verification`/`Other` variants already have `message`, and adds its own: the JSON envelope has a duplicate `"message"` key that strict parsers reject. Skip or rename the outer field. |
 | B128 | P3 | bug | confirmed | `desktop/macos/Ketch/Core/ContractScenario.swift:132`; `KetchCoreProtocol.swift:99` | `Busy` with an unknown holder becomes `pid 0`, and the user reads "ketch is running in another process (pid 0)". Make `busy(pid:)` optional, as on Windows. |
-| B129 | P3 | bug | confirmed | `desktop/macos/Ketch/Store/KetchStore.swift:135-145, 312-321` | The background update loop and window-key refresh report errors through `report`, which sets `errorMessage`; offline with the real core, a modal alert pops on every interval and focus change. Log background failures without alerting. |
+| B129 | P3 | bug | fixed | `desktop/macos/Ketch/Store/KetchStore.swift` | The update timer and a window becoming key call `refresh(alerting: false)`. A failure is a log line. A refresh the user asked for still sets `errorMessage`. |
 | B130 | P3 | bug | fixed | `desktop/macos/Ketch/Views/DiscoverView.swift:44-47`, `PackageDetailView.swift:59-62`; `desktop/windows/Ketch.App/Pages/DiscoverPage.xaml.cs:36-42` | Core calls ignore task cancellation, so an older, slower search or changelog reply can land after a newer one (Windows also searches on every keystroke). Tag requests and drop out-of-date replies; debounce search. |
 | B131 | P3 | bug | fixed | `desktop/windows/Ketch.AppCore/KetchStore.cs` (`Operate`) | When an operation is already running, `Operate` returned silently: a confirmed Uninstall or a clicked Install did nothing. It now sets `ErrorMessage` to the same sentence macOS uses. `A_second_operation_while_one_is_running_says_so` covers it. |
 | B132 | P3 | bug | fixed | `install.ps1` | `--version 0.10.0` is given a leading `v` before the download URL is built, the same as `install.sh`. A tag that already starts with `v` is left alone. |
@@ -145,6 +152,15 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 Row B85 in the 2026-10-08 findings. `registry::update` downloads with `cx.cancel`. `ask_all` checks that token before each package, so a cancel stops the parallel lookup.
 
 Status: done. See `done.md`.
+| B81 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
+
+### B81. Archive extraction keeps setuid bits
+
+Row B81 in the 2026-10-08 findings. `payload_mode` keeps only `0o777`, and every extractor applies that before `set_unix_mode`. A setuid archive member lands as `0755`.
+
+Status: done. See `done.md`.
+| B128 | done | P3 | 1 | 100% | Cursor / grok 4.7 |
+| B129 | done | P3 | 2 | 100% | Cursor / grok 4.7 |
 | B110 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
 | B134 | done | P3 | 1 | 100% | Cursor / grok 4.7 |
 | B133 | done | P3 | 2 | 100% | Cursor / grok 4.7 |
@@ -590,6 +606,16 @@ Row B118 in the 2026-10-12 findings. Done: a package installed checksum-verified
 
 Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in `cli.rs`. Check: an end-to-end test of both paths.
 
+### B128. An unknown lock holder is pid 0
+
+Row B128 in the 2026-10-12 findings. `Busy` with no pid was stored as pid 0, so the banner and the log said another process was pid 0. `busy(pid:)` is optional. A missing holder is named without a pid, as on Windows.
+
+Status: done. See `done.md`.
+### B129. Background refresh raises an error sheet
+
+Row B129 in the 2026-10-12 findings. The update timer and the window becoming key re-read the package list. Offline, that used to set `errorMessage` and the sheet appeared on every interval and every focus change. Those two callers now pass `alerting: false`. The failure is a warning in the activity log. A refresh the user asked for still alerts.
+
+Status: done. See `done.md`.
 ### B110. Changelog links open any URL scheme
 
 Row B110 in the 2026-10-12 findings. Release notes are a client app's Markdown, drawn as `Text`. A `.link` run stays only when the scheme is `https`; `zoommtg:`, `file:` and `http:` keep their words and lose the link, so the default `openURL` action cannot open them.

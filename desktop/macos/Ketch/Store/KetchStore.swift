@@ -61,8 +61,17 @@ struct BinaryChoice: Identifiable {
 /// Another process holds the ketch lock; `retry` re-runs what was refused.
 struct BusyState: Identifiable {
     let id = UUID()
-    let pid: UInt32
+    /// Nil when the core could not name the holder.
+    let pid: UInt32?
     let retry: @MainActor () async -> Void
+
+    var message: String {
+        if let pid {
+            "Another ketch is running (pid \(pid)). Retry when it finishes."
+        } else {
+            "Another ketch is running. Retry when it finishes."
+        }
+    }
 }
 
 @MainActor
@@ -133,7 +142,10 @@ final class KetchStore {
 
     /// Re-reads installed and outdated packages; called on launch, when the
     /// window becomes key (so CLI installs show up) and after every operation.
-    func refresh() async {
+    /// `alerting` is false for the timer and for becoming key: offline, those
+    /// would raise the error sheet on every interval and every focus change.
+    /// The failure is still a log line.
+    func refresh(alerting: Bool = true) async {
         do {
             let (installed, outdated) = try await background { core in
                 (try core.installed(), try core.outdated())
@@ -142,6 +154,10 @@ final class KetchStore {
             self.outdated = outdated
             lastChecked = Date()
         } catch {
+            guard alerting else {
+                append(.warning, error.localizedDescription)
+                return
+            }
             report(error, retry: { [weak self] in await self?.refresh() })
         }
     }
@@ -340,7 +356,7 @@ final class KetchStore {
             while !Task.isCancelled {
                 guard let self else { return }
                 if !self.isRunning {
-                    await self.refresh()
+                    await self.refresh(alerting: false)
                     await self.notifyOfNewUpdates()
                 }
                 let interval = self.settings.updateCheckInterval
@@ -400,7 +416,7 @@ final class KetchStore {
     private func report(_ error: any Error, retry: (@MainActor () async -> Void)?) {
         switch error as? KetchError {
         case .busy(let pid)?:
-            append(.warning, "ketch is running in another process (pid \(pid))")
+            append(.warning, error.localizedDescription)
             if let retry { busy = BusyState(pid: pid, retry: retry) }
         case .cancelled?:
             append(.warning, "Cancelled")

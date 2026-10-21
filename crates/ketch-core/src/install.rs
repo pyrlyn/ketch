@@ -761,7 +761,6 @@ pub fn commit(cx: &Ctx<'_>, state: &mut State, prepared: Prepared) -> Result<Ins
     let picked_specs = pick.as_ref().map(|p| p.specs.clone());
     let links = platform.place(&Placement {
         name: &manifest.name,
-        version: &version,
         payload_dir: &payload,
         store_dir: &store_dir,
         bin_dir: &cfg.bin_dir,
@@ -1038,7 +1037,6 @@ pub fn relink(cx: &Ctx<'_>, state: &mut State, name: &str) -> Result<()> {
     }
     let platform = crate::platform::host()?;
     let manifest = pkg.manifest.clone();
-    let version = pkg.version.to_string();
     // Place first, like `commit`: a failed placement must not take the
     // working links with it. `replacing` lets the new links reclaim the
     // destinations this package already owns.
@@ -1064,7 +1062,6 @@ pub fn relink(cx: &Ctx<'_>, state: &mut State, name: &str) -> Result<()> {
     let picked_specs = pick.as_ref().map(|p| p.specs.clone());
     let links = platform.place(&Placement {
         name: &pkg.name,
-        version: &version,
         // Already in the store: placement is idempotent over its own output.
         payload_dir: &pkg.prefix,
         store_dir: &pkg.prefix,
@@ -1213,7 +1210,6 @@ pub fn rollback(
     let picked_specs = pick.as_ref().map(|p| p.specs.clone());
     let links = platform.place(&Placement {
         name: &pkg.name,
-        version: &version,
         payload_dir: &target.prefix,
         store_dir: &target.prefix,
         bin_dir: &cfg.bin_dir,

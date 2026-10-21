@@ -47,15 +47,18 @@ pub type KetchChooseFn = Option<
 >;
 
 /// Whether to stop the processes that hold files about to be replaced:
-/// `holders` is a JSON array of `Holder`. `false` leaves them running. NULL:
-/// always `false`.
-pub type KetchStopFn =
-    Option<extern "C" fn(holders: *const c_char, user_data: *mut c_void) -> bool>;
+/// `holders` is a JSON array of `Holder`. Zero leaves them running. NULL:
+/// always no.
+///
+/// An `int32_t`, not `bool`: a Vala `bool` is `gboolean` (an `int`), and a
+/// function pointer between those two is a type error on GCC 14 (B126).
+pub type KetchStopFn = Option<extern "C" fn(holders: *const c_char, user_data: *mut c_void) -> i32>;
 
 /// Whether to remove `path`, a package folder an earlier uninstall left
-/// behind with nothing recorded in it. `false` keeps it. NULL: always `false`.
-pub type KetchConfirmFn =
-    Option<extern "C" fn(path: *const c_char, user_data: *mut c_void) -> bool>;
+/// behind with nothing recorded in it. Zero keeps it. NULL: always no.
+///
+/// An `int32_t` for the same reason as `KetchStopFn`.
+pub type KetchConfirmFn = Option<extern "C" fn(path: *const c_char, user_data: *mut c_void) -> i32>;
 
 /// The caller's `user_data`, carried to whichever thread reports.
 struct UserData(*mut c_void);
@@ -106,14 +109,14 @@ impl Decider for CDecider {
         let Some(call) = self.stop else {
             return false;
         };
-        c_json(&holders).is_some_and(|json| call(json.as_ptr(), self.stop_data.0))
+        c_json(&holders).is_some_and(|json| call(json.as_ptr(), self.stop_data.0) != 0)
     }
 
     fn confirm_remove_leftover(&self, path: String) -> bool {
         let Some(call) = self.confirm else {
             return false;
         };
-        CString::new(path).is_ok_and(|path| call(path.as_ptr(), self.confirm_data.0))
+        CString::new(path).is_ok_and(|path| call(path.as_ptr(), self.confirm_data.0) != 0)
     }
 }
 
@@ -962,10 +965,15 @@ mod tests {
         -1
     }
 
-    extern "C" fn agree(holders: *const c_char, _: *mut c_void) -> bool {
+    extern "C" fn agree(holders: *const c_char, _: *mut c_void) -> i32 {
         // SAFETY: ketch-capi passes a NUL-terminated string valid for this call.
         let holders = unsafe { CStr::from_ptr(holders) }.to_str().unwrap();
-        holders == r#"[{"pid":7,"path":"/bin/x"}]"#
+        // Any non-zero answer is yes, the way a Vala `gboolean` returns true.
+        if holders == r#"[{"pid":7,"path":"/bin/x"}]"# {
+            2
+        } else {
+            0
+        }
     }
 
     #[test]
@@ -987,10 +995,10 @@ mod tests {
         assert!(decider(None, ptr::null_mut(), None, ptr::null_mut()).is_none());
     }
 
-    extern "C" fn ghost_only(path: *const c_char, _: *mut c_void) -> bool {
+    extern "C" fn ghost_only(path: *const c_char, _: *mut c_void) -> i32 {
         // SAFETY: ketch-capi passes a NUL-terminated string valid for this call.
         let path = unsafe { CStr::from_ptr(path) }.to_str().unwrap();
-        path == "/k/store/ghost"
+        i32::from(path == "/k/store/ghost")
     }
 
     #[test]
