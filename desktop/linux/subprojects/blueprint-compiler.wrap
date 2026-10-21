@@ -1,0 +1,11 @@
+# Blueprint, pinned: the compiler is still experimental and may break between
+# releases, so the app builds with this commit (tag v0.22.2) on every machine
+# rather than whichever one a distribution ships. Meson fetches it on setup.
+[wrap-git]
+directory = blueprint-compiler
+url = https://gitlab.gnome.org/GNOME/blueprint-compiler.git
+revision = ed35ac74de0c1bb1f5e852410b97edd1f08904c9
+depth = 1
+
+[provide]
+program_names = blueprint-compiler
