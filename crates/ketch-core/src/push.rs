@@ -995,6 +995,21 @@ mod tests {
     }
 
     #[test]
+    fn hooks_are_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("tool");
+        std::fs::create_dir(&project).unwrap();
+        let file = project.join("ketch.toml");
+        std::fs::write(
+            &file,
+            "name = \"tool\"\nsource = \"github:acme/tool\"\n\n[hooks]\nafter_install = \"echo pwned\"\n",
+        )
+        .unwrap();
+        let error = load(&file).unwrap_err().to_string();
+        assert!(error.contains("cannot run hooks"), "{error}");
+    }
+
+    #[test]
     fn a_local_source_is_refused() {
         let dir = tempfile::tempdir().unwrap();
         let project = dir.path().join("tool");
