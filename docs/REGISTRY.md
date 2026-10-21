@@ -47,6 +47,7 @@ stranger's disk, so it is checked before it is trusted:
 | --- | --- |
 | an unknown key (`binary = …` for `bin = …`) | a misspelt key that is silently ignored installs the wrong thing and complains nowhere |
 | a `local:` source | a registry entry must name a release anyone can fetch, not a path on one machine's disk |
+| a `[hooks]` table | a registry entry is someone else's file; a command in it would run as the person installing it |
 | `name` that disagrees with the folder | the package would be unreachable under the name its folder advertises |
 | a `name` or `bin.name` that is not a usable file name | `name` becomes a directory in the store and `bin.name` a link in `~/.ketch/bin`; `../../.zshrc` is not a binary |
 | a `bin.path` or `extra_paths` entry containing `..` | paths are relative to the extracted payload and must stay inside it |
@@ -66,9 +67,9 @@ parse errors, validation errors, and name or alias collisions into a failing
 run so they cannot land.
 
 [`Manifest::validate`](MANIFESTS.md) also applies to `~/.ketch/manifests/*.toml`.
-Registry entries must additionally pass the `local:` and folder-name rules in
-the table above — rules user manifests never see — so a manifest that installs
-locally is not necessarily one that can be contributed as-is.
+Registry entries must additionally pass the `local:`, `[hooks]` and folder-name
+rules in the table above — rules user manifests never see — so a manifest that
+installs locally is not necessarily one that can be contributed as-is.
 
 ## Using it
 
@@ -97,7 +98,8 @@ ketch registry validate .
 ```
 
 That is what must pass before merge: every `ketch.toml` parsed, checked
-against its folder name, refused when `source` is `local:`, passed through
+against its folder name, refused when `source` is `local:` or the file carries
+`[hooks]`, passed through
 [`Manifest::validate`](MANIFESTS.md), with name and alias collisions failing
 the run.
 
