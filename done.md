@@ -31,6 +31,12 @@ Row B123 in the 2026-10-12 findings. Done: the store is restored only when this 
 
 `registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
 
+### B98. `install.ps1` closes the user's PowerShell window on error
+
+Under `irm … | iex` the installer runs in the caller's session. The body is a scriptblock invoked with `@args`, so its variables, functions and `$ErrorActionPreference = 'Stop'` stay inside it. Error paths throw; the catch prints the message. `exit` runs only when `$PSCommandPath` is set, which is a file launch (`-File` or `.\install.ps1`). Piped into `iex` the status is `$global:LASTEXITCODE` and the session keeps running. The caller's `KETCH_ROOT` is restored in `finally`.
+
+Tests: `the_script_exits_only_when_run_as_a_file`, `a_failure_under_iex_leaves_the_callers_session_running`.
+
 ### B132. `install.ps1` omits the `v` on `--version`
 
 `install.sh` accepts `0.10.0` and `v0.10.0` because release tags are always `v`-prefixed. `install.ps1` put the argument into the download URL unchanged, so `--version 0.10.0` requested `…/download/0.10.0/…` and 404ed. After the version is resolved, a value that does not already start with `v` gets one. A tag from the GitHub API already has it, so that path is unchanged.

@@ -118,7 +118,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B74 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
 | R12 | done | P3 | 1 | 100% | Cursor / grok 4.7 |
 | R20 | in progress | P2 | 3 | 90% | Claude / sonnet-5.5 |
-| B98 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
+| B98 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
 | B99 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
 | B102 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | R18 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
@@ -504,7 +504,9 @@ Kept local on purpose: `source/local.rs` `copy_tree` (its Windows branch materia
 
 ### B98. `install.ps1` closes the user's PowerShell window on error
 
-Row B98 in the 2026-10-12 findings. Done: the body runs in a function, error paths `throw`/`return`, and `$ErrorActionPreference` is restored.
+Done. See `done.md`.
+
+Row B98 in the 2026-10-12 findings. The body is a scriptblock: its variables and `$ErrorActionPreference` stay out of an `irm | iex` session, and `exit` runs only when the script was started as a file.
 
 Plan: wrap `install.ps1`; keep `--help` and arguments working. Check: a Pester-free script test (or CI step) that sources the script with a failing argument and the session survives.
 
