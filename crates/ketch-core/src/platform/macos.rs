@@ -757,7 +757,6 @@ mod tests {
         let apps = tmp.path().join("Applications");
         let plan = Placement {
             name: "rg",
-            version: "1.0",
             payload_dir: &payload,
             store_dir: &store,
             bin_dir: &bin,
@@ -820,7 +819,6 @@ mod tests {
         let package_dir = store.parent().unwrap();
         let plan = Placement {
             name: "pkg",
-            version: "1.0",
             payload_dir: &payload,
             store_dir: &store,
             bin_dir: &bin,
@@ -859,7 +857,6 @@ mod tests {
         let apps = tmp.path().join("Applications");
         let plan = Placement {
             name: "tool",
-            version: "1.0",
             payload_dir: &payload,
             store_dir: &store,
             bin_dir: &bin,
@@ -957,7 +954,6 @@ mod tests {
 
         let placed = MacOsPlatform::new().place(&Placement {
             name: "tool",
-            version: "2.0",
             payload_dir: &payload,
             store_dir: &store,
             bin_dir: &bin,
@@ -1003,7 +999,6 @@ mod tests {
 
         let placed = MacOsPlatform::new().place(&Placement {
             name: "tool",
-            version: "2.0",
             payload_dir: &payload,
             store_dir: &store,
             bin_dir: &bin,
@@ -1054,7 +1049,6 @@ mod tests {
         // Relink and rollback place a payload that is already the store.
         let placed = MacOsPlatform::new().place(&Placement {
             name: "tool",
-            version: "1.0",
             payload_dir: &store,
             store_dir: &store,
             bin_dir: &bin,

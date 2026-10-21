@@ -375,10 +375,11 @@ same version, and runs no hooks.
 **Hooks run only from a manifest in your own manifest directory**,
 `~/.ketch/manifests/<name>.toml`. A registry package or a built-in manifest is
 someone else's file, and installing what it describes must never mean running
-their shell — so a manifest from those tiers that carries `hooks` is refused
-at install, before anything is placed, with a message saying which file to
-copy where. Copying it to your manifest directory is the opt-in: it becomes
-yours, and it wins over the registry's copy from then on.
+their shell. A registry entry that carries `hooks` is refused when the registry
+is read (`ketch registry validate`, `ketch registry push`, and loading a fetched
+copy). A built-in manifest that carries `hooks` is refused at install, before
+anything is placed. Copying the file into your manifest directory is the
+opt-in: it becomes yours, and it wins over the registry's copy from then on.
 
 ## What ketch checks
 
@@ -395,7 +396,7 @@ Serde checks the shape. These are the values it cannot judge:
 | `provides` aliases must be non-empty and whitespace-free | An alias nobody can type is not an alias. |
 | `strip_prefix` must be at most 8 | Each level is a directory listing, and no real archive nests wrappers that deep. |
 | every `hooks` entry must say something | A blank one would still spawn a shell and report success. |
-| a manifest with `hooks` must come from your manifest directory — checked at install, not at load | A registry or built-in manifest is someone else's file, and its commands are their code. |
+| a manifest with `hooks` must come from your manifest directory | A registry entry is refused when the registry is read. A built-in is refused at install. Either file is someone else's, and its commands are their code. |
 | `trust.signature` and `trust.signed` must be usable file names, and `signature` knows only `{file}` and must name another file | They name files downloaded beside the asset. |
 | `trust` keys must belong to the chosen `verifier` | A `fingerprint` on a minisign policy would read as a check and be none. |
 | sigstore needs an `https` `issuer` and an `identity` or `repository` | An issuer alone admits anyone it issues certificates to. |

@@ -8,6 +8,11 @@
 & {
     $ErrorActionPreference = 'Stop'
 
+    # Windows PowerShell 5.1 on older Windows 10 and Server still defaults to
+    # TLS 1.0/1.1, which GitHub rejects. OR keeps TLS 1.3 where the host
+    # already enabled it.
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
     $SelfRepo = 'pyrlyn/ketch'
     $BinaryName = 'ketch.exe'
     $DefaultRoot = Join-Path $env:USERPROFILE '.ketch'
@@ -384,9 +389,12 @@ OPTIONS:
             }
 
             $BinaryPath = $null
+            # Windows PowerShell 5.1's Join-Path takes one child. A third
+            # positional argument is -AdditionalChildPath, which only exists in
+            # pwsh 6+, so the nested archive path is joined twice.
             $candidates = @(
                 (Join-Path $TempDir $BinaryName),
-                (Join-Path $TempDir 'ketch' $BinaryName)
+                (Join-Path (Join-Path $TempDir 'ketch') $BinaryName)
             )
             foreach ($candidate in $candidates) {
                 if (Test-Path -LiteralPath $candidate) {
