@@ -1922,6 +1922,35 @@ mod tests {
     }
 
     #[test]
+    fn a_stale_sweep_clears_every_aside_and_warns_on_one_it_cannot_remove() {
+        let tmp = tempfile::tempdir().unwrap();
+        let asides = aside_candidates(&tmp.path().join(bootstrap_binary_name()));
+        for aside in &asides {
+            std::fs::write(aside, b"old").unwrap();
+        }
+        sweep_stale_asides(tmp.path(), &Report::silent());
+        for aside in &asides {
+            assert!(!aside.exists(), "{} survived the sweep", aside.display());
+        }
+
+        // A directory stands in for the image Windows will not let go of:
+        // `remove_file` refuses it on every OS.
+        let stuck = &asides[0];
+        std::fs::create_dir(stuck).unwrap();
+        let recorder = std::sync::Arc::new(crate::report::Recorder::default());
+        sweep_stale_asides(tmp.path(), &Report::shared(recorder.clone()));
+        let shown = stuck.display().to_string();
+        assert!(
+            recorder.events().iter().any(|event| matches!(
+                event,
+                crate::report::Event::Warn { detail } if detail.contains(&shown)
+            )),
+            "no warning named the stuck aside: {:?}",
+            recorder.events()
+        );
+    }
+
+    #[test]
     fn doctor_notes_a_stale_aside_and_stays_quiet_without_one() {
         let tmp = tempfile::tempdir().unwrap();
         assert!(stale_aside_from(tmp.path(), None).is_none());
