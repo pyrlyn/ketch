@@ -133,12 +133,12 @@ jobs:
       package: ${{ steps.package.outputs.value }}
     steps:
       - id: app
-        uses: pyrlyn/ci/.github/actions/macos-runner@97fe5e56c8e5fc8980fa8d3ca7043bb9ea727f21 # main
+        uses: pyrlyn/ci/.github/actions/macos-runner@main
         with:
           runner: ${{ vars.MACOS_RUNNER }}
           value: '["macos-26"]'
       - id: package
-        uses: pyrlyn/ci/.github/actions/macos-runner@97fe5e56c8e5fc8980fa8d3ca7043bb9ea727f21 # main
+        uses: pyrlyn/ci/.github/actions/macos-runner@main
         with:
           runner: ${{ vars.MACOS_RUNNER }}
           key: runner
