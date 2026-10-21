@@ -15,8 +15,10 @@ same script as below, kept executable so it can be copied straight into
 
 ketch looks in `~/.ketch/plugins` first, then every directory on `PATH`. The
 first `ketch-source-<name>` found wins, so a copy in the plugins directory
-shadows one on `PATH`. `ketch plugin list` shows what was found and `ketch
-plugin dir` prints the directory.
+shadows one on `PATH`. The bin directory and the package store are not
+searched, and a `PATH` entry that resolves into either is skipped: an
+installed client app is not a plugin. `ketch plugin list` shows what was
+found and `ketch plugin dir` prints the directory.
 
 Every discovered plugin is asked for its capabilities on every ketch command, so
 `capabilities` must be fast and must not touch the network.

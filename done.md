@@ -23,6 +23,12 @@ Item 2 stays with B64. Item 1 is B65, which closes with B64's `tests/bin_choice.
 
 Status: done. CI already runs the whole suite on every OS, with no workflow edit: `ci.yml`'s `rust` job (pyrlyn/ci `ci-rust.yml`) runs clippy and `cargo nextest run --workspace --all-targets` on Linux x86_64 and aarch64, macOS aarch64 and Windows x86_64, and `package` runs `dist build` on all three OSes. `verify.yml` no longer exists; the per-OS `check` jobs named above became that shared job, which brings its own sccache. Item 1 is B65, its own task (it extends `tests/bin_choice.rs`, which every OS already runs). Item 2: `install.rs` tests `a_choice_asked_for_a_user_manifest_is_written_into_the_file` and `a_choice_asked_for_a_registry_package_is_remembered_in_state_and_reused` drive `commit` with a scripted `Decider` over a payload holding `rtok-cli` and `rtok-hook`: the user manifest gets `bin = [...]` appended with the rest of the file unchanged; a registry package keeps its choice in state, its registry copy is never written, and an upgrade reuses the choice without asking. They are not OS-gated, so every CI target runs them. Item 3: no second cache, for the reasons and numbers above.
 
+### B116. Do not run an installed client as a source plugin
+
+Row B116 in the 2026-10-12 findings. Discovery walks `PATH`, and install puts client binaries on that `PATH`, so a package that ships `ketch-source-*` was executed on later commands.
+
+Done: the bin directory and the store are not searched, and an executable whose path resolves into either is skipped. A plugin in the plugins directory, or elsewhere on `PATH`, is still found.
+
 ### B138. Record the Marvin advisory and keep rustls past its fix
 
 Row B138 in the 2026-10-12 findings. rustls 0.23.43 (RUSTSEC-2026-0285) is already 0.23.46 in `Cargo.lock`, so it was not bumped again. rsa 0.9.10 (RUSTSEC-2023-0071, Marvin) has no upstream fix and is only reached to verify signatures.
