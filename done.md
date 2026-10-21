@@ -236,6 +236,11 @@ Found by the 2026-10-08 review: extraction kept `mode & 0o7777`, so setuid, setg
 
 Test: `setuid_bits_from_an_archive_are_dropped`.
 
+### B100. Zip symlink targets are read without a bound
+
+A zip symlink's target is the member body. It was read with an unbounded `read_to_string`, so a small, highly compressed member could expand to gigabytes. The read now stops at 4 KiB plus one byte and refuses anything longer.
+
+Test: `an_overlong_zip_symlink_target_is_refused`.
 ### R14. Delete the stale self-update patch script
 
 `scripts/b32_patch.py` opened `src/self_update.rs` after the core move, and nothing referenced it. The script is gone.
