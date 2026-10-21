@@ -300,6 +300,11 @@ capi-test:
 windows-app-test:
     cd desktop/windows && dotnet test --project Ketch.AppCore.Tests
 
+# The Windows app's adapter onto ketch-ffi (FfiKetchCore) against the real core, on a debug build; runs on any OS.
+windows-ffi-test:
+    scripts/csharp.sh --debug
+    cd desktop/windows && dotnet test --project Ketch.FfiCore.Tests
+
 # The Linux app's fake core and store against the contract scenarios.
 # Needs valac, Meson, Ninja, GLib and json-glib on PATH (the distribution's,
 # as `just capi-test`). Where GTK 4.20 and libadwaita 1.8 are installed the

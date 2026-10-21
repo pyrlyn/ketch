@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
 
-// Application start: one instance, the tray, update notices, and the startup
-// and protocol registrations. The window closes into the tray while the icon
-// is on; Quit is what actually leaves.
+// Application start: one instance, the store on the core CoreFactory picks,
+// the saved settings, the tray, update notices, and the startup and protocol
+// registrations. The window closes into the tray while the icon is on; Quit is
+// what actually leaves.
 
 using System.ComponentModel;
 using Ketch.AppCore;
@@ -25,14 +26,19 @@ public partial class App : Application
         InitializeComponent();
     }
 
-    /// <summary>The fake core behind <see cref="Store"/>, for Settings to script.</summary>
-    public static FakeKetchCore Core { get; } = FakeCoreSetup.Create();
+    /// <summary>The core behind <see cref="Store"/>; Settings scripts it when it is the fake.</summary>
+    public static IKetchCore Core { get; } = CoreFactory.Create();
+
+    /// <summary>The saved theme; anything the file says that is not one is the system's.</summary>
+    public static ElementTheme Theme =>
+        Enum.TryParse<ElementTheme>(Settings.Theme, out var theme) && Enum.IsDefined(theme) ? theme : ElementTheme.Default;
 
     /// <summary>What every page binds to; events reach it through the UI thread's queue.</summary>
     public static KetchStore Store { get; private set; } = null!;
 
     public static MainWindow? Main { get; private set; }
 
+    /// <summary>The app's own preferences, read once at start and saved as they change.</summary>
     public static AppSettings Settings { get; private set; } = null!;
 
     /// <summary>The last startup or protocol registration that failed, for Settings to show.</summary>
@@ -68,6 +74,7 @@ public partial class App : Application
         Settings = AppSettings.Load(AppSettings.DefaultDirectory());
         Store = new KetchStore(Core, action => ui.TryEnqueue(() => action()), Settings, Toasts.Notifier);
         Main = new MainWindow();
+        Main.SetTheme(Theme);
         Main.AppWindow.Closing += OnMainClosing;
         Main.Activate();
 
