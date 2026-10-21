@@ -1349,7 +1349,7 @@ pub fn report() -> &'static Report {
 /// A core context for `cfg` that reports to this terminal and asks nothing:
 /// what a run with no person to answer, or `--yes`, wants.
 pub fn ctx(cfg: &Config) -> Ctx<'_> {
-    Ctx::new(cfg, report())
+    Ctx::new(cfg, report()).with_cancel(crate::interrupt::token())
 }
 
 /// [`ctx`], with the pipeline's questions put to a person at this terminal

@@ -255,8 +255,9 @@ pub fn select_release(
             // A tag that is not a version at all cannot be "the highest"
             // next to ones that are: compared as text, `desktop-v1.0.0` or
             // `nightly` outranks `v2.0.0` on its first letter. One repository
-            // can release two products — ketch's own tags the macOS app
-            // `desktop-v*` — and only the versioned tags are this package's.
+            // can release more than one product — ketch's own tags the macOS
+            // app `desktop-v*` and the Windows app `desktop-windows-v*` —
+            // and only the versioned tags are this package's.
             let pool = if pool.iter().any(|r| r.version.sem.is_some()) {
                 let mut versioned = Vec::with_capacity(pool.len());
                 for release in pool {
@@ -426,6 +427,28 @@ mod tests {
                     reason: "not a version".into(),
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn latest_never_picks_a_windows_app_tag_over_a_cli_release() {
+        let releases = vec![
+            release("v0.8.1", false),
+            release("desktop-windows-v1.2.3", true),
+        ];
+        let opts = ListOpts {
+            include_prerelease: true,
+            ..Default::default()
+        };
+        let traced = select_release("x", releases, &VersionSpec::Latest, &opts).unwrap();
+        assert_eq!(traced.selected.tag, "v0.8.1");
+        assert_eq!(
+            traced.rejected,
+            vec![RejectedRelease {
+                tag: "desktop-windows-v1.2.3".into(),
+                version: "desktop-windows-v1.2.3".into(),
+                reason: "not a version".into(),
+            }]
         );
     }
 

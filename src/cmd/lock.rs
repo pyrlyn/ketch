@@ -159,6 +159,7 @@ pub fn sync(cfg: &Config, args: SyncArgs) -> Result<()> {
 /// One install request for a locked entry, at exactly the tag recorded for it.
 fn request_for(cfg: &Config, entry: &LockedPackage, target: &str) -> Result<InstallRequest> {
     let mut req = InstallRequest::new(spec_for(cfg, entry)?);
+    req.cancel = crate::interrupt::token();
     req.require_checksum = cfg.require_checksums;
     // The recorded name is the one the package lives under, which `--name`
     // may have chosen. Resolving the source alone would infer another, and

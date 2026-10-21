@@ -1,3 +1,9 @@
+### B65. Binary selection regression test
+
+Add a fixture with two similarly named binaries (`rtok` and `rtok-hook`) and assert the intended one is chosen on every OS: macOS, Windows and Linux. This is the test that would have caught the Windows alphabetical-sort bug, where `rtok-hook` was selected instead of the intended binary.
+
+B64's `tests/bin_choice.rs` already linked `rtok` beside `rtok-hook` on every OS, but each host shipped its own names, so only the Windows job saw the order that broke: `rtok-hook.exe` sorts before `rtok.exe`. With discovery reverted to a plain sort and the chooser taking the first candidate, that test still passed on macOS. `windows_names_link_the_binary_named_like_the_package_on_every_os` now ships `rtok-hook.exe` and `rtok.exe` (both archive orders, and upper case) on every host and reads the linked target from `state.json`, so macOS and Linux CI fail on the same regression.
+
 ### R3. Cross-platform CI
 
 Run verification on macOS, Windows and Linux. A ketch config is either a local file in the project or pushed to a registry; keep that model. The cross-platform check must catch OS-specific binary selection bugs like the one in B64.
@@ -49,6 +55,31 @@ Row B119 in the 2026-10-12 findings. Done: an END pairs with the nearest BEGIN s
 ### B107. A failed self-docs link leaves `state.json` on the old version
 
 Row B107 in the 2026-10-12 findings. `expose_self_docs(...)?` ran after the new version was placed but before `state.save`, so a user-owned completion or man file at the destination left the new binary on disk and `state.json` naming the old one, and every later self upgrade repeated it. Done: self install and self upgrade save the new package before linking man pages and completions, and a failure there is a warning.
+
+### R8. Core calls from a long-running host
+
+A GUI keeps running between operations and must not freeze. Core operations must be callable from a worker thread, and the process lock must be tryable: `state::Lock` gets a non-blocking acquire, so a frontend can report "another ketch is running" instead of waiting. Check that nothing in the core relies on process-global state that a second operation in the same process would see stale (config, the `ui` init, cached listings).
+
+Done when two operations in one process run one after the other in a test, and a held lock gives a typed "busy" error.
+
+Finding from the survey: `Lock::acquire_path` already fails fast with the holder's pid, but it treats a lock file holding *its own pid* as re-entrant (`owned: false`). In a GUI process two concurrent operations would both pass. That is the main fix here.
+
+Plan:
+1. Lock: keep the lock file for cross-process exclusion, and add an in-process guard (a `static` `Mutex<bool>`/`AtomicBool` "held by this process") so a second acquire in the same process fails with the same busy error instead of adopting the lock. Keep the existing re-entrancy only where the CLI relies on it (find the callers first; if none, remove it and say why in the commit).
+2. Typed error: `Error::Busy { pid: Option<u32> }` (today it is a message), so a frontend can show "ketch is busy (pid N)" and retry, and the CLI prints the same text as today.
+3. Cancellation: a `Cancel` token (`Arc<AtomicBool>`) in the context, checked between packages and between download chunks; a cancelled operation cleans up its temp dir and returns `Error::Cancelled`. The CLI wires it to Ctrl-C where it already handles SIGINT (the TUI's exit 130 path).
+4. Process globals: `Config::load` reads env and files on every call — the host rebuilds `Config` per operation, so config edits in `config.toml` are seen; `log::SINK` initialised once per process; the `listing.rs` cache is file-based, fine. `tokio` runtime for `push.rs` is created per call, confirm it is not nested inside a host runtime.
+5. `Send`: core entry points are callable from any thread (no `Rc`, no thread-locals in the pipeline).
+
+Check: unit tests — two locks in one process → second is `Busy`; lock released on drop and on error; a cancelled fixture install leaves no partial store folder and no state entry; an end-to-end test runs the CLI while a lock is held and asserts the busy message.
+
+Status: done. PR https://github.com/pyrlyn/ketch/pull/184 merged 2026-10-01. Pid re-entrancy had no callers and was removed. Ctrl-C cancels the run's token (a second Ctrl-C exits 130 at once). Install requests, `self upgrade` and registry downloads share that token.
+
+### R17. Windows PATH helpers live in one module
+
+Row R17 in the 2026-10-08 findings. The Windows PATH, PowerShell profile and cmd AutoRun string helpers were compiled on every OS and silenced with `allow(dead_code)`.
+
+Done: they sit in `windows_env`, compiled on Windows and in tests. A Unix build that is not a test does not include them.
 
 ### B85. Registry update and listing ignore cancel
 Each of the four switches can be turned off in Settings. They persist in `%LOCALAPPDATA%\ketch\settings.json`, so an unpackaged app and an MSIX share one file. A broken file loads the defaults rather than stopping the app.
@@ -205,6 +236,11 @@ Found by the 2026-10-08 review: extraction kept `mode & 0o7777`, so setuid, setg
 
 Test: `setuid_bits_from_an_archive_are_dropped`.
 
+### B100. Zip symlink targets are read without a bound
+
+A zip symlink's target is the member body. It was read with an unbounded `read_to_string`, so a small, highly compressed member could expand to gigabytes. The read now stops at 4 KiB plus one byte and refuses anything longer.
+
+Test: `an_overlong_zip_symlink_target_is_refused`.
 ### R14. Delete the stale self-update patch script
 
 `scripts/b32_patch.py` opened `src/self_update.rs` after the core move, and nothing referenced it. The script is gone.
@@ -1694,9 +1730,9 @@ Also through `commit`: `install::tests::a_reinstall_whose_linking_fails_after_th
 
 ### B105. Windows same-version reinstall refuses its own copied bin
 
-Found by the 2026-10-12 review: ownership of a copied bin was proven against `record.target` after the swap had changed it. On re-check it was already fixed by 13efcf9: `retired_targets` compares bin and extra copies against `<store>.old` after the swap. A Windows end-to-end test (`install`, then `install --force`) is still missing.
+Found by the 2026-10-12 review: ownership of a copied bin was proven against `record.target` after the swap had changed it. On re-check it was already fixed by 13efcf9: `retired_targets` compares bin and extra copies against `<store>.old` after the swap.
 Model: Claude Code / opus-5.5 · Status: done 2026-10-12 (already fixed in 13efcf9) · Priority: P2 · Complexity: 3
-Check: `retired_targets` in `platform/windows.rs`; not covered by a Windows test.
+Check: `placing_a_new_build_into_the_same_store_path_replaces_our_copy` in `platform/windows.rs`.
 
 ### B80. A lone `.xz`/`.bz2` file fails as a tarball
 
