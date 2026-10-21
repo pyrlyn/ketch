@@ -474,6 +474,14 @@
       "message": "\"secrets: inherit\" passes every secret of this workflow to the reusable workflow \"./.github/workflows/tap.yml\". list only the secrets it needs in a \"secrets:\" mapping, e.g. \"NAME: ${{ secrets.NAME }}\""
     },
     {
+      "file": ".github/workflows/repo-settings.yml",
+      "rule": "unpinned-uses",
+      "fingerprint": "dbfa79e420bccd77",
+      "context": "76fabef4207b9f8e",
+      "occurrence": 0,
+      "message": "reusable workflow call \"pyrlyn/ci/.github/workflows/repo-settings.yml@main\" must be pinned to a full-length commit SHA like \"owner/repo/path/to/workflow.yml@{sha}\" because the \"unpinned-uses\" rule is enabled"
+    },
+    {
       "file": ".github/workflows/sync-docs.yml",
       "rule": "unpinned-uses",
       "fingerprint": "e3a12b3b9f2ef7dd",
