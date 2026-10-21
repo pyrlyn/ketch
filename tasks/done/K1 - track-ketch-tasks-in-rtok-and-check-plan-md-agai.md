@@ -1,9 +1,9 @@
 ---
 id: K1
 title: Track ketch tasks in rtok and check plan.md against them
-status: in-progress
+status: done
 created_at: 1792583059
-updated_at: 1792583059
+updated_at: 1792584023
 assignee: 389d32cb-6b35-47a7-b2a5-bbc8679450e1
 ---
 

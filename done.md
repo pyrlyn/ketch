@@ -1953,3 +1953,23 @@ Split into R19.1–R19.4 below (#319–#322, stacked in that order). Plan: one s
 ### R19.2. Registry push as an optional core feature
 
 Done (#320, on R19.1). octocrab and push's use of tokio sit behind the `push` feature. The CLI keeps it on by default; `ketch-ffi` does not name it, so the desktop apps do not link the registry client. `tests/workspace.rs` fails if `push` shows up in the FFI feature list.
+
+### K1. Track ketch tasks in rtok and check plan.md against them
+
+Tasks live in rtok's disk adapter (`tasks/`, finished ones in `tasks/done/`,
+prefix `K` from `.rtok.toml`); `plan.md`, `todo.md` and `done.md` are their
+human view. Every task from before rtok was written into `tasks/` with the id
+it already had, by a one-time script deleted afterwards. The move cleared the
+drift it found: rows marked done still in the table, their cards in
+`plan.md`, eight finished tasks missing from `done.md`, B60 closed but still
+planned, and B65 split across two `done.md` entries.
+
+`tests/tasks.rs` fails on any drift between the two and on a task made outside
+rtok: a row or `done.md` entry with no task file, a status changed in one
+place only, `todo.md` out of step with the table, a task file with a key rtok
+does not write or a field missing, a subtask whose parent is not the id it
+names, and a task created since the move without rtok's prefix. Every failure
+names the `rtok task` command that does the job. `AGENTS.md` has a Tasks
+section saying the same.
+
+Tests: `plan_todo_and_done_agree_with_rtok_tasks`, `a_row_written_by_hand_without_rtok_fails`, `a_new_task_with_an_id_picked_by_hand_fails`, `a_task_file_written_by_hand_is_refused`, `a_subtask_needs_its_parent`, `every_failure_names_the_rtok_command_to_use`.
