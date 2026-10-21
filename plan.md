@@ -131,34 +131,40 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | B118 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
 | B85 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
 | B105 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
-
-### B85. Registry update and listing ignore cancel
-
-Row B85 in the 2026-10-08 findings. `registry::update` downloads with `cx.cancel`. `ask_all` checks that token before each package, so a cancel stops the parallel lookup.
-
-Status: done. See `done.md`.
 | B81 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
-
-### B81. Archive extraction keeps setuid bits
-
-Row B81 in the 2026-10-08 findings. `payload_mode` keeps only `0o777`, and every extractor applies that before `set_unix_mode`. A setuid archive member lands as `0755`.
-
-Status: done. See `done.md`.
 | B128 | done | P3 | 1 | 100% | Cursor / grok 4.7 |
 | B129 | done | P3 | 2 | 100% | Cursor / grok 4.7 |
 | B110 | done | P2 | 2 | 100% | Cursor / grok 4.7 |
 | B134 | done | P3 | 1 | 100% | Cursor / grok 4.7 |
 | B133 | done | P3 | 2 | 100% | Cursor / grok 4.7 |
 | B83 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
+| B82 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
+| R16 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
+
+### B85. Registry update and listing ignore cancel
+
+Row B85 in the 2026-10-08 findings. `registry::update` downloads with `cx.cancel`. `ask_all` checks that token before each package, so a cancel stops the parallel lookup.
+
+Status: done. See `done.md`.
+
+### B81. Archive extraction keeps setuid bits
+
+Row B81 in the 2026-10-08 findings. `payload_mode` keeps only `0o777`, and every extractor applies that before `set_unix_mode`. A setuid archive member lands as `0755`.
+
+Status: done. See `done.md`.
+
+### B82. Duplicate checksum basenames overwrite each other
+
+Row B82 in the 2026-10-08 findings. An aggregate checksum file is keyed by basename. Two different hashes for the same basename are removed instead of letting the later line win.
+
+Status: done. See `done.md`.
 
 ### B83. A sidecar checksum takes the first sorted line
 
 Row B83 in the 2026-10-08 findings. `sidecar_hex` looks up the asset name first. A one-entry file is the usual sidecar; several names and no match are ignored.
-| B82 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
-| R16 | done | P2 | 1 | 100% | Cursor / grok 4.7 |
 
-Row B82 in the 2026-10-08 findings. An aggregate checksum file is keyed by basename. Two different hashes for the same basename are removed instead of letting the later line win.
-### B82. Duplicate checksum basenames overwrite each other
+Status: done. See `done.md`.
+
 ### R16. Fuzz seed script reads the old builtin path
 
 Row R16 in the 2026-10-08 findings. `fuzz/seed.sh` already reads `crates/ketch-core/src/builtin.toml`. The readme named the old `src/builtin.toml` path; it now matches the script.
@@ -293,7 +299,7 @@ Plan:
 
 Check: `just check` clean; `cargo nextest run --workspace` passes with no snapshot changes; `dist build` for the host produces `ketch-<target>.tar.gz` with the same layout; `just dist-generate` leaves `release.yml` unchanged; `scripts/release.sh --dry-run` prints the right next version.
 
-Status: PR https://github.com/pyrlyn/ketch/pull/187 merged 2026-10-01. The version moved to `[workspace.package]`; `release.sh` and `crate-version.sh` read it there, and v0.9.0 was released after the merge. Remaining: the doc examples that became doctests are marked `ignore` and should be rewritten (18 `ignore` fences under `crates/` at the last check).
+Status: PR https://github.com/pyrlyn/ketch/pull/187 merged 2026-10-01. The version moved to `[workspace.package]`; `release.sh` and `crate-version.sh` read it there, and v0.9.0 was released after the merge. The 18 `ignore` fences under `crates/` are examples that compile (`no_run` only where running would touch GitHub or the real ketch root). `tests/workspace.rs` rejects a new `ignore` fence there. Remaining: step 5, `clap` and `clap_complete` still in `ketch-core`.
 
 ### R6. A reporter instead of the global `ui::` sink
 
@@ -571,6 +577,8 @@ Row B118 in the 2026-10-12 findings. Done: a package installed checksum-verified
 
 Plan: consult `checksum_verified` in `install.rs` `verify_checksum`; the flag in `cli.rs`. Check: an end-to-end test of both paths.
 
+Status: done. `refuse_checksum_downgrade` refuses the upgrade unless `--allow-unverified`, `--yes`, or a lockfile hash is set. `an_upgrade_that_drops_the_checksum_is_refused_without_consent` and `yes_consents_to_an_upgrade_that_drops_the_checksum` cover both paths. See `done.md`.
+
 ### B128. An unknown lock holder is pid 0
 
 Row B128 in the 2026-10-12 findings. `Busy` with no pid was stored as pid 0, so the banner and the log said another process was pid 0. `busy(pid:)` is optional. A missing holder is named without a pid, as on Windows.
@@ -591,7 +599,6 @@ Status: done. See `done.md`.
 Row B134 in the 2026-10-12 findings. Windows PowerShell 5.1 on older Windows 10 and Server defaults to TLS 1.0/1.1, and GitHub rejects that handshake. The installer adds `Tls12` with `-bor` to `[Net.ServicePointManager]::SecurityProtocol` before any request, so a host that already enabled TLS 1.3 keeps it.
 
 Status: done. See `done.md`.
-Status: done. `refuse_checksum_downgrade` refuses the upgrade unless `--allow-unverified`, `--yes`, or a lockfile hash is set. `an_upgrade_that_drops_the_checksum_is_refused_without_consent` and `yes_consents_to_an_upgrade_that_drops_the_checksum` cover both paths. See `done.md`.
 
 ### B123. Relink and rollback restore a stale `.old`
 

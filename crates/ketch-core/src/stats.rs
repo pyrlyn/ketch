@@ -83,10 +83,13 @@ impl Action {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use ketch_core::stats::Action;
+    ///
     /// assert_eq!(Action::Install.as_str(), "install");
     /// assert_eq!(Action::Upgrade.as_str(), "upgrade");
     /// assert_eq!(Action::Uninstall.as_str(), "uninstall");
+    /// assert_eq!(Action::Rollback.as_str(), "rollback");
     /// ```
     ///
     /// Returns the string used to store the action in the database.
@@ -173,7 +176,9 @@ impl Summary {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use ketch_core::stats::Summary;
+    ///
     /// let summary = Summary {
     ///     events: 2,
     ///     installs: 2,
@@ -185,7 +190,6 @@ impl Summary {
     ///     first_at: None,
     ///     last_at: None,
     /// };
-    ///
     /// assert_eq!(summary.mean_duration_ms(), Some(125));
     /// ```
     pub fn mean_duration_ms(&self) -> Option<i64> {
@@ -194,13 +198,6 @@ impl Summary {
 }
 
 /// Opens the SQLite statistics database, creating its parent directories and applying pending migrations.
-///
-/// # Examples
-///
-/// ```ignore
-/// let connection = open(std::path::Path::new("stats.sqlite"))?;
-/// # Ok::<(), Error>(())
-/// ```
 #[cfg(feature = "stats")]
 fn open(path: &Path) -> Result<SqliteConnection> {
     let parent = path.parent().unwrap_or(Path::new("."));
@@ -234,10 +231,37 @@ fn open(path: &Path) -> Result<SqliteConnection> {
 ///
 /// # Examples
 ///
-/// ```ignore
-/// # let cx: Ctx<'_> = todo!();
-/// # let event: NewEvent<'_> = todo!();
+/// ```
+/// use ketch_core::config::Config;
+/// use ketch_core::report::{Ctx, Report};
+/// use ketch_core::stats::{record, NewEvent};
+///
+/// let root = std::env::temp_dir().join("ketch-doctest-record");
+/// let _ = std::fs::remove_dir_all(&root);
+/// let report = Report::silent();
+/// let cfg = Config::load(Some(root.clone()), &report)?;
+/// let cx = Ctx::new(&cfg, &report);
+/// let event = NewEvent {
+///     package: "ripgrep",
+///     action: "install",
+///     version: "14.1.0",
+///     previous_version: None,
+///     tag: "14.1.0",
+///     source: "github:BurntSushi/ripgrep",
+///     target: "x86_64-unknown-linux-gnu",
+///     asset_name: "ripgrep.tar.gz",
+///     sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+///     checksum_verified: true,
+///     duration_ms: Some(250),
+///     at: 0,
+///     ketch_version: "0.0.1",
+/// };
 /// record(&cx, &event);
+/// // Without the `stats` feature there is no database to write.
+/// #[cfg(feature = "stats")]
+/// assert!(cfg.stats_db.is_file());
+/// let _ = std::fs::remove_dir_all(&root);
+/// Ok::<(), ketch_core::error::Error>(())
 /// ```
 pub fn record(cx: &crate::report::Ctx<'_>, event: &NewEvent<'_>) {
     #[cfg(feature = "stats")]
@@ -258,13 +282,34 @@ pub fn record(cx: &crate::report::Ctx<'_>, event: &NewEvent<'_>) {
 ///
 /// # Examples
 ///
-/// ```ignore
-/// use std::path::Path;
+/// ```
+/// use ketch_core::stats::{history_at, record_at, NewEvent};
 ///
-/// # fn example(event: &NewEvent<'_>) -> Result<()> {
-/// record_at(Path::new("stats.sqlite"), event)?;
-/// # Ok(())
-/// # }
+/// let dir = std::env::temp_dir().join("ketch-doctest-record-at");
+/// let _ = std::fs::remove_dir_all(&dir);
+/// std::fs::create_dir_all(&dir).unwrap();
+/// let path = dir.join("stats.db");
+/// let event = NewEvent {
+///     package: "example",
+///     action: "install",
+///     version: "1.2.3",
+///     previous_version: None,
+///     tag: "1.2.3",
+///     source: "github:owner/example",
+///     target: "x86_64-unknown-linux-gnu",
+///     asset_name: "example.tar.gz",
+///     sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+///     checksum_verified: true,
+///     duration_ms: Some(10),
+///     at: 0,
+///     ketch_version: "0.0.1",
+/// };
+/// record_at(&path, &event)?;
+/// let rows = history_at(&path, Some("example"), 10)?;
+/// assert_eq!(rows.len(), 1);
+/// assert_eq!(rows[0].action, "install");
+/// let _ = std::fs::remove_dir_all(&dir);
+/// Ok::<(), ketch_core::error::Error>(())
 /// ```
 #[cfg(feature = "stats")]
 pub fn record_at(path: &Path, event: &NewEvent<'_>) -> Result<()> {
@@ -283,18 +328,57 @@ pub fn record_at(path: &Path, event: &NewEvent<'_>) -> Result<()> {
 ///
 /// # Examples
 ///
-/// ```ignore
-/// # let package: &crate::model::InstalledPackage = todo!();
+/// ```
+/// use ketch_core::model::{
+///     Channel, InstalledPackage, ManifestOrigin, PackageRef, TargetSpec, TrustResult, Version,
+/// };
+/// use ketch_core::stats::install_event;
+/// use std::path::PathBuf;
+///
+/// let package = InstalledPackage {
+///     name: "ripgrep".into(),
+///     version: Version::parse("1.2.3"),
+///     source: PackageRef::github("BurntSushi/ripgrep"),
+///     tag: "1.2.3".into(),
+///     target: TargetSpec::host(),
+///     asset_name: "ripgrep.tar.gz".into(),
+///     sha256: "a".repeat(64),
+///     checksum_verified: false,
+///     installed_at: 0,
+///     prefix: PathBuf::from("/store/ripgrep/1.2.3"),
+///     links: Vec::new(),
+///     pinned: false,
+///     origin: ManifestOrigin::Inferred,
+///     manifest: None,
+///     local_kind: None,
+///     local_path: None,
+///     trust: TrustResult::default(),
+///     retained: Vec::new(),
+///     provenance: None,
+///     bin_choice: None,
+///     channel: Channel::default(),
+///     draft: false,
+///     published_at: None,
+/// };
 /// let event = install_event(
-///     package,
+///     &package,
 ///     None,
 ///     Some(250),
 ///     "1.2.3",
-///     "https://example.com/package",
+///     "github:BurntSushi/ripgrep",
 ///     "x86_64-unknown-linux-gnu",
 /// );
-///
 /// assert_eq!(event.action, "install");
+/// assert_eq!(event.duration_ms, Some(250));
+/// let replacement = install_event(
+///     &package,
+///     Some("1.0.0"),
+///     Some(1),
+///     "1.2.3",
+///     "github:BurntSushi/ripgrep",
+///     "x86_64-unknown-linux-gnu",
+/// );
+/// assert_eq!(replacement.action, "upgrade");
 /// ```
 pub fn install_event<'a>(
     pkg: &'a crate::model::InstalledPackage,
@@ -329,8 +413,39 @@ pub fn install_event<'a>(
 ///
 /// # Examples
 ///
-/// ```ignore
-/// let event = uninstall_event(&package, "1.2.3", "source", "target");
+/// ```
+/// use ketch_core::model::{
+///     Channel, InstalledPackage, ManifestOrigin, PackageRef, TargetSpec, TrustResult, Version,
+/// };
+/// use ketch_core::stats::uninstall_event;
+/// use std::path::PathBuf;
+///
+/// let package = InstalledPackage {
+///     name: "ripgrep".into(),
+///     version: Version::parse("1.2.3"),
+///     source: PackageRef::github("BurntSushi/ripgrep"),
+///     tag: "1.2.3".into(),
+///     target: TargetSpec::host(),
+///     asset_name: "ripgrep.tar.gz".into(),
+///     sha256: "a".repeat(64),
+///     checksum_verified: false,
+///     installed_at: 0,
+///     prefix: PathBuf::from("/store/ripgrep/1.2.3"),
+///     links: Vec::new(),
+///     pinned: false,
+///     origin: ManifestOrigin::Inferred,
+///     manifest: None,
+///     local_kind: None,
+///     local_path: None,
+///     trust: TrustResult::default(),
+///     retained: Vec::new(),
+///     provenance: None,
+///     bin_choice: None,
+///     channel: Channel::default(),
+///     draft: false,
+///     published_at: None,
+/// };
+/// let event = uninstall_event(&package, "1.2.3", "github:BurntSushi/ripgrep", "target");
 /// assert_eq!(event.action, "uninstall");
 /// assert_eq!(event.duration_ms, None);
 /// ```
@@ -391,8 +506,18 @@ pub fn rollback_event<'a>(
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
+/// use ketch_core::config::Config;
+/// use ketch_core::report::Report;
+/// use ketch_core::stats::history;
+///
+/// let root = std::env::temp_dir().join("ketch-doctest-history");
+/// let _ = std::fs::remove_dir_all(&root);
+/// let report = Report::silent();
+/// let cfg = Config::load(Some(root), &report)?;
 /// let events = history(&cfg, Some("example"), 10)?;
+/// assert!(events.is_empty());
+/// Ok::<(), ketch_core::error::Error>(())
 /// ```
 ///
 /// # Returns
@@ -410,12 +535,15 @@ pub fn history(cfg: &Config, package: Option<&str>, limit: i64) -> Result<Vec<Ev
 ///
 /// # Examples
 ///
-/// ```ignore
-/// use std::path::Path;
+/// ```
+/// use ketch_core::stats::history_at;
 ///
-/// let events = history_at(Path::new("history.sqlite"), None, 20)?;
-/// assert!(events.len() <= 20);
-/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// let path = std::env::temp_dir().join("ketch-doctest-history-at-missing.sqlite");
+/// let _ = std::fs::remove_file(&path);
+/// let events = history_at(&path, None, 20)?;
+/// assert!(events.is_empty());
+/// assert!(!path.exists());
+/// Ok::<(), ketch_core::error::Error>(())
 /// ```
 #[cfg(feature = "stats")]
 pub fn history_at(path: &Path, package: Option<&str>, limit: i64) -> Result<Vec<Event>> {
@@ -442,11 +570,18 @@ pub fn history_at(path: &Path, package: Option<&str>, limit: i64) -> Result<Vec<
 ///
 /// # Examples
 ///
-/// ```ignore
-/// # let cfg = Config::load(None, &crate::report::Report::silent())?;
+/// ```
+/// use ketch_core::config::Config;
+/// use ketch_core::report::Report;
+/// use ketch_core::stats::summary;
+///
+/// let root = std::env::temp_dir().join("ketch-doctest-summary");
+/// let _ = std::fs::remove_dir_all(&root);
+/// let report = Report::silent();
+/// let cfg = Config::load(Some(root), &report)?;
 /// let summary = summary(&cfg)?;
-/// println!("{} events recorded", summary.events);
-/// # Ok::<(), _>(())
+/// assert_eq!(summary.events, 0);
+/// Ok::<(), ketch_core::error::Error>(())
 /// ```
 #[cfg(feature = "stats")]
 pub fn summary(cfg: &Config) -> Result<Summary> {
@@ -459,12 +594,15 @@ pub fn summary(cfg: &Config) -> Result<Summary> {
 ///
 /// # Examples
 ///
-/// ```ignore
-/// use std::path::Path;
+/// ```
+/// use ketch_core::stats::summary_at;
 ///
-/// let summary = summary_at(Path::new("missing-stats.sqlite"))?;
+/// let path = std::env::temp_dir().join("ketch-doctest-summary-at-missing.sqlite");
+/// let _ = std::fs::remove_file(&path);
+/// let summary = summary_at(&path)?;
 /// assert_eq!(summary.events, 0);
-/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// assert!(!path.exists());
+/// Ok::<(), ketch_core::error::Error>(())
 /// ```
 #[cfg(feature = "stats")]
 pub fn summary_at(path: &Path) -> Result<Summary> {
@@ -510,33 +648,12 @@ pub fn summary_at(path: &Path) -> Result<Summary> {
 }
 
 /// Converts a Diesel read error into a descriptive statistics error.
-///
-/// # Examples
-///
-/// ```ignore
-/// let error = read_err(diesel::result::Error::NotFound);
-/// assert!(error.to_string().starts_with("could not read statistics:"));
-/// ```
 #[cfg(feature = "stats")]
 fn read_err(e: diesel::result::Error) -> Error {
     Error::msg(format!("could not read statistics: {e}"))
 }
 
 /// Counts events with the specified action.
-///
-/// # Examples
-///
-/// ```ignore
-/// use diesel::{Connection, connection::SimpleConnection};
-///
-/// let mut conn = diesel::sqlite::SqliteConnection::establish(":memory:").unwrap();
-/// conn.batch_execute(
-///     "CREATE TABLE events (action TEXT NOT NULL);
-///      INSERT INTO events (action) VALUES ('install');",
-/// ).unwrap();
-///
-/// assert_eq!(count_of(&mut conn, Action::Install).unwrap(), 1);
-/// ```
 #[cfg(feature = "stats")]
 fn count_of(conn: &mut SqliteConnection, action: Action) -> Result<i64> {
     events::table
@@ -600,6 +717,23 @@ mod tests {
             draft: false,
             published_at: None,
         }
+    }
+
+    #[test]
+    fn action_names_are_the_strings_stored_in_the_database() {
+        assert_eq!(Action::Install.as_str(), "install");
+        assert_eq!(Action::Upgrade.as_str(), "upgrade");
+        assert_eq!(Action::Uninstall.as_str(), "uninstall");
+        assert_eq!(Action::Rollback.as_str(), "rollback");
+    }
+
+    #[test]
+    fn a_read_error_says_it_could_not_read_statistics() {
+        let error = read_err(diesel::result::Error::NotFound);
+        assert!(
+            error.to_string().starts_with("could not read statistics:"),
+            "{error}"
+        );
     }
 
     #[test]
