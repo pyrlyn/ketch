@@ -1,0 +1,83 @@
+// Copyright (c) 2026 Ivan Tugay
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under GPL-3.0 or later; see https://www.gnu.org/licenses/gpl-3.0.html
+
+// One installed package: Overview, Changelog and Files, switched in the
+// header bar on wide windows and from the bottom bar on narrow ones.
+using Gtk 4.0;
+using Adw 1;
+
+template $KetchAppPackagePage: Adw.NavigationPage {
+  child: Adw.BreakpointBin {
+    width-request: 360;
+    height-request: 294;
+
+    Adw.Breakpoint {
+      condition ("max-width: 550sp")
+      setters {
+        switcher_bar.reveal: true;
+        switcher.visible: false;
+      }
+    }
+
+    child: Adw.ToolbarView {
+      [top]
+      Adw.HeaderBar {
+        title-widget: Adw.ViewSwitcher switcher { stack: views; policy: wide; };
+      }
+
+      content: Adw.ViewStack views {
+        Adw.ViewStackPage {
+          name: "overview";
+          title: _("Overview");
+          icon-name: "dialog-information-symbolic";
+          child: Adw.PreferencesPage {
+            Adw.PreferencesGroup {
+              Adw.ActionRow version_row { title: _("Version"); styles ["property"] }
+              Adw.ActionRow source_row { title: _("Source"); styles ["property"] }
+              Adw.ActionRow pinned_row { title: _("Pinned"); styles ["property"] }
+            }
+
+            Adw.PreferencesGroup {
+              Button {
+                label: _("Uninstall");
+                halign: center;
+                clicked => $on_uninstall();
+                styles ["destructive-action", "pill"]
+              }
+            }
+          };
+        }
+
+        Adw.ViewStackPage {
+          name: "changelog";
+          title: _("Changelog");
+          icon-name: "text-x-generic-symbolic";
+          child: ScrolledWindow {
+            Adw.Clamp {
+              margin-top: 24;
+              margin-bottom: 24;
+              margin-start: 12;
+              margin-end: 12;
+              Label changelog_label { wrap: true; selectable: true; xalign: 0; yalign: 0; }
+            }
+          };
+        }
+
+        Adw.ViewStackPage {
+          name: "files";
+          title: _("Files");
+          icon-name: "folder-symbolic";
+          child: Adw.PreferencesPage {
+            Adw.PreferencesGroup files_group {
+              Adw.ActionRow prefix_row { title: _("Store"); subtitle-selectable: true; styles ["property"] }
+            }
+          };
+        }
+      };
+
+      [bottom]
+      Adw.ViewSwitcherBar switcher_bar { stack: views; }
+    };
+  };
+}

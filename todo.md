@@ -1,8 +1,6 @@
 # ketch — todo
 
-- B60. Windows self-update leaves `ketch.exe.old` behind
 - B65. Binary selection regression test
-- R3. Cross-platform CI
 - M17. `ketch import`: a package from winget, Homebrew or a Linux repository
 - R5. Workspace split: `ketch-core` library crate
 - R6. A reporter instead of the global `ui::` sink
@@ -15,7 +13,6 @@
 - D12. Windows: the app on the real core
 - D13. Windows: tray icon, notifications, start at login, links
 - D14. Windows: release pipeline
-- D16. Linux: Vala + GTK 4 app shell on a fake core
 - D17. Linux: the app on the real core
 - D18. Linux: notifications, background and autostart
 - D19. Linux: packaging and release
