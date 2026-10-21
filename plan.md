@@ -126,7 +126,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | R19.1 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
 | R19.2 | in progress | P2 | 2 | 90% | Claude Code / opus-5.5 |
 | R19.3 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
-| R19.4 | in progress | P2 | 3 | 90% | Claude Code / opus-5.5 |
+| R19.4 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
 | B113 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
 | B118 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
 | B123 | in progress | P3 | 3 | 90% | Claude Code / opus-5.5 |
@@ -592,3 +592,5 @@ sigstore, minisign-verify and pgp behind `trust`; without it a `require` policy 
 ### R19.4. Archive codecs as optional core features
 
 `gzip`, `xz`, `bzip2`, `zip`; plain tar always. A build without a codec reports an unsupported archive instead of linking it as a program; one `portable_extractors()` list replaces the three platform copies (#322, on R19.3).
+
+Status: done. The four codecs are cargo features, `portable_extractors()` is the one list the platforms use, and `an_archive_whose_codec_is_left_out_is_unsupported` fails a build that left a codec out. The closed #322 was brought in with #354. See `done.md`.

@@ -2,9 +2,9 @@
 
 `registry::update` used to download with a fresh `Cancel` that nothing could fire, and the parallel latest-version lookup never looked at the caller's token. The download now takes `cx.cancel`, and `ask_all` returns before the next package when that token is cancelled.
 
-### F14. Design system for the macOS app: `DESIGN.md` and tokens
+### R19.4. Archive codecs as optional core features
 
-`desktop/macos/DESIGN.md` follows the DESIGN.md spec, with generated front matter. `desktop/design/tokens.json` is the one token source, and `desktop/design/build.mjs` writes the Swift, XAML and CSS copies plus the preview stylesheet. `just design-check` fails when a generated file drifts, when text misses WCAG AA on its glass background, or when the DESIGN.md lint fails. Landed in #188. An Accessibility Inspector pass on the real Liquid Glass material still needs a Mac; the contrast numbers the script checks are the ones in the tokens.
+`gzip`, `xz`, `bzip2` and `zip` are cargo features of `ketch-core`. Plain tar stays on. `portable_extractors()` is the one list macOS, Linux and Windows extend, so a platform copy of the codec list is gone. A build that leaves a codec out reports `UnsupportedArchive` instead of treating the bytes as a program. `an_archive_whose_codec_is_left_out_is_unsupported` covers that, and `scripts/core-features.sh` builds each feature alone. The stacked pull request #322 was closed; the change came in with #354.
 
 ### B132. `install.ps1` omits the `v` on `--version`
 
