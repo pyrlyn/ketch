@@ -183,9 +183,13 @@ hand.
 - Finishing one: `rtok task status <id> done`, then its card moves to
   `done.md` and its row and `todo.md` line go.
 
-`tests/tasks.rs` checks `plan.md`, `todo.md` and `done.md` against `tasks/`
-and names whatever drifted. Ids from before rtok (`B60`, `R19.4`, …) keep
-their prefixes; only new tasks are `K`.
+rtok is the one way in. `tests/tasks.rs` checks `plan.md`, `todo.md` and
+`done.md` against `tasks/`, and refuses a task file rtok did not write: an
+unknown front matter key, a missing field, an id that does not match its
+file name, a subtask whose `parent` is not the id it names, or a new task
+without rtok's prefix. Ids from before rtok (`B60`, `R19.4`, …) keep their
+prefixes; every task created since is `K<n>`. Each failure names the
+`rtok task` command that does the job.
 
 ## Cargo cache maintenance
 
