@@ -75,6 +75,18 @@ Row B116 in the 2026-10-12 findings. Discovery walks `PATH`, and install puts cl
 
 Done: the bin directory and the store are not searched, and an executable whose path resolves into either is skipped. A plugin in the plugins directory, or elsewhere on `PATH`, is still found.
 
+### B126. C ABI yes/no callbacks return a full int
+
+Row B126 in the 2026-10-12 findings. `KetchStopFn` and `KetchConfirmFn` returned C `bool`, while a Vala `bool` is `gboolean` (an `int`). GCC 14 rejects that function-pointer mismatch, and the return ABI does not agree.
+
+Done: both callbacks return `int32_t`, and any non-zero answer is yes. The Vala test asks which of two binaries to link and passes a stop callback, so the binding is compiled against those types.
+
+### R15. Drop the unread placement version and registry alias list
+
+Row R15 in the 2026-10-08 findings. `Placement::version` was carried into every place call and never read. `Resolver::aliases` had no caller.
+
+Done: both are gone. The root `dirs` dependency, `Release::asset` and the stale `allow(dead_code)` on `PackageSpec::raw` were already gone.
+
 ### B138. Record the Marvin advisory and keep rustls past its fix
 
 Row B138 in the 2026-10-12 findings. rustls 0.23.43 (RUSTSEC-2026-0285) is already 0.23.46 in `Cargo.lock`, so it was not bumped again. rsa 0.9.10 (RUSTSEC-2023-0071, Marvin) has no upstream fix and is only reached to verify signatures.
@@ -166,6 +178,28 @@ Test: `changelogLinksStayOnlyWhenTheyAreHTTPS` (with the existing https link tes
 A `.sha256` sidecar used to take the alphabetically first hash. It now prefers the line that names the asset, and falls back to a lone entry only when the file has exactly one.
 
 Test: `a_sidecar_prefers_the_named_asset_over_the_alphabetically_first_line`.
+### B82. Duplicate checksum basenames overwrite each other
+
+An aggregate checksum list is keyed by file name. Two lines that name the same file with different hashes used to let the later one win. Conflicting names are dropped, so neither hash is trusted.
+
+Test: `an_ambiguous_basename_is_dropped_rather_than_overwritten`.
+### B129. Background refresh raises an error sheet
+
+The update timer and the window becoming key both called `refresh`, and any error set `errorMessage`. Offline, with the real core, the modal appeared on every interval and every time the window came forward. Those callers now pass `alerting: false`. The failure is a warning in the activity log, and a refresh the user started still alerts.
+
+Tests: `aBackgroundRefreshLogsAFailureWithoutAnAlert`, `aRefreshStillAlertsWhenAsked`.
+
+### B128. An unknown lock holder is pid 0
+
+A `Busy` error with no pid became `busy(pid: 0)`, and the banner read "pid 0". The pid is optional. The log and the banner name the holder only when there is one, which is what the Windows app already did.
+
+Test: `aLockWithNoKnownHolderStillOffersRetry`.
+
+### B81. Archive extraction keeps setuid bits
+
+Found by the 2026-10-08 review: extraction kept `mode & 0o7777`, so setuid, setgid and sticky bits from an archive survived. `payload_mode` now keeps `0o777`, and tar, zip and the directory-mode path all go through it.
+
+Test: `setuid_bits_from_an_archive_are_dropped`.
 
 ### B132. `install.ps1` omits the `v` on `--version`
 
