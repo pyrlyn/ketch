@@ -3,8 +3,10 @@ id: D17
 title: "Linux: the app on the real core"
 status: open
 created_at: 1792583854
-updated_at: 1792583854
+updated_at: 1792603931
 priority: 3
+blocked_by:
+- K921
 ---
 
 Swap the Linux app's fake core for `ketch-capi`. Depends on D15 and D16.
