@@ -26,12 +26,13 @@ namespace Ketch {
     [CCode (cname = "KetchChooseFn", has_target = true)]
     public delegate int64 ChooseFunc (string package, string candidates);
 
-    /* Whether to stop `holders` (a JSON array of `Holder`). */
+    /* Whether to stop `holders` (a JSON array of `Holder`). The C side
+     * returns int32_t, zero or not: a Vala bool is that wide, a C bool is not. */
     [CCode (cname = "KetchStopFn", has_target = true)]
     public delegate bool StopFunc (string holders);
 
     /* Whether to remove `path`, a package folder an earlier uninstall left
-     * behind with nothing recorded in it. */
+     * behind with nothing recorded in it. Same int32_t return as StopFunc. */
     [CCode (cname = "KetchConfirmFn", has_target = true)]
     public delegate bool ConfirmFunc (string path);
 

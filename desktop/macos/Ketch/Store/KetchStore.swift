@@ -213,7 +213,9 @@ final class KetchStore {
     /// Changelog Markdown as styled text. The core has already stripped
     /// escape sequences and bidi overrides; this only parses it. Headings are
     /// styled line by line because SwiftUI's `Text` drops the block structure
-    /// a full Markdown parse produces.
+    /// a full Markdown parse produces. A link stays only for `https`: the
+    /// notes are a client app's, and `Text` opens a `.link` run with the
+    /// default `openURL` action.
     nonisolated static func render(markdown: String) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace, failurePolicy: .returnPartiallyParsedIfPossible)
@@ -225,10 +227,22 @@ final class KetchStore {
             let isHeading = level > 0 && body.first == " "
             let source = String(isHeading ? body.drop { $0 == " " } : line)
             var text = (try? AttributedString(markdown: source, options: options)) ?? AttributedString(source)
+            keepHTTPSLinks(&text)
             if isHeading { text.font = level <= 2 ? .title3.bold() : .headline }
             result += text
         }
         return result
+    }
+
+    /// Drops every link that is not `https`. The visible words stay.
+    private nonisolated static func keepHTTPSLinks(_ text: inout AttributedString) {
+        let dropped = text.runs.compactMap { run -> Range<AttributedString.Index>? in
+            guard let url = run.link, url.scheme?.lowercased() != "https" else { return nil }
+            return run.range
+        }
+        for range in dropped {
+            text[range].link = nil
+        }
     }
 
     // MARK: Operations

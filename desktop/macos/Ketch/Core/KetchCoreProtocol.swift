@@ -6,8 +6,8 @@
 // errors R9's `ketch-ffi` will export through UniFFI.
 //
 // Views and the store only ever see this protocol, so they are testable
-// against `FakeKetchCore`, and wiring the real core is a change to
-// `CoreFactory.swift` plus one adapter file — nothing here moves.
+// against `FakeKetchCore`. `LiveKetchCore` is the adapter over `ketch-ffi`;
+// `CoreFactory` is the only place that chooses it.
 
 import Foundation
 import Synchronization
