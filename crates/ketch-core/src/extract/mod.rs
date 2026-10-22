@@ -319,11 +319,6 @@ fn resolve(path: &Path, hops: &mut u32) -> Option<PathBuf> {
     Some(resolved)
 }
 
-/// If the payload is a single wrapper directory, return it.
-///
-/// Almost every release tarball unpacks to `tool-1.2.3-target/`; treating that
-/// wrapper as the payload root is what makes `bin` paths in manifests short and
-/// stable across versions.
 /// True when a directory name is itself a macOS bundle rather than a container
 /// of files.
 ///
@@ -334,6 +329,11 @@ pub fn is_bundle_name(name: &str) -> bool {
     name.ends_with(".app") || name.ends_with(".framework")
 }
 
+/// If the payload is a single wrapper directory, return it.
+///
+/// Almost every release tarball unpacks to `tool-1.2.3-target/`; treating that
+/// wrapper as the payload root makes manifest paths stable across versions.
+/// A symlink cannot be a wrapper: moving it would change its target.
 pub fn unwrap_single_dir(dir: &Path) -> Result<PathBuf> {
     let mut entries = Vec::new();
     for entry in std::fs::read_dir(dir).map_err(|e| Error::io(dir, e))? {
@@ -346,7 +346,12 @@ pub fn unwrap_single_dir(dir: &Path) -> Result<PathBuf> {
         }
         entries.push(entry);
     }
-    if entries.len() == 1 && entries[0].path().is_dir() {
+    if entries.len() == 1
+        && entries[0]
+            .file_type()
+            .map_err(|e| Error::io(entries[0].path(), e))?
+            .is_dir()
+    {
         // A lone `.app` is the commonest shape a macOS zip or dmg has, and it
         // is the payload — not a wrapper around it. Unwrapping here would hand
         // back the bundle's `Contents`, and nothing downstream would ever see
@@ -361,6 +366,23 @@ pub fn unwrap_single_dir(dir: &Path) -> Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    #[test]
+    fn a_lone_directory_symlink_is_not_a_wrapper() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink(".", tmp.path().join("loop")).unwrap();
+        assert_eq!(unwrap_single_dir(tmp.path()).unwrap(), tmp.path());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_directory_symlink_cannot_select_a_payload_outside_the_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink(outside.path(), tmp.path().join("wrapper")).unwrap();
+        assert_eq!(unwrap_single_dir(tmp.path()).unwrap(), tmp.path());
+    }
+
     #[test]
     fn a_lone_bundle_is_the_payload_and_is_not_unwrapped() {
         let tmp = tempfile::tempdir().unwrap();
