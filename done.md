@@ -1978,3 +1978,10 @@ names the `rtok task` command that does the job. `AGENTS.md` has a Tasks
 section saying the same.
 
 Tests: `plan_todo_and_done_agree_with_rtok_tasks`, `a_row_written_by_hand_without_rtok_fails`, `a_new_task_with_an_id_picked_by_hand_fails`, `a_task_file_written_by_hand_is_refused`, `a_subtask_needs_its_parent`, `every_failure_names_the_rtok_command_to_use`.
+
+
+### K963. Audit project correctness and security
+
+Reviewed `origin/main` at `f83a678e`. Fixed checksum sidecar ambiguity and filenames with spaces, changelog directory containment, symlink wrapper selection, mutable setup-rust CI references, and the macOS generated-class/module import collision. Shared checksum line filtering and corrected Swift formatting. Changes are submitted from `codex/audit-20261022-security` for pull-request review.
+
+Validation: 1318 nextest tests, 56 .NET AppCore tests, 83 macOS unit tests and 2 macOS UI tests passed; Rust/Swift formatting, clippy, workflow lint, and the core without optional features passed. Dependency advisories remain documented by the user's decision; the existing release-version/tag mismatch and platform coverage limits are explicit in [the audit report](docs/qa/audit-k963.md), alongside four feature proposals.
