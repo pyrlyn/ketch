@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 # Windows bootstrap installer; Unix/macOS use install.sh.
 
-# Under `irm … | iex` this text runs in the caller's own session. The
+# Under `irm ... | iex` this text runs in the caller's own session. The
 # scriptblock keeps its variables, functions and $ErrorActionPreference out of
 # that session, and no error path may call `exit`: there it closes the user's
 # PowerShell window before the message can be read.
@@ -60,7 +60,7 @@ OPTIONS:
 
     function Normalize-PathKey {
         param([string]$Path)
-        # Registry PATH values are sometimes quoted (`"C:\Program Files\…"`).
+        # Registry PATH values are sometimes quoted (`"C:\Program Files\..."`).
         # Strip quotes before folding so a quoted bin dir matches the unquoted one
         # we are about to install and we do not prepend a duplicate.
         $s = ($Path -replace '/', '\').Trim().Trim('"').Trim("'")
@@ -456,7 +456,7 @@ OPTIONS:
             }
 
             Write-Host ''
-            Write-Host "✓ ketch $Version installed successfully!" -ForegroundColor Green
+            Write-Host "[OK] ketch $Version installed successfully!" -ForegroundColor Green
             Write-Host ''
             Write-Host "Installed to: $InstallPath"
             Write-Host ''
