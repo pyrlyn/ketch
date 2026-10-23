@@ -374,7 +374,8 @@ fn cli_targets(
     root: &Path,
     plan: &Placement<'_>,
 ) -> Result<Vec<(PathBuf, String)>> {
-    if plan.kind == PackageKind::App {
+    // An app links only what its `bin` list names, never what discovery finds.
+    if plan.kind == PackageKind::App && plan.bin_specs.is_empty() {
         return Ok(Vec::new());
     }
     if plan.bin_specs.is_empty() {

@@ -190,6 +190,7 @@ fn cask_payload(
 ) -> (PackageKind, Vec<BinSpec>, Option<String>) {
     let mut app = false;
     let mut bins: Vec<BinSpec> = Vec::new();
+    let mut app_bins: Vec<BinSpec> = Vec::new();
     for artifact in artifacts {
         let Some(key) = artifact.keys().find(|k| k.as_str() != "target") else {
             continue;
@@ -203,16 +204,17 @@ fn cask_payload(
                     .and_then(|a| a.first())
                     .and_then(|v| v.as_str())
                     .unwrap_or_default();
-                // Binaries inside the bundle come with the app; ketch places
-                // the bundle whole.
-                if source.starts_with("$APPDIR") {
-                    continue;
-                }
                 let command = artifact
                     .get("target")
                     .and_then(|v| v.as_str())
                     .unwrap_or(source);
                 let command = command.rsplit('/').next().unwrap_or(command);
+                if let Some(inside) = source.strip_prefix("$APPDIR/") {
+                    if let Some(entry) = app_bin_entry(command, inside) {
+                        app_bins.push(entry);
+                    }
+                    continue;
+                }
                 if let Some(entry) = bin_entry(command, Some(source)) {
                     bins.push(entry);
                 }
@@ -230,9 +232,9 @@ fn cask_payload(
         }
     }
     if app {
-        // An app's command-line helpers stay inside the bundle: `kind = "app"`
-        // places the bundle and links nothing (docs/MANIFESTS.md).
-        return (PackageKind::App, Vec::new(), None);
+        // Only the helpers Homebrew links are listed; an app links nothing
+        // else from its bundle (docs/MANIFESTS.md).
+        return (PackageKind::App, app_bins, None);
     }
     if bins.is_empty() {
         return (
@@ -242,6 +244,20 @@ fn cask_payload(
         );
     }
     (PackageKind::Auto, bins, None)
+}
+
+/// A `bin` entry for a binary inside the app bundle, `inside` being its path
+/// below `$APPDIR`. The path is kept whole, after a `*` for the wrapper
+/// directory: a bundle often holds several files of one name (a CLI and a
+/// completion directory), and only this one is the command.
+fn app_bin_entry(command: &str, inside: &str) -> Option<BinSpec> {
+    let mut entry = bin_entry(command, None)?;
+    if inside.is_empty() {
+        return None;
+    }
+    // `Manifest::validate` refuses a path that climbs out with `..`.
+    entry.path = Some(format!("*{inside}"));
+    Some(entry)
 }
 
 /// Convert a formula's API JSON.
@@ -412,10 +428,21 @@ mod tests {
     }
 
     #[test]
-    fn an_app_with_helpers_inside_the_bundle_is_still_just_the_app() {
+    fn an_app_links_the_helpers_homebrew_links_from_inside_its_bundle() {
         let c = cask("wezterm").unwrap();
         assert_eq!(c.kind, PackageKind::App);
-        assert!(c.bins.is_empty());
+        insta::assert_snapshot!(c.render().unwrap(), @r#"
+        # Written by `ketch import brew wezterm`. Schema: docs/MANIFESTS.md.
+        name = "wezterm"
+        source = "github:wezterm/wezterm"
+        kind = "app"
+
+        bin = [{ path = "*WezTerm.app/Contents/MacOS/wezterm", name = "wezterm" }, { path = "*WezTerm.app/Contents/MacOS/wezterm-gui", name = "wezterm-gui" }, { path = "*WezTerm.app/Contents/MacOS/wezterm-mux-server", name = "wezterm-mux-server" }, { path = "*WezTerm.app/Contents/MacOS/strip-ansi-escapes", name = "strip-ansi-escapes" }]
+
+        [asset.target]
+        "macos-aarch64" = "WezTerm-macos-*.zip"
+        "macos-x86_64" = "WezTerm-macos-*.zip"
+        "#);
         // No variations: one universal download serves both architectures.
         assert_eq!(
             c.artifacts["macos-aarch64"], c.artifacts["macos-x86_64"],

@@ -135,7 +135,7 @@ fn preflight_destinations(
         Vec::new()
     };
     let want_binaries = match plan.kind {
-        PackageKind::App => false,
+        PackageKind::App => !plan.bin_specs.is_empty(),
         PackageKind::Binary => true,
         PackageKind::Auto => bundles.is_empty(),
     };
@@ -310,9 +310,10 @@ impl Platform for MacOsPlatform {
             }
 
             // An app bundle carries its own executables; do not also scatter them
-            // across PATH.
+            // across PATH. A `bin` list on an app names the helpers someone
+            // chose to expose, such as a terminal's own CLI, so it is linked.
             let want_binaries = match plan.kind {
-                PackageKind::App => false,
+                PackageKind::App => !plan.bin_specs.is_empty(),
                 PackageKind::Binary => true,
                 PackageKind::Auto => links.is_empty(),
             };
@@ -1026,6 +1027,67 @@ mod tests {
             .map(|e| e.unwrap().file_name())
             .collect();
         assert_eq!(leftovers, ["Tool.app"], "no aside left behind");
+    }
+
+    fn place_app_with(root: &Path, bin_specs: &[crate::model::BinSpec]) -> Vec<LinkRecord> {
+        let payload = root.join("payload");
+        let macos = payload.join("Tool.app/Contents/MacOS");
+        std::fs::create_dir_all(&macos).unwrap();
+        // Distinct names: the default APFS volume is case-insensitive, so
+        // `Tool` and `tool` would be one file.
+        for exe in ["Tool", "tool-cli", "tool-helper"] {
+            std::fs::write(macos.join(exe), b"#!/bin/sh\n").unwrap();
+            std::fs::set_permissions(macos.join(exe), std::fs::Permissions::from_mode(0o755))
+                .unwrap();
+        }
+        MacOsPlatform::new()
+            .place(&Placement {
+                name: "tool",
+                version: "1.0",
+                payload_dir: &payload,
+                store_dir: &root.join("store/tool/1.0"),
+                bin_dir: &root.join("bin"),
+                apps_dir: &root.join("Applications"),
+                kind: PackageKind::App,
+                bin_specs,
+                replacing: &[],
+                link_apps: false,
+                link: true,
+                extras: &[],
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn an_app_without_a_bin_list_links_only_the_bundle() {
+        let tmp = tempfile::tempdir().unwrap();
+        let links = place_app_with(tmp.path(), &[]);
+        let kinds: Vec<_> = links.iter().map(|l| l.kind).collect();
+        assert_eq!(kinds, [LinkKind::CopiedApp]);
+        assert!(!tmp.path().join("bin").exists());
+    }
+
+    #[test]
+    fn an_app_links_the_helpers_its_bin_list_names_and_no_others() {
+        let tmp = tempfile::tempdir().unwrap();
+        let spec = crate::model::BinSpec {
+            path: Some("*Tool.app/Contents/MacOS/tool-cli".into()),
+            name: Some("tool".into()),
+        };
+        let links = place_app_with(tmp.path(), &[spec]);
+        let kinds: Vec<_> = links.iter().map(|l| l.kind).collect();
+        assert_eq!(kinds, [LinkKind::CopiedApp, LinkKind::Symlink]);
+        let link = tmp.path().join("bin/tool");
+        assert_eq!(
+            std::fs::read_link(&link).unwrap(),
+            tmp.path()
+                .join("store/tool/1.0/Tool.app/Contents/MacOS/tool-cli")
+        );
+        let linked: Vec<_> = std::fs::read_dir(tmp.path().join("bin"))
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(linked, ["tool"], "tool-helper stays inside the bundle");
     }
 
     #[test]

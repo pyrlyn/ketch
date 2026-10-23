@@ -147,7 +147,9 @@ ignored gives you a package that installs the wrong thing and says nothing.
   is treated as binaries.
 - `binary` — link executables onto `PATH`, and never place an `.app`.
 - `app` — place the `.app` bundle and do **not** scatter its executables across
-  `PATH`.
+  `PATH`. A `bin` list links exactly the helpers it names, such as a terminal's
+  own CLI (`{ path = "*WezTerm.app/Contents/MacOS/wezterm", name = "wezterm" }`);
+  nothing else in the bundle is discovered.
 
 ### `bin`
 
