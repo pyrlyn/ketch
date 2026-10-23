@@ -736,7 +736,7 @@ mod windows_env {
         }
 
         #[cfg(windows)]
-        fn exe(self) -> &'static str {
+        pub(super) fn exe(self) -> &'static str {
             match self {
                 PowerShell::Core => "pwsh",
                 PowerShell::Desktop => "powershell",
