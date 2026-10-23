@@ -6,3 +6,78 @@
 - D17. Linux: the app on the real core
 - D18. Linux: notifications, background and autostart
 - D19. Linux: packaging and release
+- K902. Restore a green main
+- K903. Make every CI job gate merges to main
+- K904. Take the single self-hosted Mac off the PR critical path
+- K905. Seed the registry with short names from mise's registry
+- K906. Decide how to live with the `ketch` name collision
+- K907. Make `state.json` readable across ketch versions
+- K908. Settle the version restart for existing installs
+- K909. Reduce plan.md to the active tasks
+- K910. Resolve for another target in `ketch why` and `ketch info`
+- K911. Measure asset inference against a public corpus
+- K912. Pick up the gh token and explain the rate limit
+- K913. Offer matches when a short name is unknown
+- K914. Ship a setup-ketch GitHub Action
+- K915. Make licensing and dual licensing clear
+- K916. Raise the repository's community health
+- K917. Retire workspace-hack or keep it in step automatically
+- K918. Pin cargo-nextest and add a nextest profile
+- K919. Decide the desktop ship order and maintenance budget
+- K920. Test the macOS live core against a scratch root
+- K921. Port the B129–B131 store fixes to the Linux app
+- K922. Make Doctor actionable in the desktop apps
+- K923. Add contract scenarios for the unused core calls
+- K924. Set up PATH from the macOS app on first launch
+- K925. Carry one cancel token per operation
+- K926. Plan upgrades in one place in the core
+- K927. Keep CLI wording out of core errors
+- K928. Probe source plugins only when needed
+- K929. Pass the platform in, and fault-inject placement
+- K930. Move OS-neutral placement code into one module
+- K930.1. Share bin resolution and executable discovery
+- K930.2. Share placement, unplace and extra linking
+- K931. Lock assets and hashes for several targets
+- K932. Show verification status and add `ketch audit`
+- K933. Verify GitHub artifact attestations for client apps
+- K934. Work behind corporate networks
+- K935. Ship a GitLab and Forgejo source plugin
+- K936. Install Linux AppImages as apps
+- K937. Import installed tools from Homebrew and winget
+- K938. Publish ketch to a Scoop bucket
+- K939. Correct overstated claims and widen the comparison
+- K940. Fix AGENTS.md drift and move the release runbook out
+- K941. Run desktop CI once, and only when it can change
+- K942. Keep one dependency bot and drop inert tools
+- K943. Commit mise.lock and install tools with checksums
+- K944. Dry-run the desktop release workflows
+- K945. Run the fuzz targets on a schedule
+- K946. Pin, roll back and show history in the desktop apps
+- K946.1. macOS: pin, roll back and history
+- K946.2. Windows: pin, roll back and history
+- K946.3. Linux: pin, roll back and history
+- K947. Windows: check for updates periodically
+- K948. Windows: Narrator and keyboard pass
+- K949. Show token status and rate limits in the apps
+- K950. Windows: choose and wire the app's update channel
+- K951. Decide how to stop desktop logic drifting apart
+- K952. Linux: Orca and keyboard pass
+- K953. Split the oversized modules along their seams
+- K953.1. Split install.rs
+- K953.2. Split src/ui.rs
+- K953.3. Split shell.rs and model.rs
+- K954. Trim the core's public surface and dead code
+- K955. Build the resolver once per batch
+- K956. Use one HTTP stack for push and everything else
+- K957. Find a lighter Sigstore verifier
+- K958. Optimise hot dependencies in release builds
+- K959. Publish a package catalogue on the site
+- K960. Run a tool once without linking it
+- K961. Group `ketch --help` and greet a bare `ketch`
+- K962. Mutation-test the trust-boundary guards
+- K963. Run install hooks outside the batch state lock
+- K964. Stream file contents in sha256_tree
+- K965. Share one HTTP agent between sources
+- K966. Deduplicate crate versions in Cargo.lock
+- K967. Keep a binary at the ketch path during self-replace
+- K968. Tell a cancelled or failed latest lookup from an unreachable one

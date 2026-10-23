@@ -34,6 +34,9 @@ jobs:
     uses: pyrlyn/ci/.github/workflows/sync-docs.yml@main
     with:
       locales: ru uk
+      # Internal pages beyond the shared list.
+      extra-excludes: |
+        ci-platforms.md
     permissions:
       contents: read
     secrets:

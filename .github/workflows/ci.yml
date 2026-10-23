@@ -47,16 +47,14 @@ jobs:
       - id: config
         uses: pyrlyn/ci/.github/actions/config@main
 
-  # The shared pyrlyn/ci workflow, pinned by commit, with Rust from
-  # mise.toml and a check that rustc is that pin: fmt once, then per target of
-  # its shared matrix clippy (--all-targets --all-features, so the tui feature
-  # is linted too), check, and the tests on every target (Linux x86_64 and
-  # aarch64, macOS aarch64, Windows x86_64; macOS is Apple Silicon only). The
-  # tests are the unit tests and the offline
-  # end-to-end suite in tests/ (install_linux.rs, install_windows.rs and the
-  # macOS ones are cfg-gated to their platform), default build and the
-  # optional TUI feature, which is not in the release tarball but must still
-  # compile and pass.
+  # The shared pyrlyn/ci workflow with Rust from mise.toml and a check that
+  # rustc is that pin: fmt once, then per Linux target (x86_64 and aarch64)
+  # clippy (--all-targets --all-features, so the tui feature is linted too),
+  # check, and the full test suite: the unit tests and the offline end-to-end
+  # suite in tests/, default build and the optional TUI feature, which is not
+  # in the release tarball but must still compile and pass. Linux only
+  # (docs/ci-platforms.md): the tests gated to Windows or macOS run in the
+  # optional `windows` and `macos` jobs below.
   rust:
     # Draft PRs are skipped here and reported green: review happens when the PR
     # is marked ready, and a draft must not look broken meanwhile.
@@ -80,6 +78,11 @@ jobs:
         cargo nextest run --archive-file "$NEXTEST_ARCHIVE" --workspace-remap .
         cargo nextest run -p ketch --all-targets --locked --features tui
       build-command: cargo build --workspace --all-targets --all-features --locked --target "$TARGET"
+      matrix: >-
+        [
+        {"os": "ubuntu-latest", "target": "x86_64-unknown-linux-gnu"},
+        {"os": "ubuntu-24.04-arm", "target": "aarch64-unknown-linux-gnu"}
+        ]
       # Docs-only: every job is a no-op that still reports (`rust / <target>` stay required).
       skip: ${{ needs.config.outputs.docs-only == 'true' }}
 
@@ -103,16 +106,56 @@ jobs:
         with:
           tool: commitlint
 
-  # install.ps1 parses and runs; the Rust side of Windows is the `rust` job.
+  # Only the tests gated to Windows (cfg(windows)); everything else runs on Linux in
+  # `rust` (docs/ci-platforms.md). Optional: continue-on-error, so it never blocks a merge.
+  # PLATFORM_TESTS lists them by test binary or name; keep it in sync when such a test is added
+  # or renamed. `--no-tests=pass` keeps an empty selection green.
+  windows:
+    needs: config
+    if: >-
+      github.event_name != 'issue_comment' &&
+      !cancelled() && github.event.pull_request.draft != true
+      && needs.config.outputs.docs-only != 'true'
+    continue-on-error: true
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      PLATFORM_TESTS: >-
+        binary(=completion_windows) | binary(=install_windows) | test(/(^|::)a_bin_glob_prefers_the_link_named_binary_over_a_helper_beside_it$/) | test(/(^|::)a_command_that_outlives_the_timeout_is_stopped$/) | test(/(^|::)a_failure_under_iex_leaves_the_callers_session_running$/) | test(/(^|::)a_listing_that_finishes_is_returned$/) | test(/(^|::)a_relative_root_lands_beside_the_caller_not_in_the_temp_dir$/) | test(/(^|::)an_explicit_install_dir_gets_a_copy_of_the_installed_binary$/) | test(/(^|::)an_install_dir_need_not_sit_under_the_root$/) | test(/(^|::)an_install_dir_that_only_respells_the_root_bin_dir_is_left_alone$/) | test(/(^|::)case_insensitive_collision_is_the_same_destination$/) | test(/(^|::)clear_for_replace_deletes_an_unlocked_file$/) | test(/(^|::)clear_for_replace_renames_aside_a_running_exe$/) | test(/(^|::)cmd_hits_folds_command_line_case$/) | test(/(^|::)copy_binary_replaces_a_running_recorded_exe$/) | test(/(^|::)copy_binary_replaces_our_previous_copy$/) | test(/(^|::)discover_prefers_capital_bin_over_noisy_siblings$/) | test(/(^|::)editing_the_user_path_keeps_variables_and_non_ascii_entries$/) | test(/(^|::)help_describes_root_and_install_dir_without_naming_the_root$/) | test(/(^|::)host_is_windows$/) | test(/(^|::)is_busy_recognizes_access_denied_codes$/) | test(/(^|::)lists_a_child_running_a_cmd_script$/) | test(/(^|::)path_helpers_match_quoted_and_semicolon_entries$/) | test(/(^|::)path_is_within_folds_ascii_case_on_windows$/) | test(/(^|::)place_copies_a_cmd_script_and_records_it$/) | test(/(^|::)placing_a_new_build_into_the_same_store_path_replaces_our_copy$/) | test(/(^|::)probe_accepts_a_binary_that_answers$/) | test(/(^|::)probe_rejects_a_binary_that_fails$/) | test(/(^|::)the_sweep_removes_only_stamped_asides_of_recorded_links$/) | test(/(^|::)unplace_refuses_to_delete_a_replaced_copied_app_without_a_store_target$/) | test(/(^|::)unplace_refuses_to_delete_a_replaced_copy$/) | test(/(^|::)windows_bin_name_adds_exe_unless_already_suffixed$/) | test(/(^|::)windows_device_names_are_not_usable_file_names$/)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pyrlyn/ci/.github/actions/setup-rust@main
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: nextest
+
+      - name: Platform tests
+        run: cargo nextest run --workspace --all-targets --locked --no-tests=pass -E "$PLATFORM_TESTS"
+
+  # install.ps1 parses and runs on Windows PowerShell 5.1 and pwsh: platform-only, optional.
   powershell:
     needs: config
     if: >-
       github.event_name != 'issue_comment' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
+    continue-on-error: true
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: PowerShell syntax
         shell: pwsh
@@ -190,6 +233,44 @@ jobs:
             {"os":"ubuntu-latest","runner":"ubuntu-latest","target":"x86_64-unknown-linux-gnu"},
             {"os":"windows-latest","runner":"windows-latest","target":"x86_64-pc-windows-msvc"}]
 
+  # Only the tests gated to macOS (cfg(target_os = "macos")); everything else runs on Linux in
+  # `rust` (docs/ci-platforms.md). Optional: continue-on-error, so it never blocks a merge.
+  # PLATFORM_TESTS lists them by test binary or name; keep it in sync when such a test is added
+  # or renamed. `--no-tests=pass` keeps an empty selection green.
+  macos:
+    needs: [config, macos-runner]
+    if: >-
+      github.event_name != 'issue_comment' &&
+      vars.MACOS_CI_DISABLED != 'true' &&
+      !cancelled() && github.event.pull_request.draft != true
+      && needs.config.outputs.docs-only != 'true'
+    continue-on-error: true
+    runs-on: ${{ fromJSON(needs.macos-runner.outputs.app)[0] }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      PLATFORM_TESTS: >-
+        binary(=install) | binary(=query) | test(/(^|::)a_binary_name_another_package_owns_is_not_taken_over$/) | test(/(^|::)a_failed_placement_puts_the_old_app_copy_back$/) | test(/(^|::)a_failed_placement_puts_the_old_links_back$/) | test(/(^|::)a_failed_relink_keeps_the_live_prefix_over_a_stale_old_copy$/) | test(/(^|::)a_failed_upgrade_leaves_the_installed_version_in_place$/) | test(/(^|::)a_link_that_now_points_elsewhere_survives_uninstall$/) | test(/(^|::)a_nested_link_inside_a_volume_is_kept$/) | test(/(^|::)a_nested_link_out_of_a_volume_is_refused$/) | test(/(^|::)a_plain_file_named_dmg_is_not_claimed_without_koly_trailer$/) | test(/(^|::)a_plain_file_named_pkg_is_not_claimed_without_xar_magic$/) | test(/(^|::)a_relative_root_lands_beside_the_caller_not_in_the_temp_dir$/) | test(/(^|::)an_app_ketch_did_not_install_is_never_deleted$/) | test(/(^|::)an_explicit_install_dir_gets_a_link_to_the_installed_binary$/) | test(/(^|::)an_image_that_mounts_nothing_can_still_be_detached$/) | test(/(^|::)an_install_dir_that_only_respells_the_root_bin_dir_is_left_alone$/) | test(/(^|::)app_bundles_are_found_but_their_helpers_are_not$/) | test(/(^|::)discover_prefers_capital_bin_over_noisy_siblings$/) | test(/(^|::)ignores_partitions_with_no_mount_point$/) | test(/(^|::)koly_trailer_is_claimed_without_a_dmg_extension$/) | test(/(^|::)only_a_root_the_script_creates_is_marked_as_ketchs$/) | test(/(^|::)place_links_classified_extra_paths_and_records_them$/) | test(/(^|::)placement_checks_all_binary_destinations_before_replacing_any$/) | test(/(^|::)placement_preflight_checks_the_package_name_for_a_single_build_artifact$/) | test(/(^|::)pre_installs_the_newest_cli_prerelease_and_skips_desktop_tags$/) | test(/(^|::)prefers_the_last_mount_when_hdiutil_lists_multiple_volumes$/) | test(/(^|::)reads_the_mount_point_out_of_hdiutil_output$/) | test(/(^|::)require_checksum_treats_a_local_app_like_a_local_binary$/) | test(/(^|::)sleeps_only_when_spawned_as_the_sleeper$/) | test(/(^|::)sync_refuses_a_local_app_that_changed_since_the_lock$/) | test(/(^|::)unplace_leaves_a_file_the_user_put_where_a_link_was$/) | test(/(^|::)version_flags_accept_bare_and_v_prefixed_tags$/) | test(/(^|::)xar_magic_is_claimed_without_a_pkg_extension$/)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pyrlyn/ci/.github/actions/setup-rust@main
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: nextest
+
+      - name: Platform tests
+        run: cargo nextest run --workspace --all-targets --locked --no-tests=pass -E "$PLATFORM_TESTS"
+
   # The macOS app (desktop/macos) is Swift only: its own job beside the Rust
   # ones, not in front of them. XcodeGen at the mise.toml pin; the runner's
   # default Xcode (26.x on macos-26) is new enough for the macOS 26 target.
@@ -200,6 +281,8 @@ jobs:
       vars.MACOS_CI_DISABLED != 'true' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
+    # Platform-only (docs/ci-platforms.md): optional, never blocks a merge.
+    continue-on-error: true
     runs-on: ${{ fromJSON(needs.macos-runner.outputs.app)[0] }}
     defaults:
       run:
@@ -267,6 +350,8 @@ jobs:
       github.event_name != 'issue_comment' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
+    # Platform-only (docs/ci-platforms.md): optional, never blocks a merge.
+    continue-on-error: true
     runs-on: ${{ fromJSON(needs.macos-runner.outputs.app)[0] }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -304,6 +389,8 @@ jobs:
       github.event_name != 'issue_comment' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
+    # Platform-only (docs/ci-platforms.md): optional, never blocks a merge.
+    continue-on-error: true
     runs-on: windows-latest
     defaults:
       run:
@@ -372,6 +459,8 @@ jobs:
       github.event_name != 'issue_comment' &&
       !cancelled() && github.event.pull_request.draft != true
       && needs.config.outputs.docs-only != 'true'
+    # Platform-only (docs/ci-platforms.md): optional, never blocks a merge.
+    continue-on-error: true
     runs-on: windows-latest
     defaults:
       run:
@@ -474,7 +563,9 @@ jobs:
       && needs.config.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Read the Node pin from mise.toml
         id: node_pin
@@ -483,7 +574,7 @@ jobs:
           [ -n "$version" ] || { echo "no node pin found in mise.toml" >&2; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: ${{ steps.node_pin.outputs.version }}
 
@@ -511,6 +602,8 @@ jobs:
         include: ${{ fromJSON(needs.macos-runner.outputs.package) }}
     # `os` stays the label in the check names; `runner` is what the job runs on.
     name: package (${{ matrix.os }}, ${{ matrix.target }})
+    # A native package per target is platform-only by nature; only Linux is required.
+    continue-on-error: ${{ matrix.os != 'ubuntu-latest' }}
     runs-on: ${{ vars.MACOS_CI_DISABLED == 'true' && (startsWith(matrix.os, 'macos') || startsWith(matrix.os, 'xcode')) && 'ubuntu-latest' || matrix.runner }}
     env:
       RUN: ${{ needs.config.outputs.docs-only != 'true' && !(vars.MACOS_CI_DISABLED == 'true' && (startsWith(matrix.os, 'macos') || startsWith(matrix.os, 'xcode'))) }}
@@ -520,8 +613,9 @@ jobs:
     steps:
       # Tags are required by tests/crate-version.sh (latest tag vs Cargo.toml).
       - if: env.RUN == 'true'
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       # dist builds the tarball exactly as release.yml does, with the Rust
@@ -536,7 +630,8 @@ jobs:
       - if: env.RUN == 'true'
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
-      - if: env.RUN == 'true'
+      # OS-independent script checks: once, on Linux.
+      - if: env.RUN == 'true' && runner.os == 'Linux'
         name: Shell syntax
         run: |
           bash -n install.sh
@@ -559,7 +654,7 @@ jobs:
       # cannot rot unnoticed again until someone runs the nightly fuzz build.
       # What `just fuzz-check` runs.
       - name: The fuzzing library compiles
-        if: env.RUN == 'true' && runner.os == 'macOS'
+        if: env.RUN == 'true' && runner.os == 'Linux'
         env:
           RUSTFLAGS: --cfg fuzzing
         run: cargo check --locked -p ketch -p ketch-core
