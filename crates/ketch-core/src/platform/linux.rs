@@ -256,7 +256,6 @@ mod tests {
 
         let placed = LinuxPlatform::new().place(&Placement {
             name: "tool",
-            version: "1.0",
             payload_dir: &store,
             store_dir: &store,
             bin_dir: &bin,
