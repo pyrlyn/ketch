@@ -5,7 +5,7 @@
 
 # User-facing English docs have a Russian and a Ukrainian twin, and a
 # translation does not exist for a page that was removed in English.
-# Maintainer notes stay English: research, QA audits, sonarcloud setup.
+# Maintainer notes stay English: research, QA audits, sonarcloud setup, CI platforms.
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -14,7 +14,7 @@ fail=0
 
 internal() {
     case "$1" in
-        research*.md | sonarcloud-setup.md) return 0 ;;
+        research*.md | sonarcloud-setup.md | ci-platforms.md) return 0 ;;
         *) return 1 ;;
     esac
 }

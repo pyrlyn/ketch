@@ -100,16 +100,84 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | R5 | in progress | P2 | 4 | 90% | Claude Code / opus-5.5 |
 | F13 | in progress | P3 | 4 | 80% | Claude Code / opus-5.5 |
 | D12 | todo | P3 | 4 | 0% | |
-| F14 | done | P2 | 3 | 100% | Cursor / grok 4.7 |
-| F18 | done | P2 | 4 | 100% | Cursor / grok 4.7 |
-| D11 | done | P3 | 5 | 100% | Cursor / grok 4.7 |
-| D12 | done | P3 | 4 | 100% | Cursor / grok 4.7 |
-| D13 | done | P3 | 3 | 100% | Cursor / grok 4.7 |
-| D16 | done | P3 | 5 | 100% | Cursor / grok 4.7 |
-| D14 | done | P3 | 4 | 100% | Cursor / grok 4.7 |
 | D17 | todo | P3 | 4 | 0% | |
 | D18 | todo | P3 | 3 | 0% | |
 | D19 | todo | P3 | 4 | 0% | |
+| K902 | todo | P0 | 2 | 0% | |
+| K903 | todo | P0 | 3 | 0% | |
+| K904 | todo | P0 | 3 | 0% | |
+| K905 | todo | P0 | 3 | 0% | |
+| K906 | todo | P1 | 1 | 0% | |
+| K907 | todo | P1 | 3 | 0% | |
+| K908 | todo | P1 | 2 | 0% | |
+| K909 | todo | P1 | 2 | 0% | |
+| K910 | todo | P1 | 2 | 0% | |
+| K911 | todo | P1 | 3 | 0% | |
+| K912 | todo | P1 | 2 | 0% | |
+| K913 | todo | P1 | 2 | 0% | |
+| K914 | todo | P1 | 2 | 0% | |
+| K915 | todo | P1 | 1 | 0% | |
+| K916 | todo | P1 | 1 | 0% | |
+| K917 | todo | P1 | 2 | 0% | |
+| K918 | todo | P1 | 1 | 0% | |
+| K919 | todo | P1 | 1 | 0% | |
+| K920 | todo | P1 | 3 | 0% | |
+| K921 | todo | P1 | 2 | 0% | |
+| K922 | todo | P1 | 3 | 0% | |
+| K923 | todo | P1 | 3 | 0% | |
+| K924 | todo | P1 | 3 | 0% | |
+| K925 | todo | P2 | 2 | 0% | |
+| K926 | todo | P2 | 3 | 0% | |
+| K927 | todo | P2 | 3 | 0% | |
+| K928 | todo | P2 | 2 | 0% | |
+| K929 | todo | P2 | 3 | 0% | |
+| K930 | todo | P2 | 3 | 0% | |
+| K930.1 | todo | P2 | 3 | 0% | |
+| K930.2 | todo | P2 | 3 | 0% | |
+| K931 | todo | P2 | 4 | 0% | |
+| K932 | todo | P2 | 2 | 0% | |
+| K933 | todo | P2 | 4 | 0% | |
+| K934 | todo | P2 | 2 | 0% | |
+| K935 | todo | P2 | 3 | 0% | |
+| K936 | todo | P2 | 3 | 0% | |
+| K937 | todo | P2 | 3 | 0% | |
+| K938 | todo | P2 | 2 | 0% | |
+| K939 | todo | P2 | 1 | 0% | |
+| K940 | todo | P2 | 2 | 0% | |
+| K941 | todo | P2 | 3 | 0% | |
+| K942 | todo | P2 | 2 | 0% | |
+| K943 | todo | P2 | 2 | 0% | |
+| K944 | todo | P2 | 3 | 0% | |
+| K945 | todo | P2 | 2 | 0% | |
+| K946 | todo | P2 | 3 | 0% | |
+| K946.1 | todo | P2 | 3 | 0% | |
+| K946.2 | todo | P2 | 3 | 0% | |
+| K946.3 | todo | P2 | 3 | 0% | |
+| K947 | todo | P2 | 2 | 0% | |
+| K948 | todo | P2 | 3 | 0% | |
+| K949 | todo | P2 | 3 | 0% | |
+| K950 | todo | P2 | 3 | 0% | |
+| K951 | todo | P2 | 4 | 0% | |
+| K952 | todo | P3 | 2 | 0% | |
+| K953 | todo | P3 | 2 | 0% | |
+| K953.1 | todo | P3 | 3 | 0% | |
+| K953.2 | todo | P3 | 2 | 0% | |
+| K953.3 | todo | P3 | 2 | 0% | |
+| K954 | todo | P3 | 2 | 0% | |
+| K955 | todo | P3 | 2 | 0% | |
+| K956 | todo | P3 | 3 | 0% | |
+| K957 | todo | P3 | 3 | 0% | |
+| K958 | todo | P3 | 1 | 0% | |
+| K959 | todo | P3 | 2 | 0% | |
+| K960 | todo | P3 | 2 | 0% | |
+| K961 | todo | P3 | 2 | 0% | |
+| K962 | todo | P3 | 2 | 0% | |
+| K963 | todo | P2 | 3 | 0% | |
+| K964 | todo | P3 | 1 | 0% | |
+| K965 | todo | P3 | 1 | 0% | |
+| K966 | todo | P3 | 2 | 0% | |
+| K967 | todo | P2 | 2 | 0% | |
+| K968 | todo | P3 | 1 | 0% | |
 
 ### Ketch audit
 
@@ -241,28 +309,6 @@ The app ships both as an MSIX and unpackaged (D14), and an unpackaged app has no
 
 Status: done. `FfiKetchCore` is the app's `IKetchCore` over the generated binding. Records, events and errors go through the same `ContractScenario` classes the fake replays, so the two cores show the same things. `KetchStore` already runs each call on its own thread and posts events and questions through the `DispatcherQueue`. `CoreFactory` picks the real core, or the fake when `KETCH_APP_FAKE_CORE=1`. Theme preferences live in `%LOCALAPPDATA%\ketch\app-settings.json`, which an MSIX redirects into its package data, so one path serves both forms. A declined binary choice or stop question cancels the operation; a leftover folder has no dialog and is kept. Discover still searches as you type, debounced (B130); an empty query browses the built-in shelf and asks no source. The manual Windows GUI pass (launch against a scratch `KETCH_ROOT`, walk every screen, confirm the choice dialog and a `Busy` retry) was not run here: this environment has no Windows desktop. The adapter tests cover the scratch-root install, cancel, `Busy` and `NotFound` paths, and `ketch-win-app` builds the WinUI project and checks `ketch_ffi.dll` sits beside `Ketch.exe`.
 
-### D13. Windows: tray icon, notifications, start at login, links
-
-The Windows counterparts of the macOS menu-bar extra, notifications, login item and URL scheme. WinUI has no tray control, so the icon is Win32's notification area. Research: sections 1 and 3c.
-
-Done when a notification-area icon opens the tray panel, `AppNotificationManager` posts update notices unpackaged, start at login and the `ketch` protocol are registered through `ActivationRegistrationManager` (with D8's validation rules), one instance runs at a time via `AppInstance`, and each can be switched off in Settings.
-
-Status: done. The WinUI shell adds the notification-area icon and its panel, posts one unpackaged app notification for upgrades that have not been announced, and registers startup and the `ketch` protocol through `ActivationRegistrationManager`. A second process redirects to the first. Each switch is stored in `%LOCALAPPDATA%\ketch\settings.json`, which an unpackaged app and an MSIX can both write. A link only opens a package page. The rules are tested in `Ketch.AppCore.Tests`; the WinUI project is built by the `ketch-win-app` job. See `done.md`.
-
-### D14. Windows: release pipeline
-
-How the Windows app reaches users and updates itself, separate from the CLI's release. R10's open decisions on distribution and the Windows App SDK licence come first.
-
-Done when CI builds, on `desktop-windows-v*` tags and without touching `/releases/latest`, both an MSIX and an unpackaged self-contained zip, signed (Artifact Signing or the creator's choice), updates arrive through the chosen route (Velopack or winget), and the creator's answers to R10's decisions are recorded. The creator chose to ship both forms. The MSIX is signed with a certificate held in repository secrets named the way the macOS ones are (`MACOS_CERTIFICATE`, `MACOS_CERTIFICATE_PWD`), and the release fails when they are missing rather than shipping unsigned.
-
-Settings persistence differs between the two: an MSIX has `ApplicationData`, an unpackaged app has none (D12 stores settings in a way that works in both).
-
-Status: the dispatch-only workflow `.github/workflows/release-windows-desktop.yml` publishes both artifacts under `desktop-windows-vX.Y.Z` and refuses to become `/releases/latest`. It is not triggered by the tag: the run creates the tag after the zip and the signed MSIX exist, the same way the macOS app release does, so a tag push cannot publish on its own. `select_release` drops `desktop-windows-v*` when a real version tag is present. Signing uses `WINDOWS_CERTIFICATE` (base64 pfx) and `WINDOWS_CERTIFICATE_PWD`, step env only, and the job stops before building when either is missing. Those are not `MACOS_CERTIFICATE`: an Apple Developer ID certificate cannot sign an MSIX, and a Windows job must not see it. The MSIX manifest is written on the runner (`unvirtualizedResources`, so PATH edits hit the real `HKCU`), and the unpackaged project in git stays `WindowsPackageType=None`. x64 only. Still the creator's: place the two Windows secrets (this workflow has not been dispatched, and no release was cut); an update channel (Velopack would change the app and cannot be checked here, winget submission needs a Microsoft account); and R10's open question of the Windows App SDK licence against the GPL-3.0-only build (`docs/research-desktop-windows-linux.md`, open decisions 3 and 4).
-
-### D16. Linux: Vala + GTK 4 app shell on a fake core
-
-Done. `desktop/linux` is a Meson project: a GLib core library (the contract in ketch-capi's shape, a fake that replays `desktop/contract/scenarios`, and the store) and a libadwaita app over it. The window is an `AdwNavigationSplitView` that collapses on a narrow breakpoint; Blueprint 0.22.2 (pinned wrap) is the markup. `AdwAlertDialog` asks the binary, process and uninstall questions, `AdwBanner` shows busy and the running operation, `AdwToast` reports finished work. Light, dark and high contrast come from libadwaita plus the token stylesheet's media queries (libadwaita 1.8). An empty search browses (`search-browse`). `just linux-app-test` runs the library tests; the `ketch-linux-app` job builds the app on Ubuntu 26.04. See `done.md`.
-
 ### D17. Linux: the app on the real core
 
 Swap the Linux app's fake core for `ketch-capi`. Depends on D15 and D16.
@@ -280,3 +326,555 @@ Done when update notices go through `GNotification` (the Notification portal und
 How the Linux app reaches users. R10 left Flatpak against distribution packages open, and Flatpak needs home access for PATH work.
 
 Done when the creator has chosen the format, CI builds it on `desktop-linux-v*` tags without touching `/releases/latest`, the app ships AppStream metadata and a `.desktop` file that validate, and updates come from the chosen package manager.
+
+## Improvement review (2026-10-21)
+
+A read-only review of `main` at `57d8a67` in four directions: core architecture and code, product and usability (against mise, aqua, eget, ubi, dra, stew, cargo-binstall, Homebrew, Scoop, winget, pkgx), CI and release, and the desktop apps. Findings, numbers and sources are in [`docs/research-improvements.md`](docs/research-improvements.md). The ideas already in `ideas.md` and the review tables above are not repeated; where a task extends one, its card says so.
+
+What matters most:
+
+- `main` has been red since 2026-10-18, and pull requests merge without green checks (K902, K903, K904).
+- The registry holds 7 packages, so installing by name almost always fails (K905); `ketch` is also a Homebrew-core formula of another project (K906).
+- `state.json` breaks when builds of different versions share one root, which the separately released desktop apps make likely (K907).
+
+Cards are grouped by area and ordered by priority within each group. Priorities and complexity are suggestions; the creator confirms them. Tasks that start with a decision say so in their card.
+
+#### CI and release
+
+### K902. Restore a green main
+
+`main` has had no green `ci` run since 2026-10-18; run 39601341616 at `57d8a67` fails on Linux and Windows. `platform/linux.rs:259` still sets `Placement.version`, which #440 removed (E0560); `shell.rs` calls the private `exe` on Windows after #441 (E0624); `install.ps1` fails to parse under Windows PowerShell 5.1 (UTF-8 without a BOM, `✓` at line 459), and README tells Windows users to run that file from `main`. Every open branch inherits the breakage.
+
+Done when a full `ci` run on `main` is green on every target, `install.ps1` is ASCII-only (or has a BOM) with a test that fails on a non-ASCII byte, and the 5.1 step passes.
+
+### K903. Make every CI job gate merges to main
+
+Ruleset `protect-main` lets the admin role bypass checks, and its 15 required checks leave out `ketch-cs`, `ketch-win-app`, `ketch-capi`, `ketch-linux-app` and `hakari`. 30 of the last 40 merged pull requests had non-green checks; five merged with none green. Superseded `main` runs are cancelled, and a cancelled run never fires `release-ci-alert`, so a red `main` went unnoticed for three days.
+
+Done when one aggregate `ci / gate` job (`needs:` every job, `if: always()`) is the required check, the bypass is off or merges go through a merge queue, and an alert fires when `main` has had no green run for 24 hours, cancelled runs included.
+
+Depends on K902.
+
+### K904. Take the single self-hosted Mac off the PR critical path
+
+`MACOS_RUNNER=xcode-27-local` sends every macOS job to one org-wide runner. Four macOS jobs (about 85 job-minutes) queue behind each other there, waits reach 165–284 minutes, and 428 pull-request runs were cancelled in three days. Since #462 `rust / plan`, `fmt` and `msrv` land on it too, and the docs-only `package (macos)` no-op waits up to two hours for 0.2 minutes of work. `ketch-ffi` and `macos-app` each build the XCFramework.
+
+Done when pull requests use hosted macOS (the Mac only for `main` or a merge queue), plan/fmt/msrv and the docs-only `package` run on `ubuntu-latest`, one XCFramework build feeds both jobs, and the median pull-request wall time over 20 runs is under 30 minutes.
+
+Depends on K903.
+
+#### Product and onboarding
+
+### K905. Seed the registry with short names from mise's registry
+
+`pyrlyn/ketch-registry` holds 7 packages and `builtin.toml` 2, so `ketch install jq` fails: installing by name, the first thing a new user tries, almost always ends in "use owner/repo". mise's `registry/*.toml` (about 1,015 short names) and aqua's registry (about 2,000 GitHub-release entries) are MIT and already map names to repositories.
+
+Done when a converter script turns each mise entry with an `aqua:`, `github:` or `ubi:` backend into `<name>/ketch.toml` (source, description, `provides` from its bins), at least 300 entries pass `ketch registry validate`, a NOTICE credits the MIT sources, and `ketch install jq`, `fd`, `bat`, `gh` and `lazygit` resolve.
+
+Depends on K910.
+
+### K906. Decide how to live with the `ketch` name collision
+
+Homebrew core already ships a `ketch` formula (1broseidon/ketch, web scraping for agents), and the AUR `ketch` is a third project. `brew install ketch` installs the wrong program, and a second `ketch` on PATH is only hinted at for `~/.cargo/bin` (`doctor.rs:405`).
+
+Done when the creator's decision (keep the name and disambiguate, or rename the binary or brand) is recorded, README, site and docs (with ru/uk) point at the tap explicitly, and `ketch doctor` names a Homebrew-core `ketch` that shadows this one.
+
+#### Core architecture and code
+
+### K907. Make `state.json` readable across ketch versions
+
+The CLI, the Homebrew bootstrap and each desktop app (released separately, each linking its own `ketch-ffi`) share one `~/.ketch`. `STATE_VERSION` (`state.rs:27`) has never moved; the stored manifest snapshot inherits `deny_unknown_fields` (`model.rs:840`), the stored enums have no fallback and unknown fields are dropped on save. One new manifest key or enum value written by a newer build makes every older build fail on "could not parse state.json".
+
+Done when the stored snapshot is parsed leniently (user-written files stay strict), stored enums have an `Unknown` fallback, unknown fields round-trip via `serde(flatten)`, a test loads and re-saves a state with an unknown key, enum value and package field unchanged, and the rule for bumping `STATE_VERSION` is written down.
+
+#### CI and release
+
+### K908. Settle the version restart for existing installs
+
+Versioning restarted at 0.0.1 (#359). `self_update.rs:502` refuses `to <= from`, so a ketch on 0.10.0 never upgrades again; the cask is stuck at `version "0.10.0"` because the v0.0.1 tap push failed (#367); release-failure issues #362 and #254 are still open; `/releases/latest` is an unoptimised dev build.
+
+Done when the creator's choice (bump past 0.10, or a migration note plus a `self upgrade` path down) is recorded and implemented, the tap job is fixed and re-run, and the stale release-failure issues are closed.
+
+Depends on K902.
+
+#### Process and tooling
+
+### K909. Reduce plan.md to the active tasks
+
+After the move to rtok `plan.md` is mostly history: about 65 `fixed` rows in two review tables, finished audit lists, empty "Plan 2026-09-27" sections, a dangling "Plan:" and the finished D12 still open in `tasks/`. #465 merged with its own `tests/tasks.rs` red (finished rows left in the table).
+
+Done when `plan.md` holds the header, the task table and the active cards, the review tables and audit notes live in `done.md` or a maintainer doc, D12 is closed with the creator's OK, and `cargo test --test tasks` passes.
+
+#### Product and onboarding
+
+### K910. Resolve for another target in `ketch why` and `ketch info`
+
+Resolution only runs for the host: nothing lets you ask which asset Linux or Windows would get. That blocks checking a registry entry on every OS from one machine, measuring inference, and a lockfile for several targets.
+
+Done when `ketch why <pkg> --target <triple-or-os-arch> [--json]` and `ketch info --assets --target …` resolve without installing, and unit tests cover each supported target.
+
+### K911. Measure asset inference against a public corpus
+
+"Any repository that ships releases" is the headline claim (README, site), and nothing measures it. A pass rate turns the slogan into a number and finds asset-scoring bugs before users do.
+
+Done when a scheduled workflow (network allowed) runs `ketch why --target` for a few hundred repositories from the aqua list across five targets, publishes a pass-rate JSON and a failure list as an artifact, and the first batch of failures has become scoring fixes or registry entries.
+
+Depends on K910.
+
+### K912. Pick up the gh token and explain the rate limit
+
+Unauthenticated GitHub allows 60 requests an hour; `ketch outdated` over a dozen packages spends that quickly. `config.rs:231-246` reads only env vars and `config.toml`, and the error asks the user to run `gh auth token` themselves (`error.rs:198`). dra and mise read the GitHub CLI's token.
+
+Done when, with no token configured, ketch asks `gh auth token` (with a timeout, switchable off in config), a 403/429 names the reset time from `x-ratelimit-reset`, `ketch doctor` shows which token source is used (masked), and unit tests cover each source.
+
+### K913. Offer matches when a short name is unknown
+
+`ketch install <unknown>` stops with advice to run `ketch search` by hand (`manifest.rs:122-130`). One prompt turns that dead end into an install.
+
+Done when, on a terminal, an unknown name shows the top registry and GitHub matches through the `Decider` and installs the one chosen; under `--yes` or without a TTY it still fails, listing them; an end-to-end test runs against the fixture plugin.
+
+### K914. Ship a setup-ketch GitHub Action
+
+CI is where teams adopt a tool installer, and mise, aqua and pkgx each offer a one-line step; ketch has no `action.yml`.
+
+Done when a composite action installs a pinned ketch verified against `SHA256SUMS`, adds the bin dir to `GITHUB_PATH`, passes the token, caches the store keyed on the `ketch.lock` hash, optionally runs `ketch sync`, and a CI job uses it on all three OSes.
+
+### K915. Make licensing and dual licensing clear
+
+`PRICING.md` says prices come later; the README licence text reads like a library template; `cla.yml` is off and CONTRIBUTING never mentions a CLA, so outside contributions would block selling a commercial licence; Cargo says GPL-3.0-or-later while the desktop research says GPL-3.0-only.
+
+Done when the creator's choices are recorded, README has a short licence FAQ (running ketch is free; licences matter when embedding or redistributing `ketch-core`), the CLA is on and named in CONTRIBUTING, the GPL wording is the same everywhere (with ru/uk), and sponsorship is set up or explicitly declined.
+
+### K916. Raise the repository's community health
+
+GitHub's community profile scores 50%: no issue or pull-request templates, no SECURITY.md, no code of conduct, Discussions off, while the README asks for testing volunteers. A security policy is also a trust signal for a tool that verifies downloads.
+
+Done when issue forms exist for bugs (asking for `ketch doctor --json` and `ketch why`), "wrong asset picked" and package requests, plus a PR template, `SECURITY.md` and a code of conduct, and Discussions is on.
+
+#### Process and tooling
+
+### K917. Retire workspace-hack or keep it in step automatically
+
+`cargo hakari generate --diff` is the most frequent CI failure (27 runs in 20 days, every Dependabot cargo PR) yet not required, so drift merges. It also unifies uniffi, aws-lc-rs, tokio and clap into every member: the CLI compiles uniffi only through it, and `scripts/core-features.sh` builds with it on, so the slim-core builds of R19 are not really proven.
+
+Done when, after a measured build-time comparison, the creator picks: remove workspace-hack, or exclude `ketch-ffi`/`ketch-capi` from unification, regenerate it on Dependabot PRs automatically and make `hakari` required. Either way `cargo tree -p ketch -i uniffi` is empty and the feature check runs without the hack.
+
+Depends on K903.
+
+### K918. Pin cargo-nextest and add a nextest profile
+
+Every documented test command needs nextest, but `mise.toml` does not pin it: `cargo nextest run` fails locally with "No version is set for shim: cargo-nextest". There is no `.config/nextest.toml`, and the Windows run reports leaked children (`upgrade_stops_a_process_holding_the_binary_when_yes`, `lists_a_child_running_a_cmd_script`).
+
+Done when nextest is pinned in `mise.toml` and `toolchain.md`, and a `ci` profile sets slow and leak timeouts (a leak fails) and uploads JUnit output.
+
+#### Desktop apps
+
+### K919. Decide the desktop ship order and maintenance budget
+
+About 15,600 lines of Swift, C# and Vala for one maintainer, and fixes already land unevenly (B129–B131 reached one or two apps). Linux has D17–D19 open and needs C ABI safety work first.
+
+Done when the creator's choice is recorded in `docs/research-desktop-platforms.md`, `plan.md` and `roadmap.md`: (a) macOS, then Windows, Linux frozen at the fake shell; (b) all three, with every behaviour fix landing in all apps in one PR; or (c) Linux on gtk4-rs linking `ketch-core`, dropping `ketch-capi`.
+
+### K920. Test the macOS live core against a scratch root
+
+`LiveKetchCore.swift`, the adapter the first notarised build ships, has no test and no recorded manual pass; Windows has `FfiKetchCoreTests` doing exactly that.
+
+Done when Swift tests drive `LiveKetchCore` offline through install, uninstall, a binary choice, cancel, `Busy` and `NotFound` on a scratch root, the `macos-app` job runs them, and a manual pass is recorded in F13.
+
+### K921. Port the B129–B131 store fixes to the Linux app
+
+On the real core an offline machine or a fast typist will hit, in the Linux app, bugs already fixed elsewhere: search results have no generation guard (`store.vala:64-69`, B130), a second operation is dropped silently (`store.vala:151-154`, B131), and a background refresh failure raises an alert (`store.vala:51-52`, B129).
+
+Done when the Linux store behaves as macOS does in all three cases, with `store-test.vala` cases named after each B id.
+
+### K922. Make Doctor actionable in the desktop apps
+
+Doctor's PATH check returns CLI prose ("Run `ketch path install`") and reads this process's PATH (`shell.rs:302-327`, `config.rs:407-413`), so a GUI started from Finder or the Start menu always warns "not in this shell". `doctor_fix` is exported and unused.
+
+Done when each check carries a machine-readable fix kind (none, `path_install`, `new_shell`), `doctor.json` is regenerated, and the apps offer a Fix button for `path_install` and hide "open a new shell".
+
+### K923. Add contract scenarios for the unused core calls
+
+`ketch-ffi` exports 19 calls; the apps and `desktop/contract` cover 8. `pin`, `unpin`, `rollback`, `prune`, `history`, `info`, `path_status`, `path_install`, `doctor_fix` and `registry_refresh` have no scenarios, so no fake can show a screen for them.
+
+Done when `crates/ketch-ffi/tests/contract.rs` generates scenarios for each (rollback: ok, nothing to roll back to, binary choice; path install: dry run), and all three fakes decode them.
+
+### K924. Set up PATH from the macOS app on first launch
+
+No app calls `path_status` or `path_install`, so tools installed from the GUI do not run in a terminal until someone runs `ketch path install`, and someone who installed only the `.dmg` has no CLI to run it with. A Finder launch never sees a shell-profile `KETCH_ROOT`, so app and CLI can silently use different roots.
+
+Done when a first-run sheet shows the root, the bin dir and the per-shell status, previews `path_install(dry_run: true)` and applies it on consent, Settings can reopen it, and store tests run on the new scenarios. Windows and Linux follow as their own tasks once this shape is settled.
+
+Depends on K922, K923.
+
+#### Core architecture and code
+
+### K925. Carry one cancel token per operation
+
+There are two tokens, `Ctx::cancel` (`report.rs:335`) and `InstallRequest::cancel` (`install.rs:73`). `ketch-ffi`'s `ctx()` never sets the caller's token, so a desktop upgrade's network-heavy check phase (`fill_latest`) cannot be cancelled, and `outdated` takes no token at all.
+
+Done when the token lives only on `Ctx`, the FFI context carries the caller's token, `outdated` takes one, and a test shows a cancelled token stops upgrade planning with `Cancelled`.
+
+### K926. Plan upgrades in one place in the core
+
+Three paths answer "what is outdated?" differently: CLI `upgrade` checks serially and fresh (`src/cmd/pkg.rs:259-425`), CLI `outdated` runs its own uncancellable thread pool (`src/cmd/query.rs:288-392`), FFI uses the TTL-cached `listing::fill_latest`. The CLI and the GUI can disagree on "latest", and the command bodies break the thin-`cmd/` rule. The same hand-rolled worker pool appears in `install.rs` and `listing.rs` too.
+
+Done when one core `upgrade::plan` (parallel, cancellable) returns upgrades, unreachable and skipped packages for CLI `upgrade`/`outdated` and FFI `upgrade`/`outdated`, one ordered cancel-aware pool helper replaces the three, and `pkg::upgrade` is under 80 lines.
+
+Depends on K925.
+
+### K927. Keep CLI wording out of core errors
+
+`error.rs:195-231` hints name CLI flags ("Use --force", "Pass --yes") and `ketch-ffi` appends them to every desktop message. Already installed, update available, pinned, no compatible asset, source conflict and rate-limited all collapse to `Other`, so an app cannot offer "Update" or "Unpin".
+
+Done when hints and exit codes belong to the binary (or `hint()` takes an audience), `KetchError` gains `AlreadyInstalled`, `UpdateAvailable`, `Pinned`, `NoCompatibleAsset`, `SourceConflict` and `RateLimited`, contract scenarios are updated, and a test asserts no FFI message contains `--`. Mapping the new kinds in each app may be a follow-up.
+
+### K928. Probe source plugins only when needed
+
+`SourceRegistry::load` spawns every plugin with `capabilities`, one after another with a 30-second timeout, on every install, list, outdated, info and changelog, and on each FFI call. One hung plugin delays every command, GitHub-only ones included, and the apps pay it on each poll.
+
+Done when discovery only lists candidates, a plugin is probed on the first lookup of its scheme (or capabilities are cached by path, mtime and size), `ketch plugin list` still probes all, and a test shows a sleeping plugin does not slow `ketch list` of GitHub packages.
+
+### K929. Pass the platform in, and fault-inject placement
+
+14 direct `platform::host()` calls (7 in `install.rs`) mean `FakePlatform` only reaches asset choice. The riskiest code, commit and rollback after a failed placement (B79, B104, B123), can only be tested on each OS.
+
+Done when the platform travels in `Ctx` (or a pipeline struct, defaulting to `host()`) and a fault-injecting fake proves on every host that a link failure after the store swap restores the store and the old links.
+
+### K930. Move OS-neutral placement code into one module
+
+`platform/unix.rs` and `platform/windows.rs` duplicate bin resolution, executable discovery, `cli_targets`, `writable`, `unplace` and extra linking (71 shared six-line windows), and `macos.rs` repeats part of `unix.rs`. Each copy compiles and is tested only on its own OS, so a fix to one silently misses the other. Extends the `move_into_store` idea in `ideas.md`.
+
+Done when a `platform/common.rs` compiled on every OS holds the shared code with small hooks for name matching and symlink-versus-copy, both variants are unit-tested on every host, and the duplicate-window count is under 10. Split into the two subtasks below.
+
+### K930.1. Share bin resolution and executable discovery
+
+First half of the common placement module: `resolve_bin_specs`, `payload_executable_entry`, `discover_executables` and `cli_targets` move out of `unix.rs` and `windows.rs`.
+
+Done when both platforms call the shared functions, tests for both naming rules run on every host, and behaviour is unchanged.
+
+### K930.2. Share placement, unplace and extra linking
+
+Second half: `writable`, `unplace`, `link_planned_extras` and the shared part of `macos.rs`.
+
+Done when both platforms call the shared code and the duplicate-window count is under 10.
+
+Depends on K930.1.
+
+#### Product and onboarding
+
+### K931. Lock assets and hashes for several targets
+
+`docs/LOCKFILE.md` guarantees a hash only on the target that wrote the lock, so a lock written on a Mac gives Linux CI nothing pinned. mise records a URL and checksum per platform.
+
+Done when `ketch lock --target …` (or a `lock_targets` config key) writes per-target `asset` and `sha256`, `ketch sync` enforces them on each target, and `docs/LOCKFILE.md`, the schema and ru/uk are updated.
+
+Depends on K910.
+
+### K932. Show verification status and add `ketch audit`
+
+Verification is the selling point but invisible: `ketch list` never shows whether a checksum or signature was verified, and `require_checksums` defaults to off. Teams need to find unverified installs.
+
+Done when `ketch list` shows verified, signed or unverified per package, and `ketch audit [--json]` exits non-zero when any package is unverified.
+
+### K933. Verify GitHub artifact attestations for client apps
+
+Publisher identity is checked only when a manifest declares a `trust` table. GitHub artifact attestations exist for many repositories (`GET /repos/{o}/{r}/attestations/sha256:…`), and sigstore is already a dependency; `ideas.md` covers only ketch's own release.
+
+Done when, for an asset whose digest has an attestation, ketch verifies the bundle against the repository identity and records the result in state, `ketch info` and `ketch audit`; it degrades gracefully offline and fails closed only under `require`.
+
+Depends on K932.
+
+### K934. Work behind corporate networks
+
+ureq is built on `webpki-roots` only, so a TLS-intercepting corporate CA fails every request; proxy support (`proxy-from-env`) and `KETCH_GITHUB_API` for GitHub Enterprise exist but are undocumented, and private-repo token scopes are mentioned only in a source comment.
+
+Done when the OS trust store is used (platform verifier), CONFIGURATION.md has a "Corporate networks" section (proxy, GHE, private repos) in en/ru/uk, and a test covers a custom root.
+
+### K935. Ship a GitLab and Forgejo source plugin
+
+The site promises GitLab, Gitea and internal servers, but only `examples/ketch-source-example` exists. mise and ubi cover GitLab and Codeberg.
+
+Done when a maintained plugin speaks the current `PROTOCOL_VERSION` for gitlab.com and Codeberg, installs with ketch, is in the registry, and has an end-to-end test against a fixture server.
+
+### K936. Install Linux AppImages as apps
+
+"Apps as well as binaries" holds only for macOS `.app`; `platform/mod.rs:493` rejects `.appimage`, the format most Linux GUI apps ship.
+
+Done when an AppImage declared as an app is placed with a `.desktop` entry and icon in the user XDG directories, recorded in state, removed on uninstall, and covered by a Linux end-to-end test.
+
+### K937. Import installed tools from Homebrew and winget
+
+`ketch import` takes one name at a time, but switching package managers is a bulk decision; "23 of 40 tools can move" converts users.
+
+Done when `ketch import brew --installed` and `ketch import winget --file export.json` convert what they can, print a table of what was skipped and why, honour `--dry-run`, and fixture tests cover both.
+
+### K938. Publish ketch to a Scoop bucket
+
+ketch ships only through its Homebrew tap and the scripts; Windows developers expect `scoop install`. The `ketch` crate name on crates.io is still free.
+
+Done when the release publish step generates `ketch.json` with its checksum into a `pyrlyn/scoop-bucket`, and the creator's decision on reserving the crates.io name is recorded.
+
+### K939. Correct overstated claims and widen the comparison
+
+README says uninstalling "leaves nothing behind" and the site that nothing is written elsewhere, yet ketch writes to `/Applications`, man and completion directories, shell startup files, PowerShell profiles and cmd AutoRun (all recorded and reversible). The site title still says "listepo tools"; `docs/COMPARISON.md` covers only Homebrew, apt and mise.
+
+Done when the claims are accurate, COMPARISON adds aqua, eget, ubi, dra, stew, cargo-binstall, Scoop and winget with sources, a "no telemetry" statement is added, and ru/uk are updated.
+
+#### Process and tooling
+
+### K940. Fix AGENTS.md drift and move the release runbook out
+
+AGENTS.md (798 lines) promises an auto-revert path that does not exist, says CI installs Rust with jdx/mise-action (it uses pyrlyn/ci `setup-rust`), says `release.yml` tags (dist never tags), lists "Seven things" and gives six, keeps the obsolete untagged-v0.10.0 paragraph, and calls org secrets repository secrets. About 250 lines are release runbook. Agents follow this file literally.
+
+Done when each item is fixed (together with the `ideas.md` docs-drift entry) and the Releasing and app-release sections move to a maintainer doc linked from AGENTS.md, exempt from ru/uk like `docs/qa/`.
+
+#### CI and release
+
+### K941. Run desktop CI once, and only when it can change
+
+`ketch-cs` and `ketch-win-app` both run `scripts/csharp.sh`; `ketch-ffi` and `macos-app` both build the XCFramework; the pipeline's dotnet job reruns `Ketch.AppCore.Tests`; the `--features tui` pass reruns about 250 tests per OS. Six desktop jobs run on every non-docs PR, although the config action already computes a changed-file verdict.
+
+Done when there is one macOS desktop job and one Windows .NET job, a `desktop` output (crates, desktop, scripts, Cargo.lock, mise.toml) turns desktop jobs into reporting no-ops otherwise, and the tui pass runs only tui-dependent tests or one OS.
+
+Depends on K903, K904.
+
+#### Process and tooling
+
+### K942. Keep one dependency bot and drop inert tools
+
+Renovate's preset covers cargo, actions, npm and mise, overlapping Dependabot (one onboarding PR against 17). CodeRabbit has auto-review off and its issue workflow has filed nothing. release-plz runs nowhere but keeps a config, a test and 11 AGENTS.md mentions alive.
+
+Done when Renovate is limited to `mise` (or Dependabot dropped), CodeRabbit is either on or removed, and release-plz is retired with its mentions or pinned and used.
+
+#### CI and release
+
+### K943. Commit mise.lock and install tools with checksums
+
+There is no `mise.lock`; about 20 tools, some git-sourced, install unverified, and the jactionlint baseline accepts unverified `sh` runs of the cargo-dist installer and rustup. The release build runs on these tools.
+
+Done when `mise.lock` is committed, CI installs in locked mode, and the two baseline entries are gone.
+
+### K944. Dry-run the desktop release workflows
+
+`release-apple-desktop.yml` and `release-windows-desktop.yml` have never run; `SUPublicEDKey` is a placeholder and the Windows certificate secrets do not exist. The first real run will meet months of drift.
+
+Done when each workflow has a `dry-run` input that builds and signs with a throwaway certificate and Sparkle key, skips notarisation and publishing, and runs weekly or on changes to its files.
+
+### K945. Run the fuzz targets on a schedule
+
+`fuzz/` has 11 targets over the trust-boundary parsers (archives, manifests, checksums), but CI only type-checks `cfg(fuzzing)`; nothing ever fuzzes.
+
+Done when a weekly Linux job runs each target about two minutes on nightly with a cached corpus, uploads crashes and opens an issue on one.
+
+#### Desktop apps
+
+### K946. Pin, roll back and show history in the desktop apps
+
+All three apps show held packages but cannot pin or unpin, roll back or show history, although `pin`, `unpin`, `rollback`, `history` and `info` are exported. The core work is done; only protocol and UI are missing. One subtask per app.
+
+Done when every app's package page has Pin/Unpin, "Roll back to X" when a retained version exists, and a History tab fed by `history(package, 50)`, with store tests on the new scenarios.
+
+Depends on K923.
+
+### K946.1. macOS: pin, roll back and history
+
+The macOS share of the parity task.
+
+Done when the macOS package page has the three features and store tests on the scenarios.
+
+Depends on K923.
+
+### K946.2. Windows: pin, roll back and history
+
+The Windows share of the parity task.
+
+Done when the Windows package page has the three features and `Ketch.AppCore.Tests` covers them.
+
+Depends on K923.
+
+### K946.3. Linux: pin, roll back and history
+
+The Linux share of the parity task.
+
+Done when the Linux package page has the three features and `store-test.vala` covers them.
+
+Depends on K923.
+
+### K947. Windows: check for updates periodically
+
+macOS refreshes on a timer and has a prerelease setting; Windows refreshes only at launch and on the tray's "Check now", so a tray app started at login announces updates once. Every Windows refresh failure raises an alert (the Windows side of B129).
+
+Done when a timer refreshes at an interval set in Settings (skipped while an operation runs), a background failure is logged, the prerelease switch reaches `InstallOptions`, and `Ketch.AppCore.Tests` covers it.
+
+### K948. Windows: Narrator and keyboard pass
+
+No XAML file sets `AutomationProperties`: row buttons are announced as a bare "Uninstall" or "Update", Doctor severity is a glyph only, and there are no keyboard accelerators. macOS met this bar in D9.
+
+Done when row actions are named "Update {name}" and so on, status has a text equivalent, Ctrl+F, F5 and Ctrl+, exist, and an Axe.Windows or FlaUI smoke test runs in `ketch-win-app` on the fake core.
+
+### K949. Show token status and rate limits in the apps
+
+A GUI launched from the dock has no `GITHUB_TOKEN` and usually no `gh` on PATH, and hourly update checks spend anonymous quota; the rate-limit hint tells it to set an environment variable. `config()` already reports whether a token is set; no app reads it.
+
+Done when each app's Settings shows whether a token is set and where it comes from, and a rate-limit error renders as an actionable banner with the reset time.
+
+Depends on K927, K912.
+
+### K950. Windows: choose and wire the app's update channel
+
+D14 shipped the release workflow but left the update route open; without one every release after the first reaches nobody who already has the app. Options: an in-app check of `desktop-windows-v*` releases that notifies and opens the download page (reuses D13's notifications), Velopack (in-place, changes the app), winget (needs a Microsoft account).
+
+Done when the creator's choice is recorded and the chosen route works end to end against a draft release, covered by `tests/desktop_windows_release.py`.
+
+### K951. Decide how to stop desktop logic drifting apart
+
+Three fakes and three scenario decoders (about 2,000 lines) re-implement one replay and have already drifted from the real core (B111, a declined choice, `stopProcesses` missing on macOS). The progress fold, update notices and busy/retry policy exist per app; the revisit trigger of research decision 5 has fired. Options: a scripted `KetchCore` inside `ketch-ffi` that replays the scenarios (apps test their live adapters on it; plain-.NET tests then need the native library); exporting policy (`ActivityFold`, `UpdateNotices`) from `ketch-ffi`; or a shared store-behaviour spec every app's tests carry.
+
+Done when the creator has picked, and a spike lands the chosen piece in Rust with one app adopting it.
+
+Depends on K919.
+
+### K952. Linux: Orca and keyboard pass
+
+Row buttons carry a bare verb (`window.vala:140`), status icons have no accessible label, and the only shortcut is Ctrl+,. Cheapest before D17 adds screens.
+
+Done when buttons and status icons have accessible labels, Ctrl+F and Ctrl+R exist, and a manual Orca pass is recorded.
+
+#### Core architecture and code
+
+### K953. Split the oversized modules along their seams
+
+Review and merge conflicts concentrate in a few files: `install.rs` (about 2,000 lines of code; `prepare` 274 lines, `commit` 215), `src/ui.rs` (1,365), `shell.rs` (1,504, with an inline `windows_env`), `model.rs` (about 1,600, 35 public types). One subtask per file, each a pure move with no test changes.
+
+Done when every subtask has landed.
+
+### K953.1. Split install.rs
+
+Seams: verification, store housekeeping, upgrade queries, and binary picking (which belongs in `bin_choice.rs`).
+
+Done when `install/{verify,store,upgrade}.rs` exist and `prepare` is split into helpers under 80 lines.
+
+Depends on K926, K929.
+
+### K953.2. Split src/ui.rs
+
+Styles, line kinds, prompts, progress, tables and the `Terminal` reporter share one file.
+
+Done when they live under `src/ui/` and output is unchanged.
+
+### K953.3. Split shell.rs and model.rs
+
+`shell.rs` carries an inline `mod windows_env`; `model.rs` holds 35 public types.
+
+Done when `shell/windows_env.rs` and a `model/` directory exist with no behaviour change.
+
+### K954. Trim the core's public surface and dead code
+
+33 of 38 core modules are `pub`, and 167 of 510 public items are named nowhere outside the core; `allow(dead_code)` keeps `Platform::id`, `app_bundle_extension`, `ReleaseSelection::rejected`, `SourceRegistry::schemes` and `Config::config_file` alive, and `ketch why` hard-codes `rejected: Vec::new()`. AGENTS.md's "everything else stays `pub(crate)`" has drifted. Extends R15.
+
+Done when the flagged items are `pub(crate)` or gone, `rejected` is wired into `ketch why` or deleted, and `unreachable_pub` warns in the core where privacy allows.
+
+### K955. Build the resolver once per batch
+
+`manifest.rs:63` says the `Resolver` is built once per command, but `prepare` builds one per package and FFI `search` one per call, each re-parsing the built-in registry, every registry manifest and every user manifest. The cost grows with the registry.
+
+Done when the resolver is passed into `prepare` and `batch`, and a test counts one load per batch.
+
+Depends on K929, K905.
+
+### K956. Use one HTTP stack for push and everything else
+
+`ketch registry push` runs octocrab on its own tokio runtime, without `http.rs`'s timeouts, body cap or `--verbose` log, and its errors lose exit code 7. `Error::Network` carries `Box<ureq::Error>`, tying the public error to ureq 2. 16 call sites build their own agent although `http.rs` says one per process. `push` already sits behind an `Api` trait.
+
+Done when the GitHub `Api` implementation runs on `Http`, octocrab and tokio leave the `push` feature, `Error::Network` no longer names ureq, and agents are shared per operation. Bumping ureq stays a separate decision.
+
+### K957. Find a lighter Sigstore verifier
+
+The `trust` feature adds 177 crates: sigstore 0.14's `verify` pulls fulcio and rekor clients (reqwest, tokio, hyper, webbrowser, openidconnect, rsa with the ignored B138 advisory) for what is an offline bundle check against an embedded root, and `ketch-ffi` carries it into every app.
+
+Done when a research note with primary sources compares options, and either an upstream change splits offline verification from the network clients or a replacement is chosen, with crate count and binary size measured.
+
+### K958. Optimise hot dependencies in release builds
+
+`[profile.dist]` inherits `dev` on purpose (#279), so released binaries hash, decompress and verify every download unoptimised; the cost is not measured.
+
+Done when hash-plus-extract time of a large asset and tarball size are measured, and, with the creator's OK, per-package `opt-level` overrides apply to sha2, flate2, lzma-rust2, bzip2, zip, pgp and sigstore while ketch's own crates keep debug info.
+
+#### Product and onboarding
+
+### K959. Publish a package catalogue on the site
+
+People browse before they install, and a catalogue helps search ranking; the site has a landing page and docs only.
+
+Done when the Hugo build generates a searchable page (Pagefind) from the registry tree.
+
+Depends on K905.
+
+### K960. Run a tool once without linking it
+
+Trying a tool, or running it once in CI, should not change PATH; pkgx owns that use case. The unlinked install path already exists (`--no-link`).
+
+Done when `ketch run owner/repo -- args` installs into the store unlinked (or reuses a copy), execs with the exit code passed through, `ketch prune` cleans such copies, and an end-to-end test covers it.
+
+### K961. Group `ketch --help` and greet a bare `ketch`
+
+About 30 top-level commands sit in one flat list without examples, and a bare `ketch` prints a clap error.
+
+Done when `ketch --help` groups commands (install, inspect, reproduce, registry, environment, self) with three examples, and a bare `ketch` prints a short getting-started.
+
+#### CI and release
+
+### K962. Mutation-test the trust-boundary guards
+
+Coverage is measured but nothing shows whether the tests would notice a weakened `safe_member_path`, `sanitize_component`, `validate_repo`, `Manifest::validate`, `hooks::allowed` or `changelog::sanitize`.
+
+Done when a scheduled `cargo-mutants` run scoped to those functions reports no missed mutants, or each gap has become a task.
+
+---
+
+## Optimisation and bug review (2026-10-23)
+
+A read-only review of `main` at `f83a678` for speed, build cost, duplication and bugs. Items already planned above (K902–K904 for the red and cancelled `ci` runs, K925, K953, K955–K958) are not repeated. Paths are under `crates/ketch-core/src/` unless shown otherwise; line numbers are as of the review.
+
+#### Core architecture and code
+
+### K963. Run install hooks outside the batch state lock
+
+In `install::batch` (`install.rs:923-933`) each worker calls `commit` while holding the `live` state `Mutex`, and `commit` runs the `before_install` and `after_install` hooks (`install.rs:730`, `:849`) and places the files. One slow hook or a large copy stalls every other worker, so `-j` only helps the download half.
+
+Done when `commit` takes the lock only to re-read and update the state, hooks and placement run outside it, and a test with a sleeping hook shows two packages committing concurrently.
+
+### K964. Stream file contents in sha256_tree
+
+`source::local::sha256_tree` (`source/local.rs:434`) reads every file with `fs::read` before hashing, so locking or verifying a local bundle holds its largest file in memory at once; `http::sha256_file` already streams through a 128 KiB buffer.
+
+Done when the length comes from the metadata, the payload is fed to the hasher through a reused buffer, and the existing `sha256_tree` hashes are unchanged.
+
+### K965. Share one HTTP agent between sources
+
+`Http::new` and `Http::anonymous` (`http.rs:40-60`) build two copies of the same `ureq` agent, and `Sources::load` (`source/mod.rs:307`, `:329`) and the registry update (`registry.rs:63`) each build their own, so connections and TLS sessions to `api.github.com` are not reused within one command. Extends K956.
+
+Done when one builder function sets the user agent and timeouts, and one agent per command is shared by every source and the registry download.
+
+#### CI and release
+
+### K966. Deduplicate crate versions in Cargo.lock
+
+`Cargo.lock` holds two or three versions of 48 crates (`cargo tree -d`): `digest` 0.10/0.11, `hmac`, `pbkdf2`, `cipher`, `base64` 0.21/0.22/0.23, `darling` 0.20/0.21/0.24, `nom` 7/8, `getrandom`, `hashbrown`, `itertools` and more, mostly pulled by sigstore, pgp and octocrab. Each copy adds compile time and binary size. Related to K957 and K958.
+
+Done when the duplicates are listed by the crate that pulls each one, the ones fixable by a bump or a feature are fixed, the rest are recorded as accepted, and a `cargo deny` `multiple-versions` check warns on new ones.
+
+#### Core architecture and code
+
+### K967. Keep a binary at the ketch path during self-replace
+
+`replace_binary` (`self_update.rs:613-630`) renames the running `exe` aside, then copies the new one in. Between the rename and the end of the copy there is no file at `exe`, so a shell, completion or second `ketch` started then fails with not-found, and a crash there leaves only `ketch.old`.
+
+Done when, on Unix, the new binary is copied to a sibling temp file, made executable and renamed over `exe` (atomic), the aside stays for rollback, and Windows keeps its rename-aside path with a test for each.
+
+### K968. Tell a cancelled or failed latest lookup from an unreachable one
+
+`listing::latest` (`listing.rs:440`, `:452`) marks every row without an answer `Latest::Unreachable`, whether the lookup failed, was rate-limited or was skipped because `Cancel` fired in `ask_all`; the error itself goes to `debug` only, so `ketch outdated` shows unreachable with no reason.
+
+Done when a skipped lookup reads `NotChecked`, a failed one carries its error (rate limit named as such) in the row, and a test covers cancel mid-batch.
