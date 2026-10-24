@@ -12,7 +12,7 @@ sccache = { version = "0.18.0", os = ["linux", "macos"] } # compiler cache; mise
 rust = { version = "1.98.1", components = "rustfmt,clippy" } # mise installs the minimal profile otherwise
 "cargo:cargo-cache" = "0.8.3" # `just cache` / `just cache-autoclean`; the shared cargo home fills up
 node = "24.20.0"              # commitlint for `just lint-commits` and the commit-msg hook; node-based checks live in Just and CI only
-"npm:agent-device" = "0.21.31" # device/app automation CLI for agents (Callstack): launch and drive the ketch desktop apps
+"npm:agent-device" = "0.21.31" # device/app automation CLI for agents (Callstack): Launch and drive the ketch desktop apps.
 "github:jdx/jactionlint" = "2.0.2" # the pre-push hook and local `mise x -- jactionlint`; CI lints through pyrlyn/ci
 hk = "2.5.0" # runs jactionlint as a pre-push hook (hk.pkl); `mise x -- hk install --mise`
 shellcheck = "0.11.0" # used by jactionlint for run: scripts; CI uses the runner image's copy
