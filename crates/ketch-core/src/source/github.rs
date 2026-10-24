@@ -363,19 +363,20 @@ fn sidecar_target(name: &str) -> Option<&str> {
 pub(crate) fn parse_checksum_file(body: &str) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     let mut conflicts = BTreeSet::new();
-    for line in body.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let mut parts = line.split_whitespace();
-        let (Some(hex), Some(name)) = (parts.next(), parts.next()) else {
+    for line in checksum_lines(body) {
+        let Some((hex, name)) = line.split_once(char::is_whitespace) else {
             continue;
         };
         if !is_sha256(hex) {
             continue;
         }
-        let name = name.trim_start_matches('*').trim_start_matches("./");
+        let name = name
+            .trim_start()
+            .trim_start_matches('*')
+            .trim_start_matches("./");
+        if name.is_empty() {
+            continue;
+        }
         let name = name.rsplit('/').next().unwrap_or(name).to_string();
         let hex = hex.to_ascii_lowercase();
         if let Some(existing) = out.get(&name) {
@@ -392,6 +393,12 @@ pub(crate) fn parse_checksum_file(body: &str) -> BTreeMap<String, String> {
     out
 }
 
+fn checksum_lines(body: &str) -> impl Iterator<Item = &str> {
+    body.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+}
+
 /// The hash a `.sha256` sidecar carries for `target`.
 ///
 /// Prefer a line that names the asset. A one-entry file (or a lone hex) is
@@ -402,11 +409,17 @@ fn sidecar_hex(body: &str, target: &str) -> Option<String> {
     if let Some(hex) = parsed.get(target) {
         return Some(hex.clone());
     }
+    // Count source lines, not surviving map entries: conflict removal can
+    // leave one unrelated hash, or no hashes at all. Neither is a bare hash.
+    let mut lines = checksum_lines(body);
+    let only = lines.next()?;
+    if lines.next().is_some() {
+        return None;
+    }
     if parsed.len() == 1 {
         return parsed.into_values().next();
     }
-    let first = body.split_whitespace().next().unwrap_or("");
-    is_sha256(first).then(|| first.to_ascii_lowercase())
+    is_sha256(only).then(|| only.to_ascii_lowercase())
 }
 
 // ---------------------------------------------------------------------------
@@ -696,6 +709,45 @@ not-a-hash                                                          junk.txt
             sidecar_hex(&body, "tool.tar.gz").as_deref(),
             Some(wanted.as_str())
         );
+    }
+
+    #[test]
+    fn a_sidecar_does_not_guess_from_multiple_unrelated_entries() {
+        let body = format!(
+            "{}  first.zip\n{}  second.zip\n",
+            "a".repeat(64),
+            "b".repeat(64)
+        );
+        assert_eq!(sidecar_hex(&body, "tool.zip"), None);
+    }
+
+    #[test]
+    fn a_sidecar_does_not_resurrect_a_conflicting_checksum() {
+        let body = format!(
+            "{}  tool.zip\n{}  tool.zip\n",
+            "a".repeat(64),
+            "b".repeat(64)
+        );
+        assert_eq!(sidecar_hex(&body, "tool.zip"), None);
+        let body = format!("{body}{}  unrelated.zip\n", "c".repeat(64));
+        assert_eq!(sidecar_hex(&body, "tool.zip"), None);
+    }
+
+    #[test]
+    fn checksum_names_keep_spaces_instead_of_matching_another_asset() {
+        let hex = "a".repeat(64);
+        let body = format!("{hex}  tool archive.zip\n");
+        let parsed = parse_checksum_file(&body);
+        assert_eq!(parsed.get("tool archive.zip"), Some(&hex));
+        assert!(!parsed.contains_key("tool"));
+    }
+
+    #[test]
+    fn a_sidecar_accepts_a_single_bare_or_named_checksum() {
+        let hex = "a".repeat(64);
+        for body in [format!("{hex}\n"), format!("{hex}  original-name.zip\n")] {
+            assert_eq!(sidecar_hex(&body, "tool.zip"), Some(hex.clone()));
+        }
     }
 
     #[test]

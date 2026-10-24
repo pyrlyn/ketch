@@ -43,7 +43,7 @@ Improvements from the read-only whole-project review of `main` at `13a6694` whos
 - `push.rs` `file()`: handle a directory response from the contents API explicitly instead of `items.pop()`.
 - `src/cmd/import.rs:113`: the dry-run prints rendered TOML through `ui::out` without `ui::printable`/`changelog::sanitize`.
 - `config.rs` `sanitize_component`: also reject zero-width and other invisible format characters (U+200B–200F, U+FEFF, …), not only the bidi controls, against look-alike names.
-- `changelog.rs` `find_file`: check that the canonical path stays inside the package prefix.
+- `changelog.rs` `find_file`: fixed in K963; discovery now checks directory containment with `extract::resolves_inside`.
 
 ### CLI, shell, logs
 

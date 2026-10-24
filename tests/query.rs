@@ -70,6 +70,25 @@ fn changelog_file_with_an_explicit_version_reads_the_installed_payload() {
     );
 }
 
+#[test]
+fn changelog_does_not_read_a_directory_link_outside_the_installed_payload() {
+    use predicates::prelude::*;
+
+    let sandbox = Sandbox::new();
+    publish_named(&sandbox, "testtool", "1.0.0");
+    sandbox.ok(&["install", "test:testtool", "--yes"]);
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::write(outside.path().join("CHANGELOG.md"), "private outside notes").unwrap();
+    let prefix = sandbox.store().join("testtool/1.0.0");
+    std::os::unix::fs::symlink(outside.path(), prefix.join("docs")).unwrap();
+
+    let output = sandbox.ketch(&["changelog", "testtool", "--file"]);
+    assert_cmd::assert::Assert::new(output)
+        .failure()
+        .stdout(predicate::str::contains("private outside notes").not())
+        .stderr(predicate::str::contains("private outside notes").not());
+}
+
 /// Installed state is the answer even when the source plugin is gone.
 #[test]
 fn info_still_reports_an_installed_package_when_the_source_is_unavailable() {

@@ -335,7 +335,8 @@ import Testing
 
     @Test func changelogLinksStayOnlyWhenTheyAreHTTPS() {
         let text = KetchStore.render(
-            markdown: "- [docs](https://example.com) [call](zoommtg://join) [local](file:///etc/passwd) [plain](http://example.com)"
+            markdown:
+                "- [docs](https://example.com) [call](zoommtg://join) [local](file:///etc/passwd) [plain](http://example.com)"
         )
 
         let plain = String(text.characters)

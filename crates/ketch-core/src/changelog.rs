@@ -78,6 +78,11 @@ pub fn find_file(prefix: &Path) -> Option<PathBuf> {
         } else {
             prefix.join(dir)
         };
+        // A regular leaf can still be reached through a directory symlink.
+        // Do not inspect files or enumerate directories outside the payload.
+        if !crate::extract::resolves_inside(&base, prefix) {
+            continue;
+        }
         for name in NAMES {
             let path = base.join(name);
             if is_regular_file(&path) {
@@ -88,6 +93,9 @@ pub fn find_file(prefix: &Path) -> Option<PathBuf> {
         // than the directory itself. One level, not a walk.
         if let Ok(entries) = std::fs::read_dir(&base) {
             for entry in entries.flatten().filter(|e| e.path().is_dir()) {
+                if !crate::extract::resolves_inside(&entry.path(), prefix) {
+                    continue;
+                }
                 for name in NAMES {
                     let path = entry.path().join(name);
                     if is_regular_file(&path) {
@@ -446,6 +454,37 @@ pub fn between<'a>(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    #[test]
+    fn changelog_discovery_does_not_follow_directories_outside_the_payload() {
+        for link in ["doc", "docs", "share", "nested"] {
+            let payload = tempfile::tempdir().unwrap();
+            let outside = tempfile::tempdir().unwrap();
+            std::fs::write(outside.path().join("CHANGELOG.md"), "private content").unwrap();
+            std::fs::create_dir(outside.path().join("doc")).unwrap();
+            std::fs::write(outside.path().join("doc/CHANGELOG.md"), "private content").unwrap();
+            std::os::unix::fs::symlink(outside.path(), payload.path().join(link)).unwrap();
+            assert_eq!(find_file(payload.path()), None, "{link}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn changelog_discovery_keeps_directory_links_inside_the_payload() {
+        let payload = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(payload.path().join("resources/notes")).unwrap();
+        std::fs::write(
+            payload.path().join("resources/notes/CHANGELOG.md"),
+            "release notes",
+        )
+        .unwrap();
+        std::os::unix::fs::symlink("resources/notes", payload.path().join("docs")).unwrap();
+        assert_eq!(
+            find_file(payload.path()),
+            Some(payload.path().join("docs/CHANGELOG.md"))
+        );
+    }
+
     use super::*;
 
     const KEEP_A_CHANGELOG: &str = "\

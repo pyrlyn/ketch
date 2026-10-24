@@ -9,22 +9,36 @@
 // type is spelled `KetchCore.…` and every app type `Ketch.…`.
 
 import Foundation
-import KetchCore
 import Synchronization
+
+import class KetchCore.CancelToken
+import struct KetchCore.Changelog
+import struct KetchCore.Check
+import protocol KetchCore.Decider
+import enum KetchCore.Event
+import struct KetchCore.Holder
+import struct KetchCore.InstallOptions
+import enum KetchCore.KetchError
+import struct KetchCore.Package
+import struct KetchCore.RegistryPackage
+import protocol KetchCore.Reporter
+import enum KetchCore.Stage
+import struct KetchCore.Upgrade
+import func KetchCore.packageForLink
 
 /// The live core for one ketch root. Synchronous, like the protocol: the store
 /// calls it off the main actor. The generated object is safe to share across
 /// threads; this wrapper adds no mutable state of its own.
 final class LiveKetchCore: KetchCoreProtocol, @unchecked Sendable {
     let root: URL
-    private let core: KetchCore.KetchCore
+    private let core: NativeKetchCore
 
     /// How many packages a search or a browse returns. Discover opens with an
     /// empty query, which the core answers from the registry alone.
     private static let searchLimit: UInt32 = 200
 
     init(root: URL) {
-        let core = KetchCore.KetchCore(root: root.path(percentEncoded: false))
+        let core = NativeKetchCore(root: root.path(percentEncoded: false))
         self.core = core
         if let resolved = try? core.root() {
             self.root = URL(fileURLWithPath: resolved, isDirectory: true)
