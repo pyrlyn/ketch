@@ -3,15 +3,16 @@
 # work, CI and release builds; bump it here and nowhere else. The MSRV
 # (rust-version = 1.86 in Cargo.toml) is a separate promise and does not follow it.
 [tools]
-python = "3.13.15" # runs ptools
-uv = "0.12.23" # installs the pipx: ptools tool
+python = "3.15.1" # runs ptools
+uv = "0.13.5" # installs the pipx: ptools tool
 "pipx:git+https://github.com/pyrlyn/tools.git" = "a0dd4ebdaf6f13e644e42bb5b9a1d830b726e8f8" # `mise run sweep`, `just cache`, `just swarfr` (ptools, Python; pyrlyn/tools main after #8, no tags yet)
 "cargo:cargo-sweep" = "0.8.0" # `mise run sweep`: drops build artifacts unused for 1 day (ptools sweep)
 mold = { version = "2.42.1", os = ["linux"] } # linker, Linux only; mise [env] below turns it on where it is installed
 sccache = { version = "0.18.0", os = ["linux", "macos"] } # compiler cache; mise [env] below makes it the rustc wrapper where it is installed
 rust = { version = "1.98.1", components = "rustfmt,clippy" } # mise installs the minimal profile otherwise
 "cargo:cargo-cache" = "0.8.3" # `just cache` / `just cache-autoclean`; the shared cargo home fills up
-node = "24.20.0"              # commitlint for `just lint-commits` and the commit-msg hook; node-based checks live in Just and CI only
+node = "26.12.1"              # commitlint for `just lint-commits` and the commit-msg hook; node-based checks live in Just and CI only
+"npm:agent-device" = "0.21.31" # device/app automation CLI for agents (Callstack): Launch and drive the ketch desktop apps.
 "github:jdx/jactionlint" = "2.0.2" # the pre-push hook and local `mise x -- jactionlint`; CI lints through pyrlyn/ci
 hk = "2.5.0" # runs jactionlint as a pre-push hook (hk.pkl); `mise x -- hk install --mise`
 shellcheck = "0.11.0" # used by jactionlint for run: scripts; CI uses the runner image's copy
