@@ -405,7 +405,7 @@ ketch outdated
 ketch outdated --json   # {"status","outdated","failed","unreachable"}
 ```
 
-### `ketch info <PKG> [--assets] [--releases [--draft]] [--json]`
+### `ketch info <PKG> [--assets [--target <TARGET>]] [--releases [--draft]] [--json]`
 
 Show details about a package, installed or not: source, description, latest
 and installed versions, links, retention, verification.
@@ -413,8 +413,15 @@ and installed versions, links, retention, verification.
 ```bash
 ketch info BurntSushi/ripgrep
 ketch info rg --assets     # every release asset with its score and why
+ketch info rg --assets --target linux-x86_64
 ketch info rg --releases   # the same table `ketch releases` prints, below
 ```
+
+`--assets` lists the release's assets and how each one scored. `--target`
+scores them for another platform instead of this machine: `<os>-<arch>`
+(`linux-x86_64`, `windows-aarch64`, `linux-x86_64-musl`) or a Rust triple
+(`x86_64-unknown-linux-gnu`, `aarch64-apple-darwin`). Nothing is installed.
+Omit `--target` to score for the machine ketch is running on.
 
 `--releases` adds the package's releases under the details, newest 20, in the
 format of `ketch releases`, and `--draft` lists drafts among them as
@@ -468,7 +475,7 @@ ketch releases ripgrep
 ketch releases sharkdp/fd --pre --json
 ```
 
-### `ketch why <PKG> [--json]`
+### `ketch why <PKG> [--target <TARGET>] [--json]`
 
 Explain how a package would be resolved, without installing it: which manifest
 tier answered, which release and asset were picked, and why.
@@ -476,7 +483,13 @@ tier answered, which release and asset were picked, and why.
 ```bash
 ketch why sharkdp/fd@v10.2.0
 ketch why rg --json
+ketch why rg --target x86_64-unknown-linux-musl
 ```
+
+`--target` resolves for another platform instead of this machine. It takes the
+same `<os>-<arch>` or Rust triple as `ketch info --assets --target`. The
+release lookup is unchanged; only the asset choice is. Nothing is installed
+either way.
 
 ### `ketch changelog <PKG> [--latest] [--file] [--release]`
 
@@ -502,13 +515,19 @@ ketch search ripgrep -n 5
 
 ## Reproduce
 
-### `ketch lock [--file <FILE>] [--check]`
+### `ketch lock [--file <FILE>] [--target <TARGET>]... [--check]`
 
 Write `./ketch.lock` from what is installed — the reproducible record of the
 machine's tools, pinned to exact releases. See [LOCKFILE.md](LOCKFILE.md).
 
+`--target` also records the asset and sha256 for that platform (repeat it).
+The forms are the same as `ketch why --target`. The file is downloaded to
+hash it and is not installed. `--check` only compares, so it takes no
+`--target`.
+
 ```bash
 ketch lock              # write ./ketch.lock
+ketch lock --target linux-x86_64 --target windows-x86_64
 ketch lock --check      # has the tree drifted from it?
 ketch lock -f tools.lock
 ```

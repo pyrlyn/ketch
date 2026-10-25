@@ -108,11 +108,12 @@ fn has_version_run(lower: &str) -> bool {
 }
 
 /// Extra tokens that mark a macOS asset as a build by-product.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 const BYPRODUCT_TOKENS: &[&str] = &["dsym", "debuginfo", "symbols"];
 
 /// Score a release asset name for macOS without constructing a platform backend.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+///
+/// Called for the host and for `ketch why --target`, so it is compiled on
+/// every OS. The macOS backend is not: that module is `cfg`-gated to macOS.
 pub(crate) fn score_macos_asset(
     asset_name: &str,
     host_arch: Arch,
@@ -186,10 +187,10 @@ pub(crate) fn score_macos_asset(
 
 /// Score a release asset name for Linux without constructing a platform backend.
 ///
-/// `musl_host` is whether this machine's libc is musl. A glibc (`gnu`) asset is
-/// refused there because it will not load; a musl asset on a glibc host is
-/// accepted but ranks below a native glibc build.
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+/// `musl_host` is whether the platform being scored is musl, which is this
+/// machine's libc for the host backend and whatever `--target` named otherwise.
+/// A glibc (`gnu`) asset is refused on musl because it will not load; a musl
+/// asset on a glibc host is accepted but ranks below a native glibc build.
 pub(crate) fn score_linux_asset(
     asset_name: &str,
     host_arch: Arch,
@@ -282,7 +283,6 @@ pub(crate) fn score_linux_asset(
 ///
 /// `gnu` is not treated as foreign: mingw triples (`pc-windows-gnu`) are
 /// Windows. `linux` and `musl` are.
-#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub(crate) fn score_windows_asset(asset_name: &str, host_arch: Arch) -> Option<AssetScore> {
     let lower = asset_name.trim().to_ascii_lowercase();
     if lower.is_empty() || is_rejected(&lower, &[]) {

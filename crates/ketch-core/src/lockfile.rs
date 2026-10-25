@@ -14,11 +14,12 @@
 //!
 //! * The **tag** is. Every machine resolving the same tag gets the same
 //!   release, which is the whole point of writing one down.
-//! * The **asset and its hash** are reproducible only on the same target. A
-//!   lock written on Apple Silicon names an `aarch64` tarball an x86_64 Linux
-//!   machine cannot run, so `sync` re-selects the asset there and verifies against the
-//!   source's own checksum instead. Claiming the recorded hash still applied
-//!   would be a reproducibility guarantee that quietly is not one.
+//! * The **asset and its hash** are reproducible on the target they were
+//!   recorded for. The top-level `asset` and `sha256` are the machine that
+//!   wrote the lock. `ketch lock --target` adds the same pair for other
+//!   platforms under `targets`, and `sync` enforces whichever pair matches
+//!   the machine it is running on. A platform with no pair is re-selected
+//!   and checked against the source's own checksum.
 //!
 //! A lockfile is a file somebody else may have written — that is what sharing
 //! a dotfiles repository means — so nothing in it is allowed to choose a
@@ -28,7 +29,9 @@
 
 use crate::config::{sanitize_component, validate_repo};
 use crate::error::{Error, Result};
-use crate::model::{InstalledPackage, PackageRef};
+use crate::model::{AskedTarget, InstalledPackage, Os, PackageRef, TargetSpec};
+use crate::report::Ctx;
+use crate::source::{Source, SourceRegistry};
 use crate::state::State;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -71,6 +74,11 @@ pub struct LockedPackage {
     pub target: String,
     pub asset: String,
     pub sha256: String,
+    /// Asset and hash for platforms other than `target`. Empty when the lock
+    /// only pinned the machine that wrote it. `ketch lock --target` fills it.
+    /// Absent keys stay valid: a lock from before this field existed has none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub targets: Vec<LockedTarget>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub pinned: bool,
     /// Which of several binaries sharing the package's name was chosen, as a
@@ -87,6 +95,20 @@ pub struct LockedPackage {
     pub published: Option<String>,
 }
 
+/// One platform's asset and the hash of that file.
+///
+/// The same shape as the package's own `asset` and `sha256`, for a machine
+/// other than the one that wrote the lock. `target` is `<os>-<arch>`, or
+/// `linux-<arch>-musl` when the pin is a musl build.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct LockedTarget {
+    pub target: String,
+    pub asset: String,
+    pub sha256: String,
+}
+
 impl LockedPackage {
     fn from_installed(pkg: &InstalledPackage) -> LockedPackage {
         LockedPackage {
@@ -97,6 +119,7 @@ impl LockedPackage {
             target: pkg.target.to_string(),
             asset: pkg.asset_name.clone(),
             sha256: pkg.sha256.clone(),
+            targets: Vec::new(),
             pinned: pkg.pinned,
             bin: pkg.bin_choice.clone(),
             published: pkg.published_at.clone(),
@@ -112,23 +135,75 @@ impl LockedPackage {
         self.target == target
     }
 
+    /// Asset and hash to hold a download to on `host`, when this lock recorded one.
+    ///
+    /// The top-level pair applies to `target`. A `targets` entry applies to
+    /// the platform it names, including one this machine is not. An explicit
+    /// musl or gnu triple outranks a bare `<os>-<arch>` for the same spec, so
+    /// a musl pin is not what a glibc machine enforces and the reverse.
+    /// `musl_host` is this process's libc, which is the only place that fact
+    /// lives: [`TargetSpec`] does not store it.
+    pub fn enforced_pin(&self, host: TargetSpec, musl_host: bool) -> Option<(&str, &str)> {
+        let mut best: Option<(u8, &str, &str)> = None;
+        let top = [(
+            self.target.as_str(),
+            self.asset.as_str(),
+            self.sha256.as_str(),
+        )];
+        let extras = self.targets.iter().map(|extra| {
+            (
+                extra.target.as_str(),
+                extra.asset.as_str(),
+                extra.sha256.as_str(),
+            )
+        });
+        for (target, asset, sha) in top.into_iter().chain(extras) {
+            let Some(rank) = pin_rank(target, host, musl_host) else {
+                continue;
+            };
+            if best.as_ref().is_none_or(|(have, _, _)| rank > *have) {
+                best = Some((rank, asset, sha));
+            }
+        }
+        best.map(|(_, asset, sha)| (asset, sha))
+    }
+
     /// True when the installed package is the release this entry pinned.
     ///
-    /// The tag is always compared. The hash is only a pin on the target that
-    /// recorded it: another machine has a different asset, and a mismatch
-    /// there would be the expected one rather than drift.
+    /// The tag is always compared. The hash is compared only when a pin
+    /// covers this machine — the top-level pair, or a `targets` entry. Another
+    /// machine with no pin has a different asset, and a hash mismatch there
+    /// would be the expected one rather than drift.
     fn matches_installed(&self, installed: &InstalledPackage) -> bool {
         if installed.tag != self.tag {
             return false;
         }
-        if !self.matches_target(&installed.target.to_string()) {
-            // A floating tag holds still only as long as its build does.
-            return match (&self.published, &installed.published_at) {
-                (Some(locked), Some(installed)) => locked == installed,
-                _ => true,
-            };
+        let musl_host = installed.target.os == Os::Linux
+            && cfg!(target_os = "linux")
+            && cfg!(target_env = "musl");
+        if let Some((_, sha)) = self.enforced_pin(installed.target, musl_host) {
+            return installed.sha256.eq_ignore_ascii_case(sha);
         }
-        installed.sha256.eq_ignore_ascii_case(&self.sha256)
+        // A floating tag holds still only as long as its build does.
+        match (&self.published, &installed.published_at) {
+            (Some(locked), Some(have)) => locked == have,
+            _ => true,
+        }
+    }
+}
+
+/// How specifically `target` names `host`. Higher wins. `None` is a different
+/// platform, or a libc this host does not have.
+fn pin_rank(target: &str, host: TargetSpec, musl_host: bool) -> Option<u8> {
+    let asked = AskedTarget::parse(target).ok()?;
+    if asked.spec != host {
+        return None;
+    }
+    match asked.musl {
+        Some(true) if musl_host && host.os == Os::Linux => Some(2),
+        Some(false) if !musl_host => Some(2),
+        Some(_) => None,
+        None => Some(1),
     }
 }
 
@@ -218,6 +293,37 @@ impl Lockfile {
                     pkg.sha256
                 )));
             }
+            let mut pinned = BTreeSet::new();
+            pinned.insert(pkg.target.clone());
+            for extra in &pkg.targets {
+                let where_target = format!("{named}, target `{}`", extra.target);
+                let asked = AskedTarget::parse(&extra.target).map_err(|_| {
+                    Error::msg(format!(
+                        "{where_target} is not a target ketch knows. Expected `<os>-<arch>` \
+                         (`linux-x86_64`) or `linux-<arch>-musl`."
+                    ))
+                })?;
+                let key = asked.lock_key();
+                if !pinned.insert(key.clone()) {
+                    return Err(Error::msg(format!(
+                        "{named} pins `{key}` twice; the top-level asset and sha256 already \
+                         cover `target`, and each other platform belongs in `targets` once"
+                    )));
+                }
+                if extra.asset.trim().is_empty() || sanitize_component(&extra.asset) != extra.asset
+                {
+                    return Err(Error::msg(format!(
+                        "{where_target} has `{}` where an asset file name belongs",
+                        extra.asset.escape_debug()
+                    )));
+                }
+                if !is_sha256(&extra.sha256) {
+                    return Err(Error::msg(format!(
+                        "{where_target} has `{}` where a sha256 belongs",
+                        extra.sha256
+                    )));
+                }
+            }
             // A binary's file name: one path component, as written. It is only
             // ever matched against files the release ships, but a value that
             // would need rewriting to be a file name cannot name one.
@@ -252,8 +358,9 @@ impl Lockfile {
              # run `ketch lock` again instead. Commit it.\n\
              #\n\
              # `ketch sync` installs every package below at the tag named here.\n\
-             # The asset and sha256 apply to `target`; on any other machine ketch\n\
-             # picks the asset that fits and verifies it against the source.\n\
+             # `asset` and `sha256` apply to `target`. A `[[package.targets]]` entry\n\
+             # pins another platform the same way. With no entry for this machine,\n\
+             # ketch picks the asset that fits and verifies it against the source.\n\
              {body}"
         ))
     }
@@ -326,6 +433,151 @@ fn is_sha256(text: &str) -> bool {
     text.len() == 64 && text.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
+/// Record `targets` on every package in `lock`.
+///
+/// Each string is `<os>-<arch>` or a Rust triple, the same forms as
+/// `ketch why --target`. The platform this install already recorded is
+/// skipped: its asset and hash are the top-level pair. Every other platform
+/// is resolved at the locked tag and downloaded so the hash is of the file,
+/// then the bytes are discarded. Nothing is installed.
+pub fn add_targets(
+    cx: &Ctx<'_>,
+    sources: &SourceRegistry,
+    state: &State,
+    lock: &mut Lockfile,
+    targets: &[String],
+) -> Result<()> {
+    if targets.is_empty() {
+        return Ok(());
+    }
+    // A typo should fail before the first download.
+    for text in targets {
+        AskedTarget::parse(text)?;
+    }
+    for pkg in &mut lock.packages {
+        let Some(installed) = state.iter().find(|p| p.source == pkg.source) else {
+            continue;
+        };
+        for text in targets {
+            cx.cancel.check()?;
+            let asked = AskedTarget::parse(text)?;
+            if is_host_pin(installed, asked) {
+                cx.report.note(&format!(
+                    "{}: {text} is the target already recorded for this install",
+                    pkg.name
+                ));
+                continue;
+            }
+            if installed.source.scheme == "local" {
+                return Err(Error::msg(format!(
+                    "{}: a local package has one path, not an asset per target",
+                    pkg.name
+                )));
+            }
+            let source = sources.for_ref(&installed.source)?;
+            let pin = capture_one(cx, source.as_ref(), installed, text)?;
+            if pkg.targets.iter().any(|have| have.target == pin.target) {
+                return Err(Error::msg(format!(
+                    "{}: {text} repeats {}",
+                    pkg.name, pin.target
+                )));
+            }
+            cx.report.note(&format!(
+                "{}: pinned {} for {}",
+                pkg.name, pin.asset, pin.target
+            ));
+            pkg.targets.push(pin);
+        }
+        pkg.targets.sort_by(|a, b| a.target.cmp(&b.target));
+    }
+    Ok(())
+}
+
+/// The installed package was already scored for this platform, so another
+/// download would only repeat the top-level asset and hash.
+fn is_host_pin(installed: &InstalledPackage, asked: AskedTarget) -> bool {
+    if asked.spec != installed.target {
+        return false;
+    }
+    let host_musl =
+        installed.target.os == Os::Linux && cfg!(target_os = "linux") && cfg!(target_env = "musl");
+    match asked.musl {
+        Some(true) => host_musl,
+        Some(false) => !host_musl,
+        None => true,
+    }
+}
+
+fn capture_one(
+    cx: &Ctx<'_>,
+    source: &dyn Source,
+    installed: &InstalledPackage,
+    target: &str,
+) -> Result<LockedTarget> {
+    if installed.source.scheme == "local" {
+        return Err(Error::msg(format!(
+            "{}: a local package has one path, not an asset per target",
+            installed.name
+        )));
+    }
+    let asked = AskedTarget::parse(target)?;
+    let manifest = installed
+        .manifest
+        .clone()
+        .unwrap_or_else(|| crate::model::Manifest::inferred(installed.source.clone()));
+    let opts = crate::source::ListOpts {
+        include_prerelease: true,
+        include_draft: installed.draft,
+        ..Default::default()
+    };
+    let release = cx
+        .report
+        .activity(&format!("resolving {} for {target}", installed.name))
+        .run(|| {
+            source.resolve(
+                &installed.source.id,
+                &crate::model::VersionSpec::Exact(installed.tag.clone()),
+                &opts,
+            )
+        })?;
+    let scored = crate::resolve::assets_for(cx.cfg, &release, &manifest.asset, Some(target))?;
+    let Some(chosen) = scored.first() else {
+        return Err(Error::NoCompatibleAsset {
+            id: installed.source.to_string(),
+            tag: release.tag.clone(),
+            target: asked.lock_key(),
+        });
+    };
+    let asset = release
+        .assets
+        .iter()
+        .find(|asset| asset.name == chosen.asset.name)
+        .ok_or_else(|| {
+            Error::msg(format!(
+                "{}: {} lists no asset named {}",
+                installed.name, release.tag, chosen.asset.name
+            ))
+        })?;
+    // Staging only: the hash is what the lock keeps, and the bytes are not
+    // installed. A directory under the system temp is removed with this
+    // function, including when the download fails part way.
+    let staging = tempfile::tempdir().map_err(Error::PlainIo)?;
+    let dest = staging.path().join(sanitize_component(&asset.name));
+    let progress = cx.report.download(&asset.name);
+    let sha256 = source.download(asset, &dest, &progress, &cx.cancel)?;
+    if !is_sha256(&sha256) {
+        return Err(Error::msg(format!(
+            "{}: the download of {} did not produce a sha256",
+            installed.name, asset.name
+        )));
+    }
+    Ok(LockedTarget {
+        target: asked.lock_key(),
+        asset: asset.name.clone(),
+        sha256,
+    })
+}
+
 /// What `Lockfile::load` does after reading the file, for the `lockfile` fuzz
 /// target (`src/lib.rs`).
 #[cfg(fuzzing)]
@@ -338,7 +590,7 @@ pub fn fuzz_parse(text: &str) -> Result<Lockfile> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Arch, ManifestOrigin, RetainedVersion, TargetSpec, Version};
+    use crate::model::{Arch, ManifestOrigin, Os, RetainedVersion, TargetSpec, Version};
 
     #[test]
     fn committed_lock_schema_matches_lockfile() {
@@ -422,8 +674,9 @@ mod tests {
 # run `ketch lock` again instead. Commit it.
 #
 # `ketch sync` installs every package below at the tag named here.
-# The asset and sha256 apply to `target`; on any other machine ketch
-# picks the asset that fits and verifies it against the source.
+# `asset` and `sha256` apply to `target`. A `[[package.targets]]` entry
+# pins another platform the same way. With no entry for this machine,
+# ketch picks the asset that fits and verifies it against the source.
 version = 1
 
 [[package]]
@@ -703,6 +956,171 @@ bin = \"fd\"
         assert!(!lock.packages[0].matches_target("macos-x86_64"));
     }
 
+    #[test]
+    fn another_platforms_asset_and_hash_are_enforced_on_that_platform() {
+        let sha_host = "a".repeat(64);
+        let sha_linux = "b".repeat(64);
+        let text = entry(&format!(
+            "\n[[package.targets]]\ntarget = \"linux-x86_64\"\nasset = \"fd-linux.tar.gz\"\n\
+             sha256 = \"{sha_linux}\"\n"
+        ));
+        let lock = parse_checked(&text).expect("parse");
+        let linux = TargetSpec {
+            os: Os::Linux,
+            arch: Arch::X86_64,
+        };
+        let mac = TargetSpec {
+            os: Os::MacOs,
+            arch: Arch::Aarch64,
+        };
+        assert_eq!(
+            lock.packages[0].enforced_pin(linux, false),
+            Some(("fd-linux.tar.gz", sha_linux.as_str()))
+        );
+        assert_eq!(
+            lock.packages[0].enforced_pin(mac, false),
+            Some(("fd.tar.gz", sha_host.as_str()))
+        );
+
+        // The host pair is glibc `linux-x86_64`. A musl entry outranks it only
+        // on a musl host; a glibc host keeps the top-level pair.
+        let both = format!(
+            "version = 1\n\n[[package]]\nname = \"fd\"\nsource = \"github:sharkdp/fd\"\n\
+             version = \"10.2.0\"\ntag = \"v10.2.0\"\ntarget = \"linux-x86_64\"\n\
+             asset = \"fd-gnu.tar.gz\"\nsha256 = \"{sha_host}\"\n\
+             \n[[package.targets]]\ntarget = \"linux-x86_64-musl\"\nasset = \"fd-musl.tar.gz\"\n\
+             sha256 = \"{sha_linux}\"\n"
+        );
+        let both = parse_checked(&both).expect("musl pin");
+        assert_eq!(
+            both.packages[0].enforced_pin(linux, false),
+            Some(("fd-gnu.tar.gz", sha_host.as_str()))
+        );
+        assert_eq!(
+            both.packages[0].enforced_pin(linux, true),
+            Some(("fd-musl.tar.gz", sha_linux.as_str()))
+        );
+    }
+
+    #[test]
+    fn a_target_pin_with_a_bad_hash_a_path_or_a_repeated_platform_is_refused() {
+        let sha = "b".repeat(64);
+        assert!(parse_checked(&entry(
+            "\n[[package.targets]]\ntarget = \"linux-x86_64\"\nasset = \"fd-linux.tar.gz\"\n\
+             sha256 = \"nope\"\n"
+        ))
+        .is_err());
+        assert!(parse_checked(&entry(&format!(
+            "\n[[package.targets]]\ntarget = \"macos-aarch64\"\nasset = \"other.tar.gz\"\n\
+             sha256 = \"{sha}\"\n"
+        )))
+        .is_err());
+        assert!(parse_checked(&entry(&format!(
+            "\n[[package.targets]]\ntarget = \"beos-m68k\"\nasset = \"fd.tar.gz\"\n\
+             sha256 = \"{sha}\"\n"
+        )))
+        .is_err());
+        assert!(parse_checked(&entry(&format!(
+            "\n[[package.targets]]\ntarget = \"linux-x86_64\"\nasset = \"../fd\"\n\
+             sha256 = \"{sha}\"\n"
+        )))
+        .is_err());
+        // A gnu triple is the same platform as `linux-x86_64`, which the
+        // top-level pair already pins.
+        let same_platform = format!(
+            "version = 1\n\n[[package]]\nname = \"fd\"\nsource = \"github:sharkdp/fd\"\n\
+             version = \"10.2.0\"\ntag = \"v10.2.0\"\ntarget = \"linux-x86_64\"\n\
+             asset = \"fd-gnu.tar.gz\"\nsha256 = \"{sha}\"\n\
+             \n[[package.targets]]\ntarget = \"x86_64-unknown-linux-gnu\"\n\
+             asset = \"fd-linux.tar.gz\"\nsha256 = \"{sha}\"\n"
+        );
+        assert!(parse_checked(&same_platform).is_err());
+    }
+
+    #[test]
+    fn capturing_a_target_records_the_asset_that_platform_would_get() {
+        use crate::model::{Release, ReleaseAsset};
+        use std::collections::BTreeMap;
+
+        struct Fixed;
+        impl crate::source::Source for Fixed {
+            fn scheme(&self) -> &str {
+                "github"
+            }
+            fn list_releases(
+                &self,
+                _id: &str,
+                _opts: &crate::source::ListOpts,
+            ) -> Result<Vec<Release>> {
+                let asset = |name: &str| ReleaseAsset {
+                    name: name.to_string(),
+                    url: format!("https://example.invalid/{name}"),
+                    size: 1,
+                    content_type: None,
+                    digest: None,
+                    headers: BTreeMap::new(),
+                };
+                Ok(vec![Release {
+                    version: Version::parse("1.0.0"),
+                    tag: "v1.0.0".into(),
+                    prerelease: false,
+                    draft: false,
+                    published_at: None,
+                    notes: None,
+                    assets: vec![
+                        asset("tool-x86_64-unknown-linux-gnu.tar.gz"),
+                        asset("tool-aarch64-apple-darwin.tar.gz"),
+                        asset("tool-x86_64-pc-windows-msvc.zip"),
+                    ],
+                }])
+            }
+            fn download(
+                &self,
+                _asset: &ReleaseAsset,
+                _dest: &std::path::Path,
+                _progress: &dyn crate::report::ProgressSink,
+                _cancel: &crate::cancel::Cancel,
+            ) -> Result<String> {
+                Ok("b".repeat(64))
+            }
+        }
+
+        let root = tempfile::tempdir().expect("temp");
+        let report = crate::report::Report::silent();
+        let cfg =
+            crate::config::Config::load(Some(root.path().to_path_buf()), &report).expect("config");
+        let cx = crate::report::Ctx::new(&cfg, &report);
+        let mut pkg = installed("tool", "acme/tool", "v1.0.0");
+        pkg.tag = "v1.0.0".to_string();
+        // An explicit gnu triple, so a musl host does not inherit its libc and
+        // refuse the gnu asset. The musl asset is absent: that request fails
+        // instead of recording the gnu file under a musl key.
+        let cases = [
+            (
+                "x86_64-unknown-linux-gnu",
+                "tool-x86_64-unknown-linux-gnu.tar.gz",
+                "linux-x86_64",
+            ),
+            (
+                "aarch64-apple-darwin",
+                "tool-aarch64-apple-darwin.tar.gz",
+                "macos-aarch64",
+            ),
+            (
+                "x86_64-pc-windows-msvc",
+                "tool-x86_64-pc-windows-msvc.zip",
+                "windows-x86_64",
+            ),
+        ];
+        for (target, asset, key) in cases {
+            let pin = super::capture_one(&cx, &Fixed, &pkg, target).expect(target);
+            assert_eq!(pin.target, key, "{target}");
+            assert_eq!(pin.asset, asset, "{target}");
+            assert_eq!(pin.sha256.len(), 64, "{target}");
+        }
+        assert!(super::capture_one(&cx, &Fixed, &pkg, "x86_64-unknown-linux-musl").is_err());
+    }
+
     /// Fixed inputs, so the rendering is identical on every host: a reviewed
     /// snapshot of the file `ketch lock` writes.
     #[test]
@@ -718,6 +1136,7 @@ bin = \"fd\"
                     target: "macos-aarch64".to_string(),
                     asset: "fd.tar.gz".to_string(),
                     sha256: "a".repeat(64),
+                    targets: Vec::new(),
                     pinned: false,
                     bin: None,
                     published: None,
@@ -730,6 +1149,7 @@ bin = \"fd\"
                     target: "macos-aarch64".to_string(),
                     asset: "ripgrep.tar.gz".to_string(),
                     sha256: "b".repeat(64),
+                    targets: Vec::new(),
                     pinned: true,
                     bin: None,
                     published: None,
@@ -776,6 +1196,7 @@ bin = \"fd\"
                     target: target.to_string(),
                     asset: "tool.tar.gz".to_string(),
                     sha256,
+                    targets: Vec::new(),
                     pinned,
                     bin: None,
                     published: None,

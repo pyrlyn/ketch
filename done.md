@@ -1978,3 +1978,19 @@ names the `rtok task` command that does the job. `AGENTS.md` has a Tasks
 section saying the same.
 
 Tests: `plan_todo_and_done_agree_with_rtok_tasks`, `a_row_written_by_hand_without_rtok_fails`, `a_new_task_with_an_id_picked_by_hand_fails`, `a_task_file_written_by_hand_is_refused`, `a_subtask_needs_its_parent`, `every_failure_names_the_rtok_command_to_use`.
+
+### K910. Resolve for another target in `ketch why` and `ketch info`
+
+Resolution only runs for the host: nothing lets you ask which asset Linux or Windows would get. That blocks checking a registry entry on every OS from one machine, measuring inference, and a lockfile for several targets.
+
+Done: `ketch why <pkg> --target <triple-or-os-arch> [--json]` and `ketch info --assets --target …` score assets for that platform without installing. The flag accepts `<os>-<arch>` (`linux-x86_64`, `linux-x86_64-musl`) and a Rust triple (`x86_64-unknown-linux-gnu`, `aarch64-apple-darwin`, `x86_64-pc-windows-gnu`). Scoring lives in the core (`AskedTarget`, `platform::for_target`); the command bodies only pass the flag. Unit tests cover macOS, Linux (gnu and musl) and Windows, each architecture, including a manifest pin that follows the asked target.
+
+Tests: `an_os_arch_string_and_its_triple_name_the_same_target`, `a_target_ketch_cannot_score_is_refused`, `each_supported_target_selects_its_own_asset`, `a_manifest_pin_follows_the_asked_target`, `an_unknown_target_is_refused_before_scoring`, `why_for_another_target_names_that_target_and_its_asset`.
+
+### K931. Lock assets and hashes for several targets
+
+`docs/LOCKFILE.md` guarantees a hash only on the target that wrote the lock, so a lock written on a Mac gives Linux CI nothing pinned. mise records a URL and checksum per platform.
+
+Done: `ketch lock --target` (repeatable; same `<os>-<arch>` or Rust triple as `ketch why --target`) writes a `[[package.targets]]` entry with that platform's `asset` and `sha256`. A config key was not added: ketch names a platform with `--target`, and `Config` has no target setting — the host is always `TargetSpec::host()`. `ketch sync` enforces the entry whose platform matches the machine, with an explicit musl or gnu triple outranking a bare `<os>-<arch>`. `validate` refuses an unknown platform, a bad hash, a path-like asset name, and the same platform pinned twice. `docs/LOCKFILE.md`, `docs/lock.schema.json`, and the ru/uk copies of the lockfile doc are updated.
+
+Tests: `another_platforms_asset_and_hash_are_enforced_on_that_platform`, `a_target_pin_with_a_bad_hash_a_path_or_a_repeated_platform_is_refused`, `capturing_a_target_records_the_asset_that_platform_would_get`.

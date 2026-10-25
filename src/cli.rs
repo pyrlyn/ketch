@@ -332,6 +332,12 @@ pub struct InfoArgs {
     #[arg(long)]
     pub assets: bool,
 
+    /// Score `--assets` for this platform instead of the one ketch is running on.
+    /// `<os>-<arch>` (`linux-x86_64`, `linux-x86_64-musl`) or a Rust triple
+    /// (`x86_64-unknown-linux-gnu`). Nothing is installed.
+    #[arg(long, value_name = "TARGET", requires = "assets")]
+    pub target: Option<String>,
+
     /// List the package's releases under the details (see `ketch releases`)
     #[arg(long)]
     pub releases: bool,
@@ -374,6 +380,12 @@ pub struct WhyArgs {
     /// Emit JSON instead of formatted text
     #[arg(long)]
     pub json: bool,
+
+    /// Resolve for this platform instead of the one ketch is running on.
+    /// `<os>-<arch>` (`linux-x86_64`, `linux-x86_64-musl`) or a Rust triple
+    /// (`x86_64-unknown-linux-gnu`). Nothing is installed.
+    #[arg(long, value_name = "TARGET")]
+    pub target: Option<String>,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -481,6 +493,15 @@ pub struct LockArgs {
     /// Report how the tree differs from the lockfile, and write nothing
     #[arg(long)]
     pub check: bool,
+
+    /// Also pin the asset and its sha256 for this platform. Repeat for each.
+    /// `<os>-<arch>` (`linux-x86_64`, `linux-x86_64-musl`) or a Rust triple
+    /// (`x86_64-unknown-linux-gnu`), the same forms as `ketch why --target`.
+    /// The machine this lock is written on is always recorded from what is
+    /// installed; each `--target` downloads that platform's asset, records
+    /// the hash, and does not install it.
+    #[arg(long = "target", value_name = "TARGET", conflicts_with = "check")]
+    pub targets: Vec<String>,
 }
 
 #[derive(Args, Debug, Clone)]

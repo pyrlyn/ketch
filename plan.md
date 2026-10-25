@@ -111,7 +111,6 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | K907 | todo | P1 | 3 | 0% | |
 | K908 | todo | P1 | 2 | 0% | |
 | K909 | todo | P1 | 2 | 0% | |
-| K910 | todo | P1 | 2 | 0% | |
 | K911 | todo | P1 | 3 | 0% | |
 | K912 | todo | P1 | 2 | 0% | |
 | K913 | todo | P1 | 2 | 0% | |
@@ -134,7 +133,6 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | K930 | todo | P2 | 3 | 0% | |
 | K930.1 | todo | P2 | 3 | 0% | |
 | K930.2 | todo | P2 | 3 | 0% | |
-| K931 | todo | P2 | 4 | 0% | |
 | K932 | todo | P2 | 2 | 0% | |
 | K933 | todo | P2 | 4 | 0% | |
 | K934 | todo | P2 | 2 | 0% | |
@@ -407,12 +405,6 @@ Done when `plan.md` holds the header, the task table and the active cards, the r
 
 #### Product and onboarding
 
-### K910. Resolve for another target in `ketch why` and `ketch info`
-
-Resolution only runs for the host: nothing lets you ask which asset Linux or Windows would get. That blocks checking a registry entry on every OS from one machine, measuring inference, and a lockfile for several targets.
-
-Done when `ketch why <pkg> --target <triple-or-os-arch> [--json]` and `ketch info --assets --target …` resolve without installing, and unit tests cover each supported target.
-
 ### K911. Measure asset inference against a public corpus
 
 "Any repository that ships releases" is the headline claim (README, site), and nothing measures it. A pass rate turns the slogan into a number and finds asset-scoring bugs before users do.
@@ -562,14 +554,6 @@ Done when both platforms call the shared code and the duplicate-window count is 
 Depends on K930.1.
 
 #### Product and onboarding
-
-### K931. Lock assets and hashes for several targets
-
-`docs/LOCKFILE.md` guarantees a hash only on the target that wrote the lock, so a lock written on a Mac gives Linux CI nothing pinned. mise records a URL and checksum per platform.
-
-Done when `ketch lock --target …` (or a `lock_targets` config key) writes per-target `asset` and `sha256`, `ketch sync` enforces them on each target, and `docs/LOCKFILE.md`, the schema and ru/uk are updated.
-
-Depends on K910.
 
 ### K932. Show verification status and add `ketch audit`
 

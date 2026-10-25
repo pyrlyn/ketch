@@ -59,6 +59,13 @@
           "description": "The target this entry was captured on, as `<os>-<arch>`.",
           "type": "string"
         },
+        "targets": {
+          "description": "Asset and hash for platforms other than `target`. Empty when the lock\nonly pinned the machine that wrote it. `ketch lock --target` fills it.\nAbsent keys stay valid: a lock from before this field existed has none.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LockedTarget"
+          }
+        },
         "version": {
           "description": "Human-readable version. `tag` is what actually gets resolved.",
           "type": "string"
@@ -70,6 +77,27 @@
         "source",
         "version",
         "tag",
+        "target",
+        "asset",
+        "sha256"
+      ]
+    },
+    "LockedTarget": {
+      "description": "One platform's asset and the hash of that file.\n\nThe same shape as the package's own `asset` and `sha256`, for a machine\nother than the one that wrote the lock. `target` is `<os>-<arch>`, or\n`linux-<arch>-musl` when the pin is a musl build.",
+      "type": "object",
+      "properties": {
+        "asset": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
         "target",
         "asset",
         "sha256"

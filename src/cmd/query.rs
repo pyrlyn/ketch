@@ -425,8 +425,7 @@ pub fn info(cfg: &Config, args: InfoArgs) -> Result<()> {
 
     let scored = match &release {
         Some(r) if args.assets => {
-            let platform = crate::platform::host()?;
-            install::score_assets(cfg, platform.as_ref(), r, &manifest.asset)
+            crate::resolve::assets_for(cfg, r, &manifest.asset, args.target.as_deref())?
         }
         _ => Vec::new(),
     };
@@ -584,7 +583,13 @@ pub fn info(cfg: &Config, args: InfoArgs) -> Result<()> {
     if args.assets {
         ui::out("");
         if scored.is_empty() {
-            ui::out("no asset in this release can run on this machine");
+            match &args.target {
+                Some(target) => ui::out(&format!(
+                    "no asset in this release can run on {}",
+                    crate::changelog::sanitize(target)
+                )),
+                None => ui::out("no asset in this release can run on this machine"),
+            }
         } else {
             let rows: Vec<Vec<String>> = scored
                 .iter()
@@ -991,7 +996,12 @@ pub fn stats(cfg: &Config, args: StatsArgs) -> Result<()> {
 pub fn why(cfg: &Config, args: WhyArgs) -> Result<()> {
     let spec = PackageSpec::parse(&args.package);
     let sources = SourceRegistry::load(&crate::ui::ctx(cfg));
-    let trace = crate::resolve::explain(&crate::ui::ctx(cfg), &sources, &spec)?;
+    let trace = crate::resolve::explain_for(
+        &crate::ui::ctx(cfg),
+        &sources,
+        &spec,
+        args.target.as_deref(),
+    )?;
     if args.json {
         print_json(&trace)?;
     } else {

@@ -6,6 +6,7 @@ set:
 
 ```bash
 ketch lock              # write ./ketch.lock from what is installed
+ketch lock --target linux-x86_64 --target windows-x86_64
 ketch lock --check      # has the tree drifted from it?
 ketch sync              # install what the lockfile names, at those versions
 ```
@@ -32,6 +33,16 @@ target = "macos-aarch64"
 asset = "ripgrep-14.1.1-aarch64-apple-darwin.tar.gz"
 sha256 = "4cf9f2741e6c465ffdb7c26f38056a59e2a2544b51f7cc128ef28337eeae4d8e"
 
+[[package.targets]]
+target = "linux-x86_64"
+asset = "ripgrep-14.1.1-x86_64-unknown-linux-gnu.tar.gz"
+sha256 = "9a3c1e0c6a0b1c2d3e4f5061728394a5b6c7d8e9f0a1b2c3d4e5f60718293a4b"
+
+[[package.targets]]
+target = "linux-x86_64-musl"
+asset = "ripgrep-14.1.1-x86_64-unknown-linux-musl.tar.gz"
+sha256 = "ab12cd34ab12cd34ab12cd34ab12cd34ab12cd34ab12cd34ab12cd34ab12cd34"
+
 [[package]]
 name = "fd"
 source = "github:sharkdp/fd"
@@ -56,6 +67,7 @@ choice was made.
 | `target` | the machine this entry was captured on |
 | `asset` | the release file that was taken **on that target** |
 | `sha256` | of that file |
+| `targets` | the same `asset` and `sha256` for other platforms, written by `ketch lock --target`. `target` inside one entry is `<os>-<arch>` (`linux-x86_64`) or `linux-<arch>-musl`. A Rust triple on the command line is stored in that form (`x86_64-unknown-linux-gnu` becomes `linux-x86_64`) |
 | `pinned` | whether the package was held at this version |
 | `bin` | the binary chosen when the release ships several sharing the package's name, as a file name (`rtok-cli`); `ketch sync` repeats that choice without asking — see the `bin` section of [MANIFESTS.md](MANIFESTS.md) |
 | `published` | for a package on a floating tag that is not a version (`nightly`), when the locked build was published; written only for such packages |
@@ -65,18 +77,24 @@ choice was made.
 **The tag is.** Every machine resolving the same tag gets the same release.
 That is the point of writing one down.
 
-**The asset and its hash are only reproducible on the same target.** A lock
-written on Apple Silicon names an `aarch64` tarball that an x86_64 Linux
-machine cannot run. So:
+**The asset and its hash are reproducible on every platform the lock names.**
+The top-level `asset` and `sha256` are the machine that wrote the lock. A
+`[[package.targets]]` entry, added by `ketch lock --target`, is the same pair
+for another platform: ketch resolves that platform's asset the way
+`ketch why --target` does, downloads it, records the hash, and does not
+install it. A lock written on Apple Silicon can still pin the Linux and
+Windows files a CI job will be held to.
 
-- On a machine whose `target` matches, `sync` holds the download to the
-  recorded `sha256` and refuses it before unpacking anything if it disagrees.
-  A release replaced under a tag it already published is precisely what a
-  lockfile exists to catch.
-- On any other machine, `sync` picks the asset that fits the host and verifies
-  it against the checksum the source publishes, as a normal install does.
-  Pretending the recorded hash still applied would be a guarantee that quietly
-  is not one.
+- On a machine whose platform matches `target`, or a `targets` entry, `sync`
+  holds the download to that entry's asset and `sha256` and refuses it before
+  unpacking anything if it disagrees. An explicit musl entry
+  (`linux-x86_64-musl`) applies on a musl host and not on glibc; a gnu or bare
+  `linux-x86_64` entry applies on glibc. A release replaced under a tag it
+  already published is precisely what a lockfile exists to catch.
+- On a machine with no matching entry, `sync` picks the asset that fits the
+  host and verifies it against the checksum the source publishes, as a normal
+  install does. Pretending an unrelated hash still applied would be a
+  guarantee that quietly is not one.
 - A floating tag (`nightly`, `dev`) is republished under the same name, so the
   tag alone does not hold a build still. On the recording target the hash
   already pins it. On any other machine `sync` compares `published` with when
@@ -145,6 +163,8 @@ lands*.
 | an empty `tag` | there is nothing to resolve |
 | a `published` that is blank or holds anything but printable ASCII | it is printed in the error that names a moved tag |
 | a `target` ketch does not recognise | it silently turns the entry into a cross-target one, so the recorded asset and hash stop applying and a hash that drifted under the tag reads as clean |
+| a `targets` entry whose platform ketch does not know, whose `asset` is not a file name, or whose `sha256` is not 64 hex digits | it is enforced the same way as the top-level pair, so a bad one is not a pin |
+| the same platform pinned twice, including a `targets` entry that repeats `target` (`linux-x86_64` and `x86_64-unknown-linux-gnu` are the same platform) | only one hash can be the pin |
 | an unknown key | a misspelt key that is silently ignored locks something other than what you wrote |
 | a `version` newer than this ketch understands | upgrade with `ketch self upgrade` |
 

@@ -1,9 +1,10 @@
 ---
 id: K931
 title: Lock assets and hashes for several targets
-status: open
+status: done
 created_at: 1792603887
-updated_at: 1792603929
+updated_at: 1792970381
+assignee: d2a34757-1247-4b58-beb9-8a90d064e359
 blocked_by:
 - K910
 ---

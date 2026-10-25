@@ -9,7 +9,10 @@
 //! something on PATH, and what "is this code trustworthy" means locally.
 //!
 //! macOS, Linux and Windows each have a backend. Adding another OS means adding
-//! a file here and one arm in `host()` — no changes anywhere else.
+//! a file here and one arm in `host()` — no changes anywhere else. Asking which
+//! asset another OS would choose does not need that backend: those modules are
+//! compiled only on their own host, and [`for_target`] scores with the shared
+//! rules without placing anything.
 
 pub mod scoring;
 
@@ -28,7 +31,9 @@ pub mod windows;
 use crate::config::Config;
 use crate::error::{Error, Result};
 use crate::extra::ExtraPlacement;
-use crate::model::{Arch, BinSpec, CompletionShell, LinkRecord, PackageKind, TargetSpec};
+use crate::model::{
+    Arch, AskedTarget, BinSpec, CompletionShell, LinkRecord, Os, PackageKind, TargetSpec,
+};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -400,6 +405,78 @@ pub fn expose_extras(
         let _ = (extras, root, owned, recorded);
         Ok(Vec::new())
     }
+}
+
+/// Scores assets for a platform this process may not be running on.
+///
+/// The real backends are `cfg`-gated to their own OS, so a Mac cannot
+/// construct `LinuxPlatform` to answer `ketch why --target linux-x86_64`.
+/// Scoring is shared and runs everywhere. Placement is refused: installing
+/// still goes through [`host`], whose link and copy rules are the ones that
+/// machine can actually perform.
+struct CrossTarget {
+    spec: TargetSpec,
+    musl: bool,
+}
+
+impl Platform for CrossTarget {
+    fn id(&self) -> &str {
+        match self.spec.os {
+            Os::MacOs => "macos",
+            Os::Linux => "linux",
+            Os::Windows => "windows",
+        }
+    }
+
+    fn target(&self) -> TargetSpec {
+        self.spec
+    }
+
+    fn score_asset(&self, asset_name: &str, allow_emulation: bool) -> Option<AssetScore> {
+        match self.spec.os {
+            Os::MacOs => scoring::score_macos_asset(asset_name, self.spec.arch, allow_emulation),
+            Os::Linux => {
+                scoring::score_linux_asset(asset_name, self.spec.arch, allow_emulation, self.musl)
+            }
+            Os::Windows => scoring::score_windows_asset(asset_name, self.spec.arch),
+        }
+    }
+
+    fn extractors(&self) -> Vec<Box<dyn crate::extract::Extractor>> {
+        Vec::new()
+    }
+
+    fn place(&self, _plan: &Placement<'_>) -> Result<Vec<LinkRecord>> {
+        Err(Error::msg(
+            "resolving for another target does not install; it only chooses an asset",
+        ))
+    }
+
+    fn unplace(&self, _links: &[LinkRecord], _report: &crate::report::Report) -> Result<()> {
+        Err(Error::msg(
+            "resolving for another target does not install; it only chooses an asset",
+        ))
+    }
+
+    fn is_executable(&self, _path: &Path) -> bool {
+        false
+    }
+
+    fn doctor(&self, _cfg: &Config) -> Vec<DoctorCheck> {
+        Vec::new()
+    }
+}
+
+/// A platform that only scores assets for `asked`.
+///
+/// Use this for `ketch why --target` and `ketch info --assets --target`.
+/// Install keeps using [`host`]: a foreign target is a question about an
+/// asset name, not a request to link one.
+pub fn for_target(asked: AskedTarget) -> Arc<dyn Platform> {
+    Arc::new(CrossTarget {
+        spec: asked.spec,
+        musl: asked.musl_libc(),
+    })
 }
 
 /// The platform for the machine we are on.

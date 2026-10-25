@@ -407,7 +407,7 @@ ketch outdated
 ketch outdated --json   # {"status","outdated","failed","unreachable"}
 ```
 
-### `ketch info <PKG> [--assets] [--releases [--draft]] [--json]`
+### `ketch info <PKG> [--assets [--target <TARGET>]] [--releases [--draft]] [--json]`
 
 Показывает подробности о пакете, установленном или нет: источник, описание, последнюю
 и установленную версии, ссылки, хранение, проверку.
@@ -415,8 +415,15 @@ ketch outdated --json   # {"status","outdated","failed","unreachable"}
 ```bash
 ketch info BurntSushi/ripgrep
 ketch info rg --assets     # каждый ассет релиза с оценкой и её причиной
+ketch info rg --assets --target linux-x86_64
 ketch info rg --releases   # ниже — та же таблица, что печатает `ketch releases`
 ```
+
+`--assets` перечисляет ассеты релиза и оценку каждого. `--target` считает их
+для другой платформы, а не для этой машины: `<os>-<arch>` (`linux-x86_64`,
+`windows-aarch64`, `linux-x86_64-musl`) или тройка Rust
+(`x86_64-unknown-linux-gnu`, `aarch64-apple-darwin`). Ничего не устанавливается.
+Без `--target` оценка идёт для машины, на которой запущен ketch.
 
 `--releases` добавляет под подробностями релизы пакета (20 самых новых) в формате
 `ketch releases`, а `--draft` перечисляет среди них черновики, как
@@ -468,7 +475,7 @@ ketch releases ripgrep
 ketch releases sharkdp/fd --pre --json
 ```
 
-### `ketch why <PKG> [--json]`
+### `ketch why <PKG> [--target <TARGET>] [--json]`
 
 Объясняет, как был бы разрешён пакет, не устанавливая его: какой уровень манифестов
 ответил, какой релиз и ассет были выбраны и почему.
@@ -476,7 +483,12 @@ ketch releases sharkdp/fd --pre --json
 ```bash
 ketch why sharkdp/fd@v10.2.0
 ketch why rg --json
+ketch why rg --target x86_64-unknown-linux-musl
 ```
+
+`--target` разрешает пакет для другой платформы, а не для этой машины. Форма та же,
+что у `ketch info --assets --target`: `<os>-<arch>` или тройка Rust. Поиск релиза
+не меняется — меняется только выбор ассета. Установки нет в любом случае.
 
 ### `ketch changelog <PKG> [--latest] [--file] [--release]`
 
@@ -502,13 +514,19 @@ ketch search ripgrep -n 5
 
 ## Воспроизведение
 
-### `ketch lock [--file <FILE>] [--check]`
+### `ketch lock [--file <FILE>] [--target <TARGET>]... [--check]`
 
 Записывает `./ketch.lock` по тому, что установлено, — воспроизводимую запись
 утилит машины, закреплённых на точных релизах. См. [LOCKFILE.md](LOCKFILE.md).
 
+`--target` также записывает asset и sha256 для этой платформы (флаг можно
+повторять). Формы те же, что у `ketch why --target`. Файл скачивается, чтобы
+посчитать хеш, и не устанавливается. `--check` только сравнивает, поэтому
+`--target` с ним не сочетается.
+
 ```bash
 ketch lock              # записать ./ketch.lock
+ketch lock --target linux-x86_64 --target windows-x86_64
 ketch lock --check      # не разошлось ли дерево с ним?
 ketch lock -f tools.lock
 ```

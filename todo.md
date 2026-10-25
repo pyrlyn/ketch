@@ -14,7 +14,6 @@
 - K907. Make `state.json` readable across ketch versions
 - K908. Settle the version restart for existing installs
 - K909. Reduce plan.md to the active tasks
-- K910. Resolve for another target in `ketch why` and `ketch info`
 - K911. Measure asset inference against a public corpus
 - K912. Pick up the gh token and explain the rate limit
 - K913. Offer matches when a short name is unknown
@@ -37,7 +36,6 @@
 - K930. Move OS-neutral placement code into one module
 - K930.1. Share bin resolution and executable discovery
 - K930.2. Share placement, unplace and extra linking
-- K931. Lock assets and hashes for several targets
 - K932. Show verification status and add `ketch audit`
 - K933. Verify GitHub artifact attestations for client apps
 - K934. Work behind corporate networks

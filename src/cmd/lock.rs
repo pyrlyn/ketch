@@ -37,7 +37,17 @@ pub fn lock(cfg: &Config, args: LockArgs) -> Result<()> {
         return Ok(());
     }
 
-    let lock = Lockfile::from_state(&state);
+    let mut lock = Lockfile::from_state(&state);
+    if !args.targets.is_empty() {
+        let sources = SourceRegistry::load(&crate::ui::ctx(cfg));
+        lockfile::add_targets(
+            &crate::ui::ctx(cfg),
+            &sources,
+            &state,
+            &mut lock,
+            &args.targets,
+        )?;
+    }
     lock.save(&path)?;
     ui::success(
         "wrote",
@@ -171,18 +181,22 @@ fn request_for(cfg: &Config, entry: &LockedPackage, target: &str) -> Result<Inst
     // Sync runs where nobody may be at a terminal, and a fresh machine has no
     // state to remember a choice in: the lockfile's is the one to repeat.
     req.locked_bin = entry.bin.clone();
-    // The recorded hash describes an asset for the machine that wrote the
-    // lock. Somewhere else it names a file this host cannot even run, so
-    // holding the download to it would fail every cross-platform sync.
-    if entry.matches_target(target) {
-        req.expected_sha256 = Some(entry.sha256.clone());
+    // A pin is the asset and hash recorded for this machine: the top-level
+    // pair when `target` matches, or a `targets` entry for another platform
+    // the lock named. Anywhere else the recorded file is one this host cannot
+    // run, so holding the download to it would fail every cross-platform sync.
+    let musl_host = cfg.target.os == crate::model::Os::Linux
+        && cfg!(target_os = "linux")
+        && cfg!(target_env = "musl");
+    if let Some((asset, sha)) = entry.enforced_pin(cfg.target, musl_host) {
+        req.expected_sha256 = Some(sha.to_string());
         // A hash is only checkable against the file it was taken from, so the
         // recorded asset is pinned with it. Re-scoring would pick whatever
         // scores best today — a release that gained an asset under the same
         // tag, or a later ketch with different weights — and then report the
         // mismatch as if the release had been rewritten under the tag the lock
         // recorded.
-        req.asset_override = Some(entry.asset.clone());
+        req.asset_override = Some(asset.to_string());
     } else {
         ui::debug(&format!(
             "{}: locked on {}, re-selecting the asset for {target}",

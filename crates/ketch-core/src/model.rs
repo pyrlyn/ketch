@@ -141,6 +141,160 @@ impl std::str::FromStr for TargetSpec {
     }
 }
 
+/// A platform named for resolution, not for install.
+///
+/// `ketch why` and `ketch info --assets` take this so one machine can ask
+/// which asset Linux or Windows would get. [`TargetSpec`] is only `<os>-<arch>`
+/// because that is what state and the lockfile store; a Rust triple also names
+/// the libc, which decides a musl asset against a gnu one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AskedTarget {
+    /// Operating system and architecture the assets are scored for.
+    pub spec: TargetSpec,
+    /// Linux libc from the string itself.
+    ///
+    /// `None` means the string did not say (`linux-x86_64`). Scoring then uses
+    /// this machine's libc when the machine is Linux, and glibc from anywhere
+    /// else. `Some(false)` is an explicit gnu triple, which must not inherit a
+    /// musl host.
+    pub musl: Option<bool>,
+}
+
+impl AskedTarget {
+    /// Parse `<os>-<arch>`, `<os>-<arch>-musl`, or a Rust triple.
+    ///
+    /// `linux-x86_64` and `x86_64-unknown-linux-gnu` are the same platform.
+    /// `x86_64-unknown-linux-musl` and `linux-x86_64-musl` name musl.
+    /// `x86_64-pc-windows-gnu` is Windows (mingw), not Linux, even though the
+    /// triple ends in `gnu`.
+    pub fn parse(text: &str) -> Result<Self> {
+        let text = text.trim().to_ascii_lowercase();
+        if text.is_empty() {
+            return Err(unknown_target(&text));
+        }
+        // Before `TargetSpec`: `linux-x86_64-musl` is not `<os>-<arch>`, and
+        // the `-musl` suffix is how an os-arch string names the libc the
+        // display form leaves out.
+        if let Some(prefix) = text.strip_suffix("-musl") {
+            if let Ok(spec) = prefix.parse::<TargetSpec>() {
+                if spec.os != Os::Linux {
+                    return Err(Error::parse(
+                        "target",
+                        format!("`{text}` names musl, which is a Linux libc"),
+                    ));
+                }
+                return Ok(AskedTarget {
+                    spec,
+                    musl: Some(true),
+                });
+            }
+        }
+        if let Ok(spec) = text.parse::<TargetSpec>() {
+            return Ok(AskedTarget { spec, musl: None });
+        }
+        parse_triple(&text)
+    }
+
+    /// Whether Linux scoring should refuse a glibc-only asset.
+    ///
+    /// An explicit triple wins over the host. An `<os>-<arch>` string uses
+    /// this machine's libc on Linux and glibc elsewhere: that is the asset a
+    /// Linux machine of this architecture usually runs.
+    pub fn musl_libc(self) -> bool {
+        if self.spec.os != Os::Linux {
+            return false;
+        }
+        self.musl
+            .unwrap_or(cfg!(target_os = "linux") && cfg!(target_env = "musl"))
+    }
+
+    /// Key under which a lockfile records this platform.
+    ///
+    /// An explicit musl triple is `linux-<arch>-musl`. A gnu triple and a bare
+    /// `<os>-<arch>` stay `<os>-<arch>`, including on a musl host: that bare
+    /// string is already what the lock's `target` field means there, and
+    /// appending `-musl` would make the same install look like two platforms.
+    pub fn lock_key(self) -> String {
+        if self.musl == Some(true) {
+            format!("{}-musl", self.spec)
+        } else {
+            self.spec.to_string()
+        }
+    }
+}
+
+fn unknown_target(text: &str) -> Error {
+    Error::parse(
+        "target",
+        format!(
+            "`{text}` is not a target; expected `<os>-<arch>` (linux-x86_64) \
+             or a Rust triple (x86_64-unknown-linux-gnu)"
+        ),
+    )
+}
+
+/// `arch-vendor-os-env`, or a shorter form that still names both.
+///
+/// The arch is the first component, as in a Rust triple. `gnu` is not an OS:
+/// mingw triples are Windows, and treating `gnu` as Linux would hand a Windows
+/// asset question a Linux answer.
+fn parse_triple(text: &str) -> Result<AskedTarget> {
+    let parts: Vec<&str> = text.split('-').filter(|p| !p.is_empty()).collect();
+    let arch = match parts.first().copied() {
+        Some("x86_64" | "amd64") => Arch::X86_64,
+        Some("aarch64" | "arm64") => Arch::Aarch64,
+        Some("universal") => Arch::Universal,
+        _ => return Err(unknown_target(text)),
+    };
+    let linux = parts.contains(&"linux");
+    let macos = parts
+        .iter()
+        .any(|p| matches!(*p, "darwin" | "macos" | "osx" | "apple"));
+    let windows = parts
+        .iter()
+        .any(|p| matches!(*p, "windows" | "win32" | "win64" | "msvc" | "win"));
+    if [linux, macos, windows]
+        .iter()
+        .filter(|named| **named)
+        .count()
+        != 1
+    {
+        return Err(unknown_target(text));
+    }
+    let os = if linux {
+        Os::Linux
+    } else if macos {
+        Os::MacOs
+    } else {
+        Os::Windows
+    };
+    if arch == Arch::Universal && os != Os::MacOs {
+        return Err(Error::parse(
+            "target",
+            format!("`{text}` asks for a universal binary, which ketch only scores on macOS"),
+        ));
+    }
+    let has_musl = parts.contains(&"musl");
+    let has_gnu = parts.contains(&"gnu");
+    if has_musl && os != Os::Linux {
+        return Err(Error::parse(
+            "target",
+            format!("`{text}` names musl, which is a Linux libc"),
+        ));
+    }
+    if has_musl && has_gnu {
+        return Err(unknown_target(text));
+    }
+    // A Linux triple that does not say musl is glibc, including one with no
+    // env component. That must not inherit a musl host the way a bare
+    // `linux-x86_64` does: the triple named the libc by omitting musl.
+    let musl = linux.then_some(has_musl);
+    Ok(AskedTarget {
+        spec: TargetSpec { os, arch },
+        musl,
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Package identity
 // ---------------------------------------------------------------------------
@@ -1628,6 +1782,82 @@ pub fn glob_preferred<'a>(
 mod tests {
     use super::*;
     use crate::toml_file;
+
+    #[test]
+    fn an_os_arch_string_and_its_triple_name_the_same_target() {
+        let cases = [
+            ("macos-aarch64", Os::MacOs, Arch::Aarch64, None),
+            ("aarch64-apple-darwin", Os::MacOs, Arch::Aarch64, None),
+            ("arm64-apple-darwin", Os::MacOs, Arch::Aarch64, None),
+            ("MACOS-AARCH64", Os::MacOs, Arch::Aarch64, None),
+            ("macos-x86_64", Os::MacOs, Arch::X86_64, None),
+            ("x86_64-apple-darwin", Os::MacOs, Arch::X86_64, None),
+            ("macos-universal", Os::MacOs, Arch::Universal, None),
+            ("universal-apple-darwin", Os::MacOs, Arch::Universal, None),
+            ("linux-aarch64", Os::Linux, Arch::Aarch64, None),
+            (
+                "aarch64-unknown-linux-gnu",
+                Os::Linux,
+                Arch::Aarch64,
+                Some(false),
+            ),
+            ("linux-x86_64", Os::Linux, Arch::X86_64, None),
+            ("Linux-X86_64", Os::Linux, Arch::X86_64, None),
+            (
+                "x86_64-unknown-linux-gnu",
+                Os::Linux,
+                Arch::X86_64,
+                Some(false),
+            ),
+            (
+                "amd64-unknown-linux-gnu",
+                Os::Linux,
+                Arch::X86_64,
+                Some(false),
+            ),
+            ("x86_64-linux", Os::Linux, Arch::X86_64, Some(false)),
+            ("linux-x86_64-musl", Os::Linux, Arch::X86_64, Some(true)),
+            (
+                "x86_64-unknown-linux-musl",
+                Os::Linux,
+                Arch::X86_64,
+                Some(true),
+            ),
+            (
+                "aarch64-unknown-linux-musl",
+                Os::Linux,
+                Arch::Aarch64,
+                Some(true),
+            ),
+            ("windows-aarch64", Os::Windows, Arch::Aarch64, None),
+            ("aarch64-pc-windows-msvc", Os::Windows, Arch::Aarch64, None),
+            ("windows-x86_64", Os::Windows, Arch::X86_64, None),
+            ("x86_64-pc-windows-msvc", Os::Windows, Arch::X86_64, None),
+            // mingw: `gnu` here is the Windows ABI, not a Linux libc.
+            ("x86_64-pc-windows-gnu", Os::Windows, Arch::X86_64, None),
+        ];
+        for (text, os, arch, musl) in cases {
+            let asked = AskedTarget::parse(text).unwrap_or_else(|e| panic!("{text}: {e}"));
+            assert_eq!(asked.spec, TargetSpec { os, arch }, "{text}");
+            assert_eq!(asked.musl, musl, "{text}");
+        }
+    }
+
+    #[test]
+    fn a_target_ketch_cannot_score_is_refused() {
+        for text in [
+            "",
+            "beos-m68k",
+            "x86_64-unknown-freebsd",
+            "linux-gnu",
+            "not-a-target",
+            "macos-x86_64-musl",
+            "x86_64-unknown-linux-gnu-musl",
+            "universal-unknown-linux-gnu",
+        ] {
+            assert!(AskedTarget::parse(text).is_err(), "{text} should fail");
+        }
+    }
 
     /// A bin or package called `nul` would install as the null device.
     #[cfg(windows)]
