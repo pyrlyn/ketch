@@ -12,6 +12,16 @@ namespace KetchApp {
     public delegate void Clicked ();
     delegate void Answer (string response);
 
+    /* The visible label stays the short verb or the glyph stays the icon.
+       Orca reads `accessible` instead, and the tooltip repeats it for a
+       sighted hover. The role is the one the widget class already has:
+       GTK refuses a second, different role after the widget exists. */
+    public void describe_control (Gtk.Widget widget, Gtk.AccessibleRole role, string accessible) {
+        widget.accessible_role = role;
+        widget.tooltip_text = accessible;
+        widget.update_property (Gtk.AccessibleProperty.LABEL, accessible, -1);
+    }
+
     [GtkTemplate (ui = "/io/github/pyrlyn/Ketch/window.ui")]
     public class Window : Adw.ApplicationWindow {
         [GtkChild] unowned Adw.ToastOverlay toasts;
@@ -24,6 +34,7 @@ namespace KetchApp {
         [GtkChild] unowned Gtk.Label updates_badge;
         [GtkChild] unowned Gtk.Stack installed_state;
         [GtkChild] unowned Gtk.ListBox installed_list;
+        [GtkChild] unowned Gtk.ListBox sidebar;
         [GtkChild] unowned Gtk.SearchEntry discover_entry;
         [GtkChild] unowned Gtk.Stack discover_state;
         [GtkChild] unowned Gtk.ListBox discover_list;
@@ -55,13 +66,13 @@ namespace KetchApp {
             bind (discover_list, store.search_results, discover_state, (item) => {
                 var found = (RegistryPackage) item;
                 var row = new Adw.ActionRow () { title = found.name, subtitle = found.description ?? found.source };
-                row.add_suffix (button (_("Install"), () => store.install.begin (found.name)));
+                row.add_suffix (button (_("Install"), install_button_name (found.name), () => store.install.begin (found.name)));
                 return row;
             });
             bind (updates_list, store.updates, updates_state, (item) => {
                 var upgrade = (Upgrade) item;
                 var row = new Adw.ActionRow () { title = upgrade.name, subtitle = "%s → %s".printf (upgrade.installed, upgrade.latest) };
-                row.add_suffix (button (_("Update"), () => store.upgrade.begin ({ upgrade.name })));
+                row.add_suffix (button (_("Update"), update_button_name (upgrade.name), () => store.upgrade.begin ({ upgrade.name })));
                 return row;
             });
             bind (held_list, store.held, null, (item) => {
@@ -74,7 +85,7 @@ namespace KetchApp {
             bind (log_list, store.log, null, (item) => {
                 var entry = (LogEntry) item;
                 var row = new Adw.ActionRow () { title = entry.message, subtitle = entry.time.format ("%X") };
-                row.add_prefix (new Gtk.Image.from_icon_name (level_icon (entry.level)));
+                row.add_prefix (status_icon (level_icon (entry.level), log_level_name (entry.level)));
                 return row;
             });
             bind (findings_list, store.findings, null, (item) => {
@@ -83,7 +94,7 @@ namespace KetchApp {
                     title = finding.name,
                     subtitle = finding.fix == null ? finding.detail : "%s\n%s".printf (finding.detail, finding.fix)
                 };
-                row.add_prefix (new Gtk.Image.from_icon_name (finding_icon (finding.outcome)));
+                row.add_prefix (status_icon (finding_icon (finding.outcome), finding_name (finding.outcome)));
                 return row;
             });
 
@@ -118,6 +129,12 @@ namespace KetchApp {
                 preferences.present (this);
             });
             add_action (show_preferences);
+            var search = new SimpleAction ("search", null);
+            search.activate.connect (() => focus_discover ());
+            add_action (search);
+            var refresh = new SimpleAction ("refresh", null);
+            refresh.activate.connect (() => store.refresh.begin ());
+            add_action (refresh);
 
             store.search.begin ("");
             store.run_doctor.begin ();
@@ -136,10 +153,17 @@ namespace KetchApp {
             state.visible_child_name = n > 0 ? "list" : "empty";
         }
 
-        static Gtk.Button button (string label, owned Clicked clicked) {
+        static Gtk.Button button (string label, string accessible, owned Clicked clicked) {
             var b = new Gtk.Button.with_label (label) { valign = Gtk.Align.CENTER };
+            describe_control (b, Gtk.AccessibleRole.BUTTON, accessible);
             b.clicked.connect (() => clicked ());
             return b;
+        }
+
+        static Gtk.Image status_icon (string icon_name, string accessible) {
+            var image = new Gtk.Image.from_icon_name (icon_name);
+            describe_control (image, Gtk.AccessibleRole.IMG, accessible);
+            return image;
         }
 
         /* The store swaps in a new Activity per operation; the bar follows whichever is current. */
@@ -268,13 +292,35 @@ namespace KetchApp {
 
         [GtkCallback]
         void on_section_activated (Gtk.ListBoxRow row) {
-            var name = row.name;
-            var title = ((Adw.PreferencesRow) row).title;
+            show_section (row.name, ((Adw.PreferencesRow) row).title);
+        }
+
+        void show_section (string name, string title) {
             sections.visible_child_name = name;
             section_page.title = title;
             content_page.title = title;
             nav.pop_to_page (section_page);
             split_view.show_content = true;
+            for (var i = 0; ; i++) {
+                var row = sidebar.get_row_at_index (i);
+                if (row == null) {
+                    return;
+                }
+                if (row.name == name) {
+                    sidebar.select_row (row);
+                    return;
+                }
+            }
+        }
+
+        /* The entry sits on the Discover page. Focusing it in this signal
+           runs before that page is mapped, so the focus lands on the next idle. */
+        void focus_discover () {
+            show_section ("discover", _("Discover"));
+            Idle.add (() => {
+                discover_entry.grab_focus ();
+                return Source.REMOVE;
+            });
         }
 
         [GtkCallback]

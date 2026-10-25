@@ -158,7 +158,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | K949 | todo | P2 | 3 | 0% | |
 | K950 | todo | P2 | 3 | 0% | |
 | K951 | todo | P2 | 4 | 0% | |
-| K952 | todo | P3 | 2 | 0% | |
+| K952 | in progress | P3 | 2 | 0% | d2a34757 |
 | K953 | todo | P3 | 2 | 0% | |
 | K953.1 | todo | P3 | 3 | 0% | |
 | K953.2 | todo | P3 | 2 | 0% | |
@@ -740,6 +740,8 @@ Depends on K919.
 Row buttons carry a bare verb (`window.vala:140`), status icons have no accessible label, and the only shortcut is Ctrl+,. Cheapest before D17 adds screens.
 
 Done when buttons and status icons have accessible labels, Ctrl+F and Ctrl+R exist, and a manual Orca pass is recorded.
+
+Manual Orca pass was not run. Orca 50.2 is installed and a display is available (`DISPLAY=:0`, Wayland session), but the GTK app was not built: `gtk4` and `libadwaita-1` development files are not installed, so `meson setup` reports both missing and does not build `ketch-app`. There was no window for Orca to read.
 
 #### Core architecture and code
 

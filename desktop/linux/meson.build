@@ -24,14 +24,18 @@ app_core = static_library(
   'src/scenario.vala',
   'src/fake-core.vala',
   'src/models.vala',
+  'src/a11y.vala',
   'src/store.vala',
   dependencies: core_deps,
+  # a11y.vala uses _(), which gi18n-lib.h refuses to compile without a domain.
+  # The screens pass the same define.
+  c_args: ['-DGETTEXT_PACKAGE="ketch"'],
 )
 app_core_dep = declare_dependency(link_with: app_core, dependencies: core_deps)
 
 scenarios = meson.current_source_dir() / '..' / 'contract' / 'scenarios'
 
-foreach name : ['fake-core', 'store']
+foreach name : ['fake-core', 'store', 'a11y']
   test(
     name,
     executable(name + '-test', 'tests' / name + '-test.vala', dependencies: app_core_dep),

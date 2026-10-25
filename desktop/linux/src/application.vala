@@ -22,7 +22,11 @@ namespace KetchApp {
 
         public override void startup () {
             base.startup ();
-            set_accels_for_action ("win.preferences", { "<Control>comma" });
+            // The same list the core test checks, so a shortcut cannot exist
+            // only in one of the two.
+            foreach (var accel in window_accels ()) {
+                set_accels_for_action (accel.action, { accel.combo });
+            }
         }
 
         public override void activate () {

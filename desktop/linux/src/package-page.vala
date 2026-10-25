@@ -16,6 +16,7 @@ namespace KetchApp {
         [GtkChild] unowned Gtk.Label changelog_label;
         [GtkChild] unowned Adw.PreferencesGroup files_group;
         [GtkChild] unowned Adw.ActionRow prefix_row;
+        [GtkChild] unowned Gtk.Button uninstall_button;
 
         public Window window { get; construct; }
         public Package package { get; construct; }
@@ -32,6 +33,8 @@ namespace KetchApp {
             foreach (var binary in package.binaries) {
                 files_group.add (new Adw.ActionRow () { title = Path.get_basename (binary), subtitle = binary, subtitle_selectable = true });
             }
+            // The label is only "Uninstall". The accessible name names the package.
+            describe_control (uninstall_button, Gtk.AccessibleRole.BUTTON, uninstall_button_name (package.name));
             changelog_label.label = _("Loading…");
             window.store.changelog.begin (package.name, null, package.version, (obj, res) => {
                 var text = window.store.changelog.end (res);
