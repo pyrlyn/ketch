@@ -124,5 +124,4 @@ ketch self uninstall
 - Реестр пакетов: <https://github.com/pyrlyn/ketch-registry>
 - Документация: <https://github.com/pyrlyn/ketch/tree/main/docs>
 - Релизы: <https://github.com/pyrlyn/ketch/releases>
-- Лицензия: на ваш выбор GNU GPLv3, бесплатная (royalty-free) лицензия для проприетарных настольных, мобильных и
-  веб-приложений (с указанием авторства) или коммерческая лицензия (см. <https://github.com/pyrlyn/ketch#license>)
+- Лицензия: на ваш выбор GNU GPLv3 или коммерческая лицензия (см. <https://github.com/pyrlyn/ketch#license>)

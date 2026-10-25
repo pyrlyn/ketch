@@ -9,7 +9,7 @@
 
 **Install any CLI tool or app straight from its GitHub releases — no formula, checked against the published checksum, versioned, and cleanly removable.**
 
-[![license](https://img.shields.io/badge/license-GPLv3%20%7C%20royalty--free%20%7C%20commercial-blue.svg)](#license)
+[![license](https://img.shields.io/badge/license-GPLv3%20%7C%20commercial-blue.svg)](#license)
 ![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)
 [![release](https://img.shields.io/github/v/release/pyrlyn/ketch?sort=semver)](https://github.com/pyrlyn/ketch/releases/latest)
 [![ci](https://github.com/pyrlyn/ketch/actions/workflows/ci.yml/badge.svg)](https://github.com/pyrlyn/ketch/actions/workflows/ci.yml)
@@ -211,13 +211,12 @@ see [docs/REGISTRY.md](docs/REGISTRY.md).
 
 ## License
 
-You can use this project under **any** of the following licenses, at your choice:
+You can use this project under **either** of the following licenses, at your choice:
 
 1. [GNU GPLv3](LICENSE): free for open source applications on any platform, including embedded systems.
-2. [Royalty-free License](LICENSE-ROYALTY-FREE.md): free for proprietary desktop, mobile, and web applications, as long as you disclose that your application uses this project. Embedded systems are not covered.
-3. [Commercial license](PRICING.md): for proprietary applications, including embedded systems, without the attribution requirement.
+2. [Commercial license](PRICING.md): for proprietary applications, including embedded systems.
 
 <!-- license-sync:start -->
-Commercial use not covered by the GPLv3 or the Royalty-free License requires a separate paid
+Commercial use not covered by the GPLv3 requires a separate paid
 license — see [PRICING.md](PRICING.md).
 <!-- license-sync:end -->
