@@ -64,7 +64,7 @@ fn main() {
                 path.display()
             ));
         }
-        std::process::exit(err.exit_code());
+        std::process::exit(ui::exit_code(&err));
     }
 }
 

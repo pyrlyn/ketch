@@ -8,12 +8,15 @@ have to be searched out of the command that reported it.
 `latest` is looked up from each package's source. `?` means that one source
 did not answer — GitHub's unauthenticated rate limit (60 requests an hour) is
 the usual cause, a repository with no releases or one that was renamed or
-removed is the next — and the line under the table names every such package.
+removed is the next — and the line under the table names every such package
+and why (a rate limit is named as such). A lookup skipped because the run was
+cancelled is left blank.
 The rest of the list is still right. `ketch list -v` shows each failure; set
 `GITHUB_TOKEN` (`export GITHUB_TOKEN=$(gh auth token)` works) to raise the
 rate limit.
 
-`latest: offline` under the installed packages means no source answered at all,
+`latest: offline` under the installed packages means no source answered at all
+and it was not a rate limit (that stays a `?` with the reason on the line),
 so ketch showed what it knows without the network. `ketch list remote` fails
 instead, since it has nothing to show without one.
 

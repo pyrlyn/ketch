@@ -1978,3 +1978,15 @@ names the `rtok task` command that does the job. `AGENTS.md` has a Tasks
 section saying the same.
 
 Tests: `plan_todo_and_done_agree_with_rtok_tasks`, `a_row_written_by_hand_without_rtok_fails`, `a_new_task_with_an_id_picked_by_hand_fails`, `a_task_file_written_by_hand_is_refused`, `a_subtask_needs_its_parent`, `every_failure_names_the_rtok_command_to_use`.
+
+### K927. Keep CLI wording out of core errors
+
+Hints and exit codes lived on `Error` and named CLI flags (`--force`, `--yes`, `--allow-unverified`). `ketch-ffi` appended every hint to the desktop message, and already-installed, update-available, pinned, no compatible asset, source conflict and rate-limited all collapsed to `Other`.
+
+Done. `hint` and `exit_code` live in the binary. The core's `Error` gained `SourceConflict` and `RateLimited` (HTTP 429, or 403 whose body says "rate limit"); neither message names a flag. `KetchError` gained `AlreadyInstalled`, `UpdateAvailable`, `Pinned`, `NoCompatibleAsset`, `SourceConflict` and `RateLimited`. Contract scenarios cover each. `no_ffi_message_names_a_cli_flag` asserts no FFI message contains `--`. The three desktop apps still map an unknown kind through their existing default; wiring Update and Unpin into each GUI is a follow-up.
+
+### K968. Tell a cancelled or failed latest lookup from an unreachable one
+
+`listing::fill_latest` marked every row without an answer `Latest::Unreachable`, whether the lookup failed, was rate-limited, or was skipped because `Cancel` fired. `ketch list` then named those packages with no reason.
+
+Done. A lookup the batch never started is `Latest::NotChecked`. A lookup that ran and failed is `Latest::Unreachable(LatestError)`, and a rate limit is `LatestError::RateLimited` — the core's `Error::RateLimited`, not a second string. The note under the table names each package and why. When every failure is a rate limit, `ketch list` keeps the rows (it does not say offline) and `ketch list remote` plus the FFI `outdated` path return `RateLimited`. `a_cancel_mid_batch_leaves_the_rest_unchecked_and_keeps_the_rate_limit` covers a cancel mid-batch.

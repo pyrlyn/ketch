@@ -138,7 +138,16 @@ fn list_remote(cfg: &Config, args: &ListArgs) -> Result<()> {
         listing::include_drafts(&mut rows);
     }
     let sources = SourceRegistry::load(&crate::ui::ctx(cfg));
-    if listing::fill_latest(&crate::ui::ctx(cfg), &sources, &mut rows).offline() {
+    let outcome = listing::fill_latest(&crate::ui::ctx(cfg), &sources, &mut rows);
+    if outcome.offline() {
+        // A rate limit answered; it is not a missing network. The hint names
+        // the token, which a GUI does not, because this is the command.
+        if let Some(detail) = listing::shared_rate_limit(&rows) {
+            return Err(Error::RateLimited {
+                url: "the package sources".into(),
+                detail,
+            });
+        }
         return Err(Error::msg(
             "could not reach any package source to check the latest versions; \
              `ketch list local` works offline",
@@ -201,7 +210,9 @@ fn list_all(cfg: &Config, args: &ListArgs) -> Result<()> {
         listing::include_drafts(&mut rows);
     }
     let sources = SourceRegistry::load(&crate::ui::ctx(cfg));
-    let offline = listing::fill_latest(&crate::ui::ctx(cfg), &sources, &mut rows).offline();
+    let outcome = listing::fill_latest(&crate::ui::ctx(cfg), &sources, &mut rows);
+    // Every lookup rate-limited is a reason, shown on the rows, not "offline".
+    let offline = outcome.offline() && listing::shared_rate_limit(&rows).is_none();
     // No source answered: the network is missing, not one package. What is
     // installed is still known, so that much is the answer.
     if offline {

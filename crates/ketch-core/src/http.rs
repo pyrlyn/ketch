@@ -251,11 +251,7 @@ fn classify(url: &str, err: ureq::Error) -> Error {
                 .ok()
                 .and_then(|body| extract_message(&body))
                 .filter(|d| !d.is_empty());
-            Error::Http {
-                url: url.to_string(),
-                status,
-                detail,
-            }
+            Error::from_http_status(url, status, detail)
         }
         transport => Error::Network {
             url: url.to_string(),

@@ -128,7 +128,6 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | K924 | todo | P1 | 3 | 0% | |
 | K925 | todo | P2 | 2 | 0% | |
 | K926 | todo | P2 | 3 | 0% | |
-| K927 | todo | P2 | 3 | 0% | |
 | K928 | todo | P2 | 2 | 0% | |
 | K929 | todo | P2 | 3 | 0% | |
 | K930 | todo | P2 | 3 | 0% | |
@@ -177,7 +176,6 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | K965 | todo | P3 | 1 | 0% | |
 | K966 | todo | P3 | 2 | 0% | |
 | K967 | todo | P2 | 2 | 0% | |
-| K968 | todo | P3 | 1 | 0% | |
 
 ### Ketch audit
 
@@ -523,12 +521,6 @@ Done when one core `upgrade::plan` (parallel, cancellable) returns upgrades, unr
 
 Depends on K925.
 
-### K927. Keep CLI wording out of core errors
-
-`error.rs:195-231` hints name CLI flags ("Use --force", "Pass --yes") and `ketch-ffi` appends them to every desktop message. Already installed, update available, pinned, no compatible asset, source conflict and rate-limited all collapse to `Other`, so an app cannot offer "Update" or "Unpin".
-
-Done when hints and exit codes belong to the binary (or `hint()` takes an audience), `KetchError` gains `AlreadyInstalled`, `UpdateAvailable`, `Pinned`, `NoCompatibleAsset`, `SourceConflict` and `RateLimited`, contract scenarios are updated, and a test asserts no FFI message contains `--`. Mapping the new kinds in each app may be a follow-up.
-
 ### K928. Probe source plugins only when needed
 
 `SourceRegistry::load` spawns every plugin with `capabilities`, one after another with a 30-second timeout, on every install, list, outdated, info and changelog, and on each FFI call. One hung plugin delays every command, GitHub-only ones included, and the apps pay it on each poll.
@@ -872,9 +864,3 @@ Done when the duplicates are listed by the crate that pulls each one, the ones f
 `replace_binary` (`self_update.rs:613-630`) renames the running `exe` aside, then copies the new one in. Between the rename and the end of the copy there is no file at `exe`, so a shell, completion or second `ketch` started then fails with not-found, and a crash there leaves only `ketch.old`.
 
 Done when, on Unix, the new binary is copied to a sibling temp file, made executable and renamed over `exe` (atomic), the aside stays for rollback, and Windows keeps its rename-aside path with a test for each.
-
-### K968. Tell a cancelled or failed latest lookup from an unreachable one
-
-`listing::latest` (`listing.rs:440`, `:452`) marks every row without an answer `Latest::Unreachable`, whether the lookup failed, was rate-limited or was skipped because `Cancel` fired in `ask_all`; the error itself goes to `debug` only, so `ketch outdated` shows unreachable with no reason.
-
-Done when a skipped lookup reads `NotChecked`, a failed one carries its error (rate limit named as such) in the row, and a test covers cancel mid-batch.

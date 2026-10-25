@@ -63,7 +63,7 @@ struct ErrorBody {
     message: String,
 }
 
-// `Network`, `Verification` and `Other` already carry `message`. Flattening
+// `Network`, `Verification`, `RateLimited` and `Other` already carry `message`. Flattening
 // the enum and then writing that field again emits the key twice, which a
 // strict parser rejects (B127). The sentence is added only for the variants
 // that have no field of their own.

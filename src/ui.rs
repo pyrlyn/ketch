@@ -522,10 +522,82 @@ pub fn debug(detail: &str) {
     }
 }
 
+/// A short next step for a terminal, when one exists.
+///
+/// Flags and command names live here. The core's error is also shown by a
+/// desktop app, which has neither, so the wording that names them cannot.
+pub fn hint(err: &crate::error::Error) -> Option<String> {
+    use crate::error::Error;
+    match err {
+        Error::RateLimited { .. } => Some(
+            "GitHub rate limit. Set GITHUB_TOKEN (or `gh auth token`) to raise it.".to_string(),
+        ),
+        Error::Http { status: 403, .. } => Some(
+            "The repository may be private, or the token may not have access.".to_string(),
+        ),
+        Error::Http { status: 404, .. } => {
+            Some("Check the owner/repo spelling, or the repo may be private.".to_string())
+        }
+        Error::NoCompatibleAsset { .. } => Some(
+            "Run `ketch info <pkg>` to list assets, then pin one with `asset.include` in a manifest."
+                .to_string(),
+        ),
+        Error::ChecksumMismatch { .. } => {
+            Some("Refusing to install. Re-run to retry the download.".to_string())
+        }
+        Error::ChecksumDropped { .. } => Some(
+            "A release that stops publishing checksums may have been replaced. \
+             Pass --allow-unverified (or --yes) to install it anyway."
+                .to_string(),
+        ),
+        Error::AlreadyInstalled { .. } | Error::NoUpdate { .. } => {
+            Some("Use --force to reinstall.".to_string())
+        }
+        Error::UpdateAvailable { name, .. } => {
+            Some(format!("Pass --yes to update it, or run `ketch upgrade {name}`."))
+        }
+        Error::Pinned { .. } => Some("Run `ketch unpin <pkg>` first.".to_string()),
+        Error::SourceConflict { name, .. } => Some(format!(
+            "Install it under another name with --name, or uninstall `{name}` first."
+        )),
+        Error::NoRetained(_) => {
+            Some("Upgrade keeps the previous prefix until `ketch prune`.".to_string())
+        }
+        Error::UnknownScheme(scheme) => Some(format!(
+            "Install a source plugin named `ketch-source-{scheme}` on PATH or in the plugins dir."
+        )),
+        _ => None,
+    }
+}
+
+/// Process exit code. Distinct codes let scripts branch on the failure class.
+///
+/// They live with the hints: a library has no process to exit. A source clash
+/// stays 1, the code the plain message it used to be already exited with.
+pub fn exit_code(err: &crate::error::Error) -> i32 {
+    use crate::error::Error;
+    match err {
+        Error::NotInstalled(_) | Error::NoRelease(_) | Error::NoRetained(_) => 4,
+        Error::AlreadyInstalled { .. }
+        | Error::NoUpdate { .. }
+        | Error::UpdateAvailable { .. }
+        | Error::Pinned { .. } => 5,
+        Error::ChecksumMismatch { .. }
+        | Error::ChecksumMissing(_)
+        | Error::ChecksumDropped { .. } => 6,
+        Error::Http { .. } | Error::Network { .. } | Error::RateLimited { .. } => 7,
+        Error::Busy { .. } => 8,
+        Error::Reported(code) => *code,
+        // The shell convention for "interrupted", as the TUI already uses.
+        Error::Cancelled => 130,
+        _ => 1,
+    }
+}
+
 /// Fatal error rendering, including details and a hint when we have one.
 pub fn error(err: &crate::error::Error) {
     let details = err.details();
-    let hint = err.hint();
+    let hint = hint(err);
     // One record, so a failure is one entry in the log rather than three lines
     // a reader has to piece back together.
     let mut logged = err.to_string();
@@ -1443,10 +1515,60 @@ mod tests {
     fn an_error_hint_cannot_redraw_the_terminal() {
         let _settings = init_test(Some(false), false, false);
         let err = crate::error::Error::UnknownScheme(HOSTILE.into());
-        let hint = err.hint().expect("UnknownScheme carries a hint");
+        let hint = hint(&err).expect("UnknownScheme carries a hint");
         let lines = error_lines(&err.to_string(), &[], Some(&hint));
         assert_eq!(lines.len(), 2);
         assert_client_text_is_filtered(&lines[1]);
+    }
+
+    #[test]
+    fn exit_codes_follow_the_failure_class_and_hints_name_the_flags() {
+        use crate::error::Error;
+        assert_eq!(exit_code(&Error::NotInstalled("a".into())), 4);
+        assert_eq!(
+            exit_code(&Error::AlreadyInstalled {
+                name: "a".into(),
+                version: "1".into(),
+            }),
+            5
+        );
+        assert_eq!(
+            exit_code(&Error::ChecksumMismatch {
+                name: "a".into(),
+                expected: "e".into(),
+                actual: "b".into(),
+            }),
+            6
+        );
+        assert_eq!(
+            exit_code(&Error::RateLimited {
+                url: "https://example".into(),
+                detail: None,
+            }),
+            7
+        );
+        assert_eq!(
+            exit_code(&Error::Busy {
+                pid: None,
+                lock: std::path::PathBuf::from("lock"),
+            }),
+            8
+        );
+        assert_eq!(exit_code(&Error::Cancelled), 130);
+        // The clash used to be a plain message, which exited 1.
+        let clash = Error::SourceConflict {
+            name: "rg".into(),
+            installed_from: "github:a/rg".into(),
+            requested: "github:b/rg".into(),
+        };
+        assert_eq!(exit_code(&clash), 1);
+        assert!(!clash.to_string().contains("--"));
+        let reinstall = Error::AlreadyInstalled {
+            name: "rg".into(),
+            version: "1.0.0".into(),
+        };
+        assert!(hint(&reinstall).unwrap().contains("--force"));
+        assert!(!reinstall.to_string().contains("--"));
     }
 
     /// One of each line kind a terminal can get, in the order a run shows them.

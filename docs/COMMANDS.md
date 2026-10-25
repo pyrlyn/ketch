@@ -294,9 +294,11 @@ package with an update, as the command that takes them all.
 **Offline, and packages that do not answer.** Latest versions are looked up in
 parallel (`jobs` at a time, 4 by default), with a counter on stderr while they
 load. A source that fails — rate-limited, gone, unreachable — shows `?` in
-`latest`, and one line under the table names each such package; every other row
-is still printed and the command still succeeds. When no source answers at all,
-the network is taken to be missing: `ketch list` prints the `ketch list local`
+`latest`, and one line under the table names each such package and why (a
+rate limit is named as such). A lookup skipped because the run was cancelled
+is left blank, the same as one that was never asked. Every other row
+is still printed and the command still succeeds. When no source answers at all
+and it is not a rate limit, the network is taken to be missing: `ketch list` prints the `ketch list local`
 table followed by `latest: offline` and exits 0, while `ketch list remote`,
 which has nothing to show without it, exits non-zero.
 
@@ -357,7 +359,7 @@ ripgrep  15.2.0   Recursively search directories for a regex pattern
 rtok     v0.10.0  Reduce the context AI coding agents must carry
 runa     ?        Run AI models locally (GGUF via llama.cpp) or through the OpenAI and Anthropic APIs
 swarfr   v0.1.0   Shrink Cargo target directories without slowing builds
-? means the latest release could not be checked: runa
+? means the latest release could not be checked: runa (rate limited)
 ```
 
 ```text
@@ -371,7 +373,7 @@ $ ketch list
    runa                      ?                           github:pyrlyn/runa
    swarfr                    v0.1.0                      github:listepo/swarfr
 2 updates available: ketch upgrade fd ripgrep
-? means the latest release could not be checked: runa
+? means the latest release could not be checked: runa (rate limited)
 ```
 
 Without a network:
@@ -396,7 +398,8 @@ ketch list remote --json     # the registry with latest versions
 ### `ketch outdated [--json] [--pre] [--draft]`
 
 Show installed packages that have a newer release. A source that cannot be
-reached is a warning, not a failure — unless nothing could be checked at all.
+reached is a warning that names the failure — a rate limit is named as such —
+not a failure of the command, unless nothing could be checked at all.
 `--draft` compares against GitHub draft releases too, as on `upgrade`. A
 package on a floating tag is outdated when its tag names another build.
 

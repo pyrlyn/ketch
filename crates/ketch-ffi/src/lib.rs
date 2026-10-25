@@ -708,7 +708,15 @@ fn upgrades(cx: &Ctx<'_>, state: &State, only: Option<&BTreeSet<String>>) -> Res
         .collect();
     let mut rows = listing::merge(locals, Vec::new());
     let sources = SourceRegistry::load(cx);
-    if listing::fill_latest(cx, &sources, &mut rows).offline() {
+    let outcome = listing::fill_latest(cx, &sources, &mut rows);
+    if outcome.offline() {
+        if let Some(detail) = listing::shared_rate_limit(&rows) {
+            return Err(ketch_core::error::Error::RateLimited {
+                url: "the package sources".into(),
+                detail,
+            }
+            .into());
+        }
         return Err(KetchError::Network {
             message: "could not reach any package source to check the latest versions".into(),
         });

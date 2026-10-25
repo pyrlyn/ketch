@@ -417,11 +417,11 @@ fn file_text(path: &str, content: Option<String>, sha: String) -> Result<File> {
 
 fn github_error(error: octocrab::Error) -> Error {
     match &error {
-        octocrab::Error::GitHub { source, .. } => Error::Http {
-            url: "GitHub".to_string(),
-            status: source.status_code.as_u16(),
-            detail: Some(source.message.clone()),
-        },
+        octocrab::Error::GitHub { source, .. } => Error::from_http_status(
+            "GitHub",
+            source.status_code.as_u16(),
+            Some(source.message.clone()),
+        ),
         _ => Error::msg(format!("GitHub: {error}")),
     }
 }

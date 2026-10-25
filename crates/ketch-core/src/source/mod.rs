@@ -359,6 +359,13 @@ impl SourceRegistry {
     pub fn all(&self) -> &[Arc<dyn Source>] {
         &self.sources
     }
+
+    /// Exactly these sources, and no discovery. Tests inject one that fails
+    /// on cue; a command builds the registry with [`SourceRegistry::load`].
+    #[cfg(test)]
+    pub(crate) fn from_sources(sources: Vec<Arc<dyn Source>>) -> Self {
+        SourceRegistry { sources }
+    }
 }
 
 #[cfg(test)]

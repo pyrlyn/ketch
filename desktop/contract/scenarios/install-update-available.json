@@ -1,0 +1,29 @@
+{
+  "name": "install-update-available",
+  "description": "A newer release exists. `tag` is what Update installs, so the app does not ask again.",
+  "call": {
+    "operation": "install",
+    "specs": [
+      "ripgrep"
+    ],
+    "options": {
+      "force": false,
+      "prerelease": false,
+      "link": true,
+      "require_checksum": false,
+      "allow_unverified": false,
+      "bin": null
+    }
+  },
+  "script": [],
+  "outcome": {
+    "type": "error",
+    "error": {
+      "type": "update_available",
+      "name": "ripgrep",
+      "installed": "14.1.0",
+      "latest": "14.1.1",
+      "tag": "14.1.1"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "install-already-installed",
+  "description": "This exact version is already installed, so an app can offer to reinstall.",
+  "call": {
+    "operation": "install",
+    "specs": [
+      "ripgrep"
+    ],
+    "options": {
+      "force": false,
+      "prerelease": false,
+      "link": true,
+      "require_checksum": false,
+      "allow_unverified": false,
+      "bin": null
+    }
+  },
+  "script": [],
+  "outcome": {
+    "type": "error",
+    "error": {
+      "type": "already_installed",
+      "name": "ripgrep",
+      "version": "14.1.1"
+    }
+  }
+}

@@ -471,6 +471,81 @@ fn scenarios() -> Vec<Scenario> {
             },
         },
         Scenario {
+            name: "install-already-installed",
+            description: "This exact version is already installed, so an app can offer to reinstall.",
+            call: install_call("ripgrep"),
+            script: vec![],
+            outcome: Outcome::Error {
+                error: KetchError::AlreadyInstalled {
+                    name: "ripgrep".into(),
+                    version: "14.1.1".into(),
+                },
+            },
+        },
+        Scenario {
+            name: "install-update-available",
+            description: "A newer release exists. `tag` is what Update installs, so the app does not ask again.",
+            call: install_call("ripgrep"),
+            script: vec![],
+            outcome: Outcome::Error {
+                error: KetchError::UpdateAvailable {
+                    name: "ripgrep".into(),
+                    installed: "14.1.0".into(),
+                    latest: "14.1.1".into(),
+                    tag: "14.1.1".into(),
+                },
+            },
+        },
+        Scenario {
+            name: "install-pinned",
+            description: "A pin holds the package, so an app can offer Unpin.",
+            call: install_call("fd"),
+            script: vec![],
+            outcome: Outcome::Error {
+                error: KetchError::Pinned {
+                    name: "fd".into(),
+                    version: "10.1.0".into(),
+                },
+            },
+        },
+        Scenario {
+            name: "install-no-compatible-asset",
+            description: "The release published nothing this target can install.",
+            call: install_call("ripgrep"),
+            script: vec![],
+            outcome: Outcome::Error {
+                error: KetchError::NoCompatibleAsset {
+                    id: "BurntSushi/ripgrep".into(),
+                    tag: "14.1.1".into(),
+                    target: "x86_64-unknown-linux-gnu".into(),
+                },
+            },
+        },
+        Scenario {
+            name: "install-source-conflict",
+            description: "The name is already installed from a different source, so an app can offer to rename or remove it.",
+            call: install_call("other/ripgrep"),
+            script: vec![],
+            outcome: Outcome::Error {
+                error: KetchError::SourceConflict {
+                    name: "ripgrep".into(),
+                    installed_from: "github:BurntSushi/ripgrep".into(),
+                    requested: "github:other/ripgrep".into(),
+                },
+            },
+        },
+        Scenario {
+            name: "install-rate-limited",
+            description: "The source's rate limit refused the download, distinct from a source that could not be reached.",
+            call: install_call("ripgrep"),
+            script: abandoned_download("ripgrep"),
+            outcome: Outcome::Error {
+                error: KetchError::RateLimited {
+                    message: "rate limited by https://api.github.com/rate_limit\nAPI rate limit exceeded".into(),
+                },
+            },
+        },
+        Scenario {
             name: "install-binary-choice",
             description: "Two binaries share the package's name, so the core asks which to link and the app answers with an index.",
             call: install_call("uv"),

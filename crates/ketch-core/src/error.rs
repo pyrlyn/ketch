@@ -5,8 +5,10 @@
 //! Error type shared by every module.
 //!
 //! One enum keeps the plumbing honest: any module may construct any variant,
-//! and `main` renders them uniformly. Variants carry the data needed to write a
-//! message a user can act on — never a bare string where a path or URL exists.
+//! and a front end renders them. Variants carry the data needed to write a
+//! message a user can act on — never a bare string where a path or URL exists,
+//! and never a CLI flag. Hints and process exit codes belong to the binary:
+//! a desktop app shows the same errors and has no flags to name.
 
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -34,6 +36,12 @@ pub enum Error {
         status: u16,
         detail: Option<String>,
     },
+
+    /// The server refused because its rate limit was hit. Distinct from
+    /// [`Http`] so a caller can say so without reading the body: GitHub's
+    /// primary limit is status 403, the same status as a private repository.
+    #[error("rate limited by {url}")]
+    RateLimited { url: String, detail: Option<String> },
 
     #[error("network error requesting {url}")]
     Network {
@@ -76,6 +84,16 @@ pub enum Error {
 
     #[error("`{name}` is pinned to {version}")]
     Pinned { name: String, version: String },
+
+    /// The name is already installed, from a different source than this
+    /// request. The two sources are `scheme:id`. What to type instead is a
+    /// hint the binary adds; this message is also shown by a GUI.
+    #[error("`{name}` is already installed from {installed_from}; {requested} would replace it")]
+    SourceConflict {
+        name: String,
+        installed_from: String,
+        requested: String,
+    },
 
     #[error("no release found for `{0}`")]
     NoRelease(String),
@@ -174,11 +192,35 @@ impl Error {
         }
     }
 
+    /// An HTTP status. A rate limit is [`RateLimited`] rather than [`Http`],
+    /// because GitHub reports its primary limit as 403 — the same status as a
+    /// private repository — and the body is what separates them. 429 always is
+    /// one.
+    pub fn from_http_status(url: impl Into<String>, status: u16, detail: Option<String>) -> Self {
+        let url = url.into();
+        let limited = status == 429
+            || (status == 403
+                && detail
+                    .as_deref()
+                    .is_some_and(|text| text.to_ascii_lowercase().contains("rate limit")));
+        if limited {
+            Error::RateLimited { url, detail }
+        } else {
+            Error::Http {
+                url,
+                status,
+                detail,
+            }
+        }
+    }
+
     /// Extra lines shown under the headline message. Keeps the `Display` impl
     /// short while still surfacing server bodies, diffs and stderr.
     pub fn details(&self) -> Vec<String> {
         match self {
-            Error::Http { detail, .. } => detail.iter().cloned().collect(),
+            Error::Http { detail, .. } | Error::RateLimited { detail, .. } => {
+                detail.iter().cloned().collect()
+            }
             Error::Command { stderr, .. } | Error::Plugin { stderr, .. }
                 if !stderr.trim().is_empty() =>
             {
@@ -188,65 +230,6 @@ impl Error {
                 expected, actual, ..
             } => vec![format!("expected {expected}"), format!("actual   {actual}")],
             _ => Vec::new(),
-        }
-    }
-
-    /// A short, actionable next step, when one exists.
-    pub fn hint(&self) -> Option<String> {
-        match self {
-            Error::Http { status: 403, .. } | Error::Http { status: 429, .. } => Some(
-                "GitHub rate limit. Set GITHUB_TOKEN (or `gh auth token`) to raise it."
-                    .to_string(),
-            ),
-            Error::Http { status: 404, .. } => {
-                Some("Check the owner/repo spelling, or the repo may be private.".to_string())
-            }
-            Error::NoCompatibleAsset { .. } => Some(
-                "Run `ketch info <pkg>` to list assets, then pin one with `asset.include` in a manifest."
-                    .to_string(),
-            ),
-            Error::ChecksumMismatch { .. } => {
-                Some("Refusing to install. Re-run to retry the download.".to_string())
-            }
-            Error::ChecksumDropped { .. } => Some(
-                "A release that stops publishing checksums may have been replaced. \
-                 Pass --allow-unverified (or --yes) to install it anyway."
-                    .to_string(),
-            ),
-            Error::AlreadyInstalled { .. } | Error::NoUpdate { .. } => {
-                Some("Use --force to reinstall.".to_string())
-            }
-            Error::UpdateAvailable { name, .. } => Some(format!(
-                "Pass --yes to update it, or run `ketch upgrade {name}`."
-            )),
-            Error::Pinned { .. } => Some("Run `ketch unpin <pkg>` first.".to_string()),
-            Error::NoRetained(_) => Some(
-                "Upgrade keeps the previous prefix until `ketch prune`.".to_string(),
-            ),
-            Error::UnknownScheme(s) => Some(format!(
-                "Install a source plugin named `ketch-source-{s}` on PATH or in the plugins dir."
-            )),
-            _ => None,
-        }
-    }
-
-    /// Process exit code. Distinct codes let scripts branch on failure class.
-    pub fn exit_code(&self) -> i32 {
-        match self {
-            Error::NotInstalled(_) | Error::NoRelease(_) | Error::NoRetained(_) => 4,
-            Error::AlreadyInstalled { .. }
-            | Error::NoUpdate { .. }
-            | Error::UpdateAvailable { .. }
-            | Error::Pinned { .. } => 5,
-            Error::ChecksumMismatch { .. }
-            | Error::ChecksumMissing(_)
-            | Error::ChecksumDropped { .. } => 6,
-            Error::Http { .. } | Error::Network { .. } => 7,
-            Error::Busy { .. } => 8,
-            Error::Reported(code) => *code,
-            // The shell convention for "interrupted", as the TUI already uses.
-            Error::Cancelled => 130,
-            _ => 1,
         }
     }
 }
@@ -264,5 +247,47 @@ mod tests {
         let path = dir.path().display().to_string();
         assert_eq!(text.matches(&path).count(), 1, "{text}");
         assert!(!text.contains("caller-path"), "{text}");
+    }
+
+    #[test]
+    fn a_rate_limit_body_on_403_is_not_a_plain_http_error() {
+        let err = Error::from_http_status(
+            "https://api.github.com/x",
+            403,
+            Some("API rate limit exceeded".into()),
+        );
+        assert!(matches!(err, Error::RateLimited { .. }), "{err:?}");
+        assert!(err.to_string().contains("rate limited"), "{err}");
+        assert!(!err.to_string().contains("--"), "{err}");
+        assert_eq!(err.details(), vec!["API rate limit exceeded".to_string()]);
+    }
+
+    #[test]
+    fn a_forbidden_body_without_a_rate_limit_stays_http() {
+        let err = Error::from_http_status(
+            "https://api.github.com/x",
+            403,
+            Some("Resource not accessible by integration".into()),
+        );
+        assert!(matches!(err, Error::Http { status: 403, .. }), "{err:?}");
+    }
+
+    #[test]
+    fn http_429_is_a_rate_limit_even_without_a_body() {
+        let err = Error::from_http_status("https://api.github.com/x", 429, None);
+        assert!(matches!(err, Error::RateLimited { detail: None, .. }));
+    }
+
+    #[test]
+    fn a_source_conflict_names_both_sources_and_no_flag() {
+        let err = Error::SourceConflict {
+            name: "rg".into(),
+            installed_from: "github:BurntSushi/ripgrep".into(),
+            requested: "github:other/ripgrep".into(),
+        };
+        let text = err.to_string();
+        assert!(text.contains("github:BurntSushi/ripgrep"), "{text}");
+        assert!(text.contains("github:other/ripgrep"), "{text}");
+        assert!(!text.contains("--"), "{text}");
     }
 }

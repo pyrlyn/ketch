@@ -1,0 +1,27 @@
+{
+  "name": "install-pinned",
+  "description": "A pin holds the package, so an app can offer Unpin.",
+  "call": {
+    "operation": "install",
+    "specs": [
+      "fd"
+    ],
+    "options": {
+      "force": false,
+      "prerelease": false,
+      "link": true,
+      "require_checksum": false,
+      "allow_unverified": false,
+      "bin": null
+    }
+  },
+  "script": [],
+  "outcome": {
+    "type": "error",
+    "error": {
+      "type": "pinned",
+      "name": "fd",
+      "version": "10.1.0"
+    }
+  }
+}

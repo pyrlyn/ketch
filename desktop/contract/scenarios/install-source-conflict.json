@@ -1,0 +1,28 @@
+{
+  "name": "install-source-conflict",
+  "description": "The name is already installed from a different source, so an app can offer to rename or remove it.",
+  "call": {
+    "operation": "install",
+    "specs": [
+      "other/ripgrep"
+    ],
+    "options": {
+      "force": false,
+      "prerelease": false,
+      "link": true,
+      "require_checksum": false,
+      "allow_unverified": false,
+      "bin": null
+    }
+  },
+  "script": [],
+  "outcome": {
+    "type": "error",
+    "error": {
+      "type": "source_conflict",
+      "name": "ripgrep",
+      "installed_from": "github:BurntSushi/ripgrep",
+      "requested": "github:other/ripgrep"
+    }
+  }
+}

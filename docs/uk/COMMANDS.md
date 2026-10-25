@@ -298,9 +298,11 @@ winget іде через GitHub API, тому використовується �
 **Офлайн і пакети, що не відповідають.** Останні версії запитуються
 паралельно (по `jobs` за раз, типово 4), а поки вони завантажуються, у stderr іде лічильник.
 Джерело, що не відповіло, — уперлося в ліміт, зникло, недоступне — показує `?` у
-`latest`, а під таблицею один рядок називає кожен такий пакет; усі інші рядки
-однаково друкуються, і команда однаково завершується успішно. Коли не відповідає жодне джерело,
-вважається, що мережі немає: `ketch list` друкує таблицю `ketch list local`,
+`latest`, а під таблицею один рядок називає кожен такий пакет і причину (ліміт
+запитів названо прямо). Запит, пропущений через скасування, лишається порожнім, як і той,
+який не запитували. Усі інші рядки
+однаково друкуються, і команда однаково завершується успішно. Коли не відповідає жодне джерело
+і це не ліміт запитів, вважається, що мережі немає: `ketch list` друкує таблицю `ketch list local`,
 за нею `latest: offline`, і повертає 0, а `ketch list remote`,
 якому без мережі нічого показати, повертає ненульовий код.
 
@@ -358,7 +360,7 @@ ripgrep  15.2.0   Recursively search directories for a regex pattern
 rtok     v0.10.0  Reduce the context AI coding agents must carry
 runa     ?        Run AI models locally (GGUF via llama.cpp) or through the OpenAI and Anthropic APIs
 swarfr   v0.1.0   Shrink Cargo target directories without slowing builds
-? means the latest release could not be checked: runa
+? means the latest release could not be checked: runa (rate limited)
 ```
 
 ```text
@@ -372,7 +374,7 @@ $ ketch list
    runa                      ?                           github:pyrlyn/runa
    swarfr                    v0.1.0                      github:listepo/swarfr
 2 updates available: ketch upgrade fd ripgrep
-? means the latest release could not be checked: runa
+? means the latest release could not be checked: runa (rate limited)
 ```
 
 Без мережі:
@@ -397,7 +399,8 @@ ketch list remote --json     # реєстр з останніми версіям
 ### `ketch outdated [--json] [--pre] [--draft]`
 
 Показує встановлені пакети, що мають новіший реліз. Недоступне джерело —
-це попередження, а не помилка, якщо тільки взагалі нічого не вдалося перевірити.
+це попередження, яке називає збій (ліміт запитів названо прямо), а не помилка
+команди, якщо тільки взагалі нічого не вдалося перевірити.
 `--draft` порівнює й із чернетками релізів GitHub, як в `upgrade`. Пакет
 на плаваючому тезі застарів, коли його тег указує на іншу збірку.
 

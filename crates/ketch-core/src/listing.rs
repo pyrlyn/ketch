@@ -155,15 +155,58 @@ impl Found {
     }
 }
 
+/// Why a latest lookup that was asked did not answer.
+///
+/// A rate limit is its own variant — the core's [`Error::RateLimited`] — so a
+/// caller names it without parsing the text. Anything else keeps that error's
+/// wording. The row cannot store [`Error`] itself: rows are compared by value,
+/// and `Error` carries sources that are not [`Eq`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LatestError {
+    /// [`Error::RateLimited`]. `detail` is the server's own explanation.
+    RateLimited { detail: Option<String> },
+    /// Any other failure, worded as that error.
+    Other { message: String },
+}
+
+impl LatestError {
+    fn from_error(error: &Error) -> Self {
+        match error {
+            Error::RateLimited { detail, .. } => LatestError::RateLimited {
+                detail: detail.clone(),
+            },
+            other => LatestError::Other {
+                message: other.to_string(),
+            },
+        }
+    }
+
+    /// What a table note says in parentheses. A rate limit is named as such
+    /// even when the server's body is absent.
+    pub fn summary(&self) -> String {
+        match self {
+            LatestError::RateLimited {
+                detail: Some(detail),
+            } if !detail.is_empty() => {
+                format!("rate limited: {detail}")
+            }
+            LatestError::RateLimited { .. } => "rate limited".to_string(),
+            LatestError::Other { message } => message.clone(),
+        }
+    }
+}
+
 /// The `latest` of one row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Latest {
-    /// Not looked up: a package installed from a local path has no upstream,
-    /// and a listing that needs no versions never asks.
+    /// Not looked up. A package installed from a local path has no upstream,
+    /// a listing that needs no versions never asks, and a lookup the batch
+    /// skipped because [`crate::cancel::Cancel`] fired is the same: it was
+    /// not asked, so it is not a failure.
     NotChecked,
     Found(Found),
-    /// The source was asked and did not answer.
-    Unreachable,
+    /// The source was asked and did not answer. The error says why.
+    Unreachable(LatestError),
 }
 
 /// One source asked for its newest release — with or without prereleases and
@@ -290,7 +333,7 @@ impl Row {
                 format!("{} {UPDATE}", found.release.version)
             }
             Latest::Found(found) => found.release.version.to_string(),
-            Latest::Unreachable => UNKNOWN.to_string(),
+            Latest::Unreachable(_) => UNKNOWN.to_string(),
             Latest::NotChecked => String::new(),
         }
     }
@@ -383,21 +426,48 @@ pub struct Outcome {
     pub asked: usize,
     /// Of those, how many have one, fresh from the source or from the cache.
     pub answered: usize,
+    /// Of those, how many were not started because cancel fired first.
+    pub skipped: usize,
 }
 
 impl Outcome {
-    /// Nothing answered at all: the network, not one package, is missing.
+    /// Nothing answered, and nothing was skipped before it could be asked.
+    ///
+    /// A cancel that stopped the batch is not this: those rows are
+    /// [`Latest::NotChecked`]. A rate limit still is, because the lookups ran
+    /// and failed; [`shared_rate_limit`] is how a caller tells that from a
+    /// source that could not be reached.
     pub fn offline(&self) -> bool {
-        self.asked > 0 && self.answered == 0
+        self.asked > 0 && self.answered == 0 && self.skipped == 0
     }
+}
+
+/// When every failed lookup is a rate limit, the server's explanation if it
+/// sent one. `None` when something else failed, or nothing did: a caller that
+/// already knows [`Outcome::offline`] uses this to avoid reporting a rate
+/// limit as a dead network.
+pub fn shared_rate_limit(rows: &[Row]) -> Option<Option<String>> {
+    let mut faults = rows.iter().filter_map(|row| match &row.latest {
+        Latest::Unreachable(error) => Some(error),
+        _ => None,
+    });
+    let first = faults.next()?;
+    let LatestError::RateLimited { detail } = first else {
+        return None;
+    };
+    if faults.any(|error| !matches!(error, LatestError::RateLimited { .. })) {
+        return None;
+    }
+    Some(detail.clone())
 }
 
 /// Fill in `latest` for every row that has an upstream.
 ///
 /// Each distinct source is asked once, `cfg.jobs` at a time, and a fresh
 /// cached answer is used instead of asking. A source that fails leaves its
-/// rows `Unreachable`; nothing here returns an error, because one missing
-/// version must not hide every other row.
+/// rows [`Latest::Unreachable`] carrying that error; a lookup skipped because
+/// cancel fired is [`Latest::NotChecked`]. Nothing here returns an error,
+/// because one missing version must not hide every other row.
 pub fn fill_latest(cx: &Ctx<'_>, sources: &SourceRegistry, rows: &mut [Row]) -> Outcome {
     let cfg = cx.cfg;
     let mut lookups: BTreeMap<String, Lookup> = BTreeMap::new();
@@ -428,27 +498,42 @@ pub fn fill_latest(cx: &Ctx<'_>, sources: &SourceRegistry, rows: &mut [Row]) -> 
 
     let fetched = ask_all(cx, sources, &stale);
     let mut changed = false;
-    for (key, result) in fetched {
+    let mut faults: HashMap<String, LatestError> = HashMap::new();
+    for (key, result) in &fetched {
         match result {
             Ok(found) => {
                 cache
                     .entries
-                    .insert(key.clone(), CacheEntry::new(&found, now));
-                answers.insert(key, found);
+                    .insert(key.clone(), CacheEntry::new(found, now));
+                answers.insert(key.clone(), found.clone());
                 changed = true;
             }
-            Err(e) => cx.report.debug(&format!("latest for {key}: {e}")),
+            Err(error) => {
+                cx.report.debug(&format!("latest for {key}: {error}"));
+                faults.insert(key.clone(), LatestError::from_error(error));
+            }
         }
     }
     if changed {
         cache.save(&path, cx.report);
     }
 
+    // A key that was stale and is in neither map was never started: the
+    // worker returned when cancel fired, before taking it.
+    let skipped = stale
+        .iter()
+        .filter(|(key, _)| !fetched.iter().any(|(got, _)| got == *key))
+        .count();
+
     for row in rows.iter_mut() {
         if let Some(lookup) = row.lookup() {
-            row.latest = match answers.get(&lookup.key()) {
-                Some(found) => Latest::Found(found.clone()),
-                None => Latest::Unreachable,
+            let key = lookup.key();
+            row.latest = if let Some(found) = answers.get(&key) {
+                Latest::Found(found.clone())
+            } else if let Some(error) = faults.get(&key) {
+                Latest::Unreachable(error.clone())
+            } else {
+                Latest::NotChecked
             };
             // Decided once here so that a draft that is gone is said once,
             // however many times the row is rendered afterwards.
@@ -458,6 +543,7 @@ pub fn fill_latest(cx: &Ctx<'_>, sources: &SourceRegistry, rows: &mut [Row]) -> 
     Outcome {
         asked: lookups.len(),
         answered: answers.len(),
+        skipped,
     }
 }
 
@@ -631,21 +717,27 @@ pub fn update_footer(rows: &[Row]) -> Option<String> {
     }
 }
 
-/// The line under the table naming each package whose `latest` is `?`.
+/// The line under the table naming each package whose `latest` is `?`, and why.
 pub fn unreachable_note(rows: &[Row]) -> Option<String> {
-    let names = unreachable(rows);
-    (!names.is_empty()).then(|| {
+    let parts: Vec<String> = rows
+        .iter()
+        .filter_map(|row| match &row.latest {
+            Latest::Unreachable(error) => Some(format!("{} ({})", row.name, error.summary())),
+            _ => None,
+        })
+        .collect();
+    (!parts.is_empty()).then(|| {
         format!(
             "{UNKNOWN} means the latest release could not be checked: {}",
-            names.join(", ")
+            parts.join(", ")
         )
     })
 }
 
-/// Names of the rows whose source did not answer.
+/// Names of the rows whose source was asked and did not answer.
 pub fn unreachable(rows: &[Row]) -> Vec<String> {
     rows.iter()
-        .filter(|row| row.latest == Latest::Unreachable)
+        .filter(|row| matches!(row.latest, Latest::Unreachable(_)))
         .map(|row| row.name.clone())
         .collect()
 }
@@ -710,6 +802,7 @@ mod tests {
     use super::*;
     use crate::model::{Channel, Version};
     use pretty_assertions::assert_eq;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn local(name: &str, version: &str) -> Local {
         Local {
@@ -985,12 +1078,17 @@ mod tests {
     fn the_unreachable_note_names_every_question_mark() {
         let mut rows = merge(vec![local("alpha", "1.0.0")], vec![offer("bravo")]);
         assert_eq!(unreachable_note(&rows), None);
-        rows[0].latest = Latest::Unreachable;
-        rows[1].latest = Latest::Unreachable;
+        rows[0].latest = Latest::Unreachable(LatestError::Other {
+            message: "connection refused".into(),
+        });
+        rows[1].latest = Latest::Unreachable(LatestError::RateLimited { detail: None });
         assert_eq!(rows[0].latest_cell(), "?");
+        assert_eq!(rows[1].latest_cell(), "?");
         assert_eq!(
             unreachable_note(&rows).as_deref(),
-            Some("? means the latest release could not be checked: alpha, bravo")
+            Some(
+                "? means the latest release could not be checked: alpha (connection refused), bravo (rate limited)"
+            )
         );
     }
 
@@ -999,12 +1097,21 @@ mod tests {
         assert!(!Outcome::default().offline());
         assert!(Outcome {
             asked: 3,
-            answered: 0
+            answered: 0,
+            skipped: 0,
         }
         .offline());
         assert!(!Outcome {
             asked: 3,
-            answered: 1
+            answered: 1,
+            skipped: 0,
+        }
+        .offline());
+        // Cancelled before any lookup ran: not a missing network.
+        assert!(!Outcome {
+            asked: 3,
+            answered: 0,
+            skipped: 3,
         }
         .offline());
     }
@@ -1197,5 +1304,126 @@ mod tests {
         assert!(Cache::parse(&old).is_err());
         let current = format!(r#"{{"format":{CACHE_FORMAT},"entries":{{}}}}"#);
         assert!(Cache::parse(&current).is_ok());
+    }
+
+    /// One worker, so the source's calls follow lookup order: `a` answers,
+    /// `b` is the rate limit and cancels, and `c` and `d` are never started.
+    struct Scripted {
+        calls: AtomicUsize,
+        cancel: crate::cancel::Cancel,
+    }
+
+    impl crate::source::Source for Scripted {
+        fn scheme(&self) -> &str {
+            "test"
+        }
+
+        fn list_releases(&self, id: &str, _: &crate::source::ListOpts) -> Result<Vec<Release>> {
+            match self.calls.fetch_add(1, Ordering::SeqCst) {
+                0 => Ok(vec![Release {
+                    version: Version::parse("2.0.0"),
+                    tag: "v2.0.0".into(),
+                    prerelease: false,
+                    draft: false,
+                    published_at: None,
+                    notes: None,
+                    assets: Vec::new(),
+                }]),
+                1 => {
+                    self.cancel.cancel();
+                    Err(Error::RateLimited {
+                        url: format!("https://example/{id}"),
+                        detail: Some("API rate limit exceeded".into()),
+                    })
+                }
+                _ => Err(Error::msg(format!("{id} was asked after cancel"))),
+            }
+        }
+
+        fn download(
+            &self,
+            _: &crate::model::ReleaseAsset,
+            _: &std::path::Path,
+            _: &dyn crate::report::ProgressSink,
+            _: &crate::cancel::Cancel,
+        ) -> Result<String> {
+            Err(Error::msg("not used"))
+        }
+    }
+
+    #[test]
+    fn a_cancel_mid_batch_leaves_the_rest_unchecked_and_keeps_the_rate_limit() {
+        use std::sync::Arc;
+
+        let dir = tempfile::tempdir().unwrap();
+        let report = Report::silent();
+        let mut cfg = crate::config::Config::load(Some(dir.path().join("root")), &report).unwrap();
+        cfg.jobs = 1;
+        let cancel = crate::cancel::Cancel::new();
+        let scripted = Arc::new(Scripted {
+            calls: AtomicUsize::new(0),
+            cancel: cancel.clone(),
+        });
+        let sources = crate::source::SourceRegistry::from_sources(vec![scripted.clone()]);
+        let cx = crate::report::Ctx::new(&cfg, &report).with_cancel(cancel);
+        let mut rows = merge(
+            vec![
+                local("a", "1.0.0"),
+                local("b", "1.0.0"),
+                local("c", "1.0.0"),
+                local("d", "1.0.0"),
+            ],
+            vec![],
+        );
+        let outcome = fill_latest(&cx, &sources, &mut rows);
+        assert_eq!(scripted.calls.load(Ordering::SeqCst), 2);
+        assert!(
+            matches!(rows[0].latest, Latest::Found(_)),
+            "{:?}",
+            rows[0].latest
+        );
+        assert_eq!(
+            rows[1].latest,
+            Latest::Unreachable(LatestError::RateLimited {
+                detail: Some("API rate limit exceeded".into()),
+            })
+        );
+        assert_eq!(rows[2].latest, Latest::NotChecked);
+        assert_eq!(rows[3].latest, Latest::NotChecked);
+        assert_eq!(outcome.skipped, 2);
+        assert!(!outcome.offline());
+        let note = unreachable_note(&rows).unwrap();
+        assert!(
+            note.contains("b (rate limited: API rate limit exceeded)"),
+            "{note}"
+        );
+        assert!(!note.contains("c (") && !note.contains("d ("), "{note}");
+    }
+
+    #[test]
+    fn a_failed_lookup_keeps_its_error_and_a_rate_limit_batch_is_named_as_that() {
+        let mut rows = merge(
+            vec![local("alpha", "1.0.0"), local("bravo", "1.0.0")],
+            vec![],
+        );
+        rows[0].latest = Latest::Unreachable(LatestError::Other {
+            message: "HTTP 503 from https://example/alpha".into(),
+        });
+        rows[1].latest = Latest::NotChecked;
+        assert_eq!(shared_rate_limit(&rows), None);
+        assert_eq!(unreachable(&rows), vec!["alpha".to_string()]);
+
+        rows[0].latest = Latest::Unreachable(LatestError::RateLimited {
+            detail: Some("API rate limit exceeded".into()),
+        });
+        rows[1].latest = Latest::Unreachable(LatestError::RateLimited { detail: None });
+        assert_eq!(
+            shared_rate_limit(&rows),
+            Some(Some("API rate limit exceeded".into()))
+        );
+        rows[1].latest = Latest::Unreachable(LatestError::Other {
+            message: "connection refused".into(),
+        });
+        assert_eq!(shared_rate_limit(&rows), None);
     }
 }

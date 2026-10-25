@@ -39,7 +39,10 @@ KETCH_BLESS=1 cargo nextest run -p ketch-ffi contract
   return type in `ketch-ffi` (`Vec<Package>`, `SearchResults`, `Vec<Upgrade>`,
   `Vec<Installed>`, `Vec<Changelog>`, `Vec<Check>`), or `type: "error"` with a
   `KetchError` (`busy` with an optional `pid`, `cancelled`, `not_found`,
-  `network`, `verification`, `other`).
+  `network`, `verification`, `already_installed`, `update_available`,
+  `pinned`, `no_compatible_asset`, `source_conflict`, `rate_limited`,
+  `other`). The install conflicts carry the fields an app needs to offer
+  Update, Unpin or a rename; `rate_limited` is not a `network` failure.
 
 Field names are the Rust field names, in snake case. `Option` fields are
 `null` when absent. Task ids in events are unique within a scenario.

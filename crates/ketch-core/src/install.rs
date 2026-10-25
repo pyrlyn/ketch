@@ -288,11 +288,13 @@ pub fn prepare(
         // sources' versions in one retained list — a replacement nobody asked
         // for by name.
         if !crate::manifest::same_source(&old.source, &manifest.source) {
-            return Err(Error::msg(format!(
-                "`{}` is already installed from {}; {} would replace it. \
-                 Install it under another name with --name, or uninstall `{}` first",
-                old.name, old.source, manifest.source, old.name
-            )));
+            // `--name` is a CLI flag, so it stays in the binary's hint. A GUI
+            // matches `SourceConflict` and offers its own way to rename.
+            return Err(Error::SourceConflict {
+                name: old.name.clone(),
+                installed_from: old.source.to_string(),
+                requested: manifest.source.to_string(),
+            });
         }
         if old.pinned && !matches!(req.spec.version, VersionSpec::Exact(_)) {
             return Err(Error::Pinned {

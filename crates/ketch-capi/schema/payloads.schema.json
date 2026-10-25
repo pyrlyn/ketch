@@ -192,7 +192,145 @@
           "type": "object"
         },
         {
-          "description": "Anything else, worded as the CLI would word it.",
+          "description": "This exact version is already installed. An app can offer to reinstall.",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "const": "already_installed",
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "name",
+            "version"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A newer release is available. `tag` is what an update installs, so an\napp can offer Update without asking again.",
+          "properties": {
+            "installed": {
+              "type": "string"
+            },
+            "latest": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "tag": {
+              "type": "string"
+            },
+            "type": {
+              "const": "update_available",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "name",
+            "installed",
+            "latest",
+            "tag"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Held by a pin. An app can offer Unpin.",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "const": "pinned",
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "name",
+            "version"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The release has no asset this target can install.",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "tag": {
+              "type": "string"
+            },
+            "target": {
+              "type": "string"
+            },
+            "type": {
+              "const": "no_compatible_asset",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "id",
+            "tag",
+            "target"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The name is already installed from `installed_from`; `requested` would\nreplace it. Both are `scheme:id`.",
+          "properties": {
+            "installed_from": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "requested": {
+              "type": "string"
+            },
+            "type": {
+              "const": "source_conflict",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "name",
+            "installed_from",
+            "requested"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The source's rate limit refused the request. Distinct from [`Network`]\nso an app can explain a token rather than a dead connection.",
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "type": {
+              "const": "rate_limited",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Anything else, in the core's own wording.",
           "properties": {
             "message": {
               "type": "string"

@@ -31,7 +31,6 @@
 - K924. Set up PATH from the macOS app on first launch
 - K925. Carry one cancel token per operation
 - K926. Plan upgrades in one place in the core
-- K927. Keep CLI wording out of core errors
 - K928. Probe source plugins only when needed
 - K929. Pass the platform in, and fault-inject placement
 - K930. Move OS-neutral placement code into one module
@@ -80,4 +79,3 @@
 - K965. Share one HTTP agent between sources
 - K966. Deduplicate crate versions in Cargo.lock
 - K967. Keep a binary at the ketch path during self-replace
-- K968. Tell a cancelled or failed latest lookup from an unreachable one
