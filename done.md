@@ -1978,3 +1978,11 @@ names the `rtok task` command that does the job. `AGENTS.md` has a Tasks
 section saying the same.
 
 Tests: `plan_todo_and_done_agree_with_rtok_tasks`, `a_row_written_by_hand_without_rtok_fails`, `a_new_task_with_an_id_picked_by_hand_fails`, `a_task_file_written_by_hand_is_refused`, `a_subtask_needs_its_parent`, `every_failure_names_the_rtok_command_to_use`.
+
+### K921. Port the B129–B131 store fixes to the Linux app
+
+On the real core an offline machine or a fast typist will hit, in the Linux app, bugs already fixed elsewhere: search results have no generation guard (`store.vala:64-69`, B130), a second operation is dropped silently (`store.vala:151-154`, B131), and a background refresh failure raises an alert (`store.vala:51-52`, B129).
+
+The Linux store now matches macOS in those three cases. A refresh that was not asked for logs a warning and leaves `error_message` unset; a refresh that asks to alert still sets it. An older, slower search does not replace a newer search's results and does not raise an alert after a newer search has started. A second operation while one is running sets `error_message` to `Another operation is running. Wait for it or cancel it first.` and does not call the core.
+
+Tests: `/store/b129-background-refresh-logs-without-an-alert`, `/store/b129-refresh-still-alerts-when-asked`, `/store/b130-slower-older-search-does-not-replace-a-newer-one`, `/store/b131-second-operation-is-refused`.

@@ -41,15 +41,22 @@ namespace KetchApp {
         Cancellable? cancellable;
         RetryFunc? retry;
         HashTable<int64?, string> downloads = new HashTable<int64?, string> (int64_hash, int64_equal);
+        /* A core call cannot be cancelled, so a slow reply can arrive after a
+         * newer search has started; only this generation is shown, and a late
+         * failure must not raise the sheet. */
+        uint search_generation;
 
         public Store (Core core) {
             Object (core: core);
         }
 
-        /* Re-reads installed and outdated packages; on launch and after every operation. */
-        public async void refresh () {
-            var now = take (yield background (() => core.installed ()), () => refresh.begin ());
-            var outdated = take (yield background (() => core.outdated (null)), () => refresh.begin ());
+        /* Re-reads installed and outdated packages; on launch and after every operation.
+         * `alerting` is false when the user did not ask: offline, the sheet would
+         * otherwise appear for a refresh nobody is watching. The failure is still
+         * a log line. A refresh the user started still alerts. */
+        public async void refresh (bool alerting = true) {
+            var now = take (yield background (() => core.installed ()), () => refresh.begin (), alerting);
+            var outdated = take (yield background (() => core.outdated (null)), () => refresh.begin (), alerting);
             if (now != null) {
                 fill (installed, now, (o) => new Package (o));
             }
@@ -62,7 +69,12 @@ namespace KetchApp {
         }
 
         public async void search (string query) {
-            var found = take (yield background (() => core.search (query, 50, null)), null);
+            var generation = ++search_generation;
+            var answer = yield background (() => core.search (query, 50, null));
+            if (generation != search_generation) {
+                return;
+            }
+            var found = take (answer, null);
             if (found != null && found.get_node_type () == Json.NodeType.OBJECT) {
                 fill (search_results, found.get_object ().get_member ("known"), (o) => new RegistryPackage (o));
             }
@@ -150,6 +162,9 @@ namespace KetchApp {
 
         async void operate (string title, string operation, string[] args, owned RetryFunc again) {
             if (activity != null) {
+                // A second click used to return with the window unchanged, so it
+                // looked like the click did nothing.
+                error_message = "Another operation is running. Wait for it or cancel it first.";
                 return;
             }
             var cancel = new Cancellable ();
@@ -255,8 +270,10 @@ namespace KetchApp {
             }
         }
 
-        /* `ok`'s value, or null after showing the error: Busy as the banner with Retry, Cancelled in the log, the rest as an alert. */
-        Json.Node? take (string answer, owned RetryFunc? again) {
+        /* `ok`'s value, or null after showing the error: Busy as the banner with Retry,
+         * Cancelled in the log, the rest as an alert. When `alerting` is false the same
+         * failure is only a warning, so a refresh nobody asked for does not raise the sheet. */
+        Json.Node? take (string answer, owned RetryFunc? again, bool alerting = true) {
             Json.Object? reply = null;
             try {
                 reply = parse_json (answer).get_object ();
@@ -268,7 +285,10 @@ namespace KetchApp {
             }
             var error = reply != null && reply.has_member ("error") && reply.get_member ("error").get_node_type () == Json.NodeType.OBJECT
                         ? reply.get_object_member ("error") : new Json.Object ();
-            var message = text_of (error, "message");
+            if (!alerting) {
+                append (LogLevel.WARNING, described (error));
+                return null;
+            }
             switch (text_of (error, "type")) {
             case "busy":
                 var state = new BusyState (error.get_int_member_with_default ("pid", -1));
@@ -281,24 +301,33 @@ namespace KetchApp {
             case "cancelled":
                 append (LogLevel.WARNING, "Cancelled");
                 return null;
-            case "not_found":
-                message = "No package named %s.".printf (text_of (error, "name"));
-                break;
-            case "network":
-                message = "Network error: " + message;
-                break;
-            case "verification":
-                message = "Verification failed: " + message;
-                break;
-            case "other":
-                break;
             default:
-                message = "The core answered something this app cannot read.";
-                break;
+                var message = described (error);
+                append (LogLevel.ERROR, message);
+                error_message = message;
+                return null;
             }
-            append (LogLevel.ERROR, message);
-            error_message = message;
-            return null;
+        }
+
+        /* Same words as the sheet, so a quiet warning and an alert do not disagree. */
+        static string described (Json.Object error) {
+            var message = text_of (error, "message");
+            switch (text_of (error, "type")) {
+            case "busy":
+                return new BusyState (error.get_int_member_with_default ("pid", -1)).message;
+            case "cancelled":
+                return "Cancelled";
+            case "not_found":
+                return "No package named %s.".printf (text_of (error, "name"));
+            case "network":
+                return "Network error: " + message;
+            case "verification":
+                return "Verification failed: " + message;
+            case "other":
+                return message;
+            default:
+                return "The core answered something this app cannot read.";
+            }
         }
 
         void append (LogLevel level, string message) {

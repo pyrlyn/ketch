@@ -26,6 +26,14 @@ namespace KetchApp {
         HashTable<string, Scenario> scenarios = new HashTable<string, Scenario> (str_hash, str_equal);
         HashTable<string, string> playing = new HashTable<string, string> (str_hash, str_equal);
         Json.Array packages;
+        /* One call a test holds back, named as the store makes it (`search <query>`),
+         * so an older reply can be forced to arrive after a newer one. */
+        string? delayed_call;
+        uint delayed_ms;
+        /* Error object `installed` and `outdated` answer with, instead of their scenario. */
+        string? read_error;
+        /* The delay and the read error are set on the test thread and read on the core's. */
+        Object hook_gate = new Object ();
 
         public FakeCore (string dir) throws Error {
             foreach (var scenario in Scenario.load_dir (dir).data) {
@@ -66,17 +74,37 @@ namespace KetchApp {
             }
         }
 
+        /* Makes `call` (`search <query>`, arguments as passed) wait `milliseconds` before it answers. */
+        public void delay (string call, uint milliseconds) {
+            lock (hook_gate) {
+                delayed_call = call;
+                delayed_ms = milliseconds;
+            }
+        }
+
+        /* `installed` and `outdated` answer a `type` error with `message`, so a refresh can fail with nothing else running. */
+        public void fail_reads (string type, string message) {
+            lock (hook_gate) {
+                read_error = "{\"type\": %s, \"message\": %s}".printf (quote (type), quote (message));
+            }
+        }
+
         public string root () {
             return ROOT;
         }
 
         public string installed () {
+            var failed = read_failure ();
+            if (failed != null) {
+                return failed;
+            }
             lock (packages) {
                 return envelope ("ok", array_node (packages));
             }
         }
 
         public string search (string query, uint32 limit, EventFunc? report) {
+            hold ("search " + query);
             // An empty query browses the registry (search-browse). A typed
             // query filters the search scenario, the same call the core makes.
             var needle = query.strip ().down ();
@@ -103,6 +131,10 @@ namespace KetchApp {
 
         /* The scenario's upgrades still pending: an upgraded package drops out. */
         public string outdated (EventFunc? report) {
+            var failed = read_failure ();
+            if (failed != null) {
+                return failed;
+            }
             var found = pick ("outdated", "outdated");
             if (found.outcome != "ok") {
                 return found.answer ();
@@ -176,6 +208,31 @@ namespace KetchApp {
                 packages = kept;
             }
             return envelope ("ok", array_node (removed));
+        }
+
+        /* The stand-in read error, as an envelope; null when reads answer their scenario. */
+        string? read_failure () {
+            string? error;
+            lock (hook_gate) {
+                error = read_error;
+            }
+            if (error == null) {
+                return null;
+            }
+            return envelope ("error", parse_or_null (error));
+        }
+
+        /* Waits out a test's delay for `call`. The scenario itself is unchanged. */
+        void hold (string call) {
+            uint milliseconds = 0;
+            lock (hook_gate) {
+                if (delayed_call == call) {
+                    milliseconds = delayed_ms;
+                }
+            }
+            if (milliseconds > 0) {
+                Thread.usleep (milliseconds * 1000);
+            }
         }
 
         Scenario pick (string operation, string fallback) {

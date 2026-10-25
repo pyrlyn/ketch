@@ -25,7 +25,6 @@
 - K918. Pin cargo-nextest and add a nextest profile
 - K919. Decide the desktop ship order and maintenance budget
 - K920. Test the macOS live core against a scratch root
-- K921. Port the B129–B131 store fixes to the Linux app
 - K922. Make Doctor actionable in the desktop apps
 - K923. Add contract scenarios for the unused core calls
 - K924. Set up PATH from the macOS app on first launch

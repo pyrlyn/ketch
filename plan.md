@@ -122,7 +122,6 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | K918 | todo | P1 | 1 | 0% | |
 | K919 | todo | P1 | 1 | 0% | |
 | K920 | todo | P1 | 3 | 0% | |
-| K921 | todo | P1 | 2 | 0% | |
 | K922 | todo | P1 | 3 | 0% | |
 | K923 | todo | P1 | 3 | 0% | |
 | K924 | todo | P1 | 3 | 0% | |
@@ -480,12 +479,6 @@ Done when the creator's choice is recorded in `docs/research-desktop-platforms.m
 `LiveKetchCore.swift`, the adapter the first notarised build ships, has no test and no recorded manual pass; Windows has `FfiKetchCoreTests` doing exactly that.
 
 Done when Swift tests drive `LiveKetchCore` offline through install, uninstall, a binary choice, cancel, `Busy` and `NotFound` on a scratch root, the `macos-app` job runs them, and a manual pass is recorded in F13.
-
-### K921. Port the B129–B131 store fixes to the Linux app
-
-On the real core an offline machine or a fast typist will hit, in the Linux app, bugs already fixed elsewhere: search results have no generation guard (`store.vala:64-69`, B130), a second operation is dropped silently (`store.vala:151-154`, B131), and a background refresh failure raises an alert (`store.vala:51-52`, B129).
-
-Done when the Linux store behaves as macOS does in all three cases, with `store-test.vala` cases named after each B id.
 
 ### K922. Make Doctor actionable in the desktop apps
 

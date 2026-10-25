@@ -34,9 +34,9 @@ Store new_store () {
     return new Store (fake);
 }
 
-void refresh (Store store) {
+void refresh (Store store, bool alerting = true) {
     var done = false;
-    store.refresh.begin ((_, res) => {
+    store.refresh.begin (alerting, (_, res) => {
         store.refresh.end (res);
         done = true;
     });
@@ -181,13 +181,58 @@ void the_processes_question_waits_for_an_answer_from_the_dialog () {
     assert (version_of (store, "ripgrep") == "14.1.1");
 }
 
-void a_second_operation_while_one_runs_is_ignored () {
+void a_background_refresh_logs_a_failure_without_an_alert () {
+    var store = new_store ();
+    fake.fail_reads ("network", "offline");
+    refresh (store, false);
+    assert (store.error_message == null);
+    assert (store.busy == null);
+    assert (logged (store, LogLevel.WARNING, "Network error: offline"));
+    assert (!logged (store, LogLevel.ERROR, "Network error: offline"));
+}
+
+void a_refresh_still_alerts_when_asked () {
+    var store = new_store ();
+    fake.fail_reads ("network", "offline");
+    refresh (store);
+    assert (store.error_message == "Network error: offline");
+    assert (logged (store, LogLevel.ERROR, "Network error: offline"));
+}
+
+void a_slower_older_search_does_not_replace_a_newer_one () {
+    var store = new_store ();
+    fake.delay ("search ", 600);
+    var older_done = false;
+    store.search.begin ("", (_, res) => {
+        store.search.end (res);
+        older_done = true;
+    });
+    // The empty search is inside its delay before the newer one starts.
+    Thread.usleep (100 * 1000);
+    var newer_done = false;
+    store.search.begin ("ugrep", (_, res) => {
+        store.search.end (res);
+        newer_done = true;
+    });
+    run_until (() => newer_done);
+    // Still waiting, so this error is the reply that arrives last. It must not
+    // replace ugrep or raise the sheet for a search that has already moved on.
+    fake.play ("search", "install-network-failure");
+    run_until (() => older_done);
+    assert (store.search_results.get_n_items () == 1);
+    assert (((RegistryPackage) store.search_results.get_item (0)).name == "ugrep");
+    assert (store.error_message == null);
+}
+
+void a_second_operation_is_refused_while_one_runs () {
     var store = new_store ();
     var first = start_install (store, "uv");
     run_until (() => store.pending_choice != null);
     var second = start_install (store, "ripgrep");
     run_until (second);
+    assert (store.error_message == "Another operation is running. Wait for it or cancel it first.");
     assert (!logged (store, LogLevel.INFO, "Installing ripgrep"));
+    assert (store.activity != null);
     store.answer_choice (0);
     run_until (first);
     assert (version_of (store, "ripgrep") == "14.1.0");
@@ -265,7 +310,10 @@ int main (string[] args) {
     Test.add_func ("/store/binary-choice-waits-for-dialog", the_binary_choice_waits_for_an_answer_from_the_dialog);
     Test.add_func ("/store/cancel-declines-open-question", cancelling_while_a_question_is_open_declines_it_and_stops_the_operation);
     Test.add_func ("/store/processes-question-waits-for-dialog", the_processes_question_waits_for_an_answer_from_the_dialog);
-    Test.add_func ("/store/second-operation-is-ignored", a_second_operation_while_one_runs_is_ignored);
+    Test.add_func ("/store/b129-background-refresh-logs-without-an-alert", a_background_refresh_logs_a_failure_without_an_alert);
+    Test.add_func ("/store/b129-refresh-still-alerts-when-asked", a_refresh_still_alerts_when_asked);
+    Test.add_func ("/store/b130-slower-older-search-does-not-replace-a-newer-one", a_slower_older_search_does_not_replace_a_newer_one);
+    Test.add_func ("/store/b131-second-operation-is-refused", a_second_operation_is_refused_while_one_runs);
     Test.add_func ("/store/doctor-counts-problems", doctor_counts_the_findings_that_are_not_ok);
     Test.add_func ("/store/empty-search-lists-registry", search_with_an_empty_query_lists_the_registry);
     Test.add_func ("/store/changelog-as-markdown", the_changelog_reads_as_markdown_headed_by_version);
