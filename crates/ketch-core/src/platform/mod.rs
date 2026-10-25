@@ -17,6 +17,8 @@ pub mod scoring;
 pub(crate) mod claim;
 
 #[cfg(target_os = "linux")]
+mod appimage;
+#[cfg(target_os = "linux")]
 pub mod linux;
 #[cfg(target_os = "macos")]
 pub mod macos;
@@ -56,6 +58,14 @@ pub struct Placement<'a> {
     /// macOS `.app` install root; unused on Linux/Windows placement.
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub apps_dir: &'a Path,
+    /// `$XDG_DATA_HOME/applications`, where a Linux AppImage's `.desktop`
+    /// file is written. Unused on macOS and Windows.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    pub desktop_dir: &'a Path,
+    /// `$XDG_DATA_HOME/icons`, where a Linux AppImage's icon is written.
+    /// Unused on macOS and Windows.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    pub icon_dir: &'a Path,
     pub kind: PackageKind,
     /// Explicit binaries from the manifest. Empty means "discover them".
     pub bin_specs: &'a [BinSpec],
@@ -174,6 +184,20 @@ pub trait Platform: Send + Sync {
     /// single most important function for install quality: it is what stops
     /// ketch grabbing a Linux tarball or a `.sha256` sidecar.
     fn score_asset(&self, asset_name: &str, allow_emulation: bool) -> Option<AssetScore>;
+
+    /// [`score_asset`] for a manifest of `kind`.
+    ///
+    /// The default ignores `kind`. Linux uses it so an AppImage stays rejected
+    /// for a binary and is accepted when the package is declared an app.
+    fn score_release_asset(
+        &self,
+        asset_name: &str,
+        allow_emulation: bool,
+        kind: PackageKind,
+    ) -> Option<AssetScore> {
+        let _ = kind;
+        self.score_asset(asset_name, allow_emulation)
+    }
 
     /// Extractors this platform can use, most specific first.
     fn extractors(&self) -> Vec<Box<dyn crate::extract::Extractor>>;
@@ -823,6 +847,8 @@ mod tests {
             store_dir: &store,
             bin_dir: &bin,
             apps_dir: tmp.path(),
+            desktop_dir: tmp.path(),
+            icon_dir: tmp.path(),
             kind: PackageKind::Binary,
             bin_specs: &[],
             replacing: &[],

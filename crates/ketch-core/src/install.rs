@@ -17,8 +17,9 @@ use crate::error::{Error, Result};
 use crate::hooks;
 use crate::manifest::Resolver;
 use crate::model::{
-    now_unix, AssetSelector, BinSpec, Channel, InstalledPackage, LinkRecord, LocalKind, PackageRef,
-    PackageSpec, Release, ReleaseAsset, RetainedVersion, TrustResult, Version, VersionSpec,
+    now_unix, AssetSelector, BinSpec, Channel, InstalledPackage, LinkRecord, LocalKind,
+    PackageKind, PackageRef, PackageSpec, Release, ReleaseAsset, RetainedVersion, TrustResult,
+    Version, VersionSpec,
 };
 use crate::platform::{AssetScore, Placement, Platform, TrustVerdict};
 use crate::report::{Ctx, ProgressSink, Report, Stage};
@@ -773,12 +774,16 @@ pub fn commit(cx: &Ctx<'_>, state: &mut State, prepared: Prepared) -> Result<Ins
         None
     };
     let picked_specs = pick.as_ref().map(|p| p.specs.clone());
+    let desktop_dir = crate::platform::data_home().join("applications");
+    let icon_dir = crate::platform::data_home().join("icons");
     let links = platform.place(&Placement {
         name: &manifest.name,
         payload_dir: &payload,
         store_dir: &store_dir,
         bin_dir: &cfg.bin_dir,
         apps_dir: &cfg.apps_dir,
+        desktop_dir: &desktop_dir,
+        icon_dir: &icon_dir,
         kind: manifest.kind,
         bin_specs: picked_specs.as_deref().unwrap_or(&manifest.bin),
         replacing: existing.as_ref().map(|p| p.links.as_slice()).unwrap_or(&[]),
@@ -1085,6 +1090,8 @@ pub fn relink(cx: &Ctx<'_>, state: &mut State, name: &str) -> Result<()> {
         },
     )?;
     let picked_specs = pick.as_ref().map(|p| p.specs.clone());
+    let desktop_dir = crate::platform::data_home().join("applications");
+    let icon_dir = crate::platform::data_home().join("icons");
     let links = platform.place(&Placement {
         name: &pkg.name,
         // Already in the store: placement is idempotent over its own output.
@@ -1092,6 +1099,8 @@ pub fn relink(cx: &Ctx<'_>, state: &mut State, name: &str) -> Result<()> {
         store_dir: &pkg.prefix,
         bin_dir: &cfg.bin_dir,
         apps_dir: &cfg.apps_dir,
+        desktop_dir: &desktop_dir,
+        icon_dir: &icon_dir,
         kind: manifest.as_ref().map(|m| m.kind).unwrap_or_default(),
         bin_specs: picked_specs
             .as_deref()
@@ -1233,12 +1242,16 @@ pub fn rollback(
     };
     let bin_choice = remembered_choice(pick.as_ref(), remembered);
     let picked_specs = pick.as_ref().map(|p| p.specs.clone());
+    let desktop_dir = crate::platform::data_home().join("applications");
+    let icon_dir = crate::platform::data_home().join("icons");
     let links = platform.place(&Placement {
         name: &pkg.name,
         payload_dir: &target.prefix,
         store_dir: &target.prefix,
         bin_dir: &cfg.bin_dir,
         apps_dir: &cfg.apps_dir,
+        desktop_dir: &desktop_dir,
+        icon_dir: &icon_dir,
         kind: manifest.as_ref().map(|m| m.kind).unwrap_or_default(),
         bin_specs: picked_specs
             .as_deref()
@@ -1581,7 +1594,19 @@ pub fn score_assets(
     release: &Release,
     selector: &AssetSelector,
 ) -> Vec<ScoredAsset> {
-    crate::resolve::score_assets(cfg, platform, release, selector)
+    score_assets_for(cfg, platform, release, selector, PackageKind::Auto)
+}
+
+/// [`score_assets`] for a manifest `kind`, so an app package can select an
+/// AppImage that a binary package rejects.
+pub fn score_assets_for(
+    cfg: &Config,
+    platform: &dyn Platform,
+    release: &Release,
+    selector: &AssetSelector,
+    kind: PackageKind,
+) -> Vec<ScoredAsset> {
+    crate::resolve::evaluate_assets_for(cfg, platform, release, selector, kind).scored
 }
 
 // ---------------------------------------------------------------------------
@@ -1617,7 +1642,7 @@ fn choose_asset(
         });
     }
 
-    crate::resolve::score_assets(cfg, platform, release, &manifest.asset)
+    score_assets_for(cfg, platform, release, &manifest.asset, manifest.kind)
         .into_iter()
         .next()
         .ok_or_else(|| Error::NoCompatibleAsset {

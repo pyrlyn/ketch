@@ -1,9 +1,10 @@
 ---
 id: K936
 title: Install Linux AppImages as apps
-status: open
+status: in-progress
 created_at: 1792603895
-updated_at: 1792603895
+updated_at: 1792952896
+assignee: d2a34757-1247-4b58-beb9-8a90d064e359
 ---
 
 "Apps as well as binaries" holds only for macOS `.app`; `platform/mod.rs:493` rejects `.appimage`, the format most Linux GUI apps ship.

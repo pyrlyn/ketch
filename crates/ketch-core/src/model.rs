@@ -617,7 +617,7 @@ pub enum PackageKind {
     Auto,
     /// Command-line executables linked into the bin dir.
     Binary,
-    /// A macOS `.app` bundle placed in the applications dir.
+    /// A macOS `.app` bundle, or on Linux an AppImage, placed outside `PATH`.
     App,
 }
 
@@ -1246,6 +1246,10 @@ pub enum LinkRole {
     Man,
     /// A shell completion script.
     Completion,
+    /// A Freedesktop `.desktop` file for a Linux AppImage.
+    Desktop,
+    /// An icon installed for that desktop entry.
+    Icon,
 }
 
 impl LinkRole {

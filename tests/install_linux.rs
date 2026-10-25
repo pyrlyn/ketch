@@ -180,6 +180,87 @@ fn uninstall_removes_every_trace_of_a_tool() {
     assert!(sandbox.ok(&["list", "local"]).contains("nothing installed"));
 }
 
+fn appimage_bytes() -> Vec<u8> {
+    let squashfs = include_bytes!("fixtures/appimage-diricon.sqfs");
+    let mut bytes = vec![0u8; 120];
+    bytes[0..4].copy_from_slice(b"\x7fELF");
+    bytes[4] = 2;
+    bytes[5] = 1;
+    bytes[6] = 1;
+    bytes[8..11].copy_from_slice(b"AI\x02");
+    bytes[16] = 2;
+    bytes[18] = 0x3e;
+    bytes[20] = 1;
+    bytes[32] = 64;
+    bytes[52] = 64;
+    bytes[54] = 56;
+    bytes[56] = 1;
+    bytes[64] = 1;
+    bytes[68] = 5;
+    bytes[96] = 120;
+    bytes[104] = 120;
+    bytes.extend_from_slice(squashfs);
+    bytes
+}
+
+#[test]
+fn an_appimage_declared_as_an_app_is_placed_and_removed() {
+    let sandbox = Sandbox::new();
+    let xdg = sandbox.fixture("xdg");
+    std::fs::create_dir_all(&xdg).unwrap();
+    sandbox.registry_package(
+        "demo",
+        "name = \"demo\"\nsource = \"test:demo\"\nkind = \"app\"\n",
+    );
+    let image = sandbox.fixture("Demo.AppImage");
+    std::fs::write(&image, appimage_bytes()).unwrap();
+    let arch = host_arch();
+    let asset = sandbox.file_asset(&format!("demo-1.0.0-{arch}.AppImage"), &image);
+    let decoy = sandbox.asset(
+        &format!("demo-1.0.0-{arch}-apple-darwin.tar.gz"),
+        Archive::TarGz(vec![Entry::program("demo", "decoy")]),
+    );
+    sandbox.publish("demo", &[Release::new("1.0.0", vec![decoy, asset])]);
+
+    let xdg_text = xdg.to_str().expect("xdg path is unicode");
+    sandbox.ok_env(
+        &["install", "test:demo", "--yes"],
+        &[("XDG_DATA_HOME", xdg_text)],
+    );
+
+    let desktop = xdg.join("applications/demo.desktop");
+    let text = std::fs::read_to_string(&desktop).unwrap();
+    assert!(text.contains("Type=Application"), "{text}");
+    assert!(text.contains("X-Ketch-Package=demo"), "{text}");
+    assert!(text.contains(".AppImage"), "{text}");
+    let icon = xdg.join("icons/hicolor/256x256/apps/demo.png");
+    assert_eq!(
+        std::fs::read(&icon).unwrap(),
+        include_bytes!("fixtures/appimage-diricon.png")
+    );
+    let stored = sandbox
+        .store()
+        .join("demo/1.0.0")
+        .join(format!("demo-1.0.0-{arch}.AppImage"));
+    assert!(stored.is_file(), "missing {}", stored.display());
+    assert!(!sandbox.bin().join("demo").exists());
+    let state = sandbox.state();
+    assert!(state.contains("demo.desktop"), "{state}");
+    assert!(state.contains("\"role\": \"desktop\""), "{state}");
+    assert!(state.contains("\"role\": \"icon\""), "{state}");
+
+    let other = xdg.join("applications/other.desktop");
+    std::fs::write(&other, "[Desktop Entry]\nName=Other\n").unwrap();
+    sandbox.ok_env(
+        &["uninstall", "demo", "--yes"],
+        &[("XDG_DATA_HOME", xdg_text)],
+    );
+    assert!(!desktop.exists());
+    assert!(!icon.exists());
+    assert!(other.is_file());
+    assert!(!sandbox.store().join("demo").exists());
+}
+
 #[test]
 fn doctor_reports_a_healthy_tree() {
     let sandbox = Sandbox::new();

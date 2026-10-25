@@ -144,10 +144,16 @@ ignored gives you a package that installs the wrong thing and says nothing.
 ### `kind`
 
 - `auto` — look at the payload. An `.app` bundle makes it an app; anything else
-  is treated as binaries.
-- `binary` — link executables onto `PATH`, and never place an `.app`.
-- `app` — place the `.app` bundle and do **not** scatter its executables across
-  `PATH`.
+  is treated as binaries. A Linux `.AppImage` is not inferred: until the
+  package says `app`, that file is not linked onto `PATH`.
+- `binary` — link executables onto `PATH`, and never place an `.app` or an
+  AppImage.
+- `app` — place the `.app` bundle, or on Linux the `.AppImage`, and do **not**
+  scatter its executables across `PATH`. The AppImage stays in the package
+  store. ketch writes a `.desktop` file under `$XDG_DATA_HOME/applications`
+  (or `~/.local/share/applications`) and, when the payload has an icon, copies
+  it into the user icon directory. An AppImage whose icon cannot be read still
+  installs.
 
 ### `bin`
 

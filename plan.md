@@ -139,7 +139,7 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | K933 | todo | P2 | 4 | 0% | |
 | K934 | todo | P2 | 2 | 0% | |
 | K935 | todo | P2 | 3 | 0% | |
-| K936 | todo | P2 | 3 | 0% | |
+| K936 | in progress | P2 | 3 | 0% | d2a34757 |
 | K937 | todo | P2 | 3 | 0% | |
 | K938 | todo | P2 | 2 | 0% | |
 | K939 | todo | P2 | 1 | 0% | |

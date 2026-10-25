@@ -13,7 +13,8 @@ use crate::config::Config;
 use crate::error::Result;
 use crate::manifest::Resolver;
 use crate::model::{
-    glob_match, AssetSelector, Manifest, ManifestOrigin, PackageSpec, Release, ReleaseAsset,
+    glob_match, AssetSelector, Manifest, ManifestOrigin, PackageKind, PackageSpec, Release,
+    ReleaseAsset,
 };
 use crate::platform::{AssetScore, Platform};
 use crate::report::Ctx;
@@ -50,6 +51,20 @@ pub fn evaluate_assets(
     platform: &dyn Platform,
     release: &Release,
     selector: &AssetSelector,
+) -> AssetEvaluation {
+    evaluate_assets_for(cfg, platform, release, selector, PackageKind::Auto)
+}
+
+/// [`evaluate_assets`] for a manifest `kind`.
+///
+/// `Auto` and `Binary` keep rejecting an AppImage. `App` is what lets a Linux
+/// package select the `.AppImage` its publisher shipped.
+pub fn evaluate_assets_for(
+    cfg: &Config,
+    platform: &dyn Platform,
+    release: &Release,
+    selector: &AssetSelector,
+    kind: PackageKind,
 ) -> AssetEvaluation {
     let target_pattern = selector.target.get(&cfg.target.to_string());
     let mut scored: Vec<ScoredAsset> = Vec::new();
@@ -98,7 +113,7 @@ pub fn evaluate_assets(
             });
             continue;
         }
-        match platform.score_asset(&asset.name, cfg.allow_emulation) {
+        match platform.score_release_asset(&asset.name, cfg.allow_emulation, kind) {
             Some(score) => scored.push(ScoredAsset {
                 asset: asset.clone(),
                 score,
@@ -274,7 +289,13 @@ fn explain_with(
 
     let platform = crate::platform::host()?;
     let evaluation = match &selected {
-        Some(release) => evaluate_assets(cfg, platform.as_ref(), release, &manifest.asset),
+        Some(release) => evaluate_assets_for(
+            cfg,
+            platform.as_ref(),
+            release,
+            &manifest.asset,
+            manifest.kind,
+        ),
         None => AssetEvaluation {
             scored: Vec::new(),
             rejected: Vec::new(),

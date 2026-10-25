@@ -669,6 +669,8 @@ mod tests {
             store_dir: store,
             bin_dir: bin,
             apps_dir: apps,
+            desktop_dir: apps,
+            icon_dir: apps,
             kind: PackageKind::Binary,
             bin_specs: &[],
             replacing: &[],

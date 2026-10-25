@@ -79,7 +79,23 @@ pub(crate) fn still_placed(record: &LinkRecord) -> bool {
             std::fs::read_link(&record.link).is_ok_and(|target| target == record.target)
         }
         LinkKind::CopiedFile => {
-            std::fs::symlink_metadata(&record.link).is_ok_and(|meta| meta.is_file())
+            let is_file = std::fs::symlink_metadata(&record.link).is_ok_and(|meta| meta.is_file());
+            if !is_file {
+                return false;
+            }
+            // Desktop files and icons are copies with no symlink to compare.
+            // The marker and the saved bytes are what say the file is still
+            // the one ketch wrote; a replacement at the same path is left.
+            #[cfg(target_os = "linux")]
+            {
+                return match record.role {
+                    LinkRole::Desktop => super::appimage::desktop_marker_present(&record.link),
+                    LinkRole::Icon => file_bytes_eq(&record.link, &record.target),
+                    _ => true,
+                };
+            }
+            #[cfg(not(target_os = "linux"))]
+            true
         }
         LinkKind::CopiedApp => {
             std::fs::symlink_metadata(&record.link).is_ok_and(|meta| meta.is_dir())
@@ -187,6 +203,23 @@ fn payload_executable_entry(entry: &walkdir::DirEntry, root: &Path) -> Option<Pa
         .map(|_| path.to_path_buf())
 }
 
+fn is_appimage(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("appimage"))
+}
+
+/// True when both paths are regular files with the same bytes.
+///
+/// Used to recognise an icon ketch copied out of the store. A read error
+/// means we cannot prove it, so the file stays.
+#[cfg(target_os = "linux")]
+fn file_bytes_eq(left: &Path, right: &Path) -> bool {
+    match (std::fs::read(left), std::fs::read(right)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
+}
+
 /// True when the immediate parent directory is named `bin` (any ASCII case).
 ///
 /// Windows archives and some toolchain layouts ship `Bin/`; treating only the
@@ -221,6 +254,9 @@ pub(crate) fn discover_executables(
         .filter_map(|e| e.ok())
         .filter_map(|e| payload_executable_entry(&e, root))
         .filter(|p| platform.is_executable(p))
+        // An AppImage is an app payload, not a PATH entry. Linking it for a
+        // binary package would run a publisher's GUI program under a tool name.
+        .filter(|p| !is_appimage(p))
         .collect();
 
     let in_bin: Vec<PathBuf> = found
@@ -319,10 +355,10 @@ fn cli_targets(
     if plan.kind == PackageKind::App {
         return Ok(Vec::new());
     }
-    if plan.bin_specs.is_empty() {
+    let found = if plan.bin_specs.is_empty() {
         let found = discover_executables(platform, root, plan.name);
         let sole = found.len() == 1;
-        Ok(found
+        found
             .into_iter()
             .map(|path| {
                 let file_name = path
@@ -337,10 +373,16 @@ fn cli_targets(
                 };
                 (path, link_name)
             })
-            .collect())
+            .collect()
     } else {
-        resolve_bin_specs(root, plan.bin_specs)
-    }
+        resolve_bin_specs(root, plan.bin_specs)?
+    };
+    // A manifest that names the AppImage as a `bin` still must not put it on
+    // PATH. App placement is `kind = "app"` only.
+    Ok(found
+        .into_iter()
+        .filter(|(path, name)| !is_appimage(path) && !is_appimage(Path::new(name)))
+        .collect())
 }
 
 #[cfg(target_os = "linux")]

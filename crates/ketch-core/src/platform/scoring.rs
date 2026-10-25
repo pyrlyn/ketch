@@ -184,11 +184,28 @@ pub(crate) fn score_macos_asset(
     })
 }
 
+/// True when a Linux asset name is not a program this host should install.
+///
+/// `.appimage` stays in the rejected-extension list for binaries. An app
+/// manifest opts in: that file is the payload, not a sidecar.
+fn linux_name_rejected(lower: &str, allow_appimage: bool) -> bool {
+    if allow_appimage && lower.ends_with(".appimage") && !super::is_sidecar(lower) {
+        return super::NON_BINARY_TOKENS
+            .iter()
+            .any(|token| token_at(lower, token))
+            || ["debuginfo", "dbg"]
+                .iter()
+                .any(|token| token_at(lower, token));
+    }
+    is_rejected(lower, &["debuginfo", "dbg"])
+}
+
 /// Score a release asset name for Linux without constructing a platform backend.
 ///
 /// `musl_host` is whether this machine's libc is musl. A glibc (`gnu`) asset is
 /// refused there because it will not load; a musl asset on a glibc host is
-/// accepted but ranks below a native glibc build.
+/// accepted but ranks below a native glibc build. AppImages are rejected; see
+/// [`score_linux_asset_as`] for a package declared as an app.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) fn score_linux_asset(
     asset_name: &str,
@@ -196,8 +213,24 @@ pub(crate) fn score_linux_asset(
     allow_emulation: bool,
     musl_host: bool,
 ) -> Option<AssetScore> {
+    score_linux_asset_as(asset_name, host_arch, allow_emulation, musl_host, false)
+}
+
+/// [`score_linux_asset`] with AppImages accepted when `allow_appimage` is set.
+///
+/// An app package's payload is the AppImage, so that asset outranks a tarball
+/// of the same release. Binary installs never set the flag, and a `.sha256`
+/// sidecar of an AppImage is still refused.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(crate) fn score_linux_asset_as(
+    asset_name: &str,
+    host_arch: Arch,
+    allow_emulation: bool,
+    musl_host: bool,
+    allow_appimage: bool,
+) -> Option<AssetScore> {
     let lower = asset_name.trim().to_ascii_lowercase();
-    if lower.is_empty() || is_rejected(&lower, &["debuginfo", "dbg"]) || lower.ends_with(".exe") {
+    if lower.is_empty() || linux_name_rejected(&lower, allow_appimage) || lower.ends_with(".exe") {
         return None;
     }
     if names_foreign_os(&lower)
@@ -266,7 +299,13 @@ pub(crate) fn score_linux_asset(
         reason.push(arch.to_string());
     }
 
-    let (bonus, container) = container_bonus(&lower);
+    let (bonus, container) = if allow_appimage && lower.ends_with(".appimage") {
+        // The declared payload is the AppImage, so it beats a tarball shipped
+        // beside it. Binary scoring never takes this branch.
+        (9, "appimage")
+    } else {
+        container_bonus(&lower)
+    };
     score += bonus;
     reason.push(container.to_string());
 
@@ -588,5 +627,25 @@ mod tests {
                 "Windows should have rejected {name}"
             );
         }
+    }
+
+    #[test]
+    fn an_appimage_is_rejected_for_binaries_and_accepted_for_an_app() {
+        assert!(score_linux_asset("Demo-x86_64.AppImage", Arch::X86_64, false, false).is_none());
+        let score = score_linux_asset_as("Demo-x86_64.AppImage", Arch::X86_64, false, false, true)
+            .expect("app package accepts an AppImage");
+        assert!(score.reason.contains("appimage"), "{score:?}");
+        assert!(
+            score_linux_asset_as(
+                "Demo-x86_64.AppImage.sha256",
+                Arch::X86_64,
+                false,
+                false,
+                true
+            )
+            .is_none(),
+            "a checksum sidecar is not an AppImage"
+        );
+        assert!(score_linux_asset_as("tool_amd64.deb", Arch::X86_64, false, false, true).is_none());
     }
 }

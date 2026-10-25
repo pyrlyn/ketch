@@ -426,7 +426,7 @@ pub fn info(cfg: &Config, args: InfoArgs) -> Result<()> {
     let scored = match &release {
         Some(r) if args.assets => {
             let platform = crate::platform::host()?;
-            install::score_assets(cfg, platform.as_ref(), r, &manifest.asset)
+            install::score_assets_for(cfg, platform.as_ref(), r, &manifest.asset, manifest.kind)
         }
         _ => Vec::new(),
     };
