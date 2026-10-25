@@ -601,39 +601,19 @@ const VERIFY_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Swap `fresh` into `exe`, keeping the old binary until the new one has shown
 /// it can run. A ketch that cannot start is a ketch that cannot fix itself.
+///
+/// Unix copies `fresh` to a sibling, makes that sibling executable, and links
+/// the running image aside. Renaming the sibling over `exe` is atomic, so the
+/// path always names a binary and the previous image stays at the aside for
+/// rollback. Windows cannot replace a running image in place, so it still
+/// renames that image aside and copies into the path.
 fn replace_binary(exe: &Path, fresh: &Path, report: &Report) -> Result<()> {
     let backup = swap_backup(exe);
     // The previous swap's aside is this rename's destination. On Windows that
     // delete fails at the end of the swap, because this process is the image
     // just renamed onto it; by the next swap that process has exited.
     sweep_aside(&backup, report);
-    // Rename rather than overwrite: the running image stays valid, and a failed
-    // copy leaves something to put back. A short antivirus lock is retried;
-    // once those pauses are spent the error is returned as before.
-    io_retry(|| std::fs::rename(exe, &backup), std::thread::sleep)
-        .map_err(|e| Error::io(exe, e))?;
-
-    let restore = |detail: Error| -> Error {
-        let _ = io_retry(|| std::fs::remove_file(exe), std::thread::sleep);
-        match io_retry(|| std::fs::rename(&backup, exe), std::thread::sleep) {
-            Ok(()) => detail,
-            Err(e) => Error::msg(format!(
-                "{detail}; could not restore the previous binary ({e}): move {} back to {} by hand",
-                backup.display(),
-                exe.display()
-            )),
-        }
-    };
-
-    // Copy, not rename: the download lives in the cache dir, which may be on a
-    // different filesystem.
-    if let Err(e) = io_retry(|| std::fs::copy(fresh, exe).map(|_| ()), std::thread::sleep) {
-        return Err(restore(Error::io(exe, e)));
-    }
-    #[cfg(unix)]
-    if let Err(e) = crate::platform::unix::ensure_executable(exe) {
-        return Err(restore(e));
-    }
+    stage_replacement(exe, fresh, &backup)?;
 
     match probe_runs(exe, VERIFY_TIMEOUT) {
         Ok(()) => {
@@ -644,7 +624,110 @@ fn replace_binary(exe: &Path, fresh: &Path, report: &Report) -> Result<()> {
             let _ = std::fs::remove_file(&backup);
             Ok(())
         }
-        Err(e) => Err(restore(e)),
+        Err(e) => Err(restore_previous(exe, &backup, e)),
+    }
+}
+
+/// Put `fresh` at `exe` and leave the previous image at `backup`.
+fn stage_replacement(exe: &Path, fresh: &Path, backup: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        stage_unix(exe, fresh, backup)
+    }
+    #[cfg(windows)]
+    {
+        stage_windows(exe, fresh, backup)
+    }
+}
+
+/// Stage beside `exe`, then rename over it.
+///
+/// The copy finishes before the path changes, and the aside is a second name
+/// for the running image rather than the only name. A crash while the copy
+/// is in progress still leaves the previous binary at `exe`.
+#[cfg(unix)]
+fn stage_unix(exe: &Path, fresh: &Path, backup: &Path) -> Result<()> {
+    let parent = match exe.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    };
+    // Same directory as `exe`: the later rename stays on one filesystem, which
+    // is what makes it atomic. A temp dir on another mount would not be.
+    let tmp = tempfile::Builder::new()
+        .prefix(".ketch-")
+        .suffix(".tmp")
+        .tempfile_in(parent)
+        .map_err(|e| Error::io(parent, e))?;
+    let tmp_path = tmp.path().to_path_buf();
+    // Copy, not rename: the download lives in the cache dir, which may be on a
+    // different filesystem. The sibling is the file that becomes `exe`.
+    if let Err(e) = io_retry(
+        || std::fs::copy(fresh, &tmp_path).map(|_| ()),
+        std::thread::sleep,
+    ) {
+        return Err(Error::io(&tmp_path, e));
+    }
+    // Executable before it is the path anyone will run. A rename then publishes
+    // a binary that can already start.
+    crate::platform::unix::ensure_executable(&tmp_path)?;
+    let (file, tmp_path) = tmp.keep().map_err(|e| {
+        let path = e.file.path().to_path_buf();
+        Error::io(path, e.error)
+    })?;
+    drop(file);
+
+    // Second directory entry for the running inode. `exe` stays where it is,
+    // so this does not take the last name away from the only copy.
+    if let Err(e) = io_retry(|| std::fs::hard_link(exe, backup), std::thread::sleep) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(Error::io(backup, e));
+    }
+    // Replaces the directory entry in one step. The previous inode remains
+    // reachable at `backup` for rollback.
+    if let Err(e) = io_retry(|| std::fs::rename(&tmp_path, exe), std::thread::sleep) {
+        let _ = std::fs::remove_file(&tmp_path);
+        let _ = std::fs::remove_file(backup);
+        return Err(Error::io(exe, e));
+    }
+    Ok(())
+}
+
+/// Rename the running image aside, then copy `fresh` into the path.
+///
+/// Windows lets a running image be renamed and refuses to replace it in
+/// place. The aside is the copy rollback puts back when the copy fails.
+#[cfg(windows)]
+fn stage_windows(exe: &Path, fresh: &Path, backup: &Path) -> Result<()> {
+    // A short antivirus lock is retried; once those pauses are spent the
+    // error is returned as before.
+    io_retry(|| std::fs::rename(exe, backup), std::thread::sleep).map_err(|e| Error::io(exe, e))?;
+    // Copy, not rename: the download lives in the cache dir, which may be on a
+    // different filesystem.
+    if let Err(e) = io_retry(|| std::fs::copy(fresh, exe).map(|_| ()), std::thread::sleep) {
+        return Err(restore_previous(exe, backup, Error::io(exe, e)));
+    }
+    Ok(())
+}
+
+/// Put `backup` back at `exe`. The new file is removed only once the previous
+/// image can take the path; on Unix that is one rename over `exe`.
+fn restore_previous(exe: &Path, backup: &Path, detail: Error) -> Error {
+    #[cfg(unix)]
+    let put_back = io_retry(|| std::fs::rename(backup, exe), std::thread::sleep);
+    #[cfg(windows)]
+    let put_back = {
+        // `rename` will not replace an existing file here, so the path has to
+        // be clear first. `backup` still holds the previous image.
+        let _ = io_retry(|| std::fs::remove_file(exe), std::thread::sleep);
+        io_retry(|| std::fs::rename(backup, exe), std::thread::sleep)
+    };
+    match put_back {
+        Ok(()) => detail,
+        Err(e) => Error::msg(format!(
+            "{detail}; could not restore the previous binary ({e}): move {} back to {} by hand",
+            backup.display(),
+            exe.display()
+        )),
     }
 }
 
@@ -2290,5 +2373,311 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(err.contains("--version"), "{err}");
+    }
+
+    #[cfg(unix)]
+    fn shell_script(marker: &str, exit: i32) -> Vec<u8> {
+        format!("#!/bin/sh\nexit {exit}\n# {marker}\n").into_bytes()
+    }
+
+    #[cfg(unix)]
+    fn executable(path: &Path) -> bool {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(path)
+            .map(|meta| meta.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_replace_renames_a_staged_sibling_over_the_running_binary() {
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("ketch");
+        let fresh = dir.path().join("fresh");
+        std::fs::write(&exe, shell_script("old", 0)).unwrap();
+        std::fs::write(&fresh, shell_script("new", 0)).unwrap();
+        let before = std::fs::metadata(&exe).unwrap();
+        #[cfg(target_os = "linux")]
+        let watch = SwapWatch::arm(dir.path());
+
+        replace_binary(&exe, &fresh, &Report::silent()).unwrap();
+
+        #[cfg(target_os = "linux")]
+        {
+            let events = watch.until_created(dir.path(), "watch-done");
+            assert_staged_rename(&events, "ketch");
+        }
+
+        assert_eq!(std::fs::read(&exe).unwrap(), shell_script("new", 0));
+        assert!(
+            executable(&exe),
+            "the binary at the ketch path has to be executable"
+        );
+        let after = std::fs::metadata(&exe).unwrap();
+        assert_ne!(
+            inode_of(&before),
+            inode_of(&after),
+            "the new binary is a different file, renamed into place"
+        );
+        assert!(
+            !swap_backup(&exe).exists(),
+            "a probe that succeeds removes the aside"
+        );
+        let leftovers: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.starts_with(".ketch-"))
+            .collect();
+        assert!(
+            leftovers.is_empty(),
+            "the staged sibling is gone after the rename: {leftovers:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_replace_puts_the_previous_binary_back_when_the_new_one_does_not_run() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("ketch");
+        let fresh = dir.path().join("fresh");
+        let old = shell_script("old", 0);
+        std::fs::write(&exe, &old).unwrap();
+        std::fs::write(&fresh, shell_script("new", 1)).unwrap();
+        // The failure has to be the program exiting, which is what rollback
+        // is for. A non-executable payload would fail before it runs.
+        std::fs::set_permissions(&fresh, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let err = replace_binary(&exe, &fresh, &Report::silent()).unwrap_err();
+        assert_eq!(std::fs::read(&exe).unwrap(), old, "{err}");
+        assert!(!swap_backup(&exe).exists(), "{err}");
+    }
+
+    #[cfg(unix)]
+    fn inode_of(meta: &std::fs::Metadata) -> u64 {
+        use std::os::unix::fs::MetadataExt;
+        meta.ino()
+    }
+
+    /// Directory events for one `replace_binary`, from a helper process.
+    ///
+    /// The crate forbids `unsafe`, so the watch lives in CPython's ctypes
+    /// rather than an `inotify` call here. The kernel orders the events, which
+    /// is what distinguishes a sibling rename from moving the running path aside.
+    #[cfg(target_os = "linux")]
+    struct SwapWatch {
+        child: std::process::Child,
+        lines: std::sync::mpsc::Receiver<String>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl SwapWatch {
+        fn arm(dir: &Path) -> Self {
+            let mut child = std::process::Command::new("python3")
+                .arg("-c")
+                .arg(INOTIFY_WATCH)
+                .arg(dir)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .expect("python3 watches the directory; it ships on the Linux CI image");
+            let stdout = child.stdout.take().expect("stdout");
+            let (tx, lines) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                use std::io::BufRead;
+                let reader = std::io::BufReader::new(stdout);
+                for line in reader.lines() {
+                    let Ok(line) = line else { break };
+                    if tx.send(line).is_err() {
+                        break;
+                    }
+                }
+            });
+            let ready = lines
+                .recv_timeout(Duration::from_secs(5))
+                .expect("directory watch did not start");
+            assert_eq!(ready, "ready", "directory watch: {ready}");
+            Self { child, lines }
+        }
+
+        fn until_created(mut self, dir: &Path, marker: &str) -> Vec<DirEvent> {
+            std::fs::write(dir.join(marker), b"x").unwrap();
+            let mut events = Vec::new();
+            loop {
+                let line = self
+                    .lines
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap_or_else(|_| {
+                        let err = self
+                            .child
+                            .stderr
+                            .take()
+                            .and_then(|mut err| {
+                                use std::io::Read;
+                                let mut text = String::new();
+                                err.read_to_string(&mut text).ok()?;
+                                Some(text)
+                            })
+                            .unwrap_or_default();
+                        panic!("directory watch ended before {marker}: {err}");
+                    });
+                if line.split_whitespace().nth(2) == Some(marker) {
+                    break;
+                }
+                if let Some(event) = DirEvent::parse(&line) {
+                    events.push(event);
+                }
+            }
+            events
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl Drop for SwapWatch {
+        fn drop(&mut self) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    struct DirEvent {
+        mask: u32,
+        cookie: u32,
+        name: String,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl DirEvent {
+        fn parse(line: &str) -> Option<Self> {
+            let mut parts = line.split_whitespace();
+            let mask = u32::from_str_radix(parts.next()?, 16).ok()?;
+            let cookie = u32::from_str_radix(parts.next()?, 16).ok()?;
+            let name = parts.next()?.to_string();
+            Some(Self { mask, cookie, name })
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn assert_staged_rename(events: &[DirEvent], exe_name: &str) {
+        const CREATE: u32 = 0x100;
+        const MOVED_FROM: u32 = 0x40;
+        const MOVED_TO: u32 = 0x80;
+        let staged = events.iter().find(|event| {
+            event.mask & CREATE != 0
+                && event.name.starts_with(".ketch-")
+                && event.name.ends_with(".tmp")
+        });
+        assert!(
+            staged.is_some(),
+            "the new binary is copied to a sibling first: {events:?}"
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|event| event.mask & MOVED_FROM != 0 && event.name == exe_name),
+            "the running path stays put until the new file is renamed over it: {events:?}"
+        );
+        let onto = events
+            .iter()
+            .find(|event| event.mask & MOVED_TO != 0 && event.name == exe_name)
+            .unwrap_or_else(|| panic!("the sibling was not renamed over {exe_name}: {events:?}"));
+        let from = events
+            .iter()
+            .find(|event| event.mask & MOVED_FROM != 0 && event.cookie == onto.cookie)
+            .unwrap_or_else(|| panic!("rename over {exe_name} had no source: {events:?}"));
+        assert!(
+            from.name.starts_with(".ketch-"),
+            "the file renamed over {exe_name} is the staged sibling, got {}: {events:?}",
+            from.name
+        );
+        let aside_at = events
+            .iter()
+            .position(|event| event.mask & CREATE != 0 && event.name == "ketch.old")
+            .unwrap_or_else(|| panic!("the aside was not linked before the swap: {events:?}"));
+        let rename_at = events
+            .iter()
+            .position(|event| event.mask & MOVED_TO != 0 && event.name == exe_name)
+            .expect("rename position");
+        assert!(
+            aside_at < rename_at,
+            "the aside exists before the path is replaced: {events:?}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    impl std::fmt::Debug for DirEvent {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{:x} {} {}", self.mask, self.cookie, self.name)
+        }
+    }
+
+    /// `inotify` on `sys.argv[1]`, one `mask cookie name` line per event.
+    #[cfg(target_os = "linux")]
+    const INOTIFY_WATCH: &str = r#"
+import ctypes, os, sys
+libc = ctypes.CDLL(None, use_errno=True)
+libc.inotify_init1.argtypes = [ctypes.c_int]
+libc.inotify_init1.restype = ctypes.c_int
+libc.inotify_add_watch.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32]
+libc.inotify_add_watch.restype = ctypes.c_int
+libc.read.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_size_t]
+libc.read.restype = ctypes.c_ssize_t
+fd = libc.inotify_init1(0x80000)
+if fd < 0:
+    sys.exit("inotify_init1 errno %s" % ctypes.get_errno())
+# CREATE | DELETE | MOVED_FROM | MOVED_TO
+mask = 0x100 | 0x200 | 0x40 | 0x80
+if libc.inotify_add_watch(fd, os.fsencode(sys.argv[1]), mask) < 0:
+    sys.exit("inotify_add_watch errno %s" % ctypes.get_errno())
+sys.stdout.write("ready\n")
+sys.stdout.flush()
+buf = ctypes.create_string_buffer(8192)
+order = sys.byteorder
+while True:
+    n = libc.read(fd, buf, len(buf))
+    if n <= 0:
+        break
+    raw = buf.raw[:n]
+    i = 0
+    while i + 16 <= n:
+        ev_mask = int.from_bytes(raw[i + 4:i + 8], order)
+        cookie = int.from_bytes(raw[i + 8:i + 12], order)
+        name_len = int.from_bytes(raw[i + 12:i + 16], order)
+        name = raw[i + 16:i + 16 + name_len].split(b"\0", 1)[0].decode("utf-8", "replace")
+        i += 16 + name_len
+        sys.stdout.write("%x %x %s\n" % (ev_mask, cookie, name))
+        sys.stdout.flush()
+"#;
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_replace_renames_the_running_image_aside_then_copies() {
+        use std::os::windows::fs::MetadataExt;
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("ketch.exe");
+        let fresh = dir.path().join("fresh.exe");
+        std::fs::write(&exe, b"old-image").unwrap();
+        std::fs::write(&fresh, b"new-image").unwrap();
+        let backup = swap_backup(&exe);
+        // `file_index` is nightly-only. A rename keeps the creation time of the
+        // running image; the copy into the path is a new file with its own.
+        let before = std::fs::metadata(&exe).unwrap().creation_time();
+
+        stage_windows(&exe, &fresh, &backup).unwrap();
+
+        assert_eq!(std::fs::read(&backup).unwrap(), b"old-image");
+        assert_eq!(std::fs::read(&exe).unwrap(), b"new-image");
+        assert_eq!(
+            std::fs::metadata(&backup).unwrap().creation_time(),
+            before,
+            "the aside is the renamed running image, not a second copy of its bytes"
+        );
+        assert_ne!(
+            std::fs::metadata(&exe).unwrap().creation_time(),
+            before,
+            "the path holds the copied binary, after the running image moved aside"
+        );
     }
 }

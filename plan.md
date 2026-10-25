@@ -173,10 +173,8 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | K961 | todo | P3 | 2 | 0% | |
 | K962 | todo | P3 | 2 | 0% | |
 | K963 | todo | P2 | 3 | 0% | |
-| K964 | todo | P3 | 1 | 0% | |
 | K965 | todo | P3 | 1 | 0% | |
 | K966 | todo | P3 | 2 | 0% | |
-| K967 | todo | P2 | 2 | 0% | |
 | K968 | todo | P3 | 1 | 0% | |
 
 ### Ketch audit
@@ -845,12 +843,6 @@ In `install::batch` (`install.rs:923-933`) each worker calls `commit` while hold
 
 Done when `commit` takes the lock only to re-read and update the state, hooks and placement run outside it, and a test with a sleeping hook shows two packages committing concurrently.
 
-### K964. Stream file contents in sha256_tree
-
-`source::local::sha256_tree` (`source/local.rs:434`) reads every file with `fs::read` before hashing, so locking or verifying a local bundle holds its largest file in memory at once; `http::sha256_file` already streams through a 128 KiB buffer.
-
-Done when the length comes from the metadata, the payload is fed to the hasher through a reused buffer, and the existing `sha256_tree` hashes are unchanged.
-
 ### K965. Share one HTTP agent between sources
 
 `Http::new` and `Http::anonymous` (`http.rs:40-60`) build two copies of the same `ureq` agent, and `Sources::load` (`source/mod.rs:307`, `:329`) and the registry update (`registry.rs:63`) each build their own, so connections and TLS sessions to `api.github.com` are not reused within one command. Extends K956.
@@ -866,12 +858,6 @@ Done when one builder function sets the user agent and timeouts, and one agent p
 Done when the duplicates are listed by the crate that pulls each one, the ones fixable by a bump or a feature are fixed, the rest are recorded as accepted, and a `cargo deny` `multiple-versions` check warns on new ones.
 
 #### Core architecture and code
-
-### K967. Keep a binary at the ketch path during self-replace
-
-`replace_binary` (`self_update.rs:613-630`) renames the running `exe` aside, then copies the new one in. Between the rename and the end of the copy there is no file at `exe`, so a shell, completion or second `ketch` started then fails with not-found, and a crash there leaves only `ketch.old`.
-
-Done when, on Unix, the new binary is copied to a sibling temp file, made executable and renamed over `exe` (atomic), the aside stays for rollback, and Windows keeps its rename-aside path with a test for each.
 
 ### K968. Tell a cancelled or failed latest lookup from an unreachable one
 

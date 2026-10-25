@@ -1978,3 +1978,15 @@ names the `rtok task` command that does the job. `AGENTS.md` has a Tasks
 section saying the same.
 
 Tests: `plan_todo_and_done_agree_with_rtok_tasks`, `a_row_written_by_hand_without_rtok_fails`, `a_new_task_with_an_id_picked_by_hand_fails`, `a_task_file_written_by_hand_is_refused`, `a_subtask_needs_its_parent`, `every_failure_names_the_rtok_command_to_use`.
+
+### K964. Stream file contents in sha256_tree
+
+`source::local::sha256_tree` (`source/local.rs`) used to read every file with `fs::read` before hashing, so locking or verifying a local bundle held its largest file in memory at once; `http::sha256_file` already streams through a 128 KiB buffer.
+
+Status: done. The length in the frame is the metadata size, and the payload is fed to the hasher through one reused 128 KiB buffer. The frame is unchanged, so existing tree digests stay the same. `streaming_a_file_past_the_buffer_keeps_the_framed_digest` writes a member past that window in 8 KiB chunks and checks the framed digest.
+
+### K967. Keep a binary at the ketch path during self-replace
+
+`replace_binary` (`self_update.rs`) used to rename the running `exe` aside, then copy the new one in. Between the rename and the end of the copy there was no file at `exe`, so a shell, completion or second `ketch` started then failed with not-found, and a crash there left only `ketch.old`.
+
+Status: done. On Unix the new binary is copied to a sibling temp file, made executable, and renamed over `exe`. A hard link keeps the running image at the aside for rollback, so the path always names a binary and the only copy is not removed first. Windows still renames the running image aside and then copies. Tests: `unix_replace_renames_a_staged_sibling_over_the_running_binary` (directory-event order on Linux), `unix_replace_puts_the_previous_binary_back_when_the_new_one_does_not_run`, and `windows_replace_renames_the_running_image_aside_then_copies` under `#[cfg(windows)]`.

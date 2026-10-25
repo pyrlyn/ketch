@@ -76,8 +76,6 @@
 - K961. Group `ketch --help` and greet a bare `ketch`
 - K962. Mutation-test the trust-boundary guards
 - K963. Run install hooks outside the batch state lock
-- K964. Stream file contents in sha256_tree
 - K965. Share one HTTP agent between sources
 - K966. Deduplicate crate versions in Cargo.lock
-- K967. Keep a binary at the ketch path during self-replace
 - K968. Tell a cancelled or failed latest lookup from an unreachable one

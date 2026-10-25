@@ -402,6 +402,13 @@ pub fn copy_tree(src: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Bytes of a file fed to the tree hasher at a time.
+///
+/// The same window `http::sha256_file` uses: large enough that a bundle is
+/// not a syscall per byte, small enough that locking one does not hold its
+/// largest member in memory.
+const TREE_HASH_WINDOW: usize = 128 * 1024;
+
 /// Stable digest of a directory's contents, for the sha256 field of a local `.app`.
 ///
 /// Each file and each symlink is one framed record: kind, path, permission
@@ -411,6 +418,10 @@ pub fn copy_tree(src: &Path, dest: &Path) -> Result<()> {
 /// changes the digest, and a symlink is not skipped: retargeting one inside
 /// a bundle is a different tree. A lock written before this framing does not
 /// match; `ketch lock` records the new digest.
+///
+/// A file's length is its metadata size, and its bytes are read through one
+/// reused window. The digest matches hashing the file whole, without keeping
+/// the file whole.
 pub fn sha256_tree(root: &Path) -> Result<String> {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
@@ -424,23 +435,24 @@ pub fn sha256_tree(root: &Path) -> Result<String> {
         }
     }
     paths.sort();
+    // One window for every member of this tree.
+    let mut buffer = vec![0u8; TREE_HASH_WINDOW];
     for path in paths {
         let rel = path.strip_prefix(root).unwrap_or(&path);
         let meta = fs::symlink_metadata(&path).map_err(|e| Error::io(&path, e))?;
-        let (kind, payload) = if meta.file_type().is_symlink() {
+        let rel_bytes = path_bytes(rel);
+        let mode = permission_bits(&meta);
+        if meta.file_type().is_symlink() {
             let target = fs::read_link(&path).map_err(|e| Error::io(&path, e))?;
-            (b'l', path_bytes(&target))
+            let payload = path_bytes(&target);
+            hash_record(&mut hasher, b'l', &rel_bytes, mode, &payload);
         } else {
-            let bytes = fs::read(&path).map_err(|e| Error::io(&path, e))?;
-            (b'f', bytes)
-        };
-        hash_record(
-            &mut hasher,
-            kind,
-            &path_bytes(rel),
-            permission_bits(&meta),
-            &payload,
-        );
+            // The framed length is the size metadata reported, which is what
+            // `fs::read` used to hash for a file that stays still. A short
+            // read must not publish that length over fewer bytes.
+            hash_frame(&mut hasher, b'f', &rel_bytes, mode, meta.len());
+            hash_file_bytes(&mut hasher, &path, meta.len(), &mut buffer)?;
+        }
     }
     Ok(hex::encode(hasher.finalize()))
 }
@@ -451,13 +463,49 @@ pub fn sha256_tree(root: &Path) -> Result<String> {
 /// field. `mode` is the permission bits only: owner and timestamps are not
 /// part of what a lockfile is pinning.
 fn hash_record(hasher: &mut sha2::Sha256, kind: u8, path: &[u8], mode: u32, payload: &[u8]) {
+    hash_frame(hasher, kind, path, mode, payload.len() as u64);
+    use sha2::Digest;
+    hasher.update(payload);
+}
+
+fn hash_frame(hasher: &mut sha2::Sha256, kind: u8, path: &[u8], mode: u32, payload_len: u64) {
     use sha2::Digest;
     hasher.update([kind]);
     hasher.update((path.len() as u64).to_be_bytes());
     hasher.update(path);
     hasher.update(mode.to_be_bytes());
-    hasher.update((payload.len() as u64).to_be_bytes());
-    hasher.update(payload);
+    hasher.update(payload_len.to_be_bytes());
+}
+
+/// Feed exactly `len` bytes from `path` into `hasher` through `buffer`.
+fn hash_file_bytes(
+    hasher: &mut sha2::Sha256,
+    path: &Path,
+    len: u64,
+    buffer: &mut [u8],
+) -> Result<()> {
+    use sha2::Digest;
+    use std::io::Read;
+    let mut file = fs::File::open(path).map_err(|e| Error::io(path, e))?;
+    let mut left = len;
+    while left > 0 {
+        let want = std::cmp::min(buffer.len() as u64, left) as usize;
+        let n = file
+            .read(&mut buffer[..want])
+            .map_err(|e| Error::io(path, e))?;
+        if n == 0 {
+            return Err(Error::io(
+                path,
+                std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    format!("{left} bytes were still expected"),
+                ),
+            ));
+        }
+        hasher.update(&buffer[..n]);
+        left -= n as u64;
+    }
+    Ok(())
 }
 
 fn path_bytes(path: &Path) -> Vec<u8> {
@@ -573,6 +621,51 @@ mod tests {
             sha256_tree(linked.path()).unwrap(),
             sha256_tree(again.path()).unwrap()
         );
+    }
+
+    /// Past the hash window, written in small chunks so the test does not
+    /// hold the member either. The constant is the framed digest: kind, path
+    /// length, path, mode, payload length, payload, for `a` = `X` and then
+    /// `wide.bin`. A different frame or a different digest does not match.
+    #[test]
+    fn streaming_a_file_past_the_buffer_keeps_the_framed_digest() {
+        let dir = tempfile::tempdir().unwrap();
+        let small = dir.path().join("a");
+        std::fs::write(&small, b"X").unwrap();
+        let wide_len = TREE_HASH_WINDOW + 3;
+        let wide = dir.path().join("wide.bin");
+        write_repeating_bytes(&wide, wide_len);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            for path in [&small, &wide] {
+                std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o644)).unwrap();
+            }
+        }
+        // Unix mode is the 0o644 just set. Elsewhere `permission_bits` records
+        // 0o666 for a file that is not read-only, which a new file is not.
+        let expected = if cfg!(unix) {
+            "8eb7d711e3eb2e421d6fef00004415ba6a4b5bcdbf15bcf7d3cf4a0d4c999803"
+        } else {
+            "08453aa43a0e186c58284db2559212aeead9090829c680f175c9f9791cabd343"
+        };
+        assert_eq!(sha256_tree(dir.path()).unwrap(), expected);
+    }
+
+    /// `byte[i] = i as u8`, in chunks, so the caller never holds `len` bytes.
+    fn write_repeating_bytes(path: &Path, len: usize) {
+        use std::io::Write;
+        let mut file = std::fs::File::create(path).unwrap();
+        let mut index = 0usize;
+        let mut chunk = [0u8; 8 * 1024];
+        while index < len {
+            let n = (len - index).min(chunk.len());
+            for byte in &mut chunk[..n] {
+                *byte = index as u8;
+                index += 1;
+            }
+            file.write_all(&chunk[..n]).unwrap();
+        }
     }
 
     #[test]
