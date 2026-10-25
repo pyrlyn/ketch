@@ -9,41 +9,19 @@
 //! copy is recorded so uninstall can prove identity before deleting.
 
 use super::claim::Claims;
-use super::scoring::looks_like_build_artifact;
+use super::common::{cli_targets, discover_executables, writable, BinNames, BundleDirs};
 use super::sibling;
-use super::{finalize_store_swap, restore_retired_store};
 use super::{AssetScore, DoctorCheck, Placement, Platform};
 use crate::config::Config;
 use crate::error::{Error, Result};
 use crate::extra::ExtraPlacement;
 use crate::extract::archive::is_program_head;
 use crate::extract::Extractor;
-use crate::model::{
-    glob_match_path, glob_preferred, BinSpec, CompletionShell, LinkKind, LinkRecord, LinkRole,
-    PackageKind, TargetSpec,
-};
+use crate::model::{CompletionShell, LinkKind, LinkRecord, LinkRole, PackageKind, TargetSpec};
 use crate::source::local::copy_tree;
 use fs_kit::tree::remove_any;
 use std::collections::HashSet;
-use std::io::Read;
 use std::path::{Path, PathBuf};
-
-/// Directories inside a payload that never hold the program itself.
-const NOISE_DIRS: &[&str] = &[
-    "share",
-    "doc",
-    "docs",
-    "man",
-    "completions",
-    "complete",
-    "etc",
-    "lib",
-    "include",
-    "licenses",
-    "_internal",
-    "resources",
-    "plugins",
-];
 
 /// Native Windows CLI releases: copy executables, record every destination.
 pub struct WindowsPlatform {
@@ -171,49 +149,9 @@ fn retired_targets(recorded: &[LinkRecord], store: &Path) -> Vec<LinkRecord> {
         .collect()
 }
 
-fn writable(dir: &Path) -> std::result::Result<(), String> {
-    if !dir.exists() {
-        return Err("does not exist".to_string());
-    }
-    tempfile::Builder::new()
-        .prefix(".ketch-probe")
-        .tempfile_in(dir)
-        .map(|_| ())
-        .map_err(|e| e.to_string())
-}
-
-fn same_contents(a: &Path, b: &Path) -> bool {
-    let Ok(mut fa) = std::fs::File::open(a) else {
-        return false;
-    };
-    let Ok(mut fb) = std::fs::File::open(b) else {
-        return false;
-    };
-    let mut ba = [0u8; 8192];
-    let mut bb = [0u8; 8192];
-    loop {
-        match (fa.read(&mut ba), fb.read(&mut bb)) {
-            (Ok(0), Ok(0)) => return true,
-            (Ok(na), Ok(nb)) if na == nb && ba[..na] == bb[..nb] => {}
-            _ => return false,
-        }
-    }
-}
-
 fn still_placed(record: &LinkRecord) -> bool {
-    match record.kind {
-        LinkKind::CopiedFile => {
-            std::fs::symlink_metadata(&record.link).is_ok_and(|meta| meta.is_file())
-                && same_contents(&record.link, &record.target)
-        }
-        LinkKind::Symlink | LinkKind::LinkedApp => {
-            std::fs::read_link(&record.link).is_ok_and(|target| target == record.target)
-        }
-        LinkKind::CopiedApp => {
-            std::fs::symlink_metadata(&record.link).is_ok_and(|meta| meta.is_dir())
-                && record.target.exists()
-        }
-    }
+    // Windows copies bytes, so a file the user replaced is not ours to delete.
+    super::common::still_placed(record, super::common::CopiedFileProof::SameBytes)
 }
 
 fn dest_key(path: &Path) -> String {
@@ -243,162 +181,6 @@ fn destination_available(link: &Path, recorded: &[LinkRecord]) -> Result<()> {
 fn clear_destination(link: &Path, recorded: &[LinkRecord], claims: &mut Claims) -> Result<()> {
     destination_available(link, recorded)?;
     claims.take(link)
-}
-
-/// Keep a Windows executable suffix, or add `.exe` so PATH lookup finds it.
-pub(crate) fn windows_bin_name(name: &str) -> String {
-    let lower = name.to_ascii_lowercase();
-    if [".exe", ".cmd", ".bat", ".com", ".ps1"]
-        .iter()
-        .any(|s| lower.ends_with(s))
-    {
-        name.to_string()
-    } else {
-        format!("{name}.exe")
-    }
-}
-
-fn payload_executable_entry(entry: &walkdir::DirEntry, root: &Path) -> Option<PathBuf> {
-    let path = entry.path();
-    if entry.file_type().is_file() {
-        return Some(path.to_path_buf());
-    }
-    if !entry.file_type().is_symlink() {
-        return None;
-    }
-    // One hop is not enough: `tool -> abs` reads as inside while `abs`, or
-    // any link further along, leads out of the payload.
-    if !crate::extract::resolves_inside(path, root) {
-        return None;
-    }
-    std::fs::metadata(path)
-        .ok()
-        .filter(|meta| meta.is_file())
-        .map(|_| path.to_path_buf())
-}
-
-fn discover_executables(platform: &WindowsPlatform, root: &Path, package: &str) -> Vec<PathBuf> {
-    let mut found: Vec<PathBuf> = walkdir::WalkDir::new(root)
-        .max_depth(4)
-        .follow_links(false)
-        .into_iter()
-        .filter_entry(|e| {
-            let name = e.file_name().to_string_lossy().to_ascii_lowercase();
-            e.path() == root || !NOISE_DIRS.contains(&name.as_str())
-        })
-        .filter_map(|e| e.ok())
-        .filter_map(|e| payload_executable_entry(&e, root))
-        .filter(|p| platform.is_executable(p))
-        .collect();
-    let in_bin: Vec<PathBuf> = found
-        .iter()
-        .filter(|p| {
-            p.parent()
-                .and_then(|d| d.file_name())
-                .is_some_and(|n| n.eq_ignore_ascii_case("bin"))
-        })
-        .cloned()
-        .collect();
-    if !in_bin.is_empty() {
-        found = in_bin;
-    }
-    super::order_discovered_executables(&mut found, package);
-    found
-}
-
-fn resolve_bin_specs(root: &Path, specs: &[BinSpec]) -> Result<Vec<(PathBuf, String)>> {
-    let candidates: Vec<PathBuf> = walkdir::WalkDir::new(root)
-        .max_depth(6)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-        .map(|e| e.into_path())
-        .collect();
-
-    let mut out = Vec::new();
-    for spec in specs {
-        let matched = match &spec.path {
-            Some(pattern) => {
-                let matched: Vec<&Path> = candidates
-                    .iter()
-                    .filter(|p| {
-                        p.strip_prefix(root)
-                            .ok()
-                            .is_some_and(|rel| glob_match_path(pattern, &rel.to_string_lossy()))
-                    })
-                    .map(|p| p.as_path())
-                    .collect();
-                glob_preferred(root, pattern, &matched, spec.name.as_deref())?
-            }
-            None => {
-                let want = spec.name.as_deref().unwrap_or_default();
-                candidates
-                    .iter()
-                    .find(|p| {
-                        p.file_name().is_some_and(|n| {
-                            let n_s = n.to_string_lossy();
-                            n == want
-                                || dest_key(Path::new(n)) == dest_key(Path::new(want))
-                                // `bin = [{ name = "rtok" }]` must find `rtok.exe`.
-                                || n_s.eq_ignore_ascii_case(&format!("{want}.exe"))
-                                || n_s.eq_ignore_ascii_case(&format!("{want}.cmd"))
-                                || n_s.eq_ignore_ascii_case(&format!("{want}.bat"))
-                        })
-                    })
-                    .map(|p| p.as_path())
-            }
-        };
-        let path = matched.ok_or_else(|| {
-            Error::msg(format!(
-                "manifest expects `{}` but the release payload does not contain it",
-                spec.path
-                    .clone()
-                    .or_else(|| spec.name.clone())
-                    .unwrap_or_else(|| "<unnamed>".into())
-            ))
-        })?;
-        let name = spec.name.clone().unwrap_or_else(|| {
-            path.file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .into_owned()
-        });
-        out.push((path.to_path_buf(), windows_bin_name(&name)));
-    }
-    Ok(out)
-}
-
-fn cli_targets(
-    platform: &WindowsPlatform,
-    root: &Path,
-    plan: &Placement<'_>,
-) -> Result<Vec<(PathBuf, String)>> {
-    if plan.kind == PackageKind::App {
-        return Ok(Vec::new());
-    }
-    if plan.bin_specs.is_empty() {
-        let found = discover_executables(platform, root, plan.name);
-        let sole = found.len() == 1;
-        Ok(found
-            .into_iter()
-            .map(|path| {
-                let file_name = path
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .into_owned();
-                let stem = if sole && looks_like_build_artifact(&file_name) {
-                    plan.name.to_string()
-                } else {
-                    file_name
-                };
-                (path, windows_bin_name(&stem))
-            })
-            .collect())
-    } else {
-        resolve_bin_specs(root, plan.bin_specs)
-    }
 }
 
 fn copy_binary(
@@ -435,22 +217,16 @@ pub(crate) fn link_planned_extras(
     recorded: &[LinkRecord],
     claims: &mut Claims,
 ) -> Result<Vec<LinkRecord>> {
-    let mut links = Vec::new();
-    for extra in extras {
-        let target = crate::extra::resolve_under(root, &extra.rel_path)?;
-        if let Some(parent) = extra.dest.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
-        }
+    super::common::link_planned_extras(extras, root, |extra, target| {
         clear_destination(&extra.dest, recorded, claims)?;
-        std::fs::copy(&target, &extra.dest).map_err(|e| Error::io(&extra.dest, e))?;
-        links.push(LinkRecord {
+        std::fs::copy(target, &extra.dest).map_err(|e| Error::io(&extra.dest, e))?;
+        Ok(LinkRecord {
             link: extra.dest.clone(),
-            target,
+            target: target.to_path_buf(),
             kind: LinkKind::CopiedFile,
             role: extra.role,
-        });
-    }
-    Ok(links)
+        })
+    })
 }
 
 impl Platform for WindowsPlatform {
@@ -474,14 +250,20 @@ impl Platform for WindowsPlatform {
         if kind == PackageKind::App {
             return Vec::new();
         }
-        discover_executables(self, payload, package)
+        discover_executables(self, payload, package, BundleDirs::Keep)
     }
 
     fn place(&self, plan: &Placement<'_>) -> Result<Vec<LinkRecord>> {
         // Install, upgrade, relink and rollback all come through here.
         sweep_busy_asides(plan.replacing);
         if plan.link {
-            let found = cli_targets(self, plan.payload_dir, plan)?;
+            let found = cli_targets(
+                self,
+                plan.payload_dir,
+                plan,
+                BinNames::Windows,
+                BundleDirs::Keep,
+            )?;
             let mut destinations = HashSet::new();
             for (_, name) in &found {
                 let link = plan.bin_dir.join(name);
@@ -507,60 +289,46 @@ impl Platform for WindowsPlatform {
                 return Err(Error::EmptyPayload(plan.payload_dir.to_path_buf()));
             }
         }
-        let swapped = move_into_store(plan.payload_dir, plan.store_dir)?;
-        if !plan.link {
-            if swapped {
-                finalize_store_swap(plan.store_dir);
-            }
+        let Some(swapped) = super::common::swap_payload(plan, move_into_store)? else {
             return Ok(Vec::new());
-        }
+        };
         let replacing = if swapped {
             retired_targets(plan.replacing, plan.store_dir)
         } else {
             plan.replacing.to_vec()
         };
-        let mut links = Vec::new();
         // Named like `clear_for_replace`'s asides: one a running exe keeps
         // undeletable is then the same kind of leftover, swept the same way.
-        let mut claims = Claims::new(busy_aside);
-        let result = (|| -> Result<Vec<LinkRecord>> {
-            for (target, name) in cli_targets(self, plan.store_dir, plan)? {
-                links.push(copy_binary(
-                    &target,
-                    plan.bin_dir,
-                    &name,
+        super::common::commit_placement(
+            plan.store_dir,
+            swapped,
+            Claims::new(busy_aside),
+            |links, claims| {
+                for (target, name) in cli_targets(
+                    self,
+                    plan.store_dir,
+                    plan,
+                    BinNames::Windows,
+                    BundleDirs::Keep,
+                )? {
+                    links.push(copy_binary(
+                        &target,
+                        plan.bin_dir,
+                        &name,
+                        &replacing,
+                        claims,
+                    )?);
+                }
+                links.extend(link_planned_extras(
+                    plan.extras,
+                    plan.store_dir,
                     &replacing,
-                    &mut claims,
+                    claims,
                 )?);
-            }
-            links.extend(link_planned_extras(
-                plan.extras,
-                plan.store_dir,
-                &replacing,
-                &mut claims,
-            )?);
-            if links.is_empty() {
-                return Err(Error::EmptyPayload(plan.store_dir.to_path_buf()));
-            }
-            Ok(std::mem::take(&mut links))
-        })();
-        match result {
-            Ok(links) => {
-                claims.discard();
-                if swapped {
-                    finalize_store_swap(plan.store_dir);
-                }
-                Ok(links)
-            }
-            Err(e) => {
-                let _ = self.unplace(&links, &crate::report::Report::silent());
-                claims.restore();
-                if swapped {
-                    restore_retired_store(plan.store_dir);
-                }
-                Err(e)
-            }
-        }
+                Ok(())
+            },
+            |made| self.unplace(made, &crate::report::Report::silent()),
+        )
     }
 
     fn completion_dir(&self, shell: CompletionShell) -> PathBuf {
@@ -575,20 +343,7 @@ impl Platform for WindowsPlatform {
 
     fn unplace(&self, links: &[LinkRecord], report: &crate::report::Report) -> Result<()> {
         sweep_busy_asides(links);
-        for record in links {
-            if std::fs::symlink_metadata(&record.link).is_err() {
-                continue;
-            }
-            if !still_placed(record) {
-                report.debug(&format!(
-                    "leaving {}: it is no longer what ketch placed there",
-                    record.link.display()
-                ));
-                continue;
-            }
-            remove_any(&record.link).map_err(|e| Error::fs_kit(&record.link, e))?;
-        }
-        Ok(())
+        super::common::unplace(links, report, still_placed)
     }
 
     fn is_executable(&self, path: &Path) -> bool {
@@ -636,22 +391,7 @@ impl Platform for WindowsPlatform {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{BinSpec, PackageKind};
-
-    #[test]
-    fn a_bin_glob_prefers_the_link_named_binary_over_a_helper_beside_it() {
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(tmp.path().join("rtok-hook.exe"), b"hook").unwrap();
-        std::fs::write(tmp.path().join("rtok.exe"), b"main").unwrap();
-        let specs = [BinSpec {
-            path: Some("rtok*".into()),
-            name: Some("rtok".into()),
-        }];
-        let got = resolve_bin_specs(tmp.path(), &specs).unwrap();
-        assert_eq!(got.len(), 1);
-        assert_eq!(got[0].0.file_name().unwrap(), "rtok.exe");
-        assert_eq!(got[0].1, "rtok.exe");
-    }
+    use crate::model::PackageKind;
 
     fn cmd_body(says: &str) -> Vec<u8> {
         format!("@echo off\r\necho {says}\r\n").into_bytes()
@@ -676,13 +416,6 @@ mod tests {
             link: true,
             extras: &[],
         }
-    }
-
-    #[test]
-    fn windows_bin_name_adds_exe_unless_already_suffixed() {
-        assert_eq!(windows_bin_name("rg"), "rg.exe");
-        assert_eq!(windows_bin_name("rg.exe"), "rg.exe");
-        assert_eq!(windows_bin_name("tool.cmd"), "tool.cmd");
     }
 
     #[test]

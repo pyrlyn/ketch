@@ -132,8 +132,6 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | K928 | todo | P2 | 2 | 0% | |
 | K929 | todo | P2 | 3 | 0% | |
 | K930 | todo | P2 | 3 | 0% | |
-| K930.1 | todo | P2 | 3 | 0% | |
-| K930.2 | todo | P2 | 3 | 0% | |
 | K931 | todo | P2 | 4 | 0% | |
 | K932 | todo | P2 | 2 | 0% | |
 | K933 | todo | P2 | 4 | 0% | |
@@ -546,20 +544,6 @@ Done when the platform travels in `Ctx` (or a pipeline struct, defaulting to `ho
 `platform/unix.rs` and `platform/windows.rs` duplicate bin resolution, executable discovery, `cli_targets`, `writable`, `unplace` and extra linking (71 shared six-line windows), and `macos.rs` repeats part of `unix.rs`. Each copy compiles and is tested only on its own OS, so a fix to one silently misses the other. Extends the `move_into_store` idea in `ideas.md`.
 
 Done when a `platform/common.rs` compiled on every OS holds the shared code with small hooks for name matching and symlink-versus-copy, both variants are unit-tested on every host, and the duplicate-window count is under 10. Split into the two subtasks below.
-
-### K930.1. Share bin resolution and executable discovery
-
-First half of the common placement module: `resolve_bin_specs`, `payload_executable_entry`, `discover_executables` and `cli_targets` move out of `unix.rs` and `windows.rs`.
-
-Done when both platforms call the shared functions, tests for both naming rules run on every host, and behaviour is unchanged.
-
-### K930.2. Share placement, unplace and extra linking
-
-Second half: `writable`, `unplace`, `link_planned_extras` and the shared part of `macos.rs`.
-
-Done when both platforms call the shared code and the duplicate-window count is under 10.
-
-Depends on K930.1.
 
 #### Product and onboarding
 

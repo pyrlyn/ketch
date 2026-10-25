@@ -1978,3 +1978,15 @@ names the `rtok task` command that does the job. `AGENTS.md` has a Tasks
 section saying the same.
 
 Tests: `plan_todo_and_done_agree_with_rtok_tasks`, `a_row_written_by_hand_without_rtok_fails`, `a_new_task_with_an_id_picked_by_hand_fails`, `a_task_file_written_by_hand_is_refused`, `a_subtask_needs_its_parent`, `every_failure_names_the_rtok_command_to_use`.
+
+### K930.1. Share bin resolution and executable discovery
+
+`resolve_bin_specs`, `payload_executable_entry`, `discover_executables` and `cli_targets` moved out of `platform/unix.rs` and `platform/windows.rs` into `platform/common.rs`, which compiles on every OS. Unix passes exact file names and skips `.app` and `.framework` directories; Windows passes case-insensitive launcher suffixes and does not. macOS and Linux call the same functions. Both naming rules are unit-tested on every host. Behaviour is unchanged.
+
+Tests: `exact_names_prefer_the_link_named_binary_over_a_helper_beside_it`, `windows_names_prefer_the_link_named_binary_over_a_helper_beside_it`, `exact_bin_names_match_only_the_same_spelling`, `exact_bin_names_do_not_treat_exe_as_the_bare_name`, `windows_bin_names_match_a_file_whose_case_differs`, `windows_bin_names_find_a_launcher_suffix_and_spell_the_link_with_exe`, `windows_bin_name_adds_exe_unless_already_suffixed`, `an_app_links_no_cli_targets_under_either_naming_rule`, `apple_bundle_directories_are_skipped_only_when_discovery_asks`.
+
+### K930.2. Share placement, unplace and extra linking
+
+`writable`, `unplace`, `link_planned_extras`, and the store-swap / rollback around linking moved into `platform/common.rs`. Unix still symlinks; Windows still copies, and a copied file there is still ours only while the bytes match. macOS placement uses the same swap and rollback. The duplicate-window count is one: distinct six-line windows of non-blank, non-comment lines (whitespace collapsed) shared by `unix.rs` and `windows.rs`, test modules excluded. It was 113 at the start of this work. Behaviour is unchanged.
+
+Tests: `a_copied_file_matches_by_existence_or_by_bytes`, `unplace_removes_only_what_the_proof_still_accepts`, `writable_rejects_a_directory_that_is_not_there`, plus the existing Linux place, unplace and relink tests. `cargo test --locked -p ketch-core --lib platform::` — 71 passed. `cargo clippy --locked -p ketch-core --all-targets -- -D warnings` clean.

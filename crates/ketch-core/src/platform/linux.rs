@@ -7,7 +7,8 @@
 //! Asset scoring understands GNU/musl triples; placement is bin-dir symlinks
 //! only. There is no `.app` equivalent and no quarantine to clear.
 
-use super::unix::{discover_executables, place_cli, unplace, writable};
+use super::common::{discover_executables, writable, BundleDirs};
+use super::unix::{place_cli, unplace};
 use super::{AssetScore, DoctorCheck, Placement, Platform};
 use crate::config::Config;
 use crate::error::Result;
@@ -67,7 +68,7 @@ impl Platform for LinuxPlatform {
         if kind == PackageKind::App {
             return Vec::new();
         }
-        discover_executables(self, payload, package)
+        discover_executables(self, payload, package, BundleDirs::Skip)
     }
 
     fn unplace(&self, links: &[LinkRecord], report: &crate::report::Report) -> Result<()> {
@@ -256,7 +257,6 @@ mod tests {
 
         let placed = LinuxPlatform::new().place(&Placement {
             name: "tool",
-            version: "1.0",
             payload_dir: &store,
             store_dir: &store,
             bin_dir: &bin,

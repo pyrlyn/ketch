@@ -10,11 +10,9 @@
 //! before any quarantine flag is cleared.
 
 use super::claim::Claims;
-use super::scoring::looks_like_build_artifact;
-use super::unix::{
-    clear_destination, destination_available, discover_executables, link_binary, resolve_bin_specs,
-    symlink, writable,
-};
+use super::common::{cli_targets, discover_executables, writable, BinNames, BundleDirs};
+use super::unix::{clear_destination, destination_available, link_binary, symlink};
+#[cfg(test)]
 use super::{finalize_store_swap, restore_retired_store};
 use super::{AssetScore, DoctorCheck, Placement, Platform, TrustVerdict};
 use crate::config::Config;
@@ -140,30 +138,16 @@ fn preflight_destinations(
         PackageKind::Auto => bundles.is_empty(),
     };
     let binaries = if want_binaries {
-        if plan.bin_specs.is_empty() {
-            let found = discover_executables(platform, plan.payload_dir, plan.name);
-            let sole = found.len() == 1;
-            found
-                .into_iter()
-                .map(|path| {
-                    let file_name = path
-                        .file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .into_owned();
-                    if sole && looks_like_build_artifact(&file_name) {
-                        plan.name.to_string()
-                    } else {
-                        file_name
-                    }
-                })
-                .collect()
-        } else {
-            resolve_bin_specs(plan.payload_dir, plan.bin_specs)?
-                .into_iter()
-                .map(|(_, name)| name)
-                .collect()
-        }
+        cli_targets(
+            platform,
+            plan.payload_dir,
+            plan,
+            BinNames::Exact,
+            BundleDirs::Skip,
+        )?
+        .into_iter()
+        .map(|(_, name)| name)
+        .collect()
     } else {
         Vec::new()
     };
@@ -271,7 +255,7 @@ impl Platform for MacOsPlatform {
             PackageKind::Auto => find_app_bundles(payload).is_empty(),
         };
         if want_binaries {
-            discover_executables(self, payload, package)
+            discover_executables(self, payload, package, BundleDirs::Skip)
         } else {
             Vec::new()
         }
@@ -282,105 +266,67 @@ impl Platform for MacOsPlatform {
         if plan.link {
             preflight_destinations(self, plan, package_dir)?;
         }
-        let swapped = move_into_store(plan.payload_dir, plan.store_dir)?;
-        if !plan.link {
-            if swapped {
-                finalize_store_swap(plan.store_dir);
-            }
+        let Some(swapped) = super::common::swap_payload(plan, move_into_store)? else {
             return Ok(Vec::new());
-        }
-        let mut links = Vec::new();
-        let mut claims = Claims::default();
-        let result = (|| -> Result<Vec<LinkRecord>> {
-            // Every version of this package lives under here. The version being
-            // replaced still owns its links at this point: install retires them
-            // only once placement has succeeded.
-
-            if plan.kind != PackageKind::Binary {
-                for bundle in find_app_bundles(plan.store_dir) {
-                    links.push(place_app(
-                        &bundle,
-                        plan.apps_dir,
-                        plan.link_apps,
-                        package_dir,
-                        plan.replacing,
-                        &mut claims,
-                    )?);
+        };
+        super::common::commit_placement(
+            plan.store_dir,
+            swapped,
+            Claims::default(),
+            |links, claims| {
+                // Every version of this package lives under here. The version being
+                // replaced still owns its links at this point: install retires them
+                // only once placement has succeeded.
+                if plan.kind != PackageKind::Binary {
+                    for bundle in find_app_bundles(plan.store_dir) {
+                        links.push(place_app(
+                            &bundle,
+                            plan.apps_dir,
+                            plan.link_apps,
+                            package_dir,
+                            plan.replacing,
+                            claims,
+                        )?);
+                    }
                 }
-            }
 
-            // An app bundle carries its own executables; do not also scatter them
-            // across PATH.
-            let want_binaries = match plan.kind {
-                PackageKind::App => false,
-                PackageKind::Binary => true,
-                PackageKind::Auto => links.is_empty(),
-            };
-            if want_binaries {
-                let targets = if plan.bin_specs.is_empty() {
-                    let found = discover_executables(self, plan.store_dir, plan.name);
-                    let sole = found.len() == 1;
-                    found
-                        .into_iter()
-                        .map(|path| {
-                            let file_name = path
-                                .file_name()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                                .into_owned();
-                            let link_name = if sole && looks_like_build_artifact(&file_name) {
-                                plan.name.to_string()
-                            } else {
-                                file_name
-                            };
-                            (path, link_name)
-                        })
-                        .collect()
-                } else {
-                    resolve_bin_specs(plan.store_dir, plan.bin_specs)?
+                // An app bundle carries its own executables; do not also scatter them
+                // across PATH.
+                let want_binaries = match plan.kind {
+                    PackageKind::App => false,
+                    PackageKind::Binary => true,
+                    PackageKind::Auto => links.is_empty(),
                 };
-                for (target, name) in targets {
-                    links.push(link_binary(
-                        &target,
-                        plan.bin_dir,
-                        &name,
-                        package_dir,
-                        plan.replacing,
-                        &mut claims,
-                    )?);
+                if want_binaries {
+                    for (target, name) in cli_targets(
+                        self,
+                        plan.store_dir,
+                        plan,
+                        BinNames::Exact,
+                        BundleDirs::Skip,
+                    )? {
+                        links.push(link_binary(
+                            &target,
+                            plan.bin_dir,
+                            &name,
+                            package_dir,
+                            plan.replacing,
+                            claims,
+                        )?);
+                    }
                 }
-            }
 
-            links.extend(super::unix::link_planned_extras(
-                plan.extras,
-                plan.store_dir,
-                package_dir,
-                plan.replacing,
-                &mut claims,
-            )?);
-
-            if links.is_empty() {
-                return Err(Error::EmptyPayload(plan.store_dir.to_path_buf()));
-            }
-            Ok(std::mem::take(&mut links))
-        })();
-        match result {
-            Ok(links) => {
-                claims.discard();
-                if swapped {
-                    finalize_store_swap(plan.store_dir);
-                }
-                Ok(links)
-            }
-            Err(e) => {
-                let _ = super::unix::unplace(&links, &crate::report::Report::silent());
-                claims.restore();
-                if swapped {
-                    restore_retired_store(plan.store_dir);
-                }
-                Err(e)
-            }
-        }
+                links.extend(super::unix::link_planned_extras(
+                    plan.extras,
+                    plan.store_dir,
+                    package_dir,
+                    plan.replacing,
+                    claims,
+                )?);
+                Ok(())
+            },
+            |made| super::unix::unplace(made, &crate::report::Report::silent()),
+        )
     }
 
     fn unplace(&self, links: &[LinkRecord], report: &crate::report::Report) -> Result<()> {
@@ -718,7 +664,7 @@ mod tests {
         std::fs::write(&noise, b"#!/bin/sh\necho noise\n").unwrap();
         std::fs::set_permissions(&noise, std::fs::Permissions::from_mode(0o755)).unwrap();
 
-        let found = discover_executables(&MacOsPlatform::new(), &payload, "rg");
+        let found = discover_executables(&MacOsPlatform::new(), &payload, "rg", BundleDirs::Skip);
         assert_eq!(found, vec![keep], "{found:?}");
     }
 

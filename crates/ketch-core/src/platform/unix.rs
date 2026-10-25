@@ -7,45 +7,24 @@
 #![cfg(unix)]
 
 use super::claim::Claims;
+use super::common::{cli_targets, BinNames, BundleDirs};
 use super::Platform;
 use crate::error::{Error, Result};
 use crate::extra::ExtraPlacement;
-use crate::model::{glob_match_path, glob_preferred, BinSpec, LinkKind, LinkRecord, LinkRole};
-use fs_kit::tree::remove_any;
+use crate::model::{LinkKind, LinkRecord, LinkRole};
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-#[cfg(target_os = "linux")]
-use super::scoring::looks_like_build_artifact;
 #[cfg(all(target_os = "linux", test))]
 use super::sibling;
 #[cfg(target_os = "linux")]
 use super::Placement;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", test))]
 use super::{finalize_store_swap, restore_retired_store};
-#[cfg(target_os = "linux")]
-use crate::model::PackageKind;
 #[cfg(target_os = "linux")]
 use crate::source::local::copy_tree;
 #[cfg(target_os = "linux")]
 use std::collections::HashSet;
-
-/// Directories inside a payload that never hold the program itself.
-pub(crate) const NOISE_DIRS: &[&str] = &[
-    "share",
-    "doc",
-    "docs",
-    "man",
-    "completions",
-    "complete",
-    "etc",
-    "lib",
-    "include",
-    "licenses",
-    "_internal",
-    "resources",
-    "plugins",
-];
 
 /// Add the bits a program needs to run, leaving every other bit alone.
 ///
@@ -74,18 +53,7 @@ pub(crate) fn symlink(target: &Path, link: &Path) -> Result<()> {
 /// exists — but only a directory can be one, and a matching record must never
 /// authorize deleting a file the user put in its place.
 pub(crate) fn still_placed(record: &LinkRecord) -> bool {
-    match record.kind {
-        LinkKind::Symlink | LinkKind::LinkedApp => {
-            std::fs::read_link(&record.link).is_ok_and(|target| target == record.target)
-        }
-        LinkKind::CopiedFile => {
-            std::fs::symlink_metadata(&record.link).is_ok_and(|meta| meta.is_file())
-        }
-        LinkKind::CopiedApp => {
-            std::fs::symlink_metadata(&record.link).is_ok_and(|meta| meta.is_dir())
-                && record.target.exists()
-        }
-    }
+    super::common::still_placed(record, super::common::CopiedFileProof::IsFile)
 }
 
 /// Whether an occupied destination is this package's own to replace.
@@ -150,143 +118,10 @@ pub(crate) fn destination_available(
     }
 }
 
-pub(crate) fn writable(dir: &Path) -> std::result::Result<(), String> {
-    if !dir.exists() {
-        return Err("does not exist".to_string());
-    }
-    tempfile::Builder::new()
-        .prefix(".ketch-probe")
-        .tempfile_in(dir)
-        .map(|_| ())
-        .map_err(|e| e.to_string())
-}
-
 /// Linux copies with the local-source tree copy when a rename cannot cross filesystems.
 #[cfg(target_os = "linux")]
 pub(crate) fn move_into_store(payload: &Path, store: &Path) -> Result<bool> {
     super::swap_into_store(payload, store, copy_tree)
-}
-
-/// Keep a payload symlink if its target is a regular file inside the tree.
-fn payload_executable_entry(entry: &walkdir::DirEntry, root: &Path) -> Option<PathBuf> {
-    let path = entry.path();
-    if entry.file_type().is_file() {
-        return Some(path.to_path_buf());
-    }
-    if !entry.file_type().is_symlink() {
-        return None;
-    }
-    // One hop is not enough: `tool -> abs` reads as inside while `abs`, or
-    // any link further along, leads out of the payload.
-    if !crate::extract::resolves_inside(path, root) {
-        return None;
-    }
-    std::fs::metadata(path)
-        .ok()
-        .filter(|meta| meta.is_file())
-        .map(|_| path.to_path_buf())
-}
-
-/// True when the immediate parent directory is named `bin` (any ASCII case).
-///
-/// Windows archives and some toolchain layouts ship `Bin/`; treating only the
-/// lowercase spelling as special left those packages falling back to noisy
-/// top-level discovery.
-pub(crate) fn parent_dir_is_bin(path: &Path) -> bool {
-    path.parent()
-        .and_then(|d| d.file_name())
-        .is_some_and(|n| n.eq_ignore_ascii_case("bin"))
-}
-
-/// Every executable file in the payload that is a plausible entry point.
-///
-/// The package-named binary is first. A plain sort is not that order once
-/// the names carry `.exe`.
-pub(crate) fn discover_executables(
-    platform: &dyn Platform,
-    root: &Path,
-    package: &str,
-) -> Vec<PathBuf> {
-    let mut found: Vec<PathBuf> = walkdir::WalkDir::new(root)
-        .max_depth(4)
-        .follow_links(false)
-        .into_iter()
-        .filter_entry(|e| {
-            let name = e.file_name().to_string_lossy().to_ascii_lowercase();
-            e.path() == root
-                || !(name.ends_with(".app")
-                    || name.ends_with(".framework")
-                    || NOISE_DIRS.contains(&name.as_str()))
-        })
-        .filter_map(|e| e.ok())
-        .filter_map(|e| payload_executable_entry(&e, root))
-        .filter(|p| platform.is_executable(p))
-        .collect();
-
-    let in_bin: Vec<PathBuf> = found
-        .iter()
-        .filter(|p| parent_dir_is_bin(p))
-        .cloned()
-        .collect();
-    if !in_bin.is_empty() {
-        found = in_bin;
-    }
-    super::order_discovered_executables(&mut found, package);
-    found
-}
-
-/// Resolve the manifest's explicit binary list against the extracted payload.
-pub(crate) fn resolve_bin_specs(root: &Path, specs: &[BinSpec]) -> Result<Vec<(PathBuf, String)>> {
-    let candidates: Vec<PathBuf> = walkdir::WalkDir::new(root)
-        .max_depth(6)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-        .map(|e| e.into_path())
-        .collect();
-
-    let mut out = Vec::new();
-    for spec in specs {
-        let matched = match &spec.path {
-            Some(pattern) => {
-                let matched: Vec<&Path> = candidates
-                    .iter()
-                    .filter(|p| {
-                        p.strip_prefix(root)
-                            .ok()
-                            .is_some_and(|rel| glob_match_path(pattern, &rel.to_string_lossy()))
-                    })
-                    .map(|p| p.as_path())
-                    .collect();
-                glob_preferred(root, pattern, &matched, spec.name.as_deref())?
-            }
-            None => {
-                let want = spec.name.as_deref().unwrap_or_default();
-                candidates
-                    .iter()
-                    .find(|p| p.file_name().is_some_and(|n| n == want))
-                    .map(|p| p.as_path())
-            }
-        };
-        let path = matched.ok_or_else(|| {
-            Error::msg(format!(
-                "manifest expects `{}` but the release payload does not contain it",
-                spec.path
-                    .clone()
-                    .or_else(|| spec.name.clone())
-                    .unwrap_or_else(|| "<unnamed>".into())
-            ))
-        })?;
-        let name = spec.name.clone().unwrap_or_else(|| {
-            path.file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .into_owned()
-        });
-        out.push((path.to_path_buf(), name));
-    }
-    Ok(out)
 }
 
 pub(crate) fn link_binary(
@@ -311,44 +146,17 @@ pub(crate) fn link_binary(
 }
 
 #[cfg(target_os = "linux")]
-fn cli_targets(
-    platform: &dyn Platform,
-    root: &Path,
-    plan: &Placement<'_>,
-) -> Result<Vec<(PathBuf, String)>> {
-    if plan.kind == PackageKind::App {
-        return Ok(Vec::new());
-    }
-    if plan.bin_specs.is_empty() {
-        let found = discover_executables(platform, root, plan.name);
-        let sole = found.len() == 1;
-        Ok(found
-            .into_iter()
-            .map(|path| {
-                let file_name = path
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .into_owned();
-                let link_name = if sole && looks_like_build_artifact(&file_name) {
-                    plan.name.to_string()
-                } else {
-                    file_name
-                };
-                (path, link_name)
-            })
-            .collect())
-    } else {
-        resolve_bin_specs(root, plan.bin_specs)
-    }
-}
-
-#[cfg(target_os = "linux")]
 fn preflight_cli(platform: &dyn Platform, plan: &Placement<'_>, owned: &Path) -> Result<()> {
-    let names: Vec<String> = cli_targets(platform, plan.payload_dir, plan)?
-        .into_iter()
-        .map(|(_, name)| name)
-        .collect();
+    let names: Vec<String> = cli_targets(
+        platform,
+        plan.payload_dir,
+        plan,
+        BinNames::Exact,
+        BundleDirs::Skip,
+    )?
+    .into_iter()
+    .map(|(_, name)| name)
+    .collect();
     let mut destinations = HashSet::new();
     for name in names {
         let link = plan.bin_dir.join(name);
@@ -374,73 +182,46 @@ pub(crate) fn place_cli(platform: &dyn Platform, plan: &Placement<'_>) -> Result
         preflight_cli(platform, plan, package_dir)?;
         preflight_extras(plan, package_dir)?;
     }
-    let swapped = move_into_store(plan.payload_dir, plan.store_dir)?;
-    if !plan.link {
-        if swapped {
-            finalize_store_swap(plan.store_dir);
-        }
+    let Some(swapped) = super::common::swap_payload(plan, move_into_store)? else {
         return Ok(Vec::new());
-    }
-    let mut links = Vec::new();
-    let mut claims = Claims::default();
-    let result = (|| -> Result<Vec<LinkRecord>> {
-        for (target, name) in cli_targets(platform, plan.store_dir, plan)? {
-            links.push(link_binary(
-                &target,
-                plan.bin_dir,
-                &name,
+    };
+    super::common::commit_placement(
+        plan.store_dir,
+        swapped,
+        Claims::default(),
+        |links, claims| {
+            for (target, name) in cli_targets(
+                platform,
+                plan.store_dir,
+                plan,
+                BinNames::Exact,
+                BundleDirs::Skip,
+            )? {
+                links.push(link_binary(
+                    &target,
+                    plan.bin_dir,
+                    &name,
+                    package_dir,
+                    plan.replacing,
+                    claims,
+                )?);
+            }
+            links.extend(link_planned_extras(
+                plan.extras,
+                plan.store_dir,
                 package_dir,
                 plan.replacing,
-                &mut claims,
+                claims,
             )?);
-        }
-        links.extend(link_planned_extras(
-            plan.extras,
-            plan.store_dir,
-            package_dir,
-            plan.replacing,
-            &mut claims,
-        )?);
-        if links.is_empty() {
-            return Err(Error::EmptyPayload(plan.store_dir.to_path_buf()));
-        }
-        Ok(std::mem::take(&mut links))
-    })();
-    match result {
-        Ok(links) => {
-            claims.discard();
-            if swapped {
-                finalize_store_swap(plan.store_dir);
-            }
-            Ok(links)
-        }
-        Err(e) => {
-            let _ = unplace(&links, &crate::report::Report::silent());
-            claims.restore();
-            if swapped {
-                restore_retired_store(plan.store_dir);
-            }
-            Err(e)
-        }
-    }
+            Ok(())
+        },
+        |made| unplace(made, &crate::report::Report::silent()),
+    )
 }
 
 /// Undo `place`. Must tolerate links that are already gone.
 pub(crate) fn unplace(links: &[LinkRecord], report: &crate::report::Report) -> Result<()> {
-    for record in links {
-        if std::fs::symlink_metadata(&record.link).is_err() {
-            continue;
-        }
-        if !still_placed(record) {
-            report.debug(&format!(
-                "leaving {}: it is no longer what ketch placed there",
-                record.link.display()
-            ));
-            continue;
-        }
-        remove_any(&record.link).map_err(|e| Error::fs_kit(&record.link, e))?;
-    }
-    Ok(())
+    super::common::unplace(links, report, still_placed)
 }
 
 /// Confirm extra destinations are ours to take, and that the payload files exist.
@@ -467,81 +248,23 @@ pub(crate) fn link_planned_extras(
     recorded: &[LinkRecord],
     claims: &mut Claims,
 ) -> Result<Vec<LinkRecord>> {
-    let mut links = Vec::new();
-    for extra in extras {
-        let target = crate::extra::resolve_under(root, &extra.rel_path)?;
-        if let Some(parent) = extra.dest.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
-        }
+    super::common::link_planned_extras(extras, root, |extra, target| {
         clear_destination(&extra.dest, owned, recorded, claims)?;
-        symlink(&target, &extra.dest)?;
-        links.push(LinkRecord {
+        symlink(target, &extra.dest)?;
+        Ok(LinkRecord {
             link: extra.dest.clone(),
-            target,
+            target: target.to_path_buf(),
             kind: LinkKind::Symlink,
             role: extra.role,
-        });
-    }
-    Ok(links)
+        })
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{BinSpec, LinkKind, LinkRecord, LinkRole};
+    use crate::model::{LinkKind, LinkRecord, LinkRole};
     use std::path::PathBuf;
-
-    #[test]
-    fn a_bin_glob_prefers_the_link_named_binary_over_a_helper_beside_it() {
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(tmp.path().join("rtok-hook"), b"hook").unwrap();
-        std::fs::write(tmp.path().join("rtok"), b"main").unwrap();
-        let specs = [BinSpec {
-            path: Some("rtok*".into()),
-            name: Some("rtok".into()),
-        }];
-        let got = resolve_bin_specs(tmp.path(), &specs).unwrap();
-        assert_eq!(got.len(), 1);
-        assert_eq!(got[0].0.file_name().unwrap(), "rtok");
-        assert_eq!(got[0].1, "rtok");
-    }
-
-    #[test]
-    fn a_payload_link_routed_through_another_link_out_of_the_tree_is_not_a_program() {
-        let outer = tempfile::tempdir().unwrap();
-        let root = outer.path().join("payload");
-        std::fs::create_dir_all(&root).unwrap();
-        std::fs::write(outer.path().join("outside"), b"#!/bin/sh\n").unwrap();
-        std::fs::write(root.join("inside"), b"#!/bin/sh\n").unwrap();
-        std::os::unix::fs::symlink(".", root.join("L")).unwrap();
-        // Planted by a payload no extractor checked (a DMG or PKG copy): one
-        // hop reads `abs`, which is inside, and stops there.
-        std::os::unix::fs::symlink(outer.path().join("outside"), root.join("abs")).unwrap();
-        std::os::unix::fs::symlink("abs", root.join("escape")).unwrap();
-        std::os::unix::fs::symlink("L/inside", root.join("alias")).unwrap();
-
-        let entry_for = |name: &str| {
-            walkdir::WalkDir::new(&root)
-                .into_iter()
-                .filter_map(|e| e.ok())
-                .find(|e| e.file_name() == name)
-                .unwrap()
-        };
-        assert_eq!(payload_executable_entry(&entry_for("escape"), &root), None);
-        assert_eq!(
-            payload_executable_entry(&entry_for("alias"), &root),
-            Some(root.join("alias"))
-        );
-    }
-
-    #[test]
-    fn parent_dir_is_bin_ignores_ascii_case() {
-        assert!(parent_dir_is_bin(Path::new("/store/pkg/bin/tool")));
-        assert!(parent_dir_is_bin(Path::new("/store/pkg/Bin/tool")));
-        assert!(parent_dir_is_bin(Path::new("/store/pkg/BIN/tool")));
-        assert!(!parent_dir_is_bin(Path::new("/store/pkg/lib/tool")));
-        assert!(!parent_dir_is_bin(Path::new("/store/pkg/tool")));
-    }
 
     #[test]
     fn making_a_binary_executable_leaves_every_other_bit_alone() {

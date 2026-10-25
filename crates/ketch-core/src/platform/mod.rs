@@ -13,6 +13,8 @@
 
 pub mod scoring;
 
+mod common;
+
 #[cfg(any(unix, windows))]
 pub(crate) mod claim;
 

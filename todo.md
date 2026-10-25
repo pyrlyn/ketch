@@ -35,8 +35,6 @@
 - K928. Probe source plugins only when needed
 - K929. Pass the platform in, and fault-inject placement
 - K930. Move OS-neutral placement code into one module
-- K930.1. Share bin resolution and executable discovery
-- K930.2. Share placement, unplace and extra linking
 - K931. Lock assets and hashes for several targets
 - K932. Show verification status and add `ketch audit`
 - K933. Verify GitHub artifact attestations for client apps
