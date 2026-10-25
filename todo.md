@@ -51,7 +51,6 @@
 - K942. Keep one dependency bot and drop inert tools
 - K943. Commit mise.lock and install tools with checksums
 - K944. Dry-run the desktop release workflows
-- K945. Run the fuzz targets on a schedule
 - K946. Pin, roll back and show history in the desktop apps
 - K946.1. macOS: pin, roll back and history
 - K946.2. Windows: pin, roll back and history

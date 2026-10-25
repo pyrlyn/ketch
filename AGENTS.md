@@ -274,7 +274,7 @@ differ by orders of magnitude — the cargo home is the small one. Set
 | `crates/ketch-core/migrations/` | the `stats.db` schema, embedded by `stats.rs` |
 | `ketch.toml` | the host's own package file, what `ketch registry push` sends |
 | `tests/` | end-to-end tests that drive the real binary |
-| `fuzz/` | cargo-fuzz targets, its own workspace on nightly; `just fuzz`, see `fuzz/README.md` |
+| `fuzz/` | cargo-fuzz targets, its own workspace on nightly; `just fuzz`, see `fuzz/README.md`. Weekly Linux run: `.github/workflows/fuzz.yml` |
 | `dist-workspace.toml` | what cargo-dist builds, signs and publishes; the source of `release.yml` |
 | `scripts/dist-generate.sh` | `dist generate` plus the patches to `release.yml` dist has no setting for |
 | `.github/build-setup.yml`, `.github/build-check.yml` | steps dist splices into each release build: before it, and before upload |

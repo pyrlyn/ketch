@@ -148,7 +148,6 @@ Fixed and merged, cards in `done.md`: B84 (#301), B90 (#295), B91 (#317), B92 (#
 | K942 | todo | P2 | 2 | 0% | |
 | K943 | todo | P2 | 2 | 0% | |
 | K944 | todo | P2 | 3 | 0% | |
-| K945 | todo | P2 | 2 | 0% | |
 | K946 | todo | P2 | 3 | 0% | |
 | K946.1 | todo | P2 | 3 | 0% | |
 | K946.2 | todo | P2 | 3 | 0% | |
@@ -660,12 +659,6 @@ Done when `mise.lock` is committed, CI installs in locked mode, and the two base
 `release-apple-desktop.yml` and `release-windows-desktop.yml` have never run; `SUPublicEDKey` is a placeholder and the Windows certificate secrets do not exist. The first real run will meet months of drift.
 
 Done when each workflow has a `dry-run` input that builds and signs with a throwaway certificate and Sparkle key, skips notarisation and publishing, and runs weekly or on changes to its files.
-
-### K945. Run the fuzz targets on a schedule
-
-`fuzz/` has 11 targets over the trust-boundary parsers (archives, manifests, checksums), but CI only type-checks `cfg(fuzzing)`; nothing ever fuzzes.
-
-Done when a weekly Linux job runs each target about two minutes on nightly with a cached corpus, uploads crashes and opens an issue on one.
 
 #### Desktop apps
 

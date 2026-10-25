@@ -87,9 +87,9 @@ the way: a 7-package registry (K905, K910, K911) and the name collision (K906).
   `to <= from`; the cask is stuck at 0.10.0 (issue #367) (K908).
 - Neither desktop release workflow has ever run; `SUPublicEDKey` is a
   placeholder in `desktop/macos/Ketch/Info.plist` (K944).
-- `fuzz/` has 11 targets that CI only type-checks (K945); there is no
-  `mise.lock` (K943); Renovate and Dependabot overlap, and CodeRabbit and
-  release-plz are inert (K942).
+- `fuzz/` runs weekly on Linux nightly (`.github/workflows/fuzz.yml`, K945).
+  There is no `mise.lock` (K943); Renovate and Dependabot overlap, and
+  CodeRabbit and release-plz are inert (K942).
 
 ## Desktop apps
 

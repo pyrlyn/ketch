@@ -651,7 +651,7 @@ jobs:
 
       # src/lib.rs and the core's fuzz entry points exist only under
       # cfg(fuzzing), which no other build sets; checked on stable here so they
-      # cannot rot unnoticed again until someone runs the nightly fuzz build.
+      # cannot rot unnoticed. The weekly fuzz workflow runs the targets.
       # What `just fuzz-check` runs.
       - name: The fuzzing library compiles
         if: env.RUN == 'true' && runner.os == 'Linux'

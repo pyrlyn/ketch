@@ -1978,3 +1978,11 @@ names the `rtok task` command that does the job. `AGENTS.md` has a Tasks
 section saying the same.
 
 Tests: `plan_todo_and_done_agree_with_rtok_tasks`, `a_row_written_by_hand_without_rtok_fails`, `a_new_task_with_an_id_picked_by_hand_fails`, `a_task_file_written_by_hand_is_refused`, `a_subtask_needs_its_parent`, `every_failure_names_the_rtok_command_to_use`.
+
+### K945. Run the fuzz targets on a schedule
+
+`fuzz/` has 11 targets over the trust-boundary parsers (archives, manifests, checksums), but CI only type-checks `cfg(fuzzing)`; nothing ever fuzzes.
+
+Done when a weekly Linux job runs each target about two minutes on nightly with a cached corpus, uploads crashes and opens an issue on one.
+
+Status: done. `.github/workflows/fuzz.yml` runs every target `just fuzz` lists for two minutes on Linux nightly, weekly (Monday 06:17 UTC) and on `workflow_dispatch`. `fuzz/seed.sh` seeds `fuzz/corpus`, and `actions/cache` keeps that corpus for the next run. A crash uploads `fuzz/artifacts` and opens one issue listing the targets. A clean run opens nothing.

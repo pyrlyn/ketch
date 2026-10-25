@@ -1,0 +1,193 @@
+# Weekly libFuzzer run. CI type-checks `cfg(fuzzing)` on the stable pin;
+# this workflow is what executes the targets. Linux only: libFuzzer does
+# not run on Windows, so there is no matrix.
+name: fuzz
+
+on:
+  schedule:
+    # Monday 06:17 UTC. pipeline.yml's weekly scan is 04:17 the same day;
+    # keep them apart so the two long jobs do not start together.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+# A weekly run is the corpus the next week restores, and the crash issue
+# is filed at the end. Cancelling it would drop both. A dispatch waits.
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: write
+    outputs:
+      crashed: ${{ steps.fuzz.outputs.crashed }}
+      targets: ${{ steps.fuzz.outputs.targets }}
+      artifact-url: ${{ steps.crashes.outputs.artifact-url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # libFuzzer needs nightly (fuzz/README.md). The rust pin in mise.toml
+      # stays the stable toolchain for every other build; this job does not
+      # select it. The hosted runner's rustup installs nightly.
+      - name: Install nightly
+        run: rustup toolchain install nightly --profile minimal --component rust-src
+
+      # cargo-fuzz stays the mise.toml pin. It is installed with that stable
+      # toolchain; the targets below still run on nightly.
+      - name: Install cargo-fuzz
+        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          install_args: "cargo:cargo-fuzz"
+
+      # A new primary key every attempt, so this run's corpus is what the
+      # next run restores. save-always on actions/cache does not survive a
+      # failed job; restore and save are separate so a crash still keeps
+      # the corpus.
+      - name: Restore the corpus
+        id: corpus
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: fuzz/corpus
+          key: fuzz-corpus-linux-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            fuzz-corpus-linux-
+
+      # seed.sh only adds seed-* files, so a corpus the previous run grew
+      # stays beside them. Restore first or the cache would hide the seeds.
+      - name: Seed the corpus
+        id: seed
+        run: fuzz/seed.sh
+
+      - name: Run each target
+        id: run
+        shell: bash
+        run: |
+          set -euo pipefail
+          # `just fuzz` with no target is `cargo +nightly fuzz list`. The
+          # flags match the recipe; two minutes, not its 60s default.
+          if ! targets=$(rustup run nightly cargo fuzz list); then
+            echo "cargo +nightly fuzz list failed" >&2
+            exit 1
+          fi
+          if [ -z "$targets" ]; then
+            echo "cargo +nightly fuzz list printed no targets" >&2
+            exit 1
+          fi
+          if ! rustup run nightly cargo fuzz build; then
+            echo "cargo +nightly fuzz build failed" >&2
+            exit 1
+          fi
+
+          crash_file="$RUNNER_TEMP/fuzz-crashed.txt"
+          : > "$crash_file"
+          hard=0
+          while IFS= read -r target; do
+            [ -n "$target" ] || continue
+            echo "::group::$target"
+            if ! rustup run nightly cargo fuzz run "$target" -- -max_total_time=120 -max_len=16384 -rss_limit_mb=4096; then
+              arts="fuzz/artifacts/$target"
+              first=""
+              if [ -d "$arts" ]; then
+                first=$(find "$arts" -type f -print -quit || true)
+              fi
+              if [ -n "$first" ]; then
+                printf '%s\n' "$target" >> "$crash_file"
+              else
+                echo "$target failed without a crash artifact" >&2
+                hard=1
+              fi
+            fi
+            echo "::endgroup::"
+          done <<< "$targets"
+
+          if [ -s "$crash_file" ] || [ "$hard" -ne 0 ]; then
+            exit 1
+          fi
+
+      # The run step exits non-zero on a crash, which drops that step's
+      # outputs. This step still runs and is what the issue job reads.
+      - name: Record crashes
+        id: fuzz
+        if: always() && steps.run.outcome != 'skipped'
+        shell: bash
+        run: |
+          set -euo pipefail
+          crash_file="$RUNNER_TEMP/fuzz-crashed.txt"
+          if [ -s "$crash_file" ]; then
+            {
+              echo "crashed=true"
+              echo "targets<<FUZZ_TARGETS"
+              cat "$crash_file"
+              echo "FUZZ_TARGETS"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "crashed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload crashes
+        id: crashes
+        if: failure() && steps.fuzz.outputs.crashed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-crashes-${{ github.run_id }}-${{ github.run_attempt }}
+          path: fuzz/artifacts
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Save the corpus
+        if: always() && steps.seed.outcome == 'success'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: fuzz/corpus
+          key: ${{ steps.corpus.outputs.cache-primary-key }}
+
+  issue:
+    needs: fuzz
+    if: failure() && needs.fuzz.outputs.crashed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open one issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TARGETS: ${{ needs.fuzz.outputs.targets }}
+          ARTIFACT_URL: ${{ needs.fuzz.outputs.artifact-url }}
+        run: |
+          set -euo pipefail
+          body="$RUNNER_TEMP/fuzz-issue.md"
+          {
+            echo "The weekly Linux fuzz run found a crash."
+            echo
+            echo "Targets:"
+            printf '%s\n' "$TARGETS" | while IFS= read -r target; do
+              [ -n "$target" ] || continue
+              printf -- "- \`%s\`\\n" "$target"
+            done
+            echo
+            printf 'Run: %s\n' "$RUN_URL"
+            echo
+            if [ -n "${ARTIFACT_URL:-}" ]; then
+              printf 'Artifact: %s\n' "$ARTIFACT_URL"
+              echo
+            fi
+            echo "The artifact is the \`fuzz/artifacts\` tree. Minimise a file with \`cargo +nightly fuzz tmin <target> <file>\` and add a regression test. See fuzz/README.md."
+          } > "$body"
+          gh issue create \
+            --title "fuzz: crash in run ${GITHUB_RUN_ID} attempt ${GITHUB_RUN_ATTEMPT}" \
+            --body-file "$body"

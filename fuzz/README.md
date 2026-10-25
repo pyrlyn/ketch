@@ -31,6 +31,14 @@ cargo +nightly fuzz build     # build every target
 plugin, and small archives it makes itself. `corpus/`, `artifacts/` and
 `target/` are ignored.
 
+## CI
+
+`.github/workflows/fuzz.yml` runs every target `just fuzz` lists for two
+minutes, weekly and on demand, on Linux nightly. `fuzz/seed.sh` seeds the
+corpus and `actions/cache` keeps what the previous run grew. A crash uploads
+`fuzz/artifacts` and opens one issue listing every target that crashed. A
+clean run opens nothing. The stable type-check stays `just fuzz-check`.
+
 ## Targets
 
 | Target | Drives | Fails when |

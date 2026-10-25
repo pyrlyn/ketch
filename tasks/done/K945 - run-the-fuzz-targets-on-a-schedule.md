@@ -1,9 +1,10 @@
 ---
 id: K945
 title: Run the fuzz targets on a schedule
-status: open
+status: done
 created_at: 1792603911
-updated_at: 1792603911
+updated_at: 1792958210
+assignee: d2a34757-1247-4b58-beb9-8a90d064e359
 ---
 
 `fuzz/` has 11 targets over the trust-boundary parsers (archives, manifests, checksums), but CI only type-checks `cfg(fuzzing)`; nothing ever fuzzes.
