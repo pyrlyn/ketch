@@ -21,6 +21,15 @@ Taken by the creator before the port started:
 - **Publisher signatures.** sigstore, minisign and OpenPGP verification come last (T14). Until
   then a manifest whose `trust` table requires a signature is refused with a clear error, as Rust
   ketch built without its `trust` feature does.
+- **Shared libraries (T3).** TOML, YAML, semver, HTTP and SQLite come from the new included build
+  `packages/kotlin-kit`, extracted from rtok-kotlin's `libs/` with neutral package names
+  (`toml`, `tomlaot`, `yamlaot`, `semver`, `http`, `db`). rtok-kotlin moves onto it in a separate
+  session.
+
+Taken during the port:
+
+- **SHA-256.** `org.kotlincrypto.hash:sha2` rather than rtok-kotlin's `Sha256`: that one hashes a
+  whole byte array in memory, and ketch hashes downloads in chunks.
 
 ## Goals of the port
 
@@ -56,7 +65,7 @@ The Rust modules each task covers. ✅ ported with tests green, 🟡 partial, �
 | --- | --- | --- |
 | T1 | build scaffolding | ✅ |
 | T2 | `error`, `text`, `diff`, `cancel`, `decide`, `bin_choice`, `platform/scoring` | ✅ |
-| T3 | shared Kotlin libraries: TOML (read + comment-keeping edit), YAML, semver, SHA-256, HTTP, SQLite | ⬜ |
+| T3 | shared Kotlin libraries: TOML (read + comment-keeping edit), YAML, semver, SHA-256, HTTP, SQLite | ✅ |
 | T4 | `config`, `toml_file`, `log`, `report`, `model`, `manifest`, `extra`, `hooks`, `lockfile`, `state`, `fsio`, `link` | ⬜ |
 | T5 | `extract` (tar, gzip, xz, bzip2, zip, macOS dmg/pkg) | ⬜ |
 | T6 | `platform` (mod, unix, macos, linux, claim), `process`, `shell` | ⬜ |

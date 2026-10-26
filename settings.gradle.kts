@@ -19,4 +19,8 @@ plugins {
 
 rootProject.name = "ketch-kotlin"
 
+// TOML, YAML, semver, HTTP and SQLite, shared with rtok-kotlin: a checkout of kotlin-kit.
+// KOTLIN_KIT_DIR overrides the path, as CI_DIFFUSER_DIR does above.
+includeBuild(System.getenv("KOTLIN_KIT_DIR") ?: "../../packages/kotlin-kit")
+
 include(":ketch-core", ":ketch-wire", ":ketch", ":desktop")

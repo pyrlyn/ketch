@@ -26,8 +26,9 @@ its output, the config and manifest TOML, `ketch.lock`, `state.json`, the `~/.ke
 
 ## Build and test
 
-Needs JDK 21 and a checkout of `ci-diffuser` next to this one (`../ci-diffuser`, or
-`CI_DIFFUSER_DIR`).
+Needs JDK 21, a checkout of `ci-diffuser` next to this one (`../ci-diffuser`, or
+`CI_DIFFUSER_DIR`) and one of `kotlin-kit` (`../../packages/kotlin-kit`, or `KOTLIN_KIT_DIR`).
+TOML, YAML, semver, HTTP and SQLite come from kotlin-kit: change them there, not here.
 
 ```bash
 ./gradlew build                    # everything: compile, tests, ktlint, detekt

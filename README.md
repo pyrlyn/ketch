@@ -14,7 +14,9 @@ Status: early port. What is ported so far is tracked in [plan/README.md](plan/RE
 ## Build
 
 Needs JDK 21 and a checkout of `ci-diffuser` at `../ci-diffuser` (or `CI_DIFFUSER_DIR`), which
-supplies the shared Kotlin/Native settings, ktlint, detekt and the optional remote build cache.
+supplies the shared Kotlin/Native settings, ktlint, detekt and the optional remote build cache, and
+a checkout of `kotlin-kit` at `../../packages/kotlin-kit` (or `KOTLIN_KIT_DIR`), which supplies the
+TOML, YAML, semver, HTTP and SQLite libraries.
 
 ```bash
 ./gradlew build
