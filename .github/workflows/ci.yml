@@ -140,7 +140,11 @@ jobs:
         with:
           tool: nextest
 
-      - name: Platform tests
+      - name: tests skipped (SKIP_CI_TESTS)
+        if: vars.SKIP_CI_TESTS == 'true' || env.SKIP_CI_TESTS == 'true'
+        run: echo "::notice title=SKIP_CI_TESTS::tests skipped by SKIP_CI_TESTS"
+      - if: vars.SKIP_CI_TESTS != 'true' && env.SKIP_CI_TESTS != 'true'
+        name: Platform tests
         run: cargo nextest run --workspace --all-targets --locked --no-tests=pass -E "$PLATFORM_TESTS"
 
   # install.ps1 parses and runs on Windows PowerShell 5.1 and pwsh: platform-only, optional.
@@ -268,7 +272,11 @@ jobs:
         with:
           tool: nextest
 
-      - name: Platform tests
+      - name: tests skipped (SKIP_CI_TESTS)
+        if: vars.SKIP_CI_TESTS == 'true' || env.SKIP_CI_TESTS == 'true'
+        run: echo "::notice title=SKIP_CI_TESTS::tests skipped by SKIP_CI_TESTS"
+      - if: vars.SKIP_CI_TESTS != 'true' && env.SKIP_CI_TESTS != 'true'
+        name: Platform tests
         run: cargo nextest run --workspace --all-targets --locked --no-tests=pass -E "$PLATFORM_TESTS"
 
   # The macOS app (desktop/macos) is Swift only: its own job beside the Rust
@@ -376,7 +384,11 @@ jobs:
       - name: XCFramework and bindings
         run: scripts/xcframework.sh --debug
 
-      - name: Swift test
+      - name: tests skipped (SKIP_CI_TESTS)
+        if: vars.SKIP_CI_TESTS == 'true' || env.SKIP_CI_TESTS == 'true'
+        run: echo "::notice title=SKIP_CI_TESTS::tests skipped by SKIP_CI_TESTS"
+      - if: vars.SKIP_CI_TESTS != 'true' && env.SKIP_CI_TESTS != 'true'
+        name: Swift test
         run: swift test --package-path desktop/macos/KetchCore
 
   # ketch-ffi as the Windows app will link it: ketch_ffi.dll, the C# bindings
@@ -407,7 +419,11 @@ jobs:
       - name: Library and bindings
         run: scripts/csharp.sh --debug
 
-      - name: .NET test
+      - name: tests skipped (SKIP_CI_TESTS)
+        if: vars.SKIP_CI_TESTS == 'true' || env.SKIP_CI_TESTS == 'true'
+        run: echo "::notice title=SKIP_CI_TESTS::tests skipped by SKIP_CI_TESTS"
+      - if: vars.SKIP_CI_TESTS != 'true' && env.SKIP_CI_TESTS != 'true'
+        name: .NET test
         working-directory: desktop/windows
         run: dotnet test --project KetchCore.Tests
 
@@ -479,10 +495,15 @@ jobs:
         working-directory: .
         run: scripts/csharp.sh --debug
 
-      - name: App core tests
+      - name: tests skipped (SKIP_CI_TESTS)
+        if: vars.SKIP_CI_TESTS == 'true' || env.SKIP_CI_TESTS == 'true'
+        run: echo "::notice title=SKIP_CI_TESTS::tests skipped by SKIP_CI_TESTS"
+      - if: vars.SKIP_CI_TESTS != 'true' && env.SKIP_CI_TESTS != 'true'
+        name: App core tests
         run: dotnet test --project Ketch.AppCore.Tests
 
-      - name: Adapter tests
+      - if: vars.SKIP_CI_TESTS != 'true' && env.SKIP_CI_TESTS != 'true'
+        name: Adapter tests
         run: dotnet test --project Ketch.FfiCore.Tests
 
       - name: Build the WinUI app
