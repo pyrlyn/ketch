@@ -1,0 +1,11 @@
+# Overrides on top of the shared ci-diffuser and default detekt config, the same ones octo uses.
+style:
+  MagicNumber:
+    excludes: ['**/commonTest/**', '**/nativeTest/**', '**/jvmTest/**', '**/test/**']
+    # A named property already says what its number means.
+    ignorePropertyDeclaration: true
+
+complexity:
+  TooManyFunctions:
+    allowedFunctionsPerClass: 25
+    allowedFunctionsPerFile: 25

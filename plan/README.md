@@ -55,7 +55,7 @@ The Rust modules each task covers. ✅ ported with tests green, 🟡 partial, �
 | Task | Rust | Status |
 | --- | --- | --- |
 | T1 | build scaffolding | ✅ |
-| T2 | `error`, `text`, `diff`, `cancel`, `decide`, `bin_choice`, `platform/scoring` | ⬜ |
+| T2 | `error`, `text`, `diff`, `cancel`, `decide`, `bin_choice`, `platform/scoring` | ✅ |
 | T3 | shared Kotlin libraries: TOML (read + comment-keeping edit), YAML, semver, SHA-256, HTTP, SQLite | ⬜ |
 | T4 | `config`, `toml_file`, `log`, `report`, `model`, `manifest`, `extra`, `hooks`, `lockfile`, `state`, `fsio`, `link` | ⬜ |
 | T5 | `extract` (tar, gzip, xz, bzip2, zip, macOS dmg/pkg) | ⬜ |
