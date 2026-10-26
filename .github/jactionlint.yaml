@@ -2,3 +2,10 @@
 # The default profile applies. `baseline: auto` hides the findings recorded in
 # .github/jactionlint-baseline.json; refresh it with `mise x -- jactionlint --baseline-write`.
 baseline: auto
+
+# The organization no-pinned-ci gate requires its shared actions to track main.
+ignores:
+  - rule: unpinned-uses
+    uses: pyrlyn/ci/.github/actions/setup-rust
+    file: .github/workflows/ci.yml
+    reason: Organization no-pinned-ci policy requires pyrlyn/ci references to use main.

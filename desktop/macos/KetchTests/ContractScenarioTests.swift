@@ -107,9 +107,10 @@ import Testing
 
         #expect(store.busy?.pid == nil)
         #expect(store.errorMessage == nil)
-        #expect(store.log.contains {
-            $0.level == .warning && $0.message == "ketch is running in another process."
-        })
+        #expect(
+            store.log.contains {
+                $0.level == .warning && $0.message == "ketch is running in another process."
+            })
         #expect(store.busy?.message == "Another ketch is running. Retry when it finishes.")
     }
 
