@@ -1,0 +1,18 @@
+# Toolchain for ketch-kotlin, installed with `mise install` (see toolchain.md).
+# Keep `gradle` in step with gradle/wrapper/gradle-wrapper.properties.
+[tools]
+java = "temurin-21"   # JDK for Gradle, the Kotlin daemon and the desktop app
+gradle = "9.8.2"      # same as the wrapper
+
+[tasks.release]
+description = "Release binary, full whole-program optimization (for shipping)"
+run = "./gradlew :ketch:linkReleaseExecutableMacosArm64"
+[tasks.release-fast]
+description = "Release binary from the K/N release binary cache; dev/CI only, never ship"
+run = "./gradlew :ketch:linkReleaseExecutableMacosArm64 -Pdiffuser.release.fast=true"
+[tasks.lint]
+description = "ktlint + detekt"
+run = "./gradlew ktlintCheck detekt"
+[tasks.format]
+description = "ktlint auto-format"
+run = "./gradlew ktlintFormat"
