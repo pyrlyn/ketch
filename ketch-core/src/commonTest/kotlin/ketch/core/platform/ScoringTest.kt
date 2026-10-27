@@ -1,6 +1,7 @@
 package ketch.core.platform
 
 import ketch.core.model.Arch
+import kotlinx.io.files.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -170,7 +171,25 @@ class ScoringTest {
 
     @Test
     fun thePackagesOwnBinaryIsOrderedFirst() {
-        assertEquals(listOf("d/rtok.exe", "d/rtok-hook.exe"), orderDiscoveredExecutables(listOf("d/rtok-hook.exe", "d/rtok.exe"), "rtok"))
-        assertEquals(listOf("d/a", "d/b"), orderDiscoveredExecutables(listOf("d/b", "d/a"), "rtok"))
+        fun order(vararg found: String) = orderDiscoveredExecutables(found.map(::Path), "rtok").map { it.toString() }
+        assertEquals(listOf("d/rtok.exe", "d/rtok-hook.exe"), order("d/rtok-hook.exe", "d/rtok.exe"))
+        assertEquals(listOf("d/a", "d/b"), order("d/b", "d/a"))
+        // Rust orders paths by component, not by bytes: `-` sorts before `/` as a byte.
+        assertEquals(listOf("a/b", "a-c/x"), order("a-c/x", "a/b"))
+    }
+
+    @Test
+    fun thePackageNameMatchIgnoresExeAndAsciiCase() {
+        // Upper case sorts first, so a plain sort selects the hook.
+        val found = orderDiscoveredExecutables(listOf(Path("payload/rtok.exe"), Path("payload/RTOK-HOOK.EXE")), "Rtok")
+        assertEquals(Path("payload/rtok.exe"), found[0])
+    }
+
+    @Test
+    fun detectsSidecars() {
+        assertTrue(isSidecar("rg-14.tar.gz.sha256"))
+        assertTrue(isSidecar("tool.dmg.asc"))
+        assertTrue(isSidecar("bundle.intoto.jsonl"))
+        assertFalse(isSidecar("rg-14.tar.gz"))
     }
 }

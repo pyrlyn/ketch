@@ -65,10 +65,10 @@ fun globPreferred(
     val want = name?.let { fileStem(Path(it).name) }
     val named = if (want == null) null else sorted.firstOrNull { fileStem(it.name)?.eqIgnoreAsciiCase(want) == true }
     if (sorted.size <= 1 || named != null) return named ?: sorted.firstOrNull()
-    val rootParts = components(root)
+    val rootParts = rustComponents(root)
     val listed =
         sorted.joinToString("\n") { p ->
-            val parts = components(p)
+            val parts = rustComponents(p)
             val rel = if (parts.take(rootParts.size) == rootParts) parts.drop(rootParts.size) else parts
             "  ${rel.joinToString("/")}"
         }
@@ -80,17 +80,17 @@ fun globPreferred(
 }
 
 /** Rust's `Path::components` for a `/` path: empty and `.` parts dropped, a leading `/` its own first part. */
-private fun components(path: Path): List<String> {
+internal fun rustComponents(path: Path): List<String> {
     val text = path.toString()
     val parts = text.split('/').filter { it.isNotEmpty() && it != "." }
     return if (text.startsWith('/')) listOf("") + parts else parts
 }
 
 /** Rust orders paths component by component, each by its bytes. */
-private val PATH_ORDER =
+internal val PATH_ORDER =
     Comparator<Path> { a, b ->
-        val x = components(a)
-        val y = components(b)
+        val x = rustComponents(a)
+        val y = rustComponents(b)
         x.zip(y).firstNotNullOfOrNull { (l, r) -> BYTE_ORDER.compare(l, r).takeIf { it != 0 } } ?: x.size.compareTo(y.size)
     }
 

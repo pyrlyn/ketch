@@ -1,8 +1,9 @@
 package ketch.core.platform
 
 import ketch.core.model.Arch
-import ketch.core.text.BYTE_ORDER
+import ketch.core.model.PATH_ORDER
 import ketch.core.text.asciiLowercase
+import kotlinx.io.files.Path
 
 /** How well a release asset suits this machine. */
 data class AssetScore(
@@ -97,15 +98,14 @@ fun isSidecar(name: String): Boolean {
 private fun executableNameKey(name: String): String = name.asciiLowercase().removeSuffix(".exe")
 
 /**
- * Order discovered executables (file names) so the package's own binary comes first. A plain sort is not that
- * order: `rtok` sorts before `rtok-hook`, but `rtok-hook.exe` sorts before `rtok.exe`. The binary whose name
- * equals the package name wins; everything else keeps byte order, so the result does not depend on listing order.
+ * Order discovered executables so the package's own binary comes first. A plain sort is not that order: `rtok`
+ * sorts before `rtok-hook`, but `rtok-hook.exe` sorts before `rtok.exe`. The binary whose name equals the package
+ * name wins; everything else keeps Rust's path order, so the result does not depend on listing order.
  */
 fun orderDiscoveredExecutables(
-    found: List<String>,
+    found: List<Path>,
     pkg: String,
-): List<String> {
+): List<Path> {
     val want = executableNameKey(pkg)
-    val name = { path: String -> path.substringAfterLast('/') }
-    return found.sortedWith(compareBy<String> { executableNameKey(name(it)) != want }.then(BYTE_ORDER))
+    return found.sortedWith(compareBy<Path> { executableNameKey(it.name) != want }.then(PATH_ORDER))
 }
