@@ -11,6 +11,7 @@ import ketch.core.config.Config
 import ketch.core.config.sanitizeComponent
 import ketch.core.error.KetchError
 import ketch.core.error.fsKit
+import ketch.core.error.fsKitAt
 import ketch.core.model.Manifest
 import ketch.core.model.normalizeName
 import ketch.core.tomlfile.EditDocument
@@ -45,9 +46,9 @@ fun writeBins(
 ): Boolean {
     // A manifest linked in from a dotfiles repository is edited there, not replaced by a copy that silently stops
     // following the repository.
-    val target = fsKit(path) { canonicalize(path) }
+    val target = fsKitAt(path) { canonicalize(path) }
     val label = target.toString()
-    val doc = EditDocument.parse(fsKit(target) { readText(target) }, label)
+    val doc = EditDocument.parse(fsKitAt(target) { readText(target) }, label)
     val wanted = normalizeName(packageName)
     val table =
         doc.packageTable { normalizeName(it) == wanted }
@@ -77,7 +78,7 @@ fun writeManifest(
             path
         }
     parseRegistry(text, target.toString())
-    target.parent?.let { dir -> fsKit(dir) { createDirAll(dir) } }
+    target.parent?.let { dir -> fsKitAt(dir) { createDirAll(dir) } }
     replaceFile(target, text)
 }
 
@@ -85,17 +86,7 @@ fun writeManifest(
 internal fun replaceFile(
     target: Path,
     body: String,
-) = fsKit(target) {
+) = fsKitAt(target) {
     // An existing manifest keeps the mode the user gave it; a new one is private.
     WriteOptions(followSymlinks = false, mode = NEW_MANIFEST_MODE).write(target, body.encodeToByteArray())
 }
-
-private inline fun <T> fsKit(
-    path: Path,
-    body: () -> T,
-): T =
-    try {
-        body()
-    } catch (e: FsException) {
-        throw KetchError.fsKit(path, e)
-    }

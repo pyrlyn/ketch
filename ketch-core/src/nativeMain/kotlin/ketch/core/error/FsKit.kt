@@ -10,6 +10,17 @@ fun KetchError.Companion.fsKit(
     e: FsException,
 ): KetchError = KetchError.Io(e.path ?: path, e.withoutPath())
 
+/** Run [body], turning a file-layer error into [KetchError.Io] the way [fsKit] names it. */
+inline fun <T> fsKitAt(
+    path: Path,
+    body: () -> T,
+): T =
+    try {
+        body()
+    } catch (e: FsException) {
+        throw KetchError.fsKit(path, e)
+    }
+
 /** Rust `Error::io(path, e)`: [path] names the failure, whatever path the file layer had. */
 fun KetchError.Companion.io(
     path: Path,
