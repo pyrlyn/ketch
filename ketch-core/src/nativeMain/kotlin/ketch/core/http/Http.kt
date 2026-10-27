@@ -28,7 +28,6 @@ import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.readByteArray
 import kotlinx.serialization.DeserializationStrategy
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -104,13 +103,7 @@ class Http(
         strategy: DeserializationStrategy<T>,
     ): T {
         val body = getString(url, "application/vnd.github+json", authed)
-        return try {
-            API_JSON.decodeFromString(strategy, body)
-        } catch (e: SerializationException) {
-            throw KetchError.Parse(url, e.message ?: e.toString(), e)
-        } catch (e: IllegalArgumentException) {
-            throw KetchError.Parse(url, e.message ?: e.toString(), e)
-        }
+        return decodeApiJson(url, body, strategy)
     }
 
     inline fun <reified T> getJson(
@@ -292,6 +285,25 @@ private suspend fun statusError(
  * Read an API body, refusing a truncated one. Taking [max] bytes and treating them as complete would parse a cut-off
  * JSON or checksum file as if the server had sent it whole; reading one byte past the cap tells the two apart.
  */
+
+/** [body] as [strategy] reads it, or a parse error naming [what]: malformed JSON and a wrong shape alike. */
+internal fun <T> decodeApiJson(
+    what: String,
+    body: String,
+    strategy: DeserializationStrategy<T>,
+): T =
+    try {
+        API_JSON.decodeFromString(strategy, body)
+    } catch (e: IllegalArgumentException) {
+        // SerializationException is an IllegalArgumentException.
+        throw KetchError.Parse(what, e.message ?: e.toString(), e)
+    }
+
+internal inline fun <reified T> decodeApiJson(
+    what: String,
+    body: String,
+): T = decodeApiJson(what, body, serializer<T>())
+
 internal suspend fun readLimited(
     body: HttpBody,
     max: Long,
