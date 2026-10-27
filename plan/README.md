@@ -91,6 +91,14 @@ Taken during the port:
   The Windows parts (PowerShell and cmd completion, registry entries, moving a running `.exe`
   out of the way, removal after exit) and their two probe tests wait for T13. Publisher
   signatures on a self upgrade stay stubbed until T14, like every other install.
+- **Import and push (T9).** `import` is a Kotlin keyword, so the package is `ketch.core.importer`.
+  winget manifests are read with kit `yaml-aot` and handed to kotlinx.serialization as JSON in
+  which every scalar is its source text, so `PackageVersion: 2.0` stays "2.0" as serde-saphyr
+  keeps it. `ketch registry push` speaks the GitHub REST API through the project's `Http`
+  (`getJsonOpt` for reads where 404 is an answer, `sendJson` for POST, PUT and PATCH, the last
+  two new in kit `http`); octocrab has no Kotlin counterpart. Rust's test that octocrab can be
+  built without a running tokio runtime becomes a check that the client is built from plain
+  synchronous code. Rust's `push::File` is `RemoteFile`, which says where the file lives.
 
 ## Goals of the port
 
@@ -132,7 +140,7 @@ The Rust modules each task covers. ✅ ported with tests green, 🟡 partial, �
 | T6 | `platform` (mod, unix, macos, linux, claim), `process`, `shell` | ✅ |
 | T7 | `http`, `source` (github, local, plugin), `resolve`, `releases`, `changelog`, `info`, `registry` | ✅ |
 | T8 | `install`, `listing`, `stats`, `doctor`, `wizard`, `self_update` | ✅ |
-| T9 | `import` (brew, linux, winget, apply, fetch), `push` | ⬜ |
+| T9 | `import` (brew, linux, winget, apply, fetch), `push` | ✅ |
 | T10 | `src/` command line: `cli`, `cmd/*`, `ui`, `complete`, `man`, `self_docs`; `tests/*.rs` end-to-end | ⬜ |
 | T11 | `ketch serve` and `:ketch-wire` (the `ketch-ffi` surface), contract scenarios | ⬜ |
 | T12 | Compose desktop app (the SwiftUI and WinUI screens) | ⬜ |
