@@ -85,7 +85,7 @@ val BYTE_ORDER: Comparator<String> =
         (a.length - i).compareTo(b.length - j)
     }
 
-private fun codePointAt(
+internal fun codePointAt(
     s: String,
     i: Int,
 ): Int {
