@@ -2,7 +2,7 @@
 status: in progress
 priority: P0
 complexity: 4
-readiness: 75%
+readiness: 100%
 agent: Claude Code / claude-opus-5-5
 ---
 
@@ -63,3 +63,14 @@ Notes on the `manifest`, `extra`, `hooks` step:
   proptest is a fixed sample of strings.
 - Hooks run through the new `pyrlyn.kit:process` (no stdin, capped output, process-group kill at
   the deadline); T7's plugin source reuses it. The Windows `cmd /C` shell: T13.
+
+Notes on the `lockfile`, `state`, `link` step:
+
+- `lock.schema.json` and the insta snapshot `lockfile-two-packages.snap` are fixtures copied
+  from `../ketch` at 41738f64; the lockfile proptest is a seeded sample.
+- Unknown keys are skipped per type (`@JsonIgnoreUnknownKeys`) exactly where Rust's serde
+  skips them; types that deny them in Rust still refuse them.
+- The cross-process lock test reruns the test binary filtered to one contender test
+  (`--ktest_filter`); its children prove they ran by writing a file.
+- kotlin-kit's `fs` gained exclusive create, hard links, file removal and modification times
+  for the lock. The Windows `tasklist` liveness check: T13.
