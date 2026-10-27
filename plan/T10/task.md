@@ -2,7 +2,7 @@
 status: in progress
 priority: P0
 complexity: 4
-readiness: 5%
+readiness: 15%
 agent: Claude Code / claude-opus-5-5
 ---
 
@@ -21,7 +21,7 @@ About 7.4k lines of Rust in `src/` (without `tui`) and 12k lines of tests, porte
    and hidden aliases, hidden commands, `required`, `required_unless_present`,
    `conflicts_with`, `requires`, value enums, defaults, ranged numbers, flattened groups), a
    parser, and clap 4.6's help and error output byte for byte (short and long help, wrapping at
-   the terminal width up to 100 columns, `[alias: i]`, `[default: 20]`, `tip:` lines, exit 2).
+   the terminal's width, else `COLUMNS`, else 100 columns, `[alias: i]`, `[default: 20]`, `tip:` lines, exit 2).
    Completion scripts and roff man pages are rendered from the same tree. Clikt leaves `:ketch`.
 2. `ui`: status lines, icons, colour (`NO_COLOR`, `--no-color`, a terminal or not), progress
    bars and prompts, with `ui.rs`'s unit tests and its three snapshots.

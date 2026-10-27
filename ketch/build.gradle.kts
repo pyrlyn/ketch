@@ -14,7 +14,7 @@ kotlin {
         commonMain.dependencies {
             implementation(project(":ketch-core"))
             implementation(project(":ketch-wire"))
-            implementation(libs.clikt)
+            implementation("pyrlyn.kit:cli")
         }
     }
 }
