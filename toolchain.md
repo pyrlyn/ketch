@@ -8,6 +8,9 @@
 | ci-diffuser | sibling checkout at `../ci-diffuser` (or `CI_DIFFUSER_DIR`), local included build | Shared targets, release size, ktlint, detekt, settings | `apps/ci-diffuser` (no remote) |
 | kotlin-kit | checkout at `../../packages/kotlin-kit` (or `KOTLIN_KIT_DIR`), local included build | File, TOML, YAML, semver, HTTP, SQLite and child-process libraries shared with rtok-kotlin | `packages/kotlin-kit` (no remote) |
 | git | system | Version control | https://git-scm.com |
+| conan 2.33.0 | mise (kotlin-kit) | Fetches the static bzip2 and liblzma that kotlin-kit's `archive` links | https://github.com/conan-io/conan |
+| zlib | Kotlin/Native platform library (`platform.zlib`), via kotlin-kit | gzip and deflate in archives | https://zlib.net |
+| hdiutil, pkgutil, ditto | macOS system | Unpacking `.dmg` and `.pkg` releases | https://developer.apple.com |
 
 ## Gradle
 
@@ -20,7 +23,7 @@
 | org.jetbrains.kotlinx:kotlinx-coroutines-test 1.11.0 | local | https://github.com/Kotlin/kotlinx.coroutines | Desktop tests |
 | com.github.ajalt.clikt:clikt 5.1.0 | local | https://github.com/ajalt/clikt | Command line (Rust: clap) |
 | org.kotlincrypto.hash:sha2 0.8.0 | local | https://github.com/KotlinCrypto/hash | Streaming SHA-256 of downloads (Rust: sha2) |
-| pyrlyn.kit:fs, toml, toml-aot, yaml-aot, semver, http-ktor, db-room, process | local (included build) | `packages/kotlin-kit` | Crash-safe file writes (Rust: fs-kit), TOML read and comment-keeping edit, YAML read, versions, HTTP, SQLite, hooks under a deadline (Rust: run_with_deadline) |
+| pyrlyn.kit:fs, toml, toml-aot, yaml-aot, semver, http-ktor, db-room, process, archive | local (included build) | `packages/kotlin-kit` | Crash-safe file writes (Rust: fs-kit), TOML read and comment-keeping edit, YAML read, versions, HTTP, SQLite, hooks under a deadline (Rust: run_with_deadline), tar/zip/gzip/bzip2/xz (Rust: tar, zip, flate2, bzip2, xz2) |
 | io.ktor:ktor-client-core, -darwin, -curl 3.6.0 | via kotlin-kit | https://github.com/ktorio/ktor | HTTP client (Rust: ureq) |
 | androidx.sqlite:sqlite-bundled 2.7.1 | via kotlin-kit | https://developer.android.com/jetpack/androidx/releases/sqlite | SQLite with SQLite bundled (Rust: diesel) |
 | io.kotest:kotest-assertions-core 6.2.6 | local | https://github.com/kotest/kotest | Test assertions |
@@ -30,6 +33,13 @@
 | org.jlleitschuh.gradle.ktlint 14.2.0 (ktlint 1.8.0) | via ci-diffuser | https://github.com/JLLeitschuh/ktlint-gradle | Formatting lint |
 | dev.detekt 2.0.0-alpha.6 | via ci-diffuser | https://github.com/detekt/detekt | Static analysis |
 | com.github.burrunan.s3-build-cache 1.9.10 | local (settings) | https://github.com/burrunan/gradle-s3-build-cache | Optional S3/R2 remote build cache; off without its keys |
+
+## Conan (ConanCenter, via kotlin-kit)
+
+| Package | Where | Source | Why here |
+| --- | --- | --- | --- |
+| bzip2 1.0.8 | via kotlin-kit (`archive/conan.lock`) | https://sourceware.org/bzip2/ | bzip2 codec, linked statically |
+| xz_utils 5.8.4 | via kotlin-kit (`archive/conan.lock`) | https://github.com/tukaani-project/xz | xz decoder (liblzma), linked statically |
 
 ## mise
 

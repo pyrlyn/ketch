@@ -43,6 +43,17 @@ Taken during the port:
   of 80. ktoml 0.7.1 refuses inline tables inside a multi-line array (manifests' `extra_paths`);
   tomlkt 0.6.1 refuses quotes right before a closing `'''`/`"""`, which Rust writes, and accepts
   70 of toml-test's invalid files. A datetime reads as the text Rust's Display gives it.
+- **Archives (T5).** The tar and zip readers and writers are kotlin-kit's own `pyrlyn.kit:archive`
+  (package `archive`); ketch-core keeps every guard (member paths, links, budgets, modes). gzip
+  and deflate use zlib through K/N's `platform.zlib`. bzip2 1.0.8 and liblzma from xz_utils 5.8.4
+  are the C libraries, linked statically from ConanCenter prebuilt binaries pinned by
+  `archive/conan.lock`; Conan is installed through mise. No maintained Kotlin/Native library
+  reads tar, zip, bzip2 or xz. Differences from Rust, all on the side of refusing more: the xz
+  memory limit is counted in bytes; tar names that are not UTF-8 decode lossily; the kit caps GNU
+  long names at 64 KiB, PAX headers at 1 MiB and sparse maps at 100k runs, checks the zip entry
+  count against the central directory's size and ignores a stale Unicode path field. A zip that
+  fails while a member is read is a parse error. `hdiutil`, `pkgutil` and `ditto` run under a
+  60-minute deadline (Rust has none); a missed deadline is a `KetchError.Command`.
 
 ## Goals of the port
 
@@ -80,7 +91,7 @@ The Rust modules each task covers. ✅ ported with tests green, 🟡 partial, �
 | T2 | `error`, `text`, `diff`, `cancel`, `decide`, `bin_choice`, `platform/scoring` | ✅ |
 | T3 | shared Kotlin libraries: TOML (read + comment-keeping edit), YAML, semver, SHA-256, HTTP, SQLite | ✅ |
 | T4 | `config`, `toml_file`, `log`, `report`, `model`, `manifest`, `extra`, `hooks`, `lockfile`, `state`, `fsio`, `link` | ✅ |
-| T5 | `extract` (tar, gzip, xz, bzip2, zip, macOS dmg/pkg) | ⬜ |
+| T5 | `extract` (tar, gzip, xz, bzip2, zip, macOS dmg/pkg) | ✅ |
 | T6 | `platform` (mod, unix, macos, linux, claim), `process`, `shell` | ⬜ |
 | T7 | `http`, `source` (github, local, plugin), `resolve`, `releases`, `changelog`, `info`, `registry` | ⬜ |
 | T8 | `install`, `listing`, `stats`, `doctor`, `wizard`, `self_update` | ⬜ |
