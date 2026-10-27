@@ -76,10 +76,12 @@ internal object PackageRefSerializer : KSerializer<PackageRef> {
 
     override fun deserialize(decoder: Decoder): PackageRef {
         val text = decoder.decodeString()
-        return PackageRef.parse(text)
-            ?: throw SerializationException("`$text` is not a package reference; expected `scheme:id` or `owner/repo`")
+        return PackageRef.parse(text) ?: throw SerializationException(notAReference(text))
     }
 }
+
+/** Why [text] did not parse as a [PackageRef], as Rust's `TryFrom<String>` says it. */
+internal fun notAReference(text: String) = "`$text` is not a package reference; expected `scheme:id` or `owner/repo`"
 
 /** Which version the user asked for. */
 sealed interface VersionSpec {
