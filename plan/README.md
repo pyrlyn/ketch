@@ -63,6 +63,16 @@ Taken during the port:
   and the Windows-only helpers Rust compiles everywhere as dead code (`windows_path_*`, PowerShell
   profile writing, AutoRun, the user PATH in the registry), wait for T13 with their tests; on
   Unix those entry points answer "nothing here", as Rust's do.
+- **Sources and resolution (T7).** HTTP goes through kotlin-kit's `http` client, which now
+  streams a GET body as it arrives, so ketch caps a body while it downloads and hashes it on the
+  way; GitHub, local and plugin sources are tested against recorded responses and kotlin-kit's
+  `pyrlyn.kit:loopback`, a hand-written HTTP/1.1 server on 127.0.0.1 that can break its own
+  framing, in place of Rust's `TcpListener` tests. No test touches the network. Plugins run
+  through the bounded runner of `pyrlyn.kit:process` (30 s, 8 MiB of output). `ketch update`
+  stages the registry in `fs.TempDir.createIn(root)`, so the final rename stays on one
+  filesystem as Rust's `tempdir_in` does. The file errors of kit calls go through one shared
+  `fsKitAt`. Rust's registry `CheckReport` keeps its name; the source table is `SourceRegistry`
+  in `SourceRegistry.kt`, since detekt wants a file named after its one class.
 
 ## Goals of the port
 
@@ -102,7 +112,7 @@ The Rust modules each task covers. ✅ ported with tests green, 🟡 partial, �
 | T4 | `config`, `toml_file`, `log`, `report`, `model`, `manifest`, `extra`, `hooks`, `lockfile`, `state`, `fsio`, `link` | ✅ |
 | T5 | `extract` (tar, gzip, xz, bzip2, zip, macOS dmg/pkg) | ✅ |
 | T6 | `platform` (mod, unix, macos, linux, claim), `process`, `shell` | ✅ |
-| T7 | `http`, `source` (github, local, plugin), `resolve`, `releases`, `changelog`, `info`, `registry` | ⬜ |
+| T7 | `http`, `source` (github, local, plugin), `resolve`, `releases`, `changelog`, `info`, `registry` | ✅ |
 | T8 | `install`, `listing`, `stats`, `doctor`, `wizard`, `self_update` | ⬜ |
 | T9 | `import` (brew, linux, winget, apply, fetch), `push` | ⬜ |
 | T10 | `src/` command line: `cli`, `cmd/*`, `ui`, `complete`, `man`, `self_docs`; `tests/*.rs` end-to-end | ⬜ |
