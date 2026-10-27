@@ -16,6 +16,8 @@ import ketch.core.report.Report
 import ketch.core.testing.read
 import ketch.core.testing.withTempDir
 import ketch.core.testing.write
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.convert
 import kotlinx.io.files.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -173,11 +175,12 @@ class LocalTest {
             assertEquals(LocalKind.App, classify(app))
         }
 
+    @OptIn(ExperimentalForeignApi::class)
     @Test
     fun refusesANamedPipeBeforeOpenCanBlock(): Unit =
         withTempDir { dir ->
             val fifo = Path(dir, "pipe")
-            assertEquals(0, platform.posix.mkfifo(fifo.toString(), "600".toInt(8).toUShort()), "mkfifo failed")
+            assertEquals(0, platform.posix.mkfifo(fifo.toString(), "600".toInt(8).convert()), "mkfifo failed")
             val err = assertFailsWith<KetchError> { classify(fifo) }.message
             assertTrue("not a regular file" in err, "unexpected error: $err")
         }
