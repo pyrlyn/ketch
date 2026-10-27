@@ -14,7 +14,6 @@ import ketch.core.error.KetchError
 import ketch.core.error.fsKit
 import ketch.core.error.ioAt
 import kotlinx.io.files.Path
-import kotlinx.io.files.SystemFileSystem
 
 /** Every destination a placement has claimed, with where its previous occupant was moved to, if it had one. */
 internal class Claims(
@@ -71,7 +70,7 @@ internal fun asideName(path: Path): Path = withFileName(path, ".${path.name}.ket
 internal fun rename(
     from: Path,
     to: Path,
-) = SystemFileSystem.atomicMove(from, to)
+) = fs.rename(from, to)
 
 /** Rust `Path::with_file_name`. */
 internal fun withFileName(
