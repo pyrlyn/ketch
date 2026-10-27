@@ -7,15 +7,15 @@
 package ketch.core.extract.macos
 
 import fs.EntryKind
-import fs.FsException
+import fs.TempDir
 import fs.entryKind
 import fs.isDir
 import fs.listDir
+import fs.walk
 import ketch.core.error.KetchError
 import ketch.core.error.ioAt
 import ketch.core.extract.Extractor
 import ketch.core.extract.resolvesInside
-import ketch.core.fsio.TempDir
 import ketch.core.text.rustTrim
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.convert
@@ -191,41 +191,13 @@ internal fun copyVolume(
  * discovery, man pages, the changelog) would follow it out.
  */
 internal fun ensureLinksInside(dest: Path) {
-    for (path in walk(dest)) {
-        if (entryKind(path) == EntryKind.Symlink && !resolvesInside(path, dest)) {
-            throw KetchError.Msg("refusing payload link $path that resolves outside the payload")
+    val walked = walk(dest, onError = { throw KetchError.Msg("walking $dest: ${it.message}", it) })
+    for (entry in walked) {
+        if (entry.kind == EntryKind.Symlink && !resolvesInside(entry.path, dest)) {
+            throw KetchError.Msg("refusing payload link ${entry.path} that resolves outside the payload")
         }
     }
 }
-
-/** Everything below [root], parents before children, never following a link; [maxDepth] 1 is [root]'s own entries. */
-private fun walk(
-    root: Path,
-    maxDepth: Int = Int.MAX_VALUE,
-    lenient: Boolean = false,
-): Sequence<Path> =
-    sequence {
-        for (name in entries(root, lenient)) {
-            val path = Path(root, name)
-            yield(path)
-            if (maxDepth > 1 && entryKind(path) == EntryKind.Dir) yieldAll(walk(path, maxDepth - 1, lenient))
-        }
-    }
-
-private fun entries(
-    dir: Path,
-    lenient: Boolean,
-): List<String> =
-    if (lenient) {
-        // walkdir's `filter_map(Result::ok)` for the payload search: an unreadable corner holds no payload.
-        runCatching { listDir(dir) }.getOrElse { if (it is FsException) emptyList() else throw it }
-    } else {
-        try {
-            listDir(dir)
-        } catch (e: FsException) {
-            throw KetchError.Msg("walking $dir: ${e.message}", e)
-        }
-    }
 
 /** `.pkg` / `.mpkg` — expanded and unpacked into the store rather than installed system-wide, so ketch stays the only thing that owns the files and `ketch uninstall` can actually undo it. */
 object PkgExtractor : Extractor {
@@ -264,6 +236,8 @@ private const val PAYLOAD_DEPTH = 4
  * else in the expansion is install metadata that has no meaning outside the system installer.
  */
 private fun findPayloadRoots(expanded: Path): List<Path> =
-    walk(expanded, PAYLOAD_DEPTH, lenient = true)
-        .filter { (it.name == "Payload" || it.name == "Root") && entryKind(it) == EntryKind.Dir }
+    // walkdir's `filter_map(Result::ok)`: an unreadable corner of the expansion holds no payload.
+    walk(expanded, PAYLOAD_DEPTH, onError = {})
+        .filter { it.kind == EntryKind.Dir && (it.path.name == "Payload" || it.path.name == "Root") }
+        .map { it.path }
         .toList()

@@ -1,6 +1,6 @@
 package ketch.core.testing
 
-import ketch.core.fsio.TempDir
+import fs.TempDir
 import kotlinx.io.files.Path
 
 /** Rust `tempfile::tempdir`: a fresh directory under `$TMPDIR`, removed afterwards. */
