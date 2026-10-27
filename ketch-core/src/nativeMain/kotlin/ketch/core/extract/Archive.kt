@@ -207,7 +207,7 @@ object RawBinaryExtractor : Extractor {
 }
 
 /** True when the first bytes open a compressed stream or a zip. Every one of them is claimed by its codec's extractor. */
-private fun isContainerHead(head: ByteArray) = listOf(GZIP_MAGIC, XZ_MAGIC, BZ2_MAGIC, ZIP_MAGIC).any { head.startsWith(it) }
+internal fun isContainerHead(head: ByteArray) = listOf(GZIP_MAGIC, XZ_MAGIC, BZ2_MAGIC, ZIP_MAGIC).any { head.startsWith(it) }
 
 /** Every format this build unpacks on any OS, most specific first. [RawBinaryExtractor] accepts what the others refused, so it stays last. */
 fun portableExtractors(): List<Extractor> =
