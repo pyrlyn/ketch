@@ -1,7 +1,7 @@
 # Overrides on top of the shared ci-diffuser and default detekt config, the same ones octo uses.
 style:
   MagicNumber:
-    excludes: ['**/commonTest/**', '**/nativeTest/**', '**/jvmTest/**', '**/test/**']
+    excludes: ['**/commonTest/**', '**/nativeTest/**', '**/jvmTest/**', '**/macosTest/**', '**/test/**']
     # A named property already says what its number means.
     ignorePropertyDeclaration: true
 
