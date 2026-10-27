@@ -4,7 +4,7 @@ import db.room.RoomDbDriver
 import ketch.core.hash.Sha256
 import kotlinx.serialization.json.JsonPrimitive
 import semver.VersionKey
-import toml.ktoml.KtomlReader
+import toml.TomlParser
 import tomlaot.TomlDoc
 import yamlaot.Yaml
 import yamlaot.YamlValue
@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
 class SharedLibsTest {
     @Test
     fun tomlReadsAndTheEditorKeepsComments() {
-        assertEquals(JsonPrimitive(1), KtomlReader.parse("a = 1\n")["a"])
+        assertEquals(JsonPrimitive(1), TomlParser.parse("a = 1\n")["a"])
         val text = "# keep\n[tool]\nname = \"jq\"\n"
         assertEquals(text, TomlDoc.parse(text).toString())
     }

@@ -25,10 +25,10 @@ class TomlOwnerTest {
     fun theScanTellsTheLibraryFromOtherUsesOfTheWord() {
         for (line in listOf(
             "import toml.TomlWriter",
-            "import toml.ktoml.KtomlReader",
+            "import toml.TomlParser",
             "import tomlaot.TomlDoc",
             "    val doc = tomlaot.TomlDoc.parse(text)",
-            "toml.ktoml.KtomlReader.parse(text)",
+            "toml.TomlParser.parse(text)",
         )) {
             assertTrue(namesATomlLibrary(line), line)
         }

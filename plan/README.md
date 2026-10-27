@@ -36,8 +36,13 @@ Taken during the port:
 - **Writing TOML (T4).** kotlin-kit's `toml.TomlWriter` lays a file out exactly as Rust `toml`
   1.1 `to_string_pretty` does (string forms, multi-line arrays, implicit tables), checked against
   that crate's own output, so `ketch.lock` and `config.toml` are byte-identical across the two.
-  ktoml's encoder is not used for writing. Values are mapped through kotlinx-serialization JSON
+  No library encoder is used for writing. Values are mapped through kotlinx-serialization JSON
   trees: a null is an absent key, a default is written out.
+- **Reading TOML (T4).** kotlin-kit's own `toml.TomlParser`, a strict TOML 1.1 reader (the spec
+  Rust `toml` 1.1 reads) that passes every TOML 1.1.0 file of toml-test, with Rust's nesting bound
+  of 80. ktoml 0.7.1 refuses inline tables inside a multi-line array (manifests' `extra_paths`);
+  tomlkt 0.6.1 refuses quotes right before a closing `'''`/`"""`, which Rust writes, and accepts
+  70 of toml-test's invalid files. A datetime reads as the text Rust's Display gives it.
 
 ## Goals of the port
 

@@ -14,8 +14,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.serializer
 import toml.TomlException
+import toml.TomlParser
 import toml.TomlWriter
-import toml.ktoml.KtomlReader
 import tomlaot.Shape
 import tomlaot.TomlAotException
 import tomlaot.TomlDoc
@@ -81,7 +81,7 @@ private fun tree(
     what: String,
 ): JsonObject =
     try {
-        KtomlReader.parse(text)
+        TomlParser.parse(text)
     } catch (e: TomlException) {
         throw KetchError.Parse(what, e.message.orEmpty(), e)
     }
