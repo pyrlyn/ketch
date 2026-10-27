@@ -166,11 +166,6 @@ class InstallTest {
         refuseChecksumDowngrade(plain.copy(expectedSha256 = "0".repeat(64)), verified, false, next)
     }
 
-    private fun localRequest(
-        program: Path,
-        cancel: Cancel = Cancel(),
-    ) = InstallRequest(PackageSpec.parse("local:$program"), cancel = cancel)
-
     @Test
     fun anInstallCancelledBeforeItCommitsLeavesNoStoreFolderOrStateEntry(): Unit =
         withTempDir { tmp ->

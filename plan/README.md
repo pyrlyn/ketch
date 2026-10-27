@@ -73,6 +73,12 @@ Taken during the port:
   filesystem as Rust's `tempdir_in` does. The file errors of kit calls go through one shared
   `fsKitAt`. Rust's registry `CheckReport` keeps its name; the source table is `SourceRegistry`
   in `SourceRegistry.kt`, since detekt wants a file named after its one class.
+- **Batch installs (T8).** `install.batch` installs one package at a time whatever `--jobs`
+  says, where Rust prepares up to `jobs` side by side. kotlinx-io 0.9.1 on Apple implements
+  `Path.name` and `Path.parent` with `basename(3)` and `dirname(3)`, which return a shared static
+  buffer (`core/apple/src/files/FileSystemApple.kt` on its `master`, checked 2026-10-27): two
+  threads preparing packages read each other's file names (`aravo` for `alpha` and `bravo`).
+  The order of results, per-package failures and the commit sequence stay Rust's.
 
 ## Goals of the port
 

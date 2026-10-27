@@ -1,9 +1,11 @@
 package ketch.core.install
 
+import ketch.core.cancel.Cancel
 import ketch.core.config.Config
 import ketch.core.model.InstalledPackage
 import ketch.core.model.ManifestOrigin
 import ketch.core.model.PackageRef
+import ketch.core.model.PackageSpec
 import ketch.core.model.Release
 import ketch.core.model.ReleaseAsset
 import ketch.core.model.TargetSpec
@@ -63,3 +65,9 @@ internal class Warns : Reporter {
         if (event is Event.Warn) said.store(said.load() + event.detail)
     }
 }
+
+/** A request to install the local [program]. */
+internal fun localRequest(
+    program: Path,
+    cancel: Cancel = Cancel(),
+) = InstallRequest(PackageSpec.parse("local:$program"), cancel = cancel)

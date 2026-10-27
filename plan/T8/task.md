@@ -2,7 +2,7 @@
 status: in progress
 priority: P0
 complexity: 5
-readiness: 30%
+readiness: 45%
 agent: Claude Code / claude-opus-5-5
 ---
 

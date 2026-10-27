@@ -150,13 +150,7 @@ private class Commit(
         links: List<LinkRecord>,
         retained: MutableList<RetainedVersion>,
     ) {
-        val stale = old.links.filter { l -> links.none { it.link == l.link } }
-        // A failure here leaves a dangling link, not a broken install, so it is reported rather than propagated.
-        try {
-            platform.unplace(stale, cx.report)
-        } catch (e: KetchError) {
-            cx.report.warn("could not remove old links for ${old.name}: ${e.message}")
-        }
+        unplaceStale(platform, old.name, old.links, links, cx.report)
         retainReplaced(cfg, old, storeDir, prepared.release.version, retained)
     }
 
