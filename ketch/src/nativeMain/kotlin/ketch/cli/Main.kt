@@ -10,6 +10,7 @@ import cli.Parsed
 import cli.parse
 import cli.terminalSettings
 import cli.write
+import kotlinx.io.files.Path
 import platform.posix.fputs
 import platform.posix.stderr
 import kotlin.system.exitProcess
@@ -27,16 +28,27 @@ fun main(args: Array<String>) {
     }
 }
 
-// The commands land with the port of cmd/; until then a parsed line says which one is missing.
+// The commands land with the port of cmd/; until then a parsed line says which one is missing. `completions` and
+// `man` print and write already, so their output can be compared with Rust ketch's.
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 private fun run(matches: Matches): Int {
-    val command = matches.subcommand
-    // Completions must work before any directory exists, so they are printed before the config is built.
-    if (command?.name == "completions" && !command.matches.flag("install")) {
-        val shell = CompletionShell.entries.first { it.id == command.matches.value("shell") }
-        println(script(shell).trimEnd('\n'))
-        return 0
+    val command = matches.subcommand ?: return 1
+    return when {
+        // Completions must work before any directory exists, so they are printed before the config is built.
+        command.name == "completions" && !command.matches.flag("install") -> {
+            val shell = CompletionShell.entries.first { it.id == command.matches.value("shell") }
+            println(script(shell).trimEnd('\n'))
+            0
+        }
+
+        command.name == "man" -> {
+            writeTo(Path(command.matches.values("out").single()))
+            0
+        }
+
+        else -> {
+            fputs("error: `ketch ${command.name}` is not ported yet\n", stderr)
+            1
+        }
     }
-    fputs("error: `ketch ${matches.subcommand?.name}` is not ported yet\n", stderr)
-    return 1
 }
