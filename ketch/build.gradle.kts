@@ -16,5 +16,7 @@ kotlin {
             implementation(project(":ketch-wire"))
             implementation("pyrlyn.kit:cli")
         }
+        // Scratch registries for the completion tests.
+        nativeTest.dependencies { implementation("pyrlyn.kit:fs") }
     }
 }

@@ -136,11 +136,15 @@ private fun CommandBuilder.list() =
             packages (needs a token with push access)
             """.trimIndent(),
         )
-        // Bare `ketch list` used to mean installed only; this gives scripts one release to move to `local`.
         flag("installed") {
             hidden = true
             conflictsWith("mode")
-            doc("Same as `ketch list local`")
+            doc(
+                """
+                Same as `ketch list local`. Bare `ketch list` used to mean installed
+                only; this hidden alias gives scripts one release to move to `local`.
+                """.trimIndent(),
+            )
         }
     }
 

@@ -4,6 +4,7 @@
 // how errors are shown and what the process exits with.
 package ketch.cli
 
+import cli.CompletionShell
 import cli.Matches
 import cli.Parsed
 import cli.parse
@@ -29,6 +30,13 @@ fun main(args: Array<String>) {
 // The commands land with the port of cmd/; until then a parsed line says which one is missing.
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 private fun run(matches: Matches): Int {
+    val command = matches.subcommand
+    // Completions must work before any directory exists, so they are printed before the config is built.
+    if (command?.name == "completions" && !command.matches.flag("install")) {
+        val shell = CompletionShell.entries.first { it.id == command.matches.value("shell") }
+        println(script(shell).trimEnd('\n'))
+        return 0
+    }
     fputs("error: `ketch ${matches.subcommand?.name}` is not ported yet\n", stderr)
     return 1
 }
