@@ -80,6 +80,17 @@ Taken during the port:
   threads preparing packages read each other's file names (`aravo` for `alpha` and `bravo`).
   The order of results, per-package failures and the commit sequence stay Rust's. For the same
   reason `ketch list` asks each source for its `latest` one after another, not `jobs` at a time.
+- **Statistics (T8).** `stats.db` goes through SQLDelight 2.4.1 (the creator's choice; Rust uses
+  diesel) on kotlin-kit's `pyrlyn.kit:db-sqldelight`, a `SqlDriver` over kit `db`, so SQLite stays
+  the bundled one. The schema is Rust's migration with its declared column types (`INTEGER`,
+  `TEXT`) and `IF NOT EXISTS`; a new database also gets diesel's `__diesel_schema_migrations`
+  row, so either ketch opens a `stats.db` the other wrote.
+- **Self commands (T8).** `self install`, `self upgrade` and `self uninstall` run Homebrew and mise
+  on the shared terminal through kit `process.Command.status`; the running binary comes from kit
+  `currentExe`, and the swap renames through kit `fs.rename` so a transient lock keeps its errno.
+  The Windows parts (PowerShell and cmd completion, registry entries, moving a running `.exe`
+  out of the way, removal after exit) and their two probe tests wait for T13. Publisher
+  signatures on a self upgrade stay stubbed until T14, like every other install.
 
 ## Goals of the port
 
@@ -120,7 +131,7 @@ The Rust modules each task covers. ✅ ported with tests green, 🟡 partial, �
 | T5 | `extract` (tar, gzip, xz, bzip2, zip, macOS dmg/pkg) | ✅ |
 | T6 | `platform` (mod, unix, macos, linux, claim), `process`, `shell` | ✅ |
 | T7 | `http`, `source` (github, local, plugin), `resolve`, `releases`, `changelog`, `info`, `registry` | ✅ |
-| T8 | `install`, `listing`, `stats`, `doctor`, `wizard`, `self_update` | ⬜ |
+| T8 | `install`, `listing`, `stats`, `doctor`, `wizard`, `self_update` | ✅ |
 | T9 | `import` (brew, linux, winget, apply, fetch), `push` | ⬜ |
 | T10 | `src/` command line: `cli`, `cmd/*`, `ui`, `complete`, `man`, `self_docs`; `tests/*.rs` end-to-end | ⬜ |
 | T11 | `ketch serve` and `:ketch-wire` (the `ketch-ffi` surface), contract scenarios | ⬜ |
