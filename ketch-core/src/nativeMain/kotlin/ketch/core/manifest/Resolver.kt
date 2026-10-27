@@ -97,10 +97,10 @@ class Resolver internal constructor(
             ?: builtin.firstOrNull(pred)?.let { it to ManifestOrigin.Builtin }
 
     companion object {
-        /**
-         * The resolver for [ctx], over the fetched [registry] (Rust reads it here with `registry::load`, which is
-         * ported with the registry itself).
-         */
+        /** The resolver for [ctx], over the registry `ketch update` fetched. */
+        fun load(ctx: Ctx): Resolver = load(ctx, ketch.core.registry.load(ctx))
+
+        /** The resolver for [ctx], over a [registry] already read. */
         fun load(
             ctx: Ctx,
             registry: List<Pair<Manifest, Path>>,

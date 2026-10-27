@@ -8,6 +8,7 @@ package ketch.core.resolve
 import ketch.core.changelog.sanitize
 import ketch.core.config.Config
 import ketch.core.error.KetchError
+import ketch.core.manifest.Resolver
 import ketch.core.model.AssetSelector
 import ketch.core.model.Manifest
 import ketch.core.model.ManifestOrigin
@@ -22,6 +23,7 @@ import ketch.core.report.Ctx
 import ketch.core.source.ListOpts
 import ketch.core.source.RejectedRelease
 import ketch.core.source.Source
+import ketch.core.source.SourceRegistry
 import ketch.core.text.BYTE_ORDER
 import ketch.core.text.eqIgnoreAsciiCase
 import kotlinx.serialization.SerialName
@@ -235,6 +237,17 @@ fun listOpts(
  * the same function install uses. Checksum sidecars and trust inspection are described from config and the already
  * fetched release, not performed.
  */
+
+/** Why `ketch install` [spec] would pick what it picks: every step from the manifest to the asset, with what was turned down. */
+fun explain(
+    cx: Ctx,
+    sources: SourceRegistry,
+    spec: PackageSpec,
+): ResolutionTrace {
+    val (manifest, origin) = Resolver.load(cx).resolve(spec)
+    return explainWith(cx, sources.forRef(manifest.source), spec, manifest, origin)
+}
+
 fun explainWith(
     cx: Ctx,
     source: Source,

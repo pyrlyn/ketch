@@ -11,6 +11,14 @@ import fs.isDir
 import fs.listDir
 import ketch.core.error.KetchError
 import ketch.core.error.ioAt
+import ketch.core.manifest.Resolver
+import ketch.core.model.InstalledPackage
+import ketch.core.model.PackageSpec
+import ketch.core.model.Version
+import ketch.core.model.VersionSpec
+import ketch.core.report.Ctx
+import ketch.core.source.ListOpts
+import ketch.core.source.SourceRegistry
 import ketch.core.text.BYTE_ORDER
 import ketch.core.text.rustTrim
 import kotlinx.io.IOException
@@ -76,4 +84,70 @@ fun fromFile(
     val text = sanitize(raw)
     val (heading, body) = version?.let { section(text, it) } ?: (null to text.rustTrim())
     return Entry(Origin.File(path), heading, body)
+}
+
+/** What [published] found: the package name, the release's version and its notes. */
+data class Published(
+    val name: String,
+    val version: String,
+    val entry: Entry,
+)
+
+/**
+ * The notes [spec]'s release published: the installed release unless [latest] or the spec names a version, else the
+ * newest.
+ */
+fun published(
+    cx: Ctx,
+    spec: PackageSpec,
+    installed: InstalledPackage?,
+    latest: Boolean,
+): Published {
+    val (manifest, _) = Resolver.load(cx).resolveOrRecorded(spec, installed)
+    // Without `--latest` or an explicit version, the notes wanted are the ones for the release that is installed, not
+    // whatever is newest.
+    val want =
+        when {
+            spec.version is VersionSpec.Exact || latest || installed == null -> spec.version
+            else -> VersionSpec.Exact(installed.tag)
+        }
+    val source = SourceRegistry.load(cx).forRef(manifest.source)
+    val opts = ListOpts(includePrerelease = cx.cfg.prerelease || manifest.prerelease)
+    val release = source.resolve(manifest.source.id, want, opts)
+    val version = release.version.toString()
+    val entry = fromRelease(release.notes) ?: throw KetchError.Msg("${manifest.name} $version published no release notes")
+    return Published(manifest.name, version, entry)
+}
+
+/**
+ * How many releases a range asks a source for. A range is what an app shows between the installed version and the
+ * newest, so it reaches further back than one `latest` lookup needs.
+ */
+private const val RANGE_RELEASES = 100
+
+/**
+ * The notes of every release of [spec]'s package newer than [from] and no newer than [to], newest first, under the
+ * package name.
+ *
+ * [from] defaults to the installed version, so the range is what an upgrade would bring; with nothing installed it has
+ * no lower end. [to] defaults to no upper end. A release that published no notes has nothing to show and is left out
+ * rather than failing the range.
+ */
+fun publishedRange(
+    cx: Ctx,
+    spec: PackageSpec,
+    installed: InstalledPackage?,
+    from: String?,
+    to: String?,
+): Pair<String, List<Pair<String, Entry>>> {
+    val (manifest, _) = Resolver.load(cx).resolveOrRecorded(spec, installed)
+    val lower = from?.let(Version::parse) ?: installed?.version
+    val upper = to?.let(Version::parse)
+    val source = SourceRegistry.load(cx).forRef(manifest.source)
+    val opts = ListOpts(includePrerelease = cx.cfg.prerelease || manifest.prerelease, limit = RANGE_RELEASES)
+    val entries =
+        between(source.listReleases(manifest.source.id, opts), lower, upper, opts.includePrerelease).mapNotNull { release ->
+            fromRelease(release.notes)?.let { release.version.toString() to it }
+        }
+    return manifest.name to entries
 }

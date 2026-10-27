@@ -7,12 +7,20 @@
 package ketch.core.info
 
 import ketch.core.config.Config
+import ketch.core.error.KetchError
+import ketch.core.manifest.Resolver
 import ketch.core.model.Channel
 import ketch.core.model.InstalledPackage
 import ketch.core.model.Manifest
 import ketch.core.model.ManifestOrigin
+import ketch.core.model.PackageSpec
 import ketch.core.model.Release
 import ketch.core.model.SourceInfo
+import ketch.core.model.VersionSpec
+import ketch.core.report.Ctx
+import ketch.core.source.ListOpts
+import ketch.core.source.SourceRegistry
+import ketch.core.state.State
 
 /** One package, as far as it could be found out. */
 data class Info(
@@ -51,3 +59,61 @@ fun wantsPrerelease(
     // of `ketch releases`.
     installed?.channel == Channel.Pre ||
     installed?.channel == Channel.Dev
+
+/** What [resolve] finds: the manifest, where it came from, and the installed record the query matches. */
+data class Resolved(
+    val manifest: Manifest,
+    val origin: ManifestOrigin?,
+    val installed: InstalledPackage?,
+)
+
+/** The manifest [query] names and the installed record it matches, without asking any source anything: what `ketch releases` needs before it lists. */
+fun resolve(
+    cx: Ctx,
+    state: State,
+    query: String,
+): Resolved {
+    val installed = state.find(query)
+    val (manifest, origin) = Resolver.load(cx).resolveOrRecorded(PackageSpec.parse(query), installed)
+    return Resolved(manifest, origin, installed)
+}
+
+/**
+ * Everything known about [query], a name or spec.
+ *
+ * An installed package always has an answer, even when the registry has forgotten the name it was installed under. A
+ * source that cannot be reached costs only what it would have said: that is a warning on `cx.report`, not an error,
+ * because the rest of the answer still stands.
+ */
+fun gather(
+    cx: Ctx,
+    state: State,
+    query: String,
+): Info {
+    val (manifest, origin, installed) = resolve(cx, state, query)
+    val source = warnOnFailure(cx, manifest) { SourceRegistry.load(cx).forRef(manifest.source) }
+    val described =
+        source?.let {
+            try {
+                it.describe(manifest.source.id)
+            } catch (e: KetchError) {
+                cx.report.debug("describe failed: ${e.message}")
+                null
+            }
+        }
+    val opts = ListOpts(includePrerelease = wantsPrerelease(cx.cfg, manifest, installed, extra = false))
+    val latest = source?.let { warnOnFailure(cx, manifest) { it.resolve(manifest.source.id, VersionSpec.Latest, opts) } }
+    return Info(manifest, origin, installed, source?.webUrl(manifest.source.id), described, latest)
+}
+
+private inline fun <T : Any> warnOnFailure(
+    cx: Ctx,
+    manifest: Manifest,
+    body: () -> T,
+): T? =
+    try {
+        body()
+    } catch (e: KetchError) {
+        cx.report.warn("${manifest.name}: ${e.message}")
+        null
+    }
