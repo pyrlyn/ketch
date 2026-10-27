@@ -26,6 +26,7 @@ import ketch.core.config.validateRepo
 import ketch.core.error.KetchError
 import ketch.core.error.fsKit
 import ketch.core.fsio.writePrivate
+import ketch.core.hash.isSha256Hex
 import ketch.core.model.InstalledPackage
 import ketch.core.model.PackageRef
 import ketch.core.model.TargetSpec
@@ -48,8 +49,6 @@ const val LOCK_VERSION = 1u
 
 /** The name looked for when `--file` is not given. */
 const val LOCK_FILE = "ketch.lock"
-
-private const val SHA256_HEX = 64
 
 /** A whole lockfile. Unknown keys are refused: they would be settings this ketch silently does not honour. */
 @OptIn(ExperimentalSerializationApi::class)
@@ -230,7 +229,7 @@ data class LockedPackage(
         val p = published
         val b = bin
         return when {
-            !isSha256(sha256) -> {
+            !isSha256Hex(sha256) -> {
                 "$named has `$sha256` where a sha256 belongs"
             }
 
@@ -310,5 +309,3 @@ fun plan(
 
 /** Where the lockfile lives: what was asked for, or `ketch.lock` here. */
 fun path(explicit: Path?): Path = explicit ?: Path(LOCK_FILE)
-
-private fun isSha256(text: String) = text.length == SHA256_HEX && text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
