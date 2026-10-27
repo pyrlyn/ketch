@@ -1,6 +1,7 @@
 package ketch.core.binchoice
 
 import ketch.core.error.KetchError
+import ketch.core.text.asciiLowercase
 
 /*
  * Which binary a package links when its manifest names none.
@@ -56,9 +57,6 @@ private fun withoutExtension(
     }
     return fileName
 }
-
-/** Rust's `to_ascii_lowercase`: only A–Z fold, so lengths and offsets never change. */
-fun String.asciiLowercase(): String = buildString(length) { for (c in this@asciiLowercase) append(if (c in 'A'..'Z') c + ('a' - 'A') else c) }
 
 /**
  * True when [fileName] belongs to the package's family: its stem is the package name, or the name followed by

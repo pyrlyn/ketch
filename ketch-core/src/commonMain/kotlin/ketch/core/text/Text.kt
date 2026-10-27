@@ -95,3 +95,84 @@ private fun codePointAt(
     }
     return c.code
 }
+
+/** Rust's `to_ascii_lowercase`: only A–Z fold, so lengths and offsets never change. */
+fun String.asciiLowercase(): String = buildString(length) { for (c in this@asciiLowercase) append(if (c in 'A'..'Z') c + ('a' - 'A') else c) }
+
+/** Rust's `is_ascii_alphanumeric`; Kotlin's `isLetterOrDigit` takes every script. */
+fun Char.isAsciiAlphanumeric() = this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9'
+
+/** Rust's `to_ascii_uppercase`. */
+fun String.asciiUppercase(): String = buildString(length) { for (c in this@asciiUppercase) append(if (c in 'a'..'z') c - ('a' - 'A') else c) }
+
+/**
+ * Rust's `eq_ignore_ascii_case`. Kotlin's `equals(ignoreCase = true)` folds every script, so `İ` would match `i`
+ * where Rust ketch says it does not.
+ */
+fun String.eqIgnoreAsciiCase(other: String): Boolean = length == other.length && asciiLowercase() == other.asciiLowercase()
+
+/**
+ * Unicode `White_Space`, which Rust's `char::is_whitespace` and `str::trim` use. Kotlin's `isWhitespace` also
+ * counts U+001C–U+001F and misses U+0085, so a name Rust refuses would pass.
+ */
+fun Char.isRustWhitespace(): Boolean =
+    this in '\u0009'..'\u000d' ||
+        this == ' ' ||
+        this == '\u0085' ||
+        this == ' ' ||
+        this == ' ' ||
+        this in ' '..' ' ||
+        this == ' ' ||
+        this == ' ' ||
+        this == ' ' ||
+        this == ' ' ||
+        this == '　'
+
+/** Rust's `str::trim`. */
+fun String.rustTrim(): String = trim { it.isRustWhitespace() }
+
+/**
+ * Rust's `str::escape_debug`, which error messages use to show a name with its invisible characters spelled out.
+ * Printability follows Unicode categories; a character outside the BMP is printable unless it is private use or a
+ * tag, which is where Rust's table and these categories meet for anything a file name carries.
+ */
+fun escapeDebug(text: String): String =
+    buildString {
+        codePoints(text).forEachIndexed { i, point ->
+            when (point) {
+                "\u0000" -> append("\\0")
+                "\t" -> append("\\t")
+                "\r" -> append("\\r")
+                "\n" -> append("\\n")
+                "\\", "'", "\"" -> append('\\').append(point)
+                else -> if (printable(point, i == 0)) append(point) else append("\\u{${codePointAt(point, 0).toString(HEX)}}")
+            }
+        }
+    }
+
+private const val HEX = 16
+private const val PRIVATE_PLANES = 0xF0000
+private val TAGS = 0xE0000..0xE0FFF
+
+private val UNPRINTABLE =
+    setOf(
+        CharCategory.CONTROL,
+        CharCategory.FORMAT,
+        CharCategory.SURROGATE,
+        CharCategory.PRIVATE_USE,
+        CharCategory.UNASSIGNED,
+        CharCategory.LINE_SEPARATOR,
+        CharCategory.PARAGRAPH_SEPARATOR,
+        CharCategory.SPACE_SEPARATOR,
+    )
+
+// Rust escapes a combining mark only where it would attach to the opening quote.
+private fun printable(
+    point: String,
+    first: Boolean,
+): Boolean {
+    if (point.length > 1) return codePointAt(point, 0).let { it < PRIVATE_PLANES && it !in TAGS }
+    val c = point[0]
+    val combining = c.category == CharCategory.NON_SPACING_MARK || c.category == CharCategory.ENCLOSING_MARK
+    return c == ' ' || (c.category !in UNPRINTABLE && !(first && combining))
+}

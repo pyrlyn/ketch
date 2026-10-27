@@ -2,6 +2,8 @@ package ketch.core.text
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class TextTest {
     @Test
@@ -25,5 +27,26 @@ class TextTest {
         assertEquals(emptyList(), rustLines(""))
         assertEquals(listOf("a"), rustLines("a\n"))
         assertEquals(listOf("a", "", "b"), rustLines("a\r\n\nb"))
+    }
+
+    @Test
+    fun trimsOnUnicodeWhiteSpaceAsRustDoes() {
+        assertEquals("a", "\u0085a\u3000".rustTrim())
+        // U+001F is a control character, not white space, whatever Kotlin's own trim says.
+        assertEquals("\u001fa", "\u001fa ".rustTrim())
+    }
+
+    @Test
+    fun escapesInvisibleCharactersAsRustsEscapeDebug() {
+        assertEquals("safe\\u{202e}sudo", escapeDebug("safe\u202esudo"))
+        assertEquals("a\\tb\\n\\0\\\"", escapeDebug("a\tb\n\u0000\""))
+        assertEquals("ünï cö", escapeDebug("ünï cö"))
+        assertEquals("\\u{a0}", escapeDebug("\u00a0"))
+    }
+
+    @Test
+    fun foldsOnlyAsciiCase() {
+        assertTrue("Ketch".eqIgnoreAsciiCase("kETCH"))
+        assertFalse("\u0130".eqIgnoreAsciiCase("i"))
     }
 }

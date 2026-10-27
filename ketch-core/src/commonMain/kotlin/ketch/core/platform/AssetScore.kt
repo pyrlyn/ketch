@@ -1,8 +1,8 @@
 package ketch.core.platform
 
-import ketch.core.binchoice.asciiLowercase
 import ketch.core.model.Arch
 import ketch.core.text.BYTE_ORDER
+import ketch.core.text.asciiLowercase
 
 /** How well a release asset suits this machine. */
 data class AssetScore(

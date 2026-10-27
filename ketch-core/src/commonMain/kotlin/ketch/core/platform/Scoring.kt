@@ -1,15 +1,14 @@
 package ketch.core.platform
 
-import ketch.core.binchoice.asciiLowercase
 import ketch.core.model.Arch
 import ketch.core.model.Os
+import ketch.core.text.asciiLowercase
+import ketch.core.text.isAsciiAlphanumeric
 
 /*
  * Shared asset-name scoring helpers. Common code, so every host's tests exercise token matching, rejection rules
  * and container tie-breaks without a platform backend.
  */
-
-private fun Char.isAsciiAlphanumeric() = this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9'
 
 /**
  * Does [needle] appear in [haystack] as a whole token? Plain `contains` is not usable: `darwin` contains `win`,

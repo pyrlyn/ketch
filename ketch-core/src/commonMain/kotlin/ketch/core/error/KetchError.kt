@@ -13,7 +13,8 @@ sealed class KetchError(
 ) : Exception(message, cause) {
     class Msg(
         text: String,
-    ) : KetchError(text)
+        cause: Throwable? = null,
+    ) : KetchError(text, cause)
 
     class Io(
         val path: Path,
