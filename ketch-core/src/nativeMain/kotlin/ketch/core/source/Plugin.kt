@@ -12,8 +12,8 @@
 package ketch.core.source
 
 import ketch.core.cancel.Cancel
-import ketch.core.config.HOST_WINDOWS
 import ketch.core.config.envOs
+import ketch.core.config.splitPathVar
 import ketch.core.error.KetchError
 import ketch.core.http.API_JSON
 import ketch.core.http.DEFAULT_MAX_DOWNLOAD
@@ -146,7 +146,7 @@ class PluginSource private constructor(
  */
 fun discover(cx: Ctx): List<Result<PluginSource>> {
     val platform = host()
-    val dirs = listOf(cx.cfg.pluginDir) + (envOs("PATH")?.split(if (HOST_WINDOWS) ';' else ':')?.map(::Path) ?: emptyList())
+    val dirs = listOf(cx.cfg.pluginDir) + (envOs("PATH")?.let(::splitPathVar)?.map(::Path) ?: emptyList())
     val seen = mutableSetOf<String>()
     val found = mutableListOf<Result<PluginSource>>()
     for (dir in dirs) {

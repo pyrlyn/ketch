@@ -119,7 +119,7 @@ data class Config(
     fun binDirOnPath(): Boolean {
         val path = envOs("PATH") ?: return false
         val want = pathLookupKey(binDir.toString())
-        return path.split(if (HOST_WINDOWS) ';' else ':').any { pathLookupKey(it) == want }
+        return splitPathVar(path).any { pathLookupKey(it) == want }
     }
 
     companion object {
@@ -347,6 +347,9 @@ internal fun expandTilde(path: Path): Path {
         else -> rest.split('/', '\\').filter { it.isNotEmpty() }.fold(home) { acc, part -> Path(acc, part) }
     }
 }
+
+/** The directories a `PATH`-style variable lists, in order. */
+internal fun splitPathVar(value: String): List<String> = value.split(if (HOST_WINDOWS) ';' else ':')
 
 /** A `PATH` entry as the shell matches it: either separator, no trailing one, case folded on Windows. */
 internal fun pathLookupKey(p: String): String {
