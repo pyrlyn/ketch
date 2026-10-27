@@ -22,6 +22,9 @@ kotlin {
             implementation("pyrlyn.kit:fs")
             // Hooks run under a deadline with capped output and a killable process group (Rust: run_with_deadline).
             implementation("pyrlyn.kit:process")
+            // Tar, zip and the gzip, xz and bzip2 codecs the extractors unpack releases with (Rust: tar, zip,
+            // flate2, lzma-rust2, bzip2).
+            implementation("pyrlyn.kit:archive")
         }
         // Checks the committed config and manifest schemas against what ketch accepts (Rust: jsonschema).
         nativeTest.dependencies { implementation(libs.json.schema.validator) }
