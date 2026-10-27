@@ -1,7 +1,9 @@
 package ketch.core.model
 
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonIgnoreUnknownKeys
 
 @Serializable
 enum class Os(
@@ -41,7 +43,9 @@ enum class Arch(
     override fun toString() = display
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
+@JsonIgnoreUnknownKeys
 data class TargetSpec(
     val os: Os,
     val arch: Arch,

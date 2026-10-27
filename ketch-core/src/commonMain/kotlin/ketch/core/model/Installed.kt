@@ -17,6 +17,7 @@ import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonEncoder
+import kotlinx.serialization.json.JsonIgnoreUnknownKeys
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -123,6 +124,7 @@ enum class LinkRole {
 }
 
 @Serializable
+@JsonIgnoreUnknownKeys
 data class LinkRecord(
     /** The path we created and are responsible for removing. */
     @Serializable(with = PathSerializer::class) val link: Path,
@@ -134,6 +136,7 @@ data class LinkRecord(
 )
 
 @Serializable
+@JsonIgnoreUnknownKeys
 data class InstalledPackage(
     val name: String,
     val version: Version,
@@ -199,12 +202,14 @@ data class InstalledPackage(
  * only by the explicit prune command, so a keep of 1 still leaves every version until someone prunes.
  */
 @Serializable
+@JsonIgnoreUnknownKeys
 data class RetentionPolicy(
     val keep: UInt = 1u,
 )
 
 /** A previously installed version whose prefix is still in the store. */
 @Serializable
+@JsonIgnoreUnknownKeys
 data class RetainedVersion(
     val version: Version,
     @Serializable(with = PathSerializer::class) val prefix: Path,
