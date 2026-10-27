@@ -2,7 +2,7 @@
 status: in progress
 priority: P0
 complexity: 4
-readiness: 20%
+readiness: 40%
 agent: Claude Code / claude-opus-5-5
 ---
 
@@ -26,7 +26,7 @@ About 8.4k lines of Rust and 190 tests, with cycles between the modules (`model`
    `fs_kit` error test lands with it. rtok-kotlin's `rtok-sys` `Fs.kt` is not reused: its
    writes are not atomic, it ignores modes and links, and it removes a tree through
    `system("rm -rf")`.
-2. `toml_file`: typed TOML read and write over `toml-ktoml` with kotlinx-serialization, and
+2. `toml_file`: typed TOML read and write over kotlin-kit's `toml` (`TomlParser`, `TomlWriter`) with kotlinx-serialization, and
    comment-keeping edits over `toml-aot`.
 3. `model`: the package, asset and source types. The types it reads from later phases
    (`extract`, `trust`, `registry`, `source`) come in as the minimal declarations it needs.
@@ -36,3 +36,12 @@ About 8.4k lines of Rust and 190 tests, with cycles between the modules (`model`
 
 Every Rust test of these files is ported. Check: `./gradlew build` here and `./gradlew check` in
 kotlin-kit green after each step.
+
+Moved out of the `model` step:
+
+- `write_ketch_docs` and `CompletionShell`'s clap mapping: the CLI phase.
+- Parsing minisign and gpg keys in `check_policy`: T14.
+- The schema tests and `BUILTIN_TOML`: the `manifest` step. `committed_manifest_schema_matches_manifest`
+  is not ported: there the Rust types are the schema's source.
+- `the_old_self_repo_and_registry_names_load_as_the_new_ones`: the `config` step.
+- The Windows-only `usable_file_name` test: T13. The proptest is a fixed sample.
