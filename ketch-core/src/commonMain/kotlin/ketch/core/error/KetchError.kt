@@ -125,7 +125,8 @@ sealed class KetchError(
         val name: String,
         val detail: String,
         val stderr: String,
-    ) : KetchError("plugin `$name`: $detail")
+        cause: Throwable? = null,
+    ) : KetchError("plugin `$name`: $detail", cause)
 
     class Config(
         text: String,
