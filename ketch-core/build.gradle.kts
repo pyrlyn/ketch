@@ -17,5 +17,7 @@ kotlin {
             // Streaming SHA-256 for downloads that do not fit in memory (Rust: sha2), behind ketch.core.hash.Sha256.
             implementation(libs.kotlincrypto.sha2)
         }
+        // Crash-safe writes of config, state and lock files (Rust: fs-kit); POSIX only.
+        nativeMain.dependencies { implementation("pyrlyn.kit:fs") }
     }
 }
