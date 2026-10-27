@@ -2,7 +2,7 @@
 status: in progress
 priority: P0
 complexity: 4
-readiness: 40%
+readiness: 55%
 agent: Claude Code / claude-opus-5-5
 ---
 
@@ -45,3 +45,10 @@ Moved out of the `model` step:
   is not ported: there the Rust types are the schema's source.
 - `the_old_self_repo_and_registry_names_load_as_the_new_ones`: the `config` step.
 - The Windows-only `usable_file_name` test: T13. The proptest is a fixed sample.
+
+Moved out of the `config` step:
+
+- `committed_config_schema_matches_config_file` and `the_schema_lists_the_log_values`: the
+  `manifest` step, with the other schema tests.
+- The non-Unicode branch of `env_bool`: reached only through a raw `setenv`, which the tests do
+  not set up; the code path is ported.
