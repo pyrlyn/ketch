@@ -6,7 +6,7 @@
 | Gradle 9.8.2 | wrapper (`./gradlew`) | Build | https://github.com/gradle/gradle |
 | Kotlin 2.4.21 | Gradle plugin | Language, Kotlin/Native, Kotlin Multiplatform | https://github.com/JetBrains/kotlin |
 | ci-diffuser | sibling checkout at `../ci-diffuser` (or `CI_DIFFUSER_DIR`), local included build | Shared targets, release size, ktlint, detekt, settings | `apps/ci-diffuser` (no remote) |
-| kotlin-kit | checkout at `../../packages/kotlin-kit` (or `KOTLIN_KIT_DIR`), local included build | TOML, YAML, semver, HTTP and SQLite libraries shared with rtok-kotlin | `packages/kotlin-kit` (no remote) |
+| kotlin-kit | checkout at `../../packages/kotlin-kit` (or `KOTLIN_KIT_DIR`), local included build | File, TOML, YAML, semver, HTTP and SQLite libraries shared with rtok-kotlin | `packages/kotlin-kit` (no remote) |
 | git | system | Version control | https://git-scm.com |
 
 ## Gradle
@@ -20,7 +20,7 @@
 | org.jetbrains.kotlinx:kotlinx-coroutines-test 1.11.0 | local | https://github.com/Kotlin/kotlinx.coroutines | Desktop tests |
 | com.github.ajalt.clikt:clikt 5.1.0 | local | https://github.com/ajalt/clikt | Command line (Rust: clap) |
 | org.kotlincrypto.hash:sha2 0.8.0 | local | https://github.com/KotlinCrypto/hash | Streaming SHA-256 of downloads (Rust: sha2) |
-| pyrlyn.kit:toml-ktoml, toml-aot, yaml-aot, semver, http-ktor, db-room | local (included build) | `packages/kotlin-kit` | TOML read and comment-keeping edit, YAML read, versions, HTTP, SQLite |
+| pyrlyn.kit:fs, toml-ktoml, toml-aot, yaml-aot, semver, http-ktor, db-room | local (included build) | `packages/kotlin-kit` | Crash-safe file writes (Rust: fs-kit), TOML read and comment-keeping edit, YAML read, versions, HTTP, SQLite |
 | com.akuleshov7:ktoml-core 0.7.1 | via kotlin-kit | https://github.com/orchestr7/ktoml | TOML parser (Rust: toml) |
 | io.ktor:ktor-client-core, -darwin, -curl 3.6.0 | via kotlin-kit | https://github.com/ktorio/ktor | HTTP client (Rust: ureq) |
 | androidx.sqlite:sqlite-bundled 2.7.1 | via kotlin-kit | https://developer.android.com/jetpack/androidx/releases/sqlite | SQLite with SQLite bundled (Rust: diesel) |
