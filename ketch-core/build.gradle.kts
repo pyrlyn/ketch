@@ -18,7 +18,11 @@ kotlin {
             implementation(libs.kotlincrypto.sha2)
         }
         // Crash-safe writes of config, state and lock files (Rust: fs-kit); POSIX only.
-        nativeMain.dependencies { implementation("pyrlyn.kit:fs") }
+        nativeMain.dependencies {
+            implementation("pyrlyn.kit:fs")
+            // Hooks run under a deadline with capped output and a killable process group (Rust: run_with_deadline).
+            implementation("pyrlyn.kit:process")
+        }
         // Checks the committed config and manifest schemas against what ketch accepts (Rust: jsonschema).
         nativeTest.dependencies { implementation(libs.json.schema.validator) }
     }

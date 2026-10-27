@@ -118,7 +118,8 @@ sealed class KetchError(
         val cmd: String,
         val status: String,
         val stderr: String,
-    ) : KetchError("`$cmd` failed ($status)")
+        cause: Throwable? = null,
+    ) : KetchError("`$cmd` failed ($status)", cause)
 
     class Plugin(
         val name: String,
