@@ -30,6 +30,14 @@ Taken during the port:
 
 - **SHA-256.** `org.kotlincrypto.hash:sha2` rather than rtok-kotlin's `Sha256`: that one hashes a
   whole byte array in memory, and ketch hashes downloads in chunks.
+- **Files (T4).** Rust `fs-kit` is ported into kotlin-kit as `pyrlyn.kit:fs` (atomic, durable
+  writes that keep modes and links; tree copy and removal) over POSIX. rtok-kotlin's `Fs.kt` was
+  not reused: its writes are not atomic and it removes trees through `rm -rf`.
+- **Writing TOML (T4).** kotlin-kit's `toml.TomlWriter` lays a file out exactly as Rust `toml`
+  1.1 `to_string_pretty` does (string forms, multi-line arrays, implicit tables), checked against
+  that crate's own output, so `ketch.lock` and `config.toml` are byte-identical across the two.
+  ktoml's encoder is not used for writing. Values are mapped through kotlinx-serialization JSON
+  trees: a null is an absent key, a default is written out.
 
 ## Goals of the port
 

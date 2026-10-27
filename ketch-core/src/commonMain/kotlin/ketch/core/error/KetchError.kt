@@ -38,7 +38,8 @@ sealed class KetchError(
     class Parse(
         val what: String,
         val detail: String,
-    ) : KetchError("could not parse $what: $detail")
+        cause: Throwable? = null,
+    ) : KetchError("could not parse $what: $detail", cause)
 
     class UnknownScheme(
         val scheme: String,
