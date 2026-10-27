@@ -8,6 +8,7 @@ import http.HttpBody
 import http.HttpClient
 import http.HttpException
 import http.HttpRequest
+import http.HttpResponse
 import http.HttpSettings
 import http.ktor.KtorHttp
 import ketch.core.cancel.Cancel
@@ -29,6 +30,7 @@ import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.readByteArray
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.serializer
@@ -47,6 +49,18 @@ private const val CHUNK = 128 * 1024
 private const val SNIPPET = 200
 private const val NOT_FOUND = 404
 private const val FIRST_ERROR_STATUS = 400
+
+private const val GITHUB_JSON = "application/vnd.github+json"
+
+/** The methods [Http.sendJson] sends a body with. */
+enum class Verb {
+    Post,
+    Put,
+    Patch,
+    ;
+
+    override fun toString() = name.uppercase()
+}
 
 /** Like serde: fields ketch does not know are ignored, so a new API field never breaks a parse. */
 internal val API_JSON = Json { ignoreUnknownKeys = true }
@@ -102,7 +116,7 @@ class Http(
         authed: Boolean,
         strategy: DeserializationStrategy<T>,
     ): T {
-        val body = getString(url, "application/vnd.github+json", authed)
+        val body = getString(url, GITHUB_JSON, authed)
         return decodeApiJson(url, body, strategy)
     }
 
@@ -179,6 +193,34 @@ class Http(
         }
     }
 
+    /**
+     * Send [body] as JSON to the GitHub API, with the token, and return the response body. An error status is a
+     * [KetchError.Http] carrying GitHub's own message, so a caller can tell a 404 or a 422 from a failure.
+     */
+    fun sendJson(
+        verb: Verb,
+        url: String,
+        body: JsonElement,
+    ): String {
+        report.debug("$verb $url")
+        val req =
+            request(url, GITHUB_JSON, true, mapOf("Content-Type" to "application/json"))
+                .copy(body = body.toString().encodeToByteArray())
+        val resp =
+            try {
+                runBlocking {
+                    when (verb) {
+                        Verb.Post -> client.post(req)
+                        Verb.Put -> client.put(req)
+                        Verb.Patch -> client.patch(req)
+                    }
+                }
+            } catch (e: HttpException) {
+                throw KetchError.Network(url, e)
+            }
+        return responseText(url, resp)
+    }
+
     private fun <T> call(
         url: String,
         req: HttpRequest,
@@ -199,6 +241,18 @@ class Http(
         } catch (e: HttpException) {
             throw KetchError.Network(url, e)
         }
+}
+
+/** A whole response's body, or the error its status is. */
+private fun responseText(
+    url: String,
+    resp: HttpResponse,
+): String {
+    // The client has read the body whole already; the cap still keeps an oversized answer from being parsed.
+    if (resp.body.size > MAX_API_BODY) throw KetchError.Msg("$url answered with more than ${bytes(MAX_API_BODY)}; refusing to read it")
+    val text = resp.text()
+    if (resp.status >= FIRST_ERROR_STATUS) throw KetchError.Http(url, resp.status, extractMessage(text)?.takeIf { it.isNotEmpty() })
+    return text
 }
 
 /** One download in flight: the staged file, the running hash and the count against the cap. */
