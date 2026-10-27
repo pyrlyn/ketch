@@ -54,6 +54,15 @@ Taken during the port:
   count against the central directory's size and ignores a stale Unicode path field. A zip that
   fails while a member is read is a parse error. `hdiutil`, `pkgutil` and `ditto` run under a
   60-minute deadline (Rust has none); a missed deadline is a `KetchError.Command`.
+- **Platform, processes, shell (T6).** `walkdir` and `tempfile` are kotlin-kit's `fs.walk` and
+  `fs.TempDir`. `LinuxPlatform` sits in nativeMain, so its placement is tested on the Mac too;
+  `host()` picks the backend per target. Stopping a process is `kill(2)` (SIGTERM, then SIGKILL
+  after 200 ms) rather than the `kill` command, and `codesign`, `spctl`, `xattr` and `lsof` run
+  under the bounded runner of `pyrlyn.kit:process`, which now names the child a timeout stopped.
+  Discovered executables are ordered by path components, as Rust compares `Path`s. Windows code,
+  and the Windows-only helpers Rust compiles everywhere as dead code (`windows_path_*`, PowerShell
+  profile writing, AutoRun, the user PATH in the registry), wait for T13 with their tests; on
+  Unix those entry points answer "nothing here", as Rust's do.
 
 ## Goals of the port
 
@@ -92,7 +101,7 @@ The Rust modules each task covers. ✅ ported with tests green, 🟡 partial, �
 | T3 | shared Kotlin libraries: TOML (read + comment-keeping edit), YAML, semver, SHA-256, HTTP, SQLite | ✅ |
 | T4 | `config`, `toml_file`, `log`, `report`, `model`, `manifest`, `extra`, `hooks`, `lockfile`, `state`, `fsio`, `link` | ✅ |
 | T5 | `extract` (tar, gzip, xz, bzip2, zip, macOS dmg/pkg) | ✅ |
-| T6 | `platform` (mod, unix, macos, linux, claim), `process`, `shell` | ⬜ |
+| T6 | `platform` (mod, unix, macos, linux, claim), `process`, `shell` | ✅ |
 | T7 | `http`, `source` (github, local, plugin), `resolve`, `releases`, `changelog`, `info`, `registry` | ⬜ |
 | T8 | `install`, `listing`, `stats`, `doctor`, `wizard`, `self_update` | ⬜ |
 | T9 | `import` (brew, linux, winget, apply, fetch), `push` | ⬜ |
