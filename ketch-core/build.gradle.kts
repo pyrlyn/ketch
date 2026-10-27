@@ -19,5 +19,7 @@ kotlin {
         }
         // Crash-safe writes of config, state and lock files (Rust: fs-kit); POSIX only.
         nativeMain.dependencies { implementation("pyrlyn.kit:fs") }
+        // Checks the committed config and manifest schemas against what ketch accepts (Rust: jsonschema).
+        nativeTest.dependencies { implementation(libs.json.schema.validator) }
     }
 }

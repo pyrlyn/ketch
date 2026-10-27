@@ -24,6 +24,7 @@
 | io.ktor:ktor-client-core, -darwin, -curl 3.6.0 | via kotlin-kit | https://github.com/ktorio/ktor | HTTP client (Rust: ureq) |
 | androidx.sqlite:sqlite-bundled 2.7.1 | via kotlin-kit | https://developer.android.com/jetpack/androidx/releases/sqlite | SQLite with SQLite bundled (Rust: diesel) |
 | io.kotest:kotest-assertions-core 6.2.6 | local | https://github.com/kotest/kotest | Test assertions |
+| io.github.optimumcode:json-schema-validator 0.5.5 | local | https://github.com/OptimumCode/json-schema-validator | Tests: manifests and config against the schemas Rust ketch publishes (Rust: jsonschema) |
 | org.jetbrains.kotlin:kotlin-test | local | https://github.com/JetBrains/kotlin | Tests |
 | Compose Multiplatform 1.12.2 (`org.jetbrains.compose`) | local | https://github.com/JetBrains/compose-multiplatform | Desktop UI |
 | org.jlleitschuh.gradle.ktlint 14.2.0 (ktlint 1.8.0) | via ci-diffuser | https://github.com/JLLeitschuh/ktlint-gradle | Formatting lint |
