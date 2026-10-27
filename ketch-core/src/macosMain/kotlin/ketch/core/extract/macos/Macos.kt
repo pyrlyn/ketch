@@ -42,10 +42,10 @@ private const val DITTO = "/usr/bin/ditto"
  * How long one system tool may run. Rust waits as long as it takes; a bounded run turns a tool stuck on something
  * (a disk image asking for a licence nobody can answer, say) into an error, so the limit is far past any real copy.
  */
-private val TOOL_TIMEOUT = 60.minutes
+internal val TOOL_TIMEOUT = 60.minutes
 
 /** What a tool may print before it is cut off; `hdiutil attach` lists a few lines per partition. */
-private const val TOOL_OUTPUT = 1L shl 20
+internal const val TOOL_OUTPUT = 1L shl 20
 
 /**
  * Run a system tool and return its stdout.

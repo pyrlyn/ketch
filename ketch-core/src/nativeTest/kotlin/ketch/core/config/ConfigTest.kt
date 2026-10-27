@@ -1,6 +1,5 @@
 package ketch.core.config
 
-import fs.atomic
 import fs.createDirAll
 import fs.entryKind
 import ketch.core.error.KetchError
@@ -10,6 +9,7 @@ import ketch.core.report.Report
 import ketch.core.testing.setEnv
 import ketch.core.testing.withEnv
 import ketch.core.testing.withTempDir
+import ketch.core.testing.write
 import ketch.core.tomlfile.parse
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
@@ -22,8 +22,6 @@ import kotlin.test.assertTrue
 
 /** Rust `Config::load` with nothing to report to. */
 internal fun load(root: Path) = Config.load(root, Report.silent())
-
-internal fun Path.write(text: String) = atomic(this, text.encodeToByteArray())
 
 class ConfigTest {
     @Test
