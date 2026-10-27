@@ -13,6 +13,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.serializer
+import toml.TomlDocument
 import toml.TomlException
 import toml.TomlParser
 import toml.TomlWriter
@@ -37,7 +38,7 @@ internal fun <T> parse(
     text: String,
     what: String,
     deserializer: DeserializationStrategy<T>,
-): T = decode(tree(text, what), what, deserializer)
+): T = read(text, what).let { decode(it.root, what, deserializer, it) }
 
 internal inline fun <reified T> parse(
     text: String,
@@ -68,7 +69,7 @@ internal inline fun <reified T> render(
 internal fun toJson(
     text: String,
     what: String,
-): JsonObject = tree(text, what)
+): JsonObject = read(text, what).root
 
 /** A quoted, escaped TOML string, written by the TOML writer so escaping is never hand-rolled. */
 internal fun stringLiteral(text: String): String = TomlWriter.string(text)
@@ -76,29 +77,53 @@ internal fun stringLiteral(text: String): String = TomlWriter.string(text)
 /** A TOML array of strings, escaped the same way [stringLiteral] escapes. */
 internal fun stringArrayLiteral(items: List<String>): String = TomlWriter.value(JsonArray(items.map(::JsonPrimitive)))
 
-private fun tree(
+private fun read(
     text: String,
     what: String,
-): JsonObject =
+): TomlDocument =
     try {
-        TomlParser.parse(text)
+        TomlParser.read(text)
     } catch (e: TomlException) {
         throw KetchError.Parse(what, e.message.orEmpty(), e)
     }
 
+/** [lines] places a refused value on its line, when the tree came from text. */
 private fun <T> decode(
     tree: JsonObject,
     what: String,
     deserializer: DeserializationStrategy<T>,
-): T =
-    try {
-        TOML_JSON.decodeFromJsonElement(deserializer, tree)
-    } catch (e: SerializationException) {
-        throw KetchError.Parse(what, e.message.orEmpty(), e)
+    lines: TomlDocument? = null,
+): T {
+    val path = KeyPath()
+    return try {
+        TOML_JSON.decodeFromJsonElement(Tracked.of(deserializer, path), tree)
     } catch (e: IllegalArgumentException) {
-        // A type's own `init` check refusing a value is the file's fault too.
-        throw KetchError.Parse(what, e.message.orEmpty(), e)
+        // A SerializationException, or a type's own `init` check refusing a value: the file's fault either way.
+        throw KetchError.Parse(what, located(e.message.orEmpty(), path.failed, lines), e)
     }
+}
+
+/** [message] with the key it is about and that key's line, in place of kotlinx's JSON offsets and `$` path. */
+private fun located(
+    message: String,
+    keys: List<String>?,
+    lines: TomlDocument?,
+): String {
+    // kotlinx's own messages go on to quote the JSON input on further lines, which is not what the user wrote.
+    val detail =
+        message
+            .lineSequence()
+            .first()
+            .replace(JSON_OFFSET, "")
+            .replace(JSON_PATH, "")
+    if (keys.isNullOrEmpty()) return detail
+    val key = dotted(keys)
+    val line = lines?.lineOf(dotted(keys.filterNot { it.startsWith('[') }))
+    return if (line == null) "key `$key`: $detail" else "TOML parse error at line $line, key `$key`: $detail"
+}
+
+private val JSON_OFFSET = Regex("^Unexpected JSON token at offset \\d+: ")
+private val JSON_PATH = Regex("\\s*at path: \\$\\S*$")
 
 /**
  * A parsed TOML document whose keys a caller reads, or fills in, before it becomes a typed value. A registry
@@ -133,7 +158,7 @@ internal class Document private constructor(
         fun parse(
             text: String,
             what: String,
-        ) = Document(tree(text, what), what)
+        ) = Document(read(text, what).root, what)
     }
 }
 
@@ -166,7 +191,7 @@ internal class EditDocument private constructor(
             what: String,
         ): EditDocument {
             // The editor reads lines, not the grammar; the real reader refuses what is not TOML first.
-            tree(text, what)
+            read(text, what)
             return try {
                 EditDocument(TomlDoc.parse(text))
             } catch (e: TomlAotException) {

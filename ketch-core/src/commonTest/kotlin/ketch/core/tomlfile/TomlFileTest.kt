@@ -29,6 +29,21 @@ class TomlFileTest {
         assertTrue("/root/config.toml" in err.message, err.message)
     }
 
+    @Serializable
+    data class Nested(
+        val items: List<Sample> = emptyList(),
+        val byName: Map<String, Sample> = emptyMap(),
+    )
+
+    @Test
+    fun aRefusedValueIsNamedByItsKeyAndLine() {
+        val list = assertFailsWith<KetchError.Parse> { parse<Nested>("[[items]]\nname = \"a\"\ntags = 1\n", "f.toml") }
+        assertTrue("line 3, key `items[0].tags`" in list.message, list.message)
+        val map = assertFailsWith<KetchError.Parse> { parse<Nested>("\n[byName.rg]\nname = 2\ntags = []\n", "f.toml") }
+        assertTrue("line 3, key `byName.rg.name`" in map.message, map.message)
+        assertFalse("at path" in map.message, map.message)
+    }
+
     @Test
     fun renderedTextParsesBackToTheSameValue() {
         val sample = Sample("rg \"quoted\"", listOf("a", "b"))
