@@ -1,5 +1,9 @@
 // The port of crates/ketch-core: everything ketch does, printing nothing; front ends render its events.
-plugins { id("ketch.kmp") }
+plugins {
+    id("ketch.kmp")
+    // Typed queries over stats.db, checked against its schema at build time (Rust: diesel).
+    id("app.cash.sqldelight")
+}
 
 kotlin {
     sourceSets {
@@ -14,6 +18,7 @@ kotlin {
             implementation("pyrlyn.kit:semver")
             implementation("pyrlyn.kit:http-ktor")
             implementation("pyrlyn.kit:db-room")
+            implementation("pyrlyn.kit:db-sqldelight")
             // Streaming SHA-256 for downloads that do not fit in memory (Rust: sha2), behind ketch.core.hash.Sha256.
             implementation(libs.kotlincrypto.sha2)
         }
@@ -31,6 +36,15 @@ kotlin {
             implementation(libs.json.schema.validator)
             // A hand-written HTTP server for the download guards: a lying or missing Content-Length.
             implementation("pyrlyn.kit:loopback")
+        }
+    }
+}
+
+sqldelight {
+    databases {
+        create("StatsDatabase") {
+            packageName.set("ketch.core.stats.db")
+            dialect("app.cash.sqldelight:sqlite-3-38-dialect:${libs.versions.sqldelight.get()}")
         }
     }
 }

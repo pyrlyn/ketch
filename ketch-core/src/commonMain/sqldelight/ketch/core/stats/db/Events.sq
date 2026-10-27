@@ -1,0 +1,74 @@
+-- The schema of Rust ketch's migration 2026-09-04-000000_create_events, column for column, so either ketch reads the
+-- stats.db the other wrote. Every object is created only if missing (SQLite drops that clause from the schema it
+-- stores), so opening a database Rust made, or one already migrated, changes nothing. SQLDelight knows only SQLite's own type names, so Rust's BOOLEAN and BIGINT are declared
+-- INTEGER: BIGINT has the same affinity, and 0 and 1 are stored alike under BOOLEAN's, so both read the same rows.
+--
+-- Every install, upgrade and uninstall ketch performs, appended and never rewritten. One table answers both questions
+-- asked of it: filtered by package and ordered by time it is that package's version history, and aggregated it is the
+-- statistics. Nothing here is authoritative: state.json remains the record of what is installed.
+CREATE TABLE IF NOT EXISTS events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    package TEXT NOT NULL,
+    -- `install`, `upgrade`, `uninstall` or `rollback`.
+    action TEXT NOT NULL,
+    version TEXT NOT NULL,
+    -- The version this replaced. Null unless the action is an upgrade, a rollback or a reinstall.
+    previous_version TEXT,
+    tag TEXT NOT NULL,
+    source TEXT NOT NULL,
+    target TEXT NOT NULL,
+    asset_name TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    checksum_verified INTEGER AS kotlin.Boolean NOT NULL,
+    -- Wall-clock time from the start of `prepare` to the end of `commit`. Null for an uninstall.
+    duration_ms INTEGER,
+    at INTEGER NOT NULL,
+    -- Which ketch wrote the row.
+    ketch_version TEXT NOT NULL
+);
+
+-- The two orders anything reads this in: one package's history, and everything newest first.
+CREATE INDEX IF NOT EXISTS events_package_at ON events (package, at DESC);
+
+CREATE INDEX IF NOT EXISTS events_at ON events (at DESC);
+
+-- diesel's record of applied migrations, so Rust ketch does not run the migration again on a database the port made.
+-- diesel declares VARCHAR(50) and TIMESTAMP; both hold the same text under these types.
+CREATE TABLE IF NOT EXISTS __diesel_schema_migrations (
+    version TEXT PRIMARY KEY NOT NULL,
+    run_on TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+setBusyTimeout:
+PRAGMA busy_timeout = 5000;
+
+isApplied:
+SELECT count(*) FROM __diesel_schema_migrations WHERE version = ?;
+
+markApplied:
+INSERT INTO __diesel_schema_migrations (version) VALUES (?);
+
+insert:
+INSERT INTO events (
+    package, action, version, previous_version, tag, source, target, asset_name, sha256, checksum_verified,
+    duration_ms, at, ketch_version
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+history:
+SELECT * FROM events ORDER BY at DESC, id DESC LIMIT :limit;
+
+historyOf:
+SELECT * FROM events WHERE package = :name ORDER BY at DESC, id DESC LIMIT :limit;
+
+summary:
+SELECT
+    count(*) AS events,
+    count(CASE WHEN action = 'install' THEN 1 END) AS installs,
+    count(CASE WHEN action = 'upgrade' THEN 1 END) AS upgrades,
+    count(CASE WHEN action = 'uninstall' THEN 1 END) AS uninstalls,
+    count(DISTINCT package) AS packages,
+    CAST(coalesce(sum(duration_ms), 0) AS INTEGER) AS total_duration_ms,
+    count(duration_ms) AS timed,
+    min(at) AS first_at,
+    max(at) AS last_at
+FROM events;

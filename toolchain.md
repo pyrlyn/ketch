@@ -23,10 +23,11 @@
 | org.jetbrains.kotlinx:kotlinx-coroutines-test 1.11.0 | local | https://github.com/Kotlin/kotlinx.coroutines | Desktop tests |
 | com.github.ajalt.clikt:clikt 5.1.0 | local | https://github.com/ajalt/clikt | Command line (Rust: clap) |
 | org.kotlincrypto.hash:sha2 0.8.0 | local | https://github.com/KotlinCrypto/hash | Streaming SHA-256 of downloads (Rust: sha2) |
-| pyrlyn.kit:fs, toml, toml-aot, yaml-aot, semver, http-ktor, db-room, process, archive | local (included build) | `packages/kotlin-kit` | Crash-safe file writes (Rust: fs-kit), TOML read and comment-keeping edit, YAML read, versions, HTTP, SQLite, hooks under a deadline (Rust: run_with_deadline), tar/zip/gzip/bzip2/xz (Rust: tar, zip, flate2, bzip2, xz2) |
+| pyrlyn.kit:fs, toml, toml-aot, yaml-aot, semver, http-ktor, db-room, db-sqldelight, process, archive | local (included build) | `packages/kotlin-kit` | Crash-safe file writes (Rust: fs-kit), TOML read and comment-keeping edit, YAML read, versions, HTTP, SQLite and SQLDelight on it, hooks under a deadline (Rust: run_with_deadline), tar/zip/gzip/bzip2/xz (Rust: tar, zip, flate2, bzip2, xz2) |
 | pyrlyn.kit:loopback | local (included build, tests only) | `packages/kotlin-kit` | A hand-written HTTP server on 127.0.0.1 for the download guards (Rust tests: a raw `TcpListener`) |
 | io.ktor:ktor-client-core, -darwin, -curl 3.6.0 | via kotlin-kit | https://github.com/ktorio/ktor | HTTP client (Rust: ureq) |
-| androidx.sqlite:sqlite-bundled 2.7.1 | via kotlin-kit | https://developer.android.com/jetpack/androidx/releases/sqlite | SQLite with SQLite bundled (Rust: diesel) |
+| androidx.sqlite:sqlite-bundled 2.7.1 | via kotlin-kit | https://developer.android.com/jetpack/androidx/releases/sqlite | SQLite with SQLite bundled (Rust: libsqlite3-sys, bundled) |
+| app.cash.sqldelight (Gradle plugin, runtime, sqlite-3-38-dialect) 2.4.1 | local; runtime via kotlin-kit | https://github.com/sqldelight/sqldelight | `stats.db` queries typed and checked against its schema at build time (Rust: diesel) |
 | io.kotest:kotest-assertions-core 6.2.6 | local | https://github.com/kotest/kotest | Test assertions |
 | io.github.optimumcode:json-schema-validator 0.5.5 | local | https://github.com/OptimumCode/json-schema-validator | Tests: manifests and config against the schemas Rust ketch publishes (Rust: jsonschema) |
 | org.jetbrains.kotlin:kotlin-test | local | https://github.com/JetBrains/kotlin | Tests |
