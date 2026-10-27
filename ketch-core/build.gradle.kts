@@ -27,6 +27,10 @@ kotlin {
             implementation("pyrlyn.kit:archive")
         }
         // Checks the committed config and manifest schemas against what ketch accepts (Rust: jsonschema).
-        nativeTest.dependencies { implementation(libs.json.schema.validator) }
+        nativeTest.dependencies {
+            implementation(libs.json.schema.validator)
+            // A hand-written HTTP server for the download guards: a lying or missing Content-Length.
+            implementation("pyrlyn.kit:loopback")
+        }
     }
 }
