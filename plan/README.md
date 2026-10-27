@@ -78,7 +78,8 @@ Taken during the port:
   `Path.name` and `Path.parent` with `basename(3)` and `dirname(3)`, which return a shared static
   buffer (`core/apple/src/files/FileSystemApple.kt` on its `master`, checked 2026-10-27): two
   threads preparing packages read each other's file names (`aravo` for `alpha` and `bravo`).
-  The order of results, per-package failures and the commit sequence stay Rust's.
+  The order of results, per-package failures and the commit sequence stay Rust's. For the same
+  reason `ketch list` asks each source for its `latest` one after another, not `jobs` at a time.
 
 ## Goals of the port
 

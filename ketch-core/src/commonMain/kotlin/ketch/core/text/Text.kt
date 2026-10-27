@@ -131,6 +131,21 @@ fun Char.isRustWhitespace(): Boolean =
 /** Rust's `str::trim`. */
 fun String.rustTrim(): String = trim { it.isRustWhitespace() }
 
+/** Words between runs of whitespace, as Rust's `split_whitespace`: no empty words. */
+fun String.splitWhitespace(): List<String> =
+    buildList {
+        var start = -1
+        for ((i, c) in this@splitWhitespace.withIndex()) {
+            if (c.isRustWhitespace()) {
+                if (start >= 0) add(this@splitWhitespace.substring(start, i))
+                start = -1
+            } else if (start < 0) {
+                start = i
+            }
+        }
+        if (start >= 0) add(this@splitWhitespace.substring(start))
+    }
+
 /**
  * Rust's `str::escape_debug`, which error messages use to show a name with its invisible characters spelled out.
  * Printability follows Unicode categories; a character outside the BMP is printable unless it is private use or a

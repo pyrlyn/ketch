@@ -49,4 +49,11 @@ class TextTest {
         assertTrue("Ketch".eqIgnoreAsciiCase("kETCH"))
         assertFalse("\u0130".eqIgnoreAsciiCase("i"))
     }
+
+    @Test
+    fun splitsOnRunsOfWhitespaceAsRustDoes() {
+        assertEquals(listOf("a", "b", "c"), " a\n\t b\u3000c ".splitWhitespace())
+        assertEquals(emptyList(), " \n ".splitWhitespace())
+        assertEquals(listOf("\u001fa"), "\u001fa".splitWhitespace())
+    }
 }
