@@ -2,7 +2,7 @@
 status: in progress
 priority: P0
 complexity: 4
-readiness: 55%
+readiness: 75%
 agent: Claude Code / claude-opus-5-5
 ---
 
@@ -39,7 +39,8 @@ kotlin-kit green after each step.
 
 Moved out of the `model` step:
 
-- `write_ketch_docs` and `CompletionShell`'s clap mapping: the CLI phase.
+- `CompletionShell`'s clap mapping: the CLI phase. `write_ketch_docs` landed in the `manifest`
+  step, taking the man pages and completions as functions the CLI will pass in.
 - Parsing minisign and gpg keys in `check_policy`: T14.
 - The schema tests and `BUILTIN_TOML`: the `manifest` step. `committed_manifest_schema_matches_manifest`
   is not ported: there the Rust types are the schema's source.
@@ -52,3 +53,13 @@ Moved out of the `config` step:
   `manifest` step, with the other schema tests.
 - The non-Unicode branch of `env_bool`: reached only through a raw `setenv`, which the tests do
   not set up; the code path is ported.
+
+Notes on the `manifest`, `extra`, `hooks` step:
+
+- `Resolver.load` takes the registry's manifests as a parameter until T7 ports `registry.load`.
+- The manifest and config schemas, `MANIFESTS.md`, `REGISTRY.md` and the repository's
+  `ketch.toml` are fixtures in `ketch-core/fixtures/rust`, copied from `../ketch` at 41738f64.
+  The manifest schema test compares the schema's keys with the serial names; the pattern
+  proptest is a fixed sample of strings.
+- Hooks run through the new `pyrlyn.kit:process` (no stdin, capped output, process-group kill at
+  the deadline); T7's plugin source reuses it. The Windows `cmd /C` shell: T13.
