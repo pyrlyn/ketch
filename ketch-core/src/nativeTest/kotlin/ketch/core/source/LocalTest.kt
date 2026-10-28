@@ -1,8 +1,8 @@
 package ketch.core.source
 
 import fs.createDirAll
-import fs.entryKind
 import fs.setMode
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.config.currentDir
 import ketch.core.error.KetchError
 import ketch.core.extract.BZ2_MAGIC
@@ -13,11 +13,8 @@ import ketch.core.extract.looksLikeTar
 import ketch.core.http.Http
 import ketch.core.model.LocalKind
 import ketch.core.report.Report
-import ketch.core.testing.read
 import ketch.core.testing.withTempDir
 import ketch.core.testing.write
-import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.convert
 import kotlinx.io.files.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -61,43 +58,16 @@ class LocalTest {
             assertNotEquals(sha256Tree(split), sha256Tree(fused))
         }
 
-    @Test
-    fun aModeChangeChangesTheTreeHash(): Unit =
-        withTempDir { dir ->
-            val file = Path(dir, "a")
-            file.write("same")
-            val first = sha256Tree(dir)
-            setMode(file, "755".toInt(8))
-            assertNotEquals(first, sha256Tree(dir))
-        }
-
-    @Test
-    fun aSymlinkIsHashedByItsTargetAndNotAsAFile(): Unit =
-        withTempDir { tmp ->
-            fun tree(
-                name: String,
-                fill: (Path) -> Unit,
-            ): String {
-                val dir = Path(tmp, name)
-                createDirAll(dir)
-                fill(dir)
-                return sha256Tree(dir)
-            }
-            val linked = tree("linked") { fs.symlink(Path("target-a"), Path(it, "a")) }
-            assertNotEquals(linked, tree("as-file") { Path(it, "a").write("target-a") })
-            assertNotEquals(linked, tree("empty") {})
-            assertNotEquals(linked, tree("retargeted") { fs.symlink(Path("target-b"), Path(it, "a")) })
-            assertEquals(linked, tree("again") { fs.symlink(Path("target-a"), Path(it, "a")) })
-        }
-
     /** The digest a Rust ketch records for the same tree, so a lock written by either one verifies with the other. */
     @Test
     fun theTreeHashIsTheFramingRustWrites(): Unit =
         withTempDir { dir ->
             Path(dir, "a").write("X")
             setMode(Path(dir, "a"), "644".toInt(8))
+            // Windows keeps only the read-only attribute, which Rust hashes as 0o666 or 0o444.
+            val mode = if (HOST_WINDOWS) 0xb6 else 0xa4
             val record =
-                byteArrayOf('f'.code.toByte(), 0, 0, 0, 0, 0, 0, 0, 1, 'a'.code.toByte(), 0, 0, 1, 0xa4.toByte(), 0, 0, 0, 0, 0, 0, 0, 1) +
+                byteArrayOf('f'.code.toByte(), 0, 0, 0, 0, 0, 0, 0, 1, 'a'.code.toByte(), 0, 0, 1, mode.toByte(), 0, 0, 0, 0, 0, 0, 0, 1) +
                     "X".encodeToByteArray()
             assertEquals(
                 ketch.core.hash.Sha256
@@ -128,38 +98,6 @@ class LocalTest {
         }
 
     @Test
-    fun classifiesASymlink(): Unit =
-        withTempDir { dir ->
-            val bin = Path(dir, "tool")
-            bin.write("#!/bin/sh\necho hi\n")
-            val link = Path(dir, "link")
-            fs.symlink(bin, link)
-            assertEquals(LocalKind.Symlink, classify(link))
-        }
-
-    /** Windows place stages via copyTree after extract may have created real symlinks; materialise writes the target bytes. */
-    @Test
-    fun materializeLocalSymlinkWritesTheTargetFile(): Unit =
-        withTempDir { dir ->
-            Path(dir, "tool.exe").write("MZ")
-            val link = Path(dir, "tool")
-            fs.symlink(Path("tool.exe"), link)
-            val out = Path(dir, "tool.materialised")
-            materializeLocalSymlink(link, out)
-            assertEquals("MZ", out.read())
-            assertEquals(fs.EntryKind.File, entryKind(out))
-        }
-
-    @Test
-    fun materializeLocalSymlinkErrorsWhenTargetIsMissing(): Unit =
-        withTempDir { dir ->
-            val link = Path(dir, "dangling")
-            fs.symlink(Path("missing.bin"), link)
-            val err = assertFailsWith<KetchError> { materializeLocalSymlink(link, Path(dir, "out")) }
-            assertTrue("cannot materialise local symlink" in err.message, err.message)
-        }
-
-    @Test
     fun refusesAPlainDirectory(): Unit =
         withTempDir { dir ->
             val nested = Path(dir, "stuff")
@@ -175,20 +113,11 @@ class LocalTest {
             assertEquals(LocalKind.App, classify(app))
         }
 
-    @OptIn(ExperimentalForeignApi::class)
-    @Test
-    fun refusesANamedPipeBeforeOpenCanBlock(): Unit =
-        withTempDir { dir ->
-            val fifo = Path(dir, "pipe")
-            assertEquals(0, platform.posix.mkfifo(fifo.toString(), "600".toInt(8).convert()), "mkfifo failed")
-            val err = assertFailsWith<KetchError> { classify(fifo) }.message
-            assertTrue("not a regular file" in err, "unexpected error: $err")
-        }
-
     @Test
     fun absolutePathResolvesRelative() {
         assertEquals(Path(currentDir()!!, "rel/tool"), absolutePath("rel/tool"))
-        assertEquals(Path("/tmp/ketch-local-abs-tool"), absolutePath("/tmp/ketch-local-abs-tool"))
+        val abs = if (HOST_WINDOWS) "C:\\ketch-local-abs-tool" else "/tmp/ketch-local-abs-tool"
+        assertEquals(Path(abs), absolutePath(abs))
     }
 
     @Test

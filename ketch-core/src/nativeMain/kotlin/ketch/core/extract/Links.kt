@@ -13,10 +13,13 @@ import fs.hardLink
 import fs.isDir
 import fs.removeFile
 import fs.setMode
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.error.KetchError
 import ketch.core.error.fsKit
 import ketch.core.error.io
 import ketch.core.error.ioAt
+import ketch.core.model.rustComponents
+import ketch.core.platform.pathIsWithin
 import ketch.core.platform.symlink
 import kotlinx.io.files.Path
 
@@ -38,8 +41,6 @@ internal fun join(
 ) = if (rel.startsWith('/')) Path(rel) else Path(base, rel)
 
 private fun isFile(path: Path) = entryKind(canon(path)) == EntryKind.File
-
-private fun components(path: Path) = path.toString().split('/').filter { it.isNotEmpty() }
 
 /**
  * A link inside the payload may only point at something else inside it.
@@ -108,7 +109,7 @@ internal fun ensureParent(
 
 /** Set directory modes after every member is on disk, deepest first, always leaving the owner `rwx`: ketch has to be able to remove its own store on uninstall and upgrade, whatever the archive asked for. */
 internal fun applyDirModes(dirs: List<Pair<Path, Int>>) {
-    for ((path, mode) in dirs.sortedByDescending { components(it.first).size }) setUnixMode(path, payloadMode(mode) or OWNER_ALL)
+    for ((path, mode) in dirs.sortedByDescending { rustComponents(it.first).size }) setUnixMode(path, payloadMode(mode) or OWNER_ALL)
 }
 
 /** Create hard links, then symlinks, after the rest of the archive is on disk; each pair is where the link goes and what it names. */
@@ -146,11 +147,17 @@ internal fun writeHardlink(
     }
 }
 
-// Windows falls back to materializeSymlinkAsCopy when it may not create a link; this port runs on Unix only.
+/**
+ * Windows prefers a real symlink when the process may create one (Developer Mode or SeCreateSymbolicLink), and falls
+ * back to a same-tree copy so a release that ships `bin/tool -> tool.exe` still places a runnable file.
+ */
 internal fun writeSymlink(
     target: String,
     link: Path,
-) = symlink(Path(target), link)
+) {
+    if (!HOST_WINDOWS) return symlink(Path(target), link)
+    if (runCatching { symlink(Path(target), link) }.isFailure) materializeSymlinkAsCopy(target, link)
+}
 
 /**
  * Copy the symlink target into [link] when it already exists under the payload.
@@ -173,9 +180,9 @@ internal fun materializeSymlinkAsCopy(
         isDir(resolved) -> {
             // `d -> .` or `sub/d -> ..` passes the lexical target check, yet copying it would copy the link's own
             // directory into itself.
-            val source = components(ioAt(resolved) { canonicalize(resolved) })
-            val home = components(ioAt(parent) { canonicalize(parent) })
-            if (home.take(source.size) == source) {
+            val source = ioAt(resolved) { canonicalize(resolved) }
+            val home = ioAt(parent) { canonicalize(parent) }
+            if (pathIsWithin(home, source)) {
                 throw KetchError.Msg("cannot materialise archive symlink $link → $target: the target is an ancestor of the link")
             }
             copyDirContents(resolved, link)

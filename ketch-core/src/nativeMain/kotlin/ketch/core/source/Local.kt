@@ -133,7 +133,7 @@ private fun syntheticRelease(id: String): Release {
 fun absolutePath(id: String): Path {
     val raw = id.trim()
     if (raw.isEmpty()) throw KetchError.Msg("local path is empty")
-    if (raw.startsWith('/')) return Path(raw)
+    if (Path(raw).isAbsolute) return Path(raw)
     val cwd = currentDir() ?: throw KetchError.fsKit(Path("."), FsException.ofErrno(Path(".")))
     return Path(cwd, raw)
 }
