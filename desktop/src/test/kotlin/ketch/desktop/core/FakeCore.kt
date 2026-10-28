@@ -15,6 +15,7 @@ import ketch.wire.ScriptStep
 import ketch.wire.Wire
 import kotlinx.coroutines.delay
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -44,7 +45,9 @@ class FakeCore(
     var stepDelay: Duration = Duration.ZERO,
 ) : Core {
     private val lock = Any()
-    private val reads = mutableMapOf<String, JsonElement>()
+
+    // The store reads what is outdated after every operation; a fake nobody scripted that for has nothing newer.
+    private val reads = mutableMapOf<String, JsonElement>("outdated" to JsonArray(emptyList()))
     private val scripted = mutableMapOf<String, Scenario>()
     private var installed = emptyList<Package>()
     private val made = mutableListOf<Call>()
