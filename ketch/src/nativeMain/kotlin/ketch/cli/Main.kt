@@ -15,6 +15,7 @@ import ketch.cmd.changelog
 import ketch.cmd.config
 import ketch.cmd.doctor
 import ketch.cmd.history
+import ketch.cmd.importPackage
 import ketch.cmd.info
 import ketch.cmd.install
 import ketch.cmd.installCompletions
@@ -144,6 +145,7 @@ private val COMMANDS: Map<String, (Config, Matches) -> Unit> =
         "config" to ::config,
         "lock" to ::lock,
         "sync" to ::sync,
+        "import" to ::importPackage,
         "completions" to ::installCompletions,
         "install" to ::install,
         "uninstall" to ::uninstall,
