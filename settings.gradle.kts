@@ -23,4 +23,7 @@ rootProject.name = "ketch-kotlin"
 // KOTLIN_KIT_DIR overrides the path, as CI_DIFFUSER_DIR does above.
 includeBuild(System.getenv("KOTLIN_KIT_DIR") ?: "../../packages/kotlin-kit")
 
+// insta-format snapshot assertions for the ported snapshot tests. KOTLIN_SNAPSHOT_DIR overrides the path.
+includeBuild(System.getenv("KOTLIN_SNAPSHOT_DIR") ?: "../../packages/kotlin-snapshot")
+
 include(":ketch-core", ":ketch-wire", ":ketch", ":desktop")
