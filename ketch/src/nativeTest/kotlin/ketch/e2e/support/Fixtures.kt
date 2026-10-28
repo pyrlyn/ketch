@@ -5,6 +5,7 @@ import archive.TarWriter
 import archive.ZipWriter
 import archive.gzip
 import fs.bytesIfExists
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.hash.Sha256
 import kotlinx.io.files.Path
 
@@ -76,22 +77,40 @@ class Entry(
             body: String,
         ) = Entry(path, body.encodeToByteArray(), FILE_MODE)
 
-        /** An executable that prints [says] when run, so a test can prove the thing on PATH is what was installed. */
+        /**
+         * An executable that prints [says] when run, so a test can prove the thing on PATH is what was installed. On
+         * Windows it is a `.cmd`, since only the extension makes a file runnable there.
+         */
         fun program(
             path: String,
             says: String,
-        ) = Entry(path, "#!/bin/sh\necho '$says'\n".encodeToByteArray(), PROGRAM_MODE)
+        ) = if (HOST_WINDOWS) {
+            Entry(runnable(path), "@echo off\r\necho $says\r\n".encodeToByteArray(), PROGRAM_MODE)
+        } else {
+            Entry(path, "#!/bin/sh\necho '$says'\n".encodeToByteArray(), PROGRAM_MODE)
+        }
 
         /**
          * A program that stays running, so upgrade can see a process holding the file. It creates the file
          * [SLEEPER_READY] names, when set, before it starts waiting.
          */
         fun sleeper(path: String) =
-            Entry(
-                path,
-                "#!/bin/sh\nif [ -n \"\${$SLEEPER_READY}\" ]; then : > \"\${$SLEEPER_READY}\"; fi\nsleep 30\n".encodeToByteArray(),
-                PROGRAM_MODE,
-            )
+            if (HOST_WINDOWS) {
+                Entry(
+                    runnable(path),
+                    "@echo off\r\nif defined $SLEEPER_READY type nul > \"%$SLEEPER_READY%\"\r\nping -n 30 127.0.0.1 >nul\r\n".encodeToByteArray(),
+                    PROGRAM_MODE,
+                )
+            } else {
+                Entry(
+                    path,
+                    "#!/bin/sh\nif [ -n \"\${$SLEEPER_READY}\" ]; then : > \"\${$SLEEPER_READY}\"; fi\nsleep 30\n".encodeToByteArray(),
+                    PROGRAM_MODE,
+                )
+            }
+
+        /** [path] with `.cmd` added unless it already names something Windows runs. */
+        private fun runnable(path: String) = if (listOf(".cmd", ".exe", ".bat").any { path.lowercase().endsWith(it) }) path else "$path.cmd"
     }
 }
 
@@ -121,6 +140,12 @@ fun tarGz(vararg entries: Entry) = Archive.TarGz(entries.toList())
 
 fun zip(vararg entries: Entry) = Archive.Zip(entries.toList())
 
+/** The archive kind a release for this host comes in: a zip on Windows, a gzipped tar elsewhere. */
+fun nativeArchive(entries: List<Entry>): Archive = if (HOST_WINDOWS) Archive.Zip(entries) else Archive.TarGz(entries)
+
+/** Where a program installed as [name] lands in the bin dir: Windows keeps a script's `.cmd`. */
+fun Sandbox.binProgram(name: String): Path = bin.resolve(if (HOST_WINDOWS) "$name.cmd" else name)
+
 /** Enough of a JSON string escape for fixture text. */
 private fun jsonEscape(text: String) = text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
 
@@ -143,5 +168,6 @@ fun nativeName(
 ): String =
     when (Platform.osFamily) {
         OsFamily.MACOSX -> "$pkg-$version-${hostArch()}-apple-darwin.tar.gz"
+        OsFamily.WINDOWS -> "$pkg-$version-${hostArch()}-pc-windows-msvc.zip"
         else -> "$pkg-$version-${hostArch()}-unknown-linux-gnu.tar.gz"
     }

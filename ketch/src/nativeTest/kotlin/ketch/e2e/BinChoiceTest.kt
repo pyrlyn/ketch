@@ -4,12 +4,14 @@
 package ketch.e2e
 
 import fs.readText
-import ketch.e2e.support.Archive
+import ketch.core.config.HOST_WINDOWS
 import ketch.e2e.support.Entry
 import ketch.e2e.support.Release
 import ketch.e2e.support.Sandbox
+import ketch.e2e.support.binProgram
 import ketch.e2e.support.fails
 import ketch.e2e.support.ketch
+import ketch.e2e.support.nativeArchive
 import ketch.e2e.support.nativeName
 import ketch.e2e.support.ok
 import ketch.e2e.support.resolve
@@ -37,12 +39,12 @@ class BinChoiceTest {
         vararg programs: String,
     ) {
         val entries = programs.map { Entry.program("rtok-$version/$it", "$it $version") } + Entry.file("rtok-$version/README.md", "# rtok\n")
-        val asset = sandbox.asset(nativeName("rtok", version), Archive.TarGz(entries))
+        val asset = sandbox.asset(nativeName("rtok", version), nativeArchive(entries))
         sandbox.publish("rtok", listOf(Release(version, listOf(asset))))
     }
 
     /** Where the program called [name] lands in the bin dir. */
-    private fun linked(name: String) = sandbox.bin.resolve(name)
+    private fun linked(name: String) = sandbox.binProgram(name)
 
     private fun exists(path: Path) = SystemFileSystem.exists(path)
 
@@ -100,9 +102,11 @@ class BinChoiceTest {
 
         sandbox.ok("install", "rtok", "--yes")
 
-        // A bare name equal to the package leads.
+        // Windows would link a bare name as `.exe`, so a script keeps its own. A bare name equal to the package leads;
+        // a `.cmd` does not, since only `.exe` is folded away, so on Windows the two stay alphabetical.
+        val (first, second) = if (HOST_WINDOWS) "other-tool.cmd" to "rtok.cmd" else "rtok" to "other-tool"
         val written = readText(file)
-        assertEquals("${original}bin = [{ name = \"rtok\" }, { name = \"other-tool\" }]\n", written, "everything but the new entry must be left as it was")
+        assertEquals("${original}bin = [{ name = \"$first\" }, { name = \"$second\" }]\n", written, "everything but the new entry must be left as it was")
         assertEquals("rtok 1.0.0", said(linked("rtok")))
         assertEquals("other-tool 1.0.0", said(linked("other-tool")))
         assertFalse(exists(linked("rtok-hook")))
@@ -202,7 +206,8 @@ class BinChoiceTest {
     @Test
     fun aBinGlobMatchingSeveralFilesLinksTheOneNamedLikeTheEntry() {
         publish("1.0.0", "rtok-hook", "rtok")
-        globManifest(", name = \"rtok\"")
+        // Windows links a bare name as `.exe`, so the script's entry keeps its suffix; the stem still names the file.
+        globManifest(", name = \"${if (HOST_WINDOWS) "rtok.cmd" else "rtok"}\"")
         sandbox.ok("install", "rtok", "--yes")
         assertEquals("rtok 1.0.0", said(linked("rtok")))
         assertFalse(exists(linked("rtok-hook")))

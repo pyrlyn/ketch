@@ -8,12 +8,13 @@ import ketch.e2e.support.Entry
 import ketch.e2e.support.Release
 import ketch.e2e.support.SLEEPER_READY
 import ketch.e2e.support.Sandbox
+import ketch.e2e.support.binProgram
 import ketch.e2e.support.ketch
 import ketch.e2e.support.ketchOverrides
+import ketch.e2e.support.nativeArchive
 import ketch.e2e.support.nativeName
 import ketch.e2e.support.ok
 import ketch.e2e.support.resolve
-import ketch.e2e.support.tarGz
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import platform.posix.usleep
@@ -42,12 +43,12 @@ class AutoUpdateTest {
     fun cleanUp() = sandbox.close()
 
     private fun publishTool(version: String) {
-        val native = sandbox.asset(nativeName("testtool", version), tarGz(Entry.program("testtool-$version/bin/testtool", "testtool $version")))
+        val native = sandbox.asset(nativeName("testtool", version), nativeArchive(listOf(Entry.program("testtool-$version/bin/testtool", "testtool $version"))))
         sandbox.publish("testtool", listOf(Release(version, listOf(native))))
     }
 
     private fun publishSleeper(version: String) {
-        val native = sandbox.asset(nativeName("testtool", version), tarGz(Entry.sleeper("testtool-$version/bin/testtool")))
+        val native = sandbox.asset(nativeName("testtool", version), nativeArchive(listOf(Entry.sleeper("testtool-$version/bin/testtool"))))
         sandbox.publish("testtool", listOf(Release(version, listOf(native))))
     }
 
@@ -92,7 +93,7 @@ class AutoUpdateTest {
         publishSleeper("1.0.0")
         sandbox.ok("install", "test:testtool@1.0.0", "--yes")
 
-        val link = sandbox.bin.resolve("testtool").toString()
+        val link = sandbox.binProgram("testtool").toString()
         val ready = sandbox.root.resolve("sleeper-ready").toString()
         // The occupant runs on a worker, since a run here waits for its child; upgrade is what ends it.
         val worker = Worker.start(name = "occupant")

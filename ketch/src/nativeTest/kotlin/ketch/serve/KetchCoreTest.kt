@@ -6,23 +6,16 @@ import fs.TempDir
 import fs.atomic
 import fs.createDirAll
 import fs.isDir
-import fs.readText
-import fs.setMode
+import fs.joinPath
 import ketch.core.cancel.Cancel
 import ketch.core.config.Config
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.error.KetchError
-import ketch.core.listing.Available
-import ketch.core.listing.Row
-import ketch.core.listing.fillLatest
-import ketch.core.manifest.Resolver
-import ketch.core.model.PackageSpec
 import ketch.core.report.Ctx
 import ketch.core.report.Report
-import ketch.core.source.SourceRegistry
 import ketch.core.state.Lock
 import ketch.core.state.State
 import ketch.wire.Answer
-import ketch.wire.ChangelogSource
 import ketch.wire.Event
 import ketch.wire.InstallOptions
 import ketch.wire.PathOutcome
@@ -31,8 +24,8 @@ import ketch.wire.Stage
 import kotlinx.cinterop.toKString
 import kotlinx.io.files.Path
 import platform.posix.getenv
-import platform.posix.setenv
-import platform.posix.unsetenv
+import process.setEnv
+import process.unsetEnv
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -42,21 +35,23 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import ketch.wire.KetchError as WireError
 
+/** A [KetchCore] over a fresh root inside a scratch directory, removed afterwards. */
+internal fun scratch(body: (Path, KetchCore) -> Unit) = TempDir.create("ketch-test-").use { body(it.path, KetchCore(joinPath(it.path, "root"))) }
+
+internal fun cfg(dir: Path) = Config.load(joinPath(dir, "root"), Report.silent())
+
 class KetchCoreTest {
     /** A core over a fresh root under a temporary directory, and that directory. */
-    private fun scratch(body: (Path, KetchCore) -> Unit) = TempDir.create("ketch-test-").use { body(it.path, KetchCore(Path(it.path, "root"))) }
-
-    private fun cfg(dir: Path) = Config.load(Path(dir, "root"), Report.silent())
 
     /** A one-file `local:` package under [dir], named [name]. */
     private fun payload(
         dir: Path,
         name: String,
     ): String {
-        val folder = Path(dir, "payload", name)
+        val folder = joinPath(dir, "payload", name)
         createDirAll(folder)
-        atomic(Path(folder, name), "#!/bin/sh\necho hi\n".encodeToByteArray())
-        return "local:${Path(folder, name)}"
+        atomic(joinPath(folder, name), "#!/bin/sh\necho hi\n".encodeToByteArray())
+        return "local:${joinPath(folder, name)}"
     }
 
     private fun failure(body: () -> Unit) = assertFailsWith<CallFailed> { body() }.error
@@ -160,7 +155,7 @@ class KetchCoreTest {
         scratch { dir, core ->
             val manifests = cfg(dir).manifestDir
             createDirAll(manifests)
-            atomic(Path(manifests, "alpha.toml"), "name = \"alpha\"\nsource = \"github:example/alpha\"\n".encodeToByteArray())
+            atomic(joinPath(manifests, "alpha.toml"), "name = \"alpha\"\nsource = \"github:example/alpha\"\n".encodeToByteArray())
             val everything = core.search("  ", 1000)
             assertEquals("alpha", everything.known[0].name, everything.toString())
             assertTrue(everything.known.size > 1, "the built-ins are known too")
@@ -207,8 +202,8 @@ class KetchCoreTest {
     @Test
     fun aLeftoverFolderIsTakenOnlyWhenTheDeciderConfirms() =
         scratch { dir, core ->
-            val leftover = Path(cfg(dir).storeDir, "ghost")
-            createDirAll(Path(leftover, "1.0.0.old"))
+            val leftover = joinPath(cfg(dir).storeDir, "ghost")
+            createDirAll(joinPath(leftover, "1.0.0.old"))
             val notFound = WireError.NotFound("ghost")
 
             assertEquals(notFound, failure { core.uninstall(listOf("ghost")) })
@@ -229,65 +224,6 @@ class KetchCoreTest {
             val name = core.install(listOf(payload(dir, "hello")))[0].pkg.name
             assertEquals(WireError.NotFound("ghost"), failure { core.uninstall(listOf(name, "ghost")) })
             assertEquals(1, core.installed().size)
-        }
-
-    /**
-     * A `test:` source plugin in [dir]'s root serving `alpha`'s releases, each with notes, and a user manifest naming
-     * it — enough for a search and a changelog, which need no download.
-     */
-    private fun publishAlpha(
-        dir: Path,
-        versions: List<String>,
-    ) {
-        val cfg = cfg(dir)
-        val releases = versions.map { v -> """{"version":"$v","tag":"v$v","notes":"notes for $v","assets":[]}""" }
-        val feed = Path(dir, "alpha.releases.json")
-        atomic(feed, "[${releases.joinToString(",")}]".encodeToByteArray())
-        createDirAll(cfg.pluginDir)
-        val plugin = Path(cfg.pluginDir, "ketch-source-test")
-        val script =
-            "#!/bin/sh\ncase \"\$1\" in\n" +
-                "capabilities) printf '%s' '{\"protocol\":1,\"scheme\":\"test\",\"download\":false,\"search\":false}' ;;\n" +
-                "describe) printf 'null' ;;\n" +
-                "releases) cat '$feed' ;;\n" +
-                "search) printf '[]' ;;\n" +
-                "*) exit 1 ;;\nesac\n"
-        atomic(plugin, script.encodeToByteArray())
-        setMode(plugin, "755".toInt(8))
-        createDirAll(cfg.manifestDir)
-        atomic(
-            Path(cfg.manifestDir, "alpha.toml"),
-            "name = \"alpha\"\nsource = \"test:alpha\"\ndescription = \"the alpha tool\"\n".encodeToByteArray(),
-        )
-    }
-
-    @Test
-    fun aChangelogRangeIsEveryReleaseBetweenNewestFirst() =
-        scratch { dir, core ->
-            publishAlpha(dir, listOf("1.0.0", "1.1.0", "1.2.0", "1.3.0"))
-            val range = core.changelogRange("alpha", "1.0.0", "1.2.0")
-            assertEquals(listOf("1.2.0", "1.1.0"), range.map { it.version })
-            assertEquals("notes for 1.2.0", range[0].body)
-            assertEquals(ChangelogSource.Release, range[0].source)
-            assertEquals(4, core.changelogRange("alpha", null, null).size)
-        }
-
-    @Test
-    fun aSearchResultCarriesTheLatestAnEarlierListingCached() =
-        scratch { dir, core ->
-            publishAlpha(dir, listOf("1.0.0", "2.0.0"))
-            // A limit of one leaves no room for repositories, so no source is searched over the network.
-            assertNull(core.search("alpha", 1).known[0].latest)
-
-            val cfg = cfg(dir)
-            cfg.ensureDirs()
-            val cx = Ctx(cfg, Report.silent())
-            val (manifest, _) = Resolver.load(cx).resolve(PackageSpec.parse("alpha"))
-            fillLatest(cx, SourceRegistry.load(cx), listOf(Row.offered(Available.fromManifest(cfg, manifest))))
-
-            val after = core.search("alpha", 1)
-            assertEquals("alpha", after.known[0].name)
-            assertEquals("2.0.0", after.known[0].latest)
         }
 
     @Test
@@ -356,7 +292,8 @@ class KetchCoreTest {
             assertEquals(core.config().binDir, status.binDir)
             assertEquals(listOf("bash", "zsh", "fish"), status.shells.map { it.shell })
             assertFalse(status.onPath)
-            assertNull(status.userPath)
+            // Only Windows keeps a user PATH apart from the shells.
+            assertEquals(HOST_WINDOWS, status.userPath != null)
         }
 
     @Test
@@ -377,43 +314,24 @@ class KetchCoreTest {
     fun theConfigIsTheScratchRootAndHidesTheToken() =
         scratch { dir, core ->
             val settings = core.config()
-            assertEquals(Path(dir, "root").toString(), settings.root)
+            assertEquals(joinPath(dir, "root").toString(), settings.root)
             assertTrue(settings.jobs > 0)
             assertTrue(settings.target.isNotEmpty())
         }
+}
 
-    @Test
-    fun doctorFixSetsUpTheShellInUseOnce() =
-        scratch { dir, core ->
-            val home = Path(dir, "home")
-            createDirAll(home)
-            // Every variable that could lead the fix to a real startup file.
-            val env = mapOf("HOME" to home.toString(), "SHELL" to "/bin/zsh", "ZDOTDIR" to null, "XDG_CONFIG_HOME" to null)
-            withEnv(env) {
-                val fixed = core.doctorFix()
-                assertEquals(1, fixed.size, fixed.toString())
-                assertEquals("zsh", fixed[0].target)
-                assertEquals(PathOutcome.Added, fixed[0].outcome)
-                val file = Path(home, ".zshrc")
-                assertEquals(file.toString(), fixed[0].file)
-                assertTrue("ketch" in readText(file))
-                assertEquals(emptyList(), core.doctorFix())
-            }
-        }
+/** [set] applied (null unsets), and every variable put back afterwards. Native tests run on one thread. */
+internal fun <T> withEnv(
+    set: Map<String, String?>,
+    body: () -> T,
+): T {
+    val saved = set.keys.associateWith { getenv(it)?.toKString() }
 
-    /** [set] applied (null unsets), and every variable put back afterwards. Native tests run on one thread. */
-    private fun <T> withEnv(
-        set: Map<String, String?>,
-        body: () -> T,
-    ): T {
-        val saved = set.keys.associateWith { getenv(it)?.toKString() }
-
-        fun apply(values: Map<String, String?>) = values.forEach { (k, v) -> if (v == null) unsetenv(k) else setenv(k, v, 1) }
-        apply(set)
-        return try {
-            body()
-        } finally {
-            apply(saved)
-        }
+    fun apply(values: Map<String, String?>) = values.forEach { (k, v) -> if (v == null) unsetEnv(k) else setEnv(k, v) }
+    apply(set)
+    return try {
+        body()
+    } finally {
+        apply(saved)
     }
 }

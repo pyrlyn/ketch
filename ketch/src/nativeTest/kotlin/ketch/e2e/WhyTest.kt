@@ -6,6 +6,7 @@ package ketch.e2e
 
 import fs.bytesIfExists
 import fs.canon
+import fs.joinPath
 import ketch.cmd.PRETTY
 import ketch.cmd.sortedJson
 import ketch.e2e.support.Entry
@@ -54,7 +55,12 @@ class WhyTest {
         "$pkg-$version-${hostArch()}-apple-darwin.tar.gz"
     }
 
-    private fun hostTarget() = "${if (Platform.osFamily == OsFamily.MACOSX) "macos" else "linux"}-${hostArch()}"
+    private fun hostTarget() =
+        "${when (Platform.osFamily) {
+            OsFamily.MACOSX -> "macos"
+            OsFamily.WINDOWS -> "windows"
+            else -> "linux"
+        }}-${hostArch()}"
 
     private fun publishPair(
         id: String,
@@ -85,12 +91,17 @@ class WhyTest {
         return normalizeWhyText(out)
     }
 
-    /** Wipe the absolute sandbox root, as printed and as resolved, then any path through it to the manifests. */
+    /**
+     * Wipe the absolute sandbox root, as printed and as resolved, in `/`, `\` and JSON-escaped spellings; then any path
+     * through it to the manifests, which catches a Windows short (8.3) name the forms above miss.
+     */
     private fun redactRootPaths(text: String): String {
         var out = text
-        for (form in listOf(sandbox.root.toString(), canon(sandbox.root).toString())) out = out.replace(form, "{root}")
-        out = scrubThroughRootSuffix(out, "/manifests/")
-        return scrubThroughRootSuffix(out, "/registry/")
+        for (form in listOf(sandbox.root.toString(), canon(sandbox.root).toString())) {
+            for (candidate in listOf(form, form.replace('\\', '/'), form.replace("\\", "\\\\"))) out = out.replace(candidate, "{root}")
+        }
+        for ((needle, canonical) in ROOT_NEEDLES) out = scrubThroughRootSuffix(out, needle, canonical)
+        return normalizeRootRelativeSeparators(out.replace("{root}\\", "{root}/"))
     }
 
     private fun redactJson(value: JsonElement): JsonElement =
@@ -115,7 +126,7 @@ class WhyTest {
         name: String,
         body: String,
     ) {
-        val path = Path(checkNotNull(getenv("SNAPSHOT_DIR")?.toKString()) { "SNAPSHOT_DIR is not set" }, "why/$name")
+        val path = joinPath(checkNotNull(getenv("SNAPSHOT_DIR")?.toKString()) { "SNAPSHOT_DIR is not set" }, "why/$name")
         val expected = bytesIfExists(path)?.decodeToString()
         when {
             expected == body -> {}

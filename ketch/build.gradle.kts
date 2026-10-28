@@ -6,6 +6,22 @@ import org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
 plugins { id("ketch.kmp") }
 
 kotlin {
+    mingwX64 {
+        // Windows runs only an `.exe` found on PATH, so the tests' stand-in for another tool is a program of its own
+        // there (Rust builds its fakes with rustc).
+        val fakes =
+            compilations.create("fakes") {
+                defaultSourceSet.dependencies {
+                    implementation("pyrlyn.kit:fs")
+                    implementation("pyrlyn.kit:process")
+                }
+            }
+        binaries.executable("fakeTool", listOf(NativeBuildType.DEBUG)) {
+            compilation = fakes
+            entryPoint = "ketch.fakes.main"
+            baseName = "fake-tool"
+        }
+    }
     targets.withType<KotlinNativeTarget>().configureEach {
         binaries.executable {
             entryPoint = "ketch.cli.main"
@@ -36,6 +52,10 @@ kotlin {
             val exe = target.binaries.getExecutable(NativeBuildType.DEBUG)
             dependsOn(exe.linkTaskProvider)
             environment("KETCH_EXE", exe.outputFile.absolutePath)
+            target.binaries.findExecutable("fakeTool", NativeBuildType.DEBUG)?.let { fake ->
+                dependsOn(fake.linkTaskProvider)
+                environment("FAKE_TOOL_EXE", fake.outputFile.absolutePath)
+            }
             environment(
                 "TRYCMD_DIR",
                 layout.projectDirectory

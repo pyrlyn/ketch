@@ -12,10 +12,11 @@ import kotlinx.serialization.json.longOrNull
 /** The score a pin gets, which is the one a snapshot keeps. */
 private const val PIN = 2147483647L
 
-/** Replace `…<anything><needle>rest` with `{root}<needle>rest`. */
+/** Replace `…<anything><needle>rest` with `{root}<canonical>rest`. */
 internal fun scrubThroughRootSuffix(
     text: String,
     needle: String,
+    canonical: String = needle,
 ): String {
     val out = StringBuilder()
     var rest = text
@@ -25,7 +26,7 @@ internal fun scrubThroughRootSuffix(
         val before = rest.substring(0, idx)
         // Walk left to the start of the absolute path token.
         val start = before.indexOfLast { it == '"' || it.isWhitespace() || it == '=' } + 1
-        out.append(before, 0, start).append("{root}").append(needle)
+        out.append(before, 0, start).append("{root}").append(canonical)
         rest = rest.substring(idx + needle.length)
     }
     return out.append(rest).toString()
@@ -105,10 +106,32 @@ internal fun normalizeWhyJson(value: JsonElement): JsonElement {
     return JsonObject(top)
 }
 
-private fun canonicalOrigin(origin: String): String {
-    for (needle in listOf("/manifests/", "/registry/")) {
-        val idx = origin.indexOf(needle)
-        if (idx >= 0) return "{root}$needle${origin.substring(idx + needle.length)}"
+/** The `/` and the Windows `\` spelling of each directory under the root a manifest can come from. */
+internal val ROOT_NEEDLES = listOf("/manifests/" to "/manifests/", "\\manifests\\" to "/manifests/", "/registry/" to "/registry/", "\\registry\\" to "/registry/")
+
+/**
+ * Paths after a scrubbed root keep the host's separators (`{root}/registry/ripgrep\ketch.toml` on Windows); fold
+ * them to `/` up to the end of the path token.
+ */
+internal fun normalizeRootRelativeSeparators(text: String): String {
+    val out = StringBuilder()
+    var rest = text
+    while (true) {
+        val idx = rest.indexOf("{root}")
+        if (idx < 0) break
+        out.append(rest, 0, idx)
+        rest = rest.substring(idx)
+        val end = rest.indexOfFirst { it.isWhitespace() || it == '"' }.takeIf { it >= 0 } ?: rest.length
+        out.append(rest.substring(0, end).replace('\\', '/'))
+        rest = rest.substring(end)
     }
-    return origin
+    return out.append(rest).toString()
+}
+
+private fun canonicalOrigin(origin: String): String {
+    for ((needle, canonical) in ROOT_NEEDLES) {
+        val idx = origin.indexOf(needle)
+        if (idx >= 0) return "{root}$canonical${origin.substring(idx + needle.length).replace('\\', '/')}"
+    }
+    return if (origin.startsWith("{root}")) origin.replace('\\', '/') else origin
 }

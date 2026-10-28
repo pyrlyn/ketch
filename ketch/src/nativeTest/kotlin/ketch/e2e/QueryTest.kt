@@ -5,15 +5,15 @@ import ketch.e2e.support.CHANGELOG
 import ketch.e2e.support.Entry
 import ketch.e2e.support.Release
 import ketch.e2e.support.Sandbox
+import ketch.e2e.support.binProgram
 import ketch.e2e.support.get
 import ketch.e2e.support.items
 import ketch.e2e.support.json
 import ketch.e2e.support.ketch
+import ketch.e2e.support.nativeArchive
 import ketch.e2e.support.nativeName
 import ketch.e2e.support.ok
-import ketch.e2e.support.resolve
 import ketch.e2e.support.str
-import ketch.e2e.support.tarGz
 import kotlinx.io.files.SystemFileSystem
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -31,7 +31,7 @@ class QueryTest {
         val native =
             sandbox.asset(
                 nativeName("testtool", version),
-                tarGz(Entry.program("testtool-$version/bin/testtool", "testtool $version"), Entry.file("testtool-$version/CHANGELOG.md", CHANGELOG)),
+                nativeArchive(listOf(Entry.program("testtool-$version/bin/testtool", "testtool $version"), Entry.file("testtool-$version/CHANGELOG.md", CHANGELOG))),
             )
         sandbox.publish("testtool", listOf(Release(version, listOf(native)).withNotes("published notes for $version")))
     }
@@ -40,7 +40,7 @@ class QueryTest {
         name: String,
         version: String,
     ) {
-        val asset = sandbox.asset(nativeName(name, version), tarGz(Entry.program("$name-$version/bin/$name", "$name $version")))
+        val asset = sandbox.asset(nativeName(name, version), nativeArchive(listOf(Entry.program("$name-$version/bin/$name", "$name $version"))))
         sandbox.publish(name, listOf(Release(version, listOf(asset))))
     }
 
@@ -60,12 +60,12 @@ class QueryTest {
     fun infoStillReportsAnInstalledPackageWhenTheSourceIsUnavailable() {
         publishTool("1.0.0")
         sandbox.ok("install", "test:testtool", "--yes")
-        SystemFileSystem.delete(sandbox.root.resolve("plugins/ketch-source-test"))
+        SystemFileSystem.delete(sandbox.pluginFile)
 
         val info = sandbox.ok("info", "testtool")
         assertTrue("installed" in info, info)
         assertTrue("1.0.0" in info, info)
-        assertTrue(sandbox.bin.resolve("testtool").toString() in info, "link missing:\n$info")
+        assertTrue(sandbox.binProgram("testtool").toString() in info, "link missing:\n$info")
 
         val parsed = json(sandbox.ok("info", "testtool", "--json"))
         assertEquals("1.0.0", parsed["installed"].str)

@@ -20,14 +20,12 @@ import ketch.e2e.support.get
 import ketch.e2e.support.items
 import ketch.e2e.support.json
 import ketch.e2e.support.ketch
-import ketch.e2e.support.makeExecutable
 import ketch.e2e.support.nativeName
 import ketch.e2e.support.ok
 import ketch.e2e.support.okEnv
 import ketch.e2e.support.resolve
 import ketch.e2e.support.str
 import ketch.e2e.support.tarGz
-import ketch.e2e.support.writeText
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -81,11 +79,6 @@ class ListTest {
     }
 
     private fun keys(value: JsonElement) = (value as JsonObject).keys.sorted()
-
-    private fun row(
-        out: String,
-        name: String,
-    ) = out.lines().firstOrNull { line -> line.split(' ').filter(String::isNotEmpty).any { it == name } } ?: error("no row for $name:\n$out")
 
     private fun words(line: String) = line.split(' ').filter(String::isNotEmpty)
 
@@ -276,21 +269,10 @@ class ListTest {
         sandbox.ok("list", "local")
         assertFalse(SystemFileSystem.exists(cache))
     }
-
-    @Test
-    fun aPackageInstalledFromALocalPathIsListedWithoutALatest() {
-        val fixture = sandbox.fixture("pathtool")
-        writeText(fixture, "#!/bin/sh\necho path\n")
-        makeExecutable(fixture)
-        sandbox.ok("install", "--path", fixture.toString(), "--yes")
-
-        // Nothing to ask is not the same as nobody answering.
-        val out = sandbox.ok("list")
-        assertTrue(row(out, "pathtool").startsWith('*'), out)
-        assertFalse("offline" in out, out)
-        assertFalse('?' in out, out)
-        val parsed = json(sandbox.ok("list", "--json"))
-        assertEquals(JsonNull, parsed["packages"][0]["latest"], "$parsed")
-        assertEquals(JsonArray(emptyList()), parsed["unreachable"])
-    }
 }
+
+/** The line of a `ketch list` table that names [name] as a whole word. */
+internal fun row(
+    out: String,
+    name: String,
+) = out.lines().firstOrNull { line -> line.split(' ').filter(String::isNotEmpty).any { it == name } } ?: error("no row for $name:\n$out")

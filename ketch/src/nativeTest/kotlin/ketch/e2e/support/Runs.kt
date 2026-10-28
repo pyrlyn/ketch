@@ -11,7 +11,7 @@ fun Sandbox.ketch(vararg args: String) = ketch(args.toList())
 fun Sandbox.ketch(args: List<String>) = command(KETCH_EXE, args, pathWithBin()).runOnce()
 
 /** Run ketch with the bin dir left off PATH, as an install not yet wired into a shell looks. */
-fun Sandbox.ketchOffPath(vararg args: String) = command(KETCH_EXE, args.toList(), joinPath(inheritedPath())).runOnce()
+fun Sandbox.ketchOffPath(vararg args: String) = command(KETCH_EXE, args.toList(), pathVar(inheritedPath())).runOnce()
 
 /** As [ketch], with extra environment variables; they win over the sandbox's. */
 fun Sandbox.ketchOverrides(

@@ -11,11 +11,14 @@ package ketch.e2e.support
 import fs.TempDir
 import fs.copyFile
 import fs.createDirAll
+import fs.joinPath
 import fs.listDir
 import fs.setMode
 import fs.symlink
 import fs.textOrEmpty
 import ketch.cmd.PRETTY
+import ketch.core.config.HOST_WINDOWS
+import ketch.core.config.splitPathVar
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.toKString
 import kotlinx.io.buffered
@@ -40,6 +43,12 @@ private const val EXECUTABLE = 0x1ed
 
 /** The `ketch` under test: the linked debug executable the build names in `KETCH_EXE`. */
 val KETCH_EXE: String get() = checkNotNull(getenv("KETCH_EXE")?.toKString()) { "KETCH_EXE is not set; run the tests through Gradle" }
+
+/** The Windows stand-in for another tool (see `ketch.fakes`), which the build links beside the ketch under test. */
+val FAKE_TOOL_EXE: String get() = checkNotNull(getenv("FAKE_TOOL_EXE")?.toKString()) { "FAKE_TOOL_EXE is not set; run the tests through Gradle" }
+
+/** What a copy of the ketch under test is called on disk: Windows runs only an `.exe`. */
+val KETCH_FILE_NAME = if (HOST_WINDOWS) "ketch.exe" else "ketch"
 
 /** What a finished `ketch` printed and how it ended (Rust `std::process::Output`). */
 class Run(
@@ -75,7 +84,10 @@ fun writeBytes(
     SystemFileSystem.sink(path).buffered().use { it.write(bytes) }
 }
 
-fun makeExecutable(path: Path) = setMode(path, EXECUTABLE)
+/** Windows has no executable bit: the extension decides what runs. */
+fun makeExecutable(path: Path) {
+    if (!HOST_WINDOWS) setMode(path, EXECUTABLE)
+}
 
 /** Single-quote a path for a generated shell script; temp dirs contain no quotes, but the script should not assume so. */
 fun shellQuote(path: Path) = "'${path.toString().replace("'", "'\\''")}'"
@@ -97,7 +109,7 @@ class Sandbox : AutoCloseable {
     /** Numbers the files that hold a run's input. */
     internal var inputs = 0
 
-    internal fun child(name: String) = Path(tmp.path, name)
+    internal fun child(name: String) = joinPath(tmp.path, name)
 
     val root get() = child("root")
     val apps get() = child("Applications")
@@ -137,7 +149,7 @@ class Sandbox : AutoCloseable {
     fun installWithMise() = installWithMiseAs(MISE_TOOL_DIRS[0])
 
     fun installWithMiseAs(tool: String): Path {
-        val exe = miseData.resolve("installs/$tool/0.4.7/ketch")
+        val exe = miseData.resolve("installs/$tool/0.4.7/$KETCH_FILE_NAME")
         createDirAll(exe.parent!!)
         copyFile(Path(KETCH_EXE), exe)
         makeExecutable(exe)
@@ -157,6 +169,12 @@ class Sandbox : AutoCloseable {
     fun fakeMise(): Pair<Path, Path> {
         val dir = child("mise-bin")
         val log = dir.resolve("mise-args")
+        if (HOST_WINDOWS) {
+            createDirAll(dir)
+            copyFile(Path(FAKE_TOOL_EXE), dir.resolve("mise.exe"))
+            writeText(dir.resolve("mise-removes"), miseToolDir().toString())
+            return dir to log
+        }
         val mise = dir.resolve("mise")
         writeText(mise, "#!/bin/sh\nprintf '%s' \"$*\" > ${shellQuote(log)}\nrm -rf ${shellQuote(miseToolDir())} || exit 1\n")
         makeExecutable(mise)
@@ -178,7 +196,7 @@ class Sandbox : AutoCloseable {
         program: Path,
         args: List<String>,
         extra: Path,
-    ) = command(program.toString(), args, joinPath(listOf(extra.toString(), bin.toString()) + inheritedPath())).runOnce()
+    ) = command(program.toString(), args, pathVar(listOf(extra.toString(), bin.toString()) + inheritedPath())).runOnce()
 
     /** Where the run's log lands. */
     fun log() = textOrEmpty(root.resolve("logs/ketch.log"))
@@ -259,6 +277,8 @@ class Sandbox : AutoCloseable {
             .env("PATH", path)
             // Shell setup writes into $HOME; pointing it at the sandbox keeps the suite from editing a real .zshrc.
             .env("HOME", home.toString())
+            // Windows finds the home through USERPROFILE, not HOME.
+            .env("USERPROFILE", home.toString())
             .env("SHELL", "/bin/zsh")
             // Homebrew's and mise's own answers to where they live, so detection looks inside the sandbox only.
             .env("HOMEBREW_PREFIX", homebrew.toString())
@@ -270,10 +290,29 @@ class Sandbox : AutoCloseable {
             .envRemove("GH_TOKEN")
     }
 
-    internal fun pathWithBin() = joinPath(listOf(bin.toString()) + inheritedPath())
+    internal fun pathWithBin() = pathVar(listOf(bin.toString()) + inheritedPath())
+
+    /** The test source plugin: Windows runs it as a batch file, so it carries `.cmd` there. */
+    val pluginFile: Path get() = root.resolve(if (HOST_WINDOWS) "plugins/ketch-source-test.cmd" else "plugins/ketch-source-test")
 
     private fun writePlugin() {
         val caps = """{"protocol":1,"scheme":"test","download":true,"search":false}"""
+        if (HOST_WINDOWS) {
+            val script =
+                listOf(
+                    "@echo off",
+                    "set \"DB=$assets\"",
+                    "if \"%~1\"==\"capabilities\" (echo $caps & exit /b 0)",
+                    "if \"%~1\"==\"describe\" (echo null & exit /b 0)",
+                    "if \"%~1\"==\"releases\" (type \"%DB%\\%~2.releases.json\" & exit /b 0)",
+                    "if \"%~1\"==\"search\" (echo [] & exit /b 0)",
+                    "if \"%~1\"==\"download\" (copy /Y \"%~2\" \"%~3\" >nul & exit /b 0)",
+                    "echo unsupported subcommand: %~1 1>&2",
+                    "exit /b 1",
+                ).joinToString("\r\n", postfix = "\r\n")
+            writeText(pluginFile, script)
+            return
+        }
         val script =
             """
             |#!/bin/sh
@@ -289,14 +328,14 @@ class Sandbox : AutoCloseable {
             |esac
             |
             """.trimMargin()
-        val plugin = root.resolve("plugins/ketch-source-test")
-        writeText(plugin, script)
-        makeExecutable(plugin)
+        writeText(pluginFile, script)
+        makeExecutable(pluginFile)
     }
 }
 
-fun Path.resolve(child: String) = Path(this, child)
+fun Path.resolve(child: String) = joinPath(this, child)
 
-internal fun inheritedPath() = getenv("PATH")?.toKString()?.split(':')?.filter { it.isNotEmpty() } ?: emptyList()
+internal fun inheritedPath() = getenv("PATH")?.toKString()?.let(::splitPathVar)?.filter { it.isNotEmpty() } ?: emptyList()
 
-internal fun joinPath(dirs: List<String>) = dirs.joinToString(":")
+/** [dirs] as one PATH value, the way Rust's `std::env::join_paths` writes it for directories without the separator. */
+internal fun pathVar(dirs: List<String>) = dirs.joinToString(if (HOST_WINDOWS) ";" else ":")
