@@ -6,6 +6,7 @@
 // rule; install applies it before anything is placed or removed.
 package ketch.core.hooks
 
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.error.KetchError
 import ketch.core.model.Hooks
 import ketch.core.model.ManifestOrigin
@@ -124,5 +125,11 @@ fun runOrWarn(
     }
 }
 
-/** The platform shell, so a hook is one line of what the user already types. Windows (`cmd /C`) comes with T13. */
-private fun shell(script: String) = Command("sh", listOf("-c", script))
+/**
+ * The platform shell, so a hook is one line of what the user already types.
+ *
+ * On Windows the script goes to `cmd /C` exactly as written. The usual argument quoting wraps it for
+ * `CommandLineToArgvW`, and `cmd.exe` then strips those quotes by its own rules, which turns a quoted path in the
+ * script into a filename Windows rejects.
+ */
+private fun shell(script: String) = if (HOST_WINDOWS) Command("cmd", listOf("/C")).rawArg(script) else Command("sh", listOf("-c", script))

@@ -1,11 +1,14 @@
 package ketch.core.hooks
 
+import fs.canonicalize
 import fs.readText
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.error.KetchError
 import ketch.core.model.Hooks
 import ketch.core.model.ManifestOrigin
 import ketch.core.report.Recorder
 import ketch.core.report.Report
+import ketch.core.shell.nativeSpelling
 import ketch.core.testing.withTempDir
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
@@ -43,17 +46,21 @@ class HooksTest {
             SystemFileSystem.createDirectories(prefix)
             val out = Path(tmp, "out")
             val script =
-                "printf '%s %s %s %s\\n%s\\n' \"\$KETCH_HOOK\" \"\$KETCH_PACKAGE\" \"\$KETCH_VERSION\" " +
-                    "\"\$KETCH_PREVIOUS_VERSION\" \"\$PWD\" > '$out'"
+                if (HOST_WINDOWS) {
+                    "(echo %KETCH_HOOK% %KETCH_PACKAGE% %KETCH_VERSION% %KETCH_PREVIOUS_VERSION% && cd) > \"${nativeSpelling(out)}\""
+                } else {
+                    "printf '%s %s %s %s\\n%s\\n' \"\$KETCH_HOOK\" \"\$KETCH_PACKAGE\" \"\$KETCH_VERSION\" " +
+                        "\"\$KETCH_PREVIOUS_VERSION\" \"\$PWD\" > '$out'"
+                }
             run(Hooks(afterUpdate = script), Event.AfterUpdate, context(prefix, "1.0.0"))
             val lines = readText(out).lines()
             assertEquals("after_update tool 2.0.0 1.0.0", lines[0].trim())
-            assertEquals(SystemFileSystem.resolve(prefix), SystemFileSystem.resolve(Path(lines[1].trim())))
+            assertEquals(canonicalize(prefix), canonicalize(Path(lines[1].trim())))
         }
 
     @Test
     fun aFailingHookReportsItsStderr() {
-        val e = assertFailsWith<KetchError> { run(hooks("echo broken >&2; exit 3"), Event.AfterInstall, context(Path("nowhere"))) }
+        val e = assertFailsWith<KetchError> { run(hooks(if (HOST_WINDOWS) "echo broken 1>&2 && exit 3" else "echo broken >&2; exit 3"), Event.AfterInstall, context(Path("nowhere"))) }
         assertTrue("after_install hook for tool" in e.message.orEmpty(), e.message)
         assertEquals(listOf("broken"), e.details())
     }
@@ -63,7 +70,7 @@ class HooksTest {
         val started = TimeSource.Monotonic.markNow()
         val e =
             assertFailsWith<KetchError> {
-                runWith(hooks("sleep 30"), Event.AfterInstall, context(Path("nowhere")), 300.milliseconds)
+                runWith(hooks(if (HOST_WINDOWS) "ping -n 30 127.0.0.1 > NUL" else "sleep 30"), Event.AfterInstall, context(Path("nowhere")), 300.milliseconds)
             }
         assertTrue(started.elapsedNow() < 10.seconds, "waited the hook out instead of stopping it")
         assertTrue("was stopped" in e.message.orEmpty(), e.message)
