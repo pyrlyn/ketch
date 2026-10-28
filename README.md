@@ -22,10 +22,12 @@ TOML, YAML, semver, HTTP and SQLite libraries.
 ./gradlew build
 ./ketch/build/bin/macosArm64/debugExecutable/ketch.kexe --version
 ./gradlew :desktop:run
+./gradlew :desktop:packageDmg
 ```
 
 `-Pdiffuser.allTargets=true` adds the Linux targets. `mise run release` links the shipped
-release binary.
+release binary. `packageDmg` (or `packageDeb`, `packageMsi` on those hosts) builds the desktop app
+with the release `ketch` inside; `:desktop:run` uses the same one unless `KETCH_EXE` names another.
 
 ## License
 

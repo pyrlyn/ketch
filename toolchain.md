@@ -2,7 +2,7 @@
 
 | Program | How to install | Why here | Source |
 | --- | --- | --- | --- |
-| JDK 21 (Temurin) | mise | Runs Gradle, the Kotlin daemon and the desktop app | https://adoptium.net |
+| JDK 21 (Temurin) | mise | Runs Gradle, the Kotlin daemon and the desktop app; its jpackage builds the app's dmg, deb and msi | https://adoptium.net |
 | Gradle 9.8.2 | wrapper (`./gradlew`) | Build | https://github.com/gradle/gradle |
 | Kotlin 2.4.21 | Gradle plugin | Language, Kotlin/Native, Kotlin Multiplatform | https://github.com/JetBrains/kotlin |
 | ci-diffuser | sibling checkout at `../ci-diffuser` (or `CI_DIFFUSER_DIR`), local included build | Shared targets, release size, ktlint, detekt, settings | `apps/ci-diffuser` (no remote) |

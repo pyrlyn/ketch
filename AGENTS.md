@@ -34,6 +34,7 @@ Files, TOML, YAML, semver, HTTP and SQLite come from kotlin-kit: change them the
 ./gradlew build                    # everything: compile, tests, ktlint, detekt
 ./gradlew macosArm64Test           # native unit tests
 ./gradlew :desktop:run             # the desktop app
+./gradlew :desktop:packageDmg      # the app's package, with the release ketch inside
 ./gradlew ktlintFormat             # fix formatting
 ```
 
