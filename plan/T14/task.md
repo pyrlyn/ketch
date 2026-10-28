@@ -10,4 +10,4 @@ agent:
 
 `trust`: sigstore bundles, minisign and OpenPGP signature verification. Research the options
 first (cinterop to C libraries or own modules), record the choice in `plan/README.md`, then port
-the Rust tests.
+the Rust tests, `tests/trust.rs` among them.
