@@ -3,6 +3,7 @@
 plugins { id("ketch.kmp") }
 
 kotlin {
+    mingwX64()
     jvm()
     jvmToolchain(21)
 }

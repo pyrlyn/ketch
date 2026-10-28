@@ -40,6 +40,7 @@ import ketch.core.log.Log
 import ketch.ui.debug
 import ketch.ui.note
 import ketch.ui.out
+import ketch.ui.prepareConsole
 import ketch.ui.report
 import ketch.ui.setEmoji
 import ketch.ui.success
@@ -48,6 +49,7 @@ import kotlinx.io.files.Path
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
+    prepareConsole()
     val argv = args.toList()
     intercept(argv)?.let { exitProcess(it) }
     serveIntercept(argv)?.let { exitProcess(it) }

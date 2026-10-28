@@ -9,10 +9,6 @@ import cli.plain
 import icons.displayWidth
 import ketch.core.text.truncate
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.alloc
-import kotlinx.cinterop.convert
-import kotlinx.cinterop.memScoped
-import kotlinx.cinterop.ptr
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -20,10 +16,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import platform.posix.STDERR_FILENO
-import platform.posix.TIOCGWINSZ
-import platform.posix.ioctl
 import platform.posix.sched_yield
-import platform.posix.winsize
 import kotlin.concurrent.Volatile
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicLong
@@ -209,11 +202,7 @@ internal object Screen {
     private const val MIN_GAP_MS = 50
 }
 
-private fun stderrWidth(): Int? =
-    memScoped {
-        val size = alloc<winsize>()
-        if (ioctl(STDERR_FILENO, TIOCGWINSZ.convert(), size.ptr) == 0 && size.ws_col.toInt() > 0) size.ws_col.toInt() else null
-    }
+private fun stderrWidth(): Int? = terminalColumns(STDERR_FILENO)
 
 /** indicatif's default spinner. */
 private const val SPINNER = "⠁⠂⠄⡀⢀⠠⠐⠈"

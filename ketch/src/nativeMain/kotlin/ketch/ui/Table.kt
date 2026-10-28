@@ -1,17 +1,8 @@
 // Aligned tables on stdout, from ui.rs.
-@file:OptIn(ExperimentalForeignApi::class)
 
 package ketch.ui
 
-import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.alloc
-import kotlinx.cinterop.convert
-import kotlinx.cinterop.memScoped
-import kotlinx.cinterop.ptr
 import platform.posix.STDOUT_FILENO
-import platform.posix.TIOCGWINSZ
-import platform.posix.ioctl
-import platform.posix.winsize
 
 /** A cell painter for [tableStyled]: row index, column index and the cell's filtered text; returns what to print. */
 typealias CellPaint = (row: Int, col: Int, cell: String) -> String
@@ -36,13 +27,7 @@ fun tableStyled(
  * Columns stdout can use before a line wraps, or null when it is not a terminal and nothing should be cut. `COLUMNS`
  * wins when set, as it does for most tools, so a script or a test can ask for a width of its own.
  */
-fun stdoutWidth(): Int? =
-    env("COLUMNS")?.trim()?.toIntOrNull()?.takeIf { it > 0 }
-        ?: memScoped {
-            val size = alloc<winsize>()
-            val read = isTerminal(STDOUT_FILENO) && ioctl(STDOUT_FILENO, TIOCGWINSZ.convert(), size.ptr) == 0
-            if (read) size.ws_col.toInt() else null
-        }
+fun stdoutWidth(): Int? = env("COLUMNS")?.trim()?.toIntOrNull()?.takeIf { it > 0 } ?: terminalColumns(STDOUT_FILENO)
 
 /** The table's lines, built rather than printed so a test can read them. */
 internal fun tableLines(

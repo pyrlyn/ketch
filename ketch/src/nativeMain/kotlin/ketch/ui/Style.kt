@@ -13,8 +13,8 @@ package ketch.ui
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.toKString
 import platform.posix.STDERR_FILENO
+import platform.posix.STDOUT_FILENO
 import platform.posix.getenv
-import platform.posix.isatty
 import kotlin.concurrent.Volatile
 
 @Volatile
@@ -30,8 +30,6 @@ private var level = 1
 
 internal fun env(name: String): String? = getenv(name)?.toKString()
 
-internal fun isTerminal(fd: Int) = isatty(fd) == 1
-
 fun init(
     color: Boolean?,
     quiet: Boolean,
@@ -39,8 +37,7 @@ fun init(
 ) {
     val enabled =
         color ?: (forceColor() || (isTerminal(STDERR_FILENO) && env("NO_COLOR") == null && env("TERM") != "dumb"))
-    // Only legacy Windows consoles print escape sequences as text; no target of this build has one.
-    colorOn = enabled
+    colorOn = enabled && takesAnsi()
     level =
         when {
             quiet -> 0
@@ -48,6 +45,13 @@ fun init(
             else -> 1
         }
 }
+
+/**
+ * Whether escape sequences reach the screen as colour rather than as text. Only a console needs asking: a pipe or a
+ * file takes the bytes as they are, which is what `CLICOLOR_FORCE` into a pager wants. Tables go to stdout on the same
+ * decision, but a redirected stdout must not veto colour on the stderr the user is looking at.
+ */
+private fun takesAnsi(): Boolean = !isTerminal(STDERR_FILENO) || (terminalTakesAnsi(STDERR_FILENO) && (!isTerminal(STDOUT_FILENO) || terminalTakesAnsi(STDOUT_FILENO)))
 
 /**
  * `CLICOLOR_FORCE` set to anything but `0`: colour even into a pipe. The convention (https://bixense.com/clicolors/)

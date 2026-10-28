@@ -5,6 +5,7 @@ import cli.Matches
 import cli.Subcommand
 import ketch.cli.SELF_DOCS
 import ketch.core.config.Config
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.doctor.checks
 import ketch.core.doctor.failed
 import ketch.core.doctor.firstKetchOnPath
@@ -31,7 +32,9 @@ import ketch.core.shell.Setup
 import ketch.core.shell.Shell
 import ketch.core.shell.ShellState
 import ketch.core.shell.detected
+import ketch.core.shell.installUser
 import ketch.core.shell.manualLine
+import ketch.core.shell.uninstallUser
 import ketch.core.source.PROTOCOL_VERSION
 import ketch.core.source.discover
 import ketch.core.state.State
@@ -146,7 +149,7 @@ fun path(
 ) {
     when (command?.name) {
         "install" -> pathInstall(cfg, command.matches)
-        "uninstall" -> for (sh in chosen(command.matches)) report(uninstallShell(sh, dryRun(command.matches)), dryRun(command.matches))
+        "uninstall" -> pathUninstall(cfg, command.matches)
         else -> pathStatus(cfg)
     }
 }
@@ -180,6 +183,16 @@ private fun pathInstall(
         return
     }
     var changed = false
+    // Windows keeps PATH in the registry: with no shell named, the user PATH is the whole setup.
+    if (HOST_WINDOWS && wantsUserPath(args)) {
+        val outcome = installUser(cfg, dryRun(args))
+        changed = outcome != Outcome.Unchanged
+        reportUser(outcome, dryRun(args))
+        if (!args.flag("all")) {
+            if (changed && !dryRun(args)) out("Open a new terminal to pick it up.")
+            return
+        }
+    }
     for (sh in chosen(args)) {
         val change = installShell(cfg, sh, dryRun(args))
         changed = changed || change.outcome != Outcome.Unchanged
@@ -187,6 +200,24 @@ private fun pathInstall(
     }
     if (changed && !dryRun(args)) out("Open a new shell to pick it up.")
 }
+
+private fun pathUninstall(
+    cfg: Config,
+    args: Matches,
+) {
+    if (HOST_WINDOWS && wantsUserPath(args)) {
+        // A registry that cannot be read must not keep the shell files named alongside it from being cleaned.
+        try {
+            reportUser(uninstallUser(cfg, dryRun(args)), dryRun(args))
+        } catch (e: KetchError) {
+            warn(e.message)
+        }
+        if (!args.flag("all")) return
+    }
+    for (sh in chosen(args)) report(uninstallShell(sh, dryRun(args)), dryRun(args))
+}
+
+private fun wantsUserPath(args: Matches) = args.values("shell").isEmpty() || args.flag("all")
 
 /** Which shells this invocation acts on: what was asked for, or what the machine looks like. */
 private fun chosen(args: Matches): List<Shell> {
@@ -220,20 +251,32 @@ private fun planLines(plan: UninstallPlan): List<String> {
     return lines
 }
 
-// The Windows user PATH is a setup step only on Windows, which this build does not target.
 private fun reportSetup(
     setup: Setup,
     dryRun: Boolean,
-) {
-    if (setup is Setup.ShellFile) report(setup.change, dryRun)
+) = when (setup) {
+    is Setup.ShellFile -> report(setup.change, dryRun)
+    is Setup.UserPath -> reportUser(setup.outcome, dryRun)
 }
+
+private fun reportUser(
+    outcome: Outcome,
+    dryRun: Boolean,
+) = reportOutcome(outcome, dryRun, "user PATH (HKCU\\Environment\\Path)")
 
 private fun report(
     change: Change,
     dryRun: Boolean,
 ) {
-    val detail = "${change.file} (${change.shell.shellName})"
-    when (change.outcome) {
+    reportOutcome(change.outcome, dryRun, "${change.file} (${change.shell.shellName})")
+}
+
+private fun reportOutcome(
+    outcome: Outcome,
+    dryRun: Boolean,
+    detail: String,
+) {
+    when (outcome) {
         Outcome.Added -> if (dryRun) step("would add", detail) else success("added", detail)
         Outcome.Updated -> if (dryRun) step("would update", detail) else success("updated", detail)
         Outcome.Removed -> if (dryRun) step("would remove", detail) else success("removed", detail)
