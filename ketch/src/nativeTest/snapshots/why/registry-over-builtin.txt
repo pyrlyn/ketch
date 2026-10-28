@@ -1,0 +1,19 @@
+package      ripgrep
+target       {target}
+manifest     registry  {root}/registry/ripgrep/ketch.toml
+matched      rg
+source       test:ripgrep
+version      latest  v1.0.0 (1.0.0)
+prerelease   excluded
+
+assets
+score  name  reason
+{score}  {ripgrep-native-1.0.0}  {native-reason}
+
+rejected
+name  reason
+{ripgrep-foreign-1.0.0}  incompatible with {target}
+
+checksum     published-digest
+trust        advisory  strip_quarantine=true  allow_emulation=true
+candidate    {ripgrep-native-1.0.0}  {native-reason}

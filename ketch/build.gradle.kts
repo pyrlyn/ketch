@@ -54,5 +54,5 @@ tasks.withType<KotlinNativeTest>().configureEach {
             .dir("src/nativeTest/snapshots")
             .asFile.absolutePath,
     )
-    listOf("SNAPSHOT_UPDATE", "INSTA_UPDATE", "CI").forEach { name -> System.getenv(name)?.let { environment(name, it) } }
+    listOf("SNAPSHOT_UPDATE", "INSTA_UPDATE", "UPDATE_SNAPSHOTS", "CI").forEach { name -> System.getenv(name)?.let { environment(name, it) } }
 }
