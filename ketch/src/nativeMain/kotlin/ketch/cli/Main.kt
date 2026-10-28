@@ -20,6 +20,7 @@ import ketch.cmd.install
 import ketch.cmd.installCompletions
 import ketch.cmd.link
 import ketch.cmd.list
+import ketch.cmd.lock
 import ketch.cmd.outdated
 import ketch.cmd.pin
 import ketch.cmd.prune
@@ -27,6 +28,7 @@ import ketch.cmd.releases
 import ketch.cmd.rollback
 import ketch.cmd.search
 import ketch.cmd.stats
+import ketch.cmd.sync
 import ketch.cmd.uninstall
 import ketch.cmd.upgrade
 import ketch.cmd.why
@@ -140,6 +142,8 @@ private val COMMANDS: Map<String, (Config, Matches) -> Unit> =
         "stats" to ::stats,
         "doctor" to ::doctor,
         "config" to ::config,
+        "lock" to ::lock,
+        "sync" to ::sync,
         "completions" to ::installCompletions,
         "install" to ::install,
         "uninstall" to ::uninstall,

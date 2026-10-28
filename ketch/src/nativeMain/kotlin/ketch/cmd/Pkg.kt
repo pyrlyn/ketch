@@ -56,7 +56,7 @@ private const val NOT_INSTALLED = 4
 private const val SHORT_SHA = 12
 
 /** How the packages of one batch fared. */
-private class Tally {
+internal class Tally {
     var done = 0
     val failed = mutableListOf<String>()
 }
