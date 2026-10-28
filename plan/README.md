@@ -109,6 +109,9 @@ Taken during the port:
   mingwX64 and the Windows implementations go into kotlin-kit itself; tests run on a Windows
   VM in Parallels on the Mac (Windows on Arm, which runs the x64 binaries under emulation). No
   subtask closes without that run.
+  SQLite on Windows is kit `db-native` (the creator's choice after androidx.sqlite turned out
+  to have no mingw build): SQLite's C API over a static sqlite3 Conan builds with K/N's mingw
+  toolchain; ketch picks `RoomDbDriver` on macOS and Linux, `NativeDbDriver` on Windows.
 - **`ketch serve` (T11).** One JSON object per line each way, `:ketch-wire`'s records with the
   Rust field names: `hello` first, then `event`, `ask` and `result` per call id; the app sends
   `call`, `answer` and `cancel`. `serve` is read before the parser, as `__complete` is, so the
