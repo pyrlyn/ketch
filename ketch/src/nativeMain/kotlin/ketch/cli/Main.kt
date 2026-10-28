@@ -107,9 +107,27 @@ private fun man(out: Path) {
     success("Wrote", "${written.size} man pages to $out")
 }
 
-// The commands land with the port of cmd/; until then a parsed line says which one is missing.
-@Suppress("UnusedParameter")
 private fun dispatch(
     cfg: Config,
     command: Subcommand,
-): Unit = throw KetchError.Msg("`ketch ${command.name}` is not ported yet")
+) {
+    val args = command.matches
+    when (command.name) {
+        "update" -> ketch.cmd.update(cfg)
+
+        "doctor" -> ketch.cmd.doctor(cfg, args)
+
+        "path" -> ketch.cmd.path(cfg, args.subcommand)
+
+        "plugin" -> ketch.cmd.plugin(cfg, checkNotNull(args.subcommand))
+
+        "self" -> ketch.cmd.zelf(cfg, checkNotNull(args.subcommand))
+
+        "completions" -> ketch.cmd.installCompletions(cfg, args)
+
+        "man" -> man(Path(args.values("out").single()))
+
+        // The commands still being ported say which one is missing.
+        else -> throw KetchError.Msg("`ketch ${command.name}` is not ported yet")
+    }
+}
