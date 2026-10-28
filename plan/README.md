@@ -126,10 +126,15 @@ Taken during the port:
   with the POSIX rename Rust's std uses when MoveFileExW refuses a file another process has open.
   The lock test's crashed contender writes its stale pid in place, as Rust's `fs::write` does:
   replacing the file needs every other handle on it to allow deletion, and on Windows one often
-  does not for about a second. Rust's `sibling_keeps_a_non_utf8_file_name` is not ported: a
-  Kotlin `Path` holds a `String`, which cannot carry a non-UTF-8 name. Rust's `split_paths`
-  honours quotes in PATH on Windows; ketch's `splitPathVar` splits on `;` only, so a quoted
-  PATH entry that holds a `;` is read as two (the registry edits use their own quote-aware split).
+  does not for about a second. Rust's `sibling_keeps_a_non_utf8_file_name` is ported for
+  the names a Kotlin `Path` can hold: a `String` carries no undecodable bytes, but it does carry
+  an unpaired surrogate, a Windows name that is not valid Unicode. kotlinx-io's `Path.parent` and
+  `Path.name` go through C `dirname`/`basename` as UTF-8 and turn one into U+FFFD, so kit's
+  `exactParent`/`exactName` cut the answer from the original text; `createDirAll`, the atomic
+  write's staging dir and the store swap use them. The other `parent`/`name` calls still use
+  kotlinx-io's. `splitPathVar` reads a Windows PATH as Rust's `split_paths` does: `"` quotes a `;`
+  into an entry and is dropped (the registry edits keep their own split, which leaves quotes in
+  place because they write the value back).
 - **`ketch serve` (T11).** One JSON object per line each way, `:ketch-wire`'s records with the
   Rust field names: `hello` first, then `event`, `ask` and `result` per call id; the app sends
   `call`, `answer` and `cancel`. `serve` is read before the parser, as `__complete` is, so the

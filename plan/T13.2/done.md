@@ -31,9 +31,12 @@ test binary ran on the Parallels Windows 11 VM: 723 of 723 pass as the user and 
 kit's fs (58) and process (28) Windows test binaries pass there as the user and as SYSTEM.
 
 Not done: the intermediate commits were not built one by one, only the last one. Paths are shown
-with mixed separators until T13.3 settles display. Rust's non-UTF-8 sibling test is not
-portable (a Kotlin `Path` is a `String`).
+with mixed separators until T13.3 settles display.
 
 ketch-kotlin commits: `61d555d` build, `d183ed3` platform, `09ab4fa` process, `9ee20d0` shell,
 `7ce3d6c` hooks, `be5c425` links and sources, `f48c77a` self-update and doctor. kotlin-kit
 commits: `b768a79` raw arguments, `99d364a` detached spawn, `13a1f5a` rename, `eb831c2` temp dir.
+
+Follow-up: the non-UTF-8 sibling test is ported for unpaired surrogates (with kit's lossless
+`exactParent`/`exactName`), `splitPathVar` honours quotes in a Windows PATH, and the Windows test
+home has an `AppData\Local`, so PowerShell's cache no longer lands in the working directory.
