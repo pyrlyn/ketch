@@ -3,6 +3,7 @@ package ketch.core.platform
 import fs.createDir
 import fs.createDirAll
 import fs.entryKind
+import fs.exactName
 import fs.listDir
 import ketch.core.error.KetchError
 import ketch.core.model.CompletionShell
@@ -29,6 +30,17 @@ class PlatformTest {
     @Test
     fun siblingOfANamelessPathUsesPkg() {
         assertEquals(Path("pkg.old"), sibling(Path(""), ".old"))
+    }
+
+    /**
+     * Rust's `sibling_keeps_a_non_utf8_file_name`, for the names a Kotlin `Path` can hold. A `String` cannot carry bytes
+     * that are not UTF-8, but it does carry an unpaired surrogate, which is how a Windows name that is not valid
+     * Unicode reads; the suffix must not repair or drop it.
+     */
+    @Test
+    fun siblingKeepsAFileNameThatIsNotValidUnicode() {
+        val name = "\uDCFF\uD800"
+        assertEquals("$name.old", sibling(Path("store", name), ".old").exactName)
     }
 
     @Test

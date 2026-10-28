@@ -98,4 +98,20 @@ class PlatformWindowsTest {
                 assertEquals("v2", readText(link))
             }
         }
+
+    /** A Windows name may be any UTF-16, paired or not; the store swap must keep such a name on disk as it was. */
+    @Test
+    fun aStoreSwapKeepsANameThatIsNotValidUnicode(): Unit =
+        withTempDir { tmp ->
+            val name = "tool\uD800"
+            val store = Path(tmp, name)
+            createDirAll(store)
+            Path(store, "tool").write("working")
+            val payload = Path(tmp, "payload")
+            createDirAll(payload)
+            Path(payload, "tool").write("new")
+            swapIntoStore(payload, store) { _, _ -> fail("rename should stay on one filesystem") }
+            assertEquals(listOf(name, "$name.old"), listDir(tmp).sorted())
+            assertEquals("working", readText(Path(sibling(store, ".old"), "tool")))
+        }
 }
