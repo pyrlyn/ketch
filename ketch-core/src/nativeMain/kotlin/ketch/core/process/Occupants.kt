@@ -10,17 +10,16 @@ import fs.EntryKind
 import fs.canon
 import fs.entryKind
 import fs.isDir
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.extract.readHead
 import ketch.core.report.Ctx
 import ketch.core.report.Report
+import ketch.core.shell.windowsPathKey
 import ketch.core.state.processAlive
 import ketch.core.text.asciiLowercase
 import kotlinx.cinterop.convert
 import kotlinx.io.files.Path
-import platform.posix.SIGKILL
-import platform.posix.SIGTERM
 import platform.posix.getpid
-import platform.posix.kill
 import platform.posix.usleep
 import process.Command
 import process.Output
@@ -89,7 +88,8 @@ private fun uniqueKeys(paths: List<Path>): List<Pair<Path, String>> {
     return paths.mapNotNull { path -> pathKey(path).takeIf { it.isNotEmpty() && seen.add(it) }?.let { path to it } }
 }
 
-internal fun pathKey(p: Path): String = canon(p).toString()
+/** Windows paths compare case-blind and slash-blind, so its key is folded the way a PATH entry's is. */
+internal fun pathKey(p: Path): String = canon(p).let { if (HOST_WINDOWS) windowsPathKey(it) else it.toString() }
 
 /** Sentence for a listing stopped at its deadline, naming the program and pid. */
 fun stoppedDetail(
@@ -204,7 +204,13 @@ internal fun argsHit(
 
 /** Ask [pid] to exit, and kill it if it is still there a moment later. */
 internal fun terminate(pid: Long) {
-    kill(pid.toInt(), SIGTERM)
+    askToExit(pid)
     usleep(GRACE.inWholeMicroseconds.convert())
-    if (processAlive(pid)) kill(pid.toInt(), SIGKILL)
+    if (processAlive(pid)) forceExit(pid)
 }
+
+/** `SIGTERM`, or `taskkill` without `/F`, which asks the process's windows to close. */
+internal expect fun askToExit(pid: Long)
+
+/** `SIGKILL`, or `taskkill /F`. */
+internal expect fun forceExit(pid: Long)

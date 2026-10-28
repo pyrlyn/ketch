@@ -7,6 +7,7 @@ import fs.copyFile
 import fs.setMode
 import fs.textOrEmpty
 import ketch.core.config.Config
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.report.Ctx
 import ketch.core.report.Event
 import ketch.core.report.Recorder
@@ -21,10 +22,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.io.files.Path
-import platform.posix.SIGKILL
 import platform.posix.getenv
 import platform.posix.getpid
-import platform.posix.kill
 import platform.posix.sleep
 import platform.posix.usleep
 import process.Command
@@ -53,13 +52,13 @@ class ProcessTest {
     private class Sleeper(
         dir: Path,
     ) : AutoCloseable {
-        val copy = Path(dir, "sleeper")
+        val copy = Path(dir, if (HOST_WINDOWS) "sleeper.exe" else "sleeper")
         private val pidFile = Path(dir, "pid")
         val run: Deferred<Result<Output>>
 
         init {
             copyFile(Path(checkNotNull(Platform.programName) { "no program name to copy" }), copy)
-            setMode(copy, "755".toInt(8))
+            if (!HOST_WINDOWS) setMode(copy, "755".toInt(8))
             val filter = "--ktest_filter=ketch.core.process.ProcessTest.${ProcessTest::sleepsOnlyWhenSpawnedAsTheSleeper.name}"
             val command = Command(copy.toString(), listOf(filter)).env(SLEEPER_ENV, dir.toString())
             // runBounded waits for the child, so it waits on another thread while the test lists it.
@@ -72,7 +71,7 @@ class ProcessTest {
         fun await(): Output = runBlocking { run.await() }.getOrThrow()
 
         override fun close() {
-            pid()?.let { kill(it.toInt(), SIGKILL) }
+            pid()?.let(::forceExit)
             runBlocking { run.await() }
         }
     }
@@ -129,7 +128,11 @@ class ProcessTest {
                 // Awaited, not polled: a child `offerToStop` missed runs out its 30 s sleep and exits successfully,
                 // which the assertion rejects.
                 val status = sleeper.await().status
-                assertIs<ExitStatus.Signaled>(status, "pid ${found.pid} was not stopped by a signal: $status")
+                if (HOST_WINDOWS) {
+                    assertFalse(status.success, "pid ${found.pid} ran to completion instead of being stopped: $status")
+                } else {
+                    assertIs<ExitStatus.Signaled>(status, "pid ${found.pid} was not stopped by a signal: $status")
+                }
             }
         }
     }
@@ -200,7 +203,7 @@ class ProcessTest {
     // Rust runs these two on Windows, where listing spawns a program; on macOS `lsof` goes through the same path.
     @Test
     fun aListingThatFinishesIsReturned() {
-        val out = outputBounded(Command("/bin/sh", listOf("-c", "echo found")), 10.seconds, Report.silent())
+        val out = outputBounded(shell("echo found"), 10.seconds, Report.silent())
         assertTrue(
             out
                 ?.stdout
@@ -214,7 +217,8 @@ class ProcessTest {
     fun aListingThatOutlivesTheTimeoutIsStoppedAndWarnedAbout() {
         val recorder = Recorder()
         val started = TimeSource.Monotonic.markNow()
-        assertNull(outputBounded(Command("/bin/sh", listOf("-c", "sleep 30")), 300.milliseconds, Report(recorder)))
+        val sleep = if (HOST_WINDOWS) "ping -n 30 127.0.0.1 >nul" else "sleep 30"
+        assertNull(outputBounded(shell(sleep), 300.milliseconds, Report(recorder)))
         assertTrue(started.elapsedNow() < 10.seconds, "the wait must stay bounded")
         val warning =
             recorder
@@ -222,8 +226,10 @@ class ProcessTest {
                 .filterIsInstance<Event.Warn>()
                 .single()
                 .detail
-        assertTrue(warning.startsWith("/bin/sh (pid ") && warning.contains("was stopped"), warning)
+        assertTrue(warning.startsWith("${shell("").program} (pid ") && warning.contains("was stopped"), warning)
     }
+
+    private fun shell(script: String) = if (HOST_WINDOWS) Command("cmd.exe", listOf("/c", script)) else Command("/bin/sh", listOf("-c", script))
 
     private companion object {
         const val SLEEPER_ENV = "KETCH_TEST_SLEEPER"
