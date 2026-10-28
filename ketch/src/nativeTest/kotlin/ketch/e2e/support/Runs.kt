@@ -1,6 +1,8 @@
 // Running the ketch under test against a [Sandbox], as Rust tests/support/mod.rs's `Sandbox::ketch*` methods do.
 package ketch.e2e.support
 
+import kotlinx.io.files.Path
+import process.Command
 import kotlin.test.assertTrue
 
 /** Run ketch against this sandbox, with the bin dir on PATH: the configuration ketch is installed into. */
@@ -71,3 +73,11 @@ fun ketchBare(
     vararg args: String,
     envs: Map<String, String> = emptyMap(),
 ) = process.Command(KETCH_EXE, args.toList()).apply { envs.forEach { (k, v) -> env(k, v) } }.runOnce()
+
+/** What [program] printed, trimmed; the test fails unless it exits 0. Proves the thing ketch linked is what it installed. */
+fun said(program: Path): String =
+    Command(program.toString())
+        .runOnce()
+        .also { assertTrue(it.success, "$program failed with $it") }
+        .stdout
+        .trim()
