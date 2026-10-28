@@ -11,3 +11,8 @@ complexity:
     allowedFunctionsPerFile: 25
     # A ported test class mirrors one Rust test file, test for test.
     excludes: ['**/commonTest/**', '**/nativeTest/**', '**/jvmTest/**', '**/macosTest/**', '**/test/**']
+
+naming:
+  FunctionNaming:
+    # Compose names its UI functions like types.
+    ignoreAnnotated: ['Composable']

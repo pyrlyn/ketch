@@ -10,7 +10,9 @@ dependencies {
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
     implementation(libs.kotlinx.coroutines.swing)
-    testImplementation(libs.kotlinx.coroutines.test)
+    implementation(libs.markdown.renderer.m3)
+    @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+    testImplementation(compose.uiTest)
 }
 
 compose.desktop {
@@ -41,3 +43,6 @@ tasks.test {
         environment("KETCH_EXE", rootProject.file("ketch/build/bin/$target/debugExecutable/ketch.kexe").absolutePath)
     }
 }
+
+// The brand tokens, copied unchanged from the Rust tree (desktop/design/README.md), read at start.
+tasks.processResources { from("design") { include("tokens.json") } }

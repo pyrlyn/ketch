@@ -10,6 +10,8 @@ ktlint_standard_property-naming = disabled
 ktlint_standard_kdoc = disabled
 ktlint_standard_no-consecutive-comments = disabled
 ktlint_standard_mixed-condition-operators = disabled
+# Compose names its UI functions like types.
+ktlint_function_naming_ignore_when_annotated_with = Composable
 
 [**/build.gradle.kts]
 # Modules configured only from the root script keep an empty build file.
