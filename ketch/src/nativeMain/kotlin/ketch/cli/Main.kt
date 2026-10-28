@@ -12,6 +12,7 @@ import cli.parse
 import cli.terminalSettings
 import cli.write
 import ketch.cmd.changelog
+import ketch.cmd.config
 import ketch.cmd.doctor
 import ketch.cmd.history
 import ketch.cmd.info
@@ -138,6 +139,7 @@ private val COMMANDS: Map<String, (Config, Matches) -> Unit> =
         "history" to ::history,
         "stats" to ::stats,
         "doctor" to ::doctor,
+        "config" to ::config,
         "completions" to ::installCompletions,
         "install" to ::install,
         "uninstall" to ::uninstall,

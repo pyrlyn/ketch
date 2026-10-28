@@ -81,7 +81,7 @@ internal object PackageRefSerializer : KSerializer<PackageRef> {
 }
 
 /** Why [text] did not parse as a [PackageRef], as Rust's `TryFrom<String>` says it. */
-internal fun notAReference(text: String) = "`$text` is not a package reference; expected `scheme:id` or `owner/repo`"
+fun notAReference(text: String) = "`$text` is not a package reference; expected `scheme:id` or `owner/repo`"
 
 /** Which version the user asked for. */
 sealed interface VersionSpec {

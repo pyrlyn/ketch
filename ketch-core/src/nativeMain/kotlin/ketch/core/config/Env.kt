@@ -58,7 +58,7 @@ internal fun homeDir(): Path? {
 }
 
 /** Rust `env::current_dir`; null when the directory is gone. */
-internal fun currentDir(): Path? {
+fun currentDir(): Path? {
     val buf = getcwd(null, 0u) ?: return null
     try {
         return Path(buf.toKString())
