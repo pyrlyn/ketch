@@ -2,12 +2,14 @@
 
 package ketch.core.log
 
+import fs.FsException
+import fs.appendSink
+import fs.joinPath
 import ketch.core.VERSION
 import ketch.core.config.Config
 import ketch.core.error.KetchError
 import ketch.core.model.nowUnix
 import kotlinx.io.Sink
-import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.writeString
@@ -72,6 +74,8 @@ object Log {
         val opened =
             try {
                 open(cfg.logFile, level, cfg.logFormat)
+            } catch (e: FsException) {
+                throw KetchError.Msg("could not open ${cfg.logFile}: ${e.detail}", e)
             } catch (e: kotlinx.io.IOException) {
                 throw KetchError.Msg("could not open ${cfg.logFile}: ${e.message}", e)
             }
@@ -136,7 +140,8 @@ object Log {
     ): LogSink {
         path.parent?.let { SystemFileSystem.createDirectories(it) }
         rotate(path)
-        val file = SystemFileSystem.sink(path, append = true).buffered()
+        // Shared for deletion, as Rust opens it: `self uninstall` removes the log directory while this is still open.
+        val file = appendSink(path)
         return LogSink(file, path, level, format, getpid())
     }
 
@@ -150,6 +155,6 @@ object Log {
         val name = path.name
         val dot = name.lastIndexOf('.')
         val stem = if (dot > 0) name.substring(0, dot) else name
-        return Path(path.parent ?: Path("."), "$stem.log.1")
+        return joinPath(path.parent ?: Path("."), "$stem.log.1")
     }
 }
