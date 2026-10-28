@@ -1,0 +1,36 @@
+{
+  "name": "search-browse",
+  "description": "An empty query browses: every package the registry knows, and no repositories, since no source is asked.",
+  "call": {
+    "operation": "search",
+    "query": "",
+    "limit": 50
+  },
+  "script": [],
+  "outcome": {
+    "type": "ok",
+    "value": {
+      "known": [
+        {
+          "description": "A simple, fast alternative to find",
+          "latest": "10.2.0",
+          "name": "fd",
+          "source": "github:sharkdp/fd"
+        },
+        {
+          "description": "Line-oriented search tool",
+          "latest": "14.1.1",
+          "name": "ripgrep",
+          "source": "github:BurntSushi/ripgrep"
+        },
+        {
+          "description": "An extremely fast Python package manager",
+          "latest": null,
+          "name": "uv",
+          "source": "github:astral-sh/uv"
+        }
+      ],
+      "repositories": []
+    }
+  }
+}
