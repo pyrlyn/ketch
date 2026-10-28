@@ -16,6 +16,7 @@ import ketch.wire.PROTOCOL
 import ketch.wire.Question
 import ketch.wire.ServeMessage
 import ketch.wire.Wire
+import ketch.wire.decline
 import ketch.wire.resultSerializer
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -182,13 +183,6 @@ class Server(
         }
     }
 }
-
-/** What declining [question] answers: no binary chosen, nothing confirmed. */
-private fun decline(question: Question): WireAnswer =
-    when (question) {
-        is Question.ChooseBinary -> WireAnswer.Index(null)
-        is Question.StopProcesses, is Question.ConfirmRemoveLeftover -> WireAnswer.Confirm(false)
-    }
 
 /** Runs [call] on [core]; the value is what [resultSerializer] says the call returns. */
 // One branch per call is a table, not branching logic; splitting it would hide which call is missing.

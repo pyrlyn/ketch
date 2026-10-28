@@ -23,11 +23,10 @@
 
 The desktop tests depend on the host's debug `ketch` link task and get it as `KETCH_EXE`.
 
-Duplicate-code check: `decline` repeats the native `Server`'s, in a JVM module that cannot
-reach it. Moving it to `:ketch-wire` would serve both; that is left to the next change that
-touches the wire.
+Duplicate-code check: the native `Server` and the app both need `decline`, so it moved from
+`Server.kt` into `:ketch-wire`. The scenario reading uses `:ketch-wire`'s `Scenario`.
 
-Commits: `af2438d` (T12: split and claim T12.1) and the T12.1 code commit after it, on `main`.
+Commits: `af2438d` (T12: split and claim T12.1) to the `decline` move after the close, on `main`.
 No remote yet, so no PR.
 
 Checked on the Mac (arm64): `./gradlew :desktop:test` runs 14 tests, all green:

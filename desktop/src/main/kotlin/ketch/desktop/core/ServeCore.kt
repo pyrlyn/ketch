@@ -13,6 +13,7 @@ import ketch.wire.Outcome
 import ketch.wire.PROTOCOL
 import ketch.wire.ServeMessage
 import ketch.wire.Wire
+import ketch.wire.decline
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope

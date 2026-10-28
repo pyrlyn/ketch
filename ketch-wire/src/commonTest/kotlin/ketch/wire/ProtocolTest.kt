@@ -55,4 +55,11 @@ class ProtocolTest {
         Wire.json.encodeToJsonElement(count, 3L) shouldBe JsonPrimitive(3)
         Wire.json.decodeFromJsonElement(resultSerializer(Call.Root), JsonPrimitive("/k")) shouldBe "/k"
     }
+
+    @Test
+    fun aDeclineChoosesNothingAndConfirmsNothing() {
+        decline(Question.ChooseBinary("uv", listOf("a"))) shouldBe Answer.Index(null)
+        decline(Question.StopProcesses(emptyList())) shouldBe Answer.Confirm(false)
+        decline(Question.ConfirmRemoveLeftover("/k/store/ghost")) shouldBe Answer.Confirm(false)
+    }
 }

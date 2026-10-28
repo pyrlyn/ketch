@@ -192,6 +192,13 @@ sealed interface Answer {
     ) : Answer
 }
 
+/** What declining [question] answers: no binary chosen, nothing confirmed. */
+fun decline(question: Question): Answer =
+    when (question) {
+        is Question.ChooseBinary -> Answer.Index(null)
+        is Question.StopProcesses, is Question.ConfirmRemoveLeftover -> Answer.Confirm(false)
+    }
+
 /** Why a call failed. */
 @Serializable
 sealed interface KetchError {

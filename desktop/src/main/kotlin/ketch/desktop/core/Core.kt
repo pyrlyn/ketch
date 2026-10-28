@@ -8,6 +8,7 @@ import ketch.wire.Event
 import ketch.wire.KetchError
 import ketch.wire.Question
 import ketch.wire.Wire
+import ketch.wire.decline
 import ketch.wire.resultSerializer
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonElement
@@ -24,13 +25,6 @@ interface Callbacks {
         val None = object : Callbacks {}
     }
 }
-
-/** What declining [question] answers: no binary chosen, nothing confirmed. */
-fun decline(question: Question): Answer =
-    when (question) {
-        is Question.ChooseBinary -> Answer.Index(null)
-        is Question.StopProcesses, is Question.ConfirmRemoveLeftover -> Answer.Confirm(false)
-    }
 
 /** The core refused or failed a call; [error] is the core's own. */
 class CoreException(
