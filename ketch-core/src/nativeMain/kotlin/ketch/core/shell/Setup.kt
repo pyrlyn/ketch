@@ -6,6 +6,7 @@ import fs.canon
 import fs.readText
 import fs.textOrEmpty
 import ketch.core.config.Config
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.config.env
 import ketch.core.config.homeDir
 import ketch.core.error.KetchError
@@ -224,14 +225,22 @@ fun detected(): List<Shell> {
     return detected
 }
 
-/** `ketch path install` with no shell named: the startup file of every shell in use. */
+/** `ketch path install` with no shell named: the Windows user PATH on Windows, the startup file of every shell in use elsewhere. */
 fun installHere(
     cfg: Config,
     dryRun: Boolean,
-): List<Setup> = detected().map { Setup.ShellFile(install(cfg, it, dryRun)) }
+): List<Setup> =
+    if (HOST_WINDOWS) {
+        listOf(Setup.UserPath(installUser(cfg, dryRun)))
+    } else {
+        detected().map { Setup.ShellFile(install(cfg, it, dryRun)) }
+    }
 
 /** The line to add by hand, for a shell ketch does not know. */
-fun manualLine(cfg: Config): String = Shell.Bash.export(binDirStr(cfg))
+fun manualLine(cfg: Config): String {
+    val bin = binDirStr(cfg)
+    return if (HOST_WINDOWS) "Add $bin to your user PATH." else Shell.Bash.export(bin)
+}
 
 private fun home(): Path = homeDir() ?: throw KetchError.Msg("no home directory; set HOME")
 
@@ -240,7 +249,7 @@ private fun home(): Path = homeDir() ?: throw KetchError.Msg("no home directory;
  * than written and hoped for.
  */
 private fun binDirStr(cfg: Config): String {
-    val text = cfg.binDir.toString()
+    val text = nativeSpelling(cfg.binDir)
     if ('\n' in text) throw KetchError.Msg("$text contains a newline; no shell can express that on one line")
     return text
 }
@@ -254,7 +263,7 @@ internal fun read(file: Path): String =
     }
 
 /** Rust `fs::read_to_string(..).ok()`: the text, or null for a missing, unreadable or non-UTF-8 file. */
-private fun readable(file: Path): String? =
+internal fun readable(file: Path): String? =
     try {
         if (isFile(file)) readText(file) else null
     } catch (_: FsException) {

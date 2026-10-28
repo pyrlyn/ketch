@@ -6,7 +6,7 @@ internal const val BEGIN = "# >>> ketch >>>"
 /** Closes the block ketch owns. */
 internal const val END = "# <<< ketch <<<"
 
-private const val BOM = '﻿'
+internal const val BOM = '﻿'
 
 /** Single-quote for the POSIX family, where the only character that cannot appear inside single quotes is the quote. */
 internal fun quotePosix(text: String) = "'${text.replace("'", "'\\''")}'"
