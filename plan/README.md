@@ -61,8 +61,8 @@ Taken during the port:
   under the bounded runner of `pyrlyn.kit:process`, which now names the child a timeout stopped.
   Discovered executables are ordered by path components, as Rust compares `Path`s. Windows code,
   and the Windows-only helpers Rust compiles everywhere as dead code (`windows_path_*`, PowerShell
-  profile writing, AutoRun, the user PATH in the registry), wait for T13 with their tests; on
-  Unix those entry points answer "nothing here", as Rust's do.
+  profile writing, AutoRun, the user PATH in the registry), came with T13.2; on Unix those entry
+  points answer "nothing here", as Rust's do.
 - **Sources and resolution (T7).** HTTP goes through kotlin-kit's `http` client, which now
   streams a GET body as it arrives, so ketch caps a body while it downloads and hashes it on the
   way; GitHub, local and plugin sources are tested against recorded responses and kotlin-kit's
@@ -91,7 +91,7 @@ Taken during the port:
   on the shared terminal through kit `process.Command.status`; the running binary comes from kit
   `currentExe`, and the swap renames through kit `fs.rename` so a transient lock keeps its errno.
   The Windows parts (PowerShell and cmd completion, registry entries, moving a running `.exe`
-  out of the way, removal after exit) and their two probe tests wait for T13. Publisher
+  out of the way, removal after exit) and their two probe tests came with T13.2. Publisher
   signatures on a self upgrade stay stubbed until T14, like every other install.
 - **Import and push (T9).** `import` is a Kotlin keyword, so the package is `ketch.core.importer`.
   winget manifests are read with kit `yaml-aot` and handed to kotlinx.serialization as JSON in
@@ -112,6 +112,24 @@ Taken during the port:
   SQLite on Windows is kit `db-native` (the creator's choice after androidx.sqlite turned out
   to have no mingw build): SQLite's C API over a static sqlite3 Conan builds with K/N's mingw
   toolchain; ketch picks `RoomDbDriver` on macOS and Linux, `NativeDbDriver` on Windows.
+- **ketch-core on Windows (T13.2).** Source sets: `unixMain`/`unixTest` (Apple and Linux) and
+  `mingwMain`/`mingwTest`; a Rust `#[cfg(unix)]` test goes to `unixTest`, a `#[cfg(windows)]` one
+  to `mingwTest`. kotlinx-io joins paths with `/` on Windows, so ketch's paths come out mixed
+  (`C:\Users\u\.ketch/bin`): Win32 takes both, the path keys and `pathIsWithin` read both, and
+  `nativeSpelling` writes backslashes wherever a path is shown to Windows itself (the user PATH,
+  AutoRun, PowerShell, a command line another process is matched by). How paths are displayed
+  is left to T13.3, with the CLI. The home directory is `USERPROFILE`. The registry is read and
+  written through Windows PowerShell, as in Rust, with a 120 s guard Rust does not have (a hung
+  PowerShell must not hang `ketch path install`). kit gained `Command.rawArg` (hooks
+  run through `cmd /C` exactly as Rust's `raw_arg` does), `Command.spawnDetached` (removing the
+  root after `self uninstall` exits) and `systemTempDir`, and its Windows `rename` now retries
+  with the POSIX rename Rust's std uses when MoveFileExW refuses a file another process has open.
+  The lock test's crashed contender writes its stale pid in place, as Rust's `fs::write` does:
+  replacing the file needs every other handle on it to allow deletion, and on Windows one often
+  does not for about a second. Rust's `sibling_keeps_a_non_utf8_file_name` is not ported: a
+  Kotlin `Path` holds a `String`, which cannot carry a non-UTF-8 name. Rust's `split_paths`
+  honours quotes in PATH on Windows; ketch's `splitPathVar` splits on `;` only, so a quoted
+  PATH entry that holds a `;` is read as two (the registry edits use their own quote-aware split).
 - **`ketch serve` (T11).** One JSON object per line each way, `:ketch-wire`'s records with the
   Rust field names: `hello` first, then `event`, `ask` and `result` per call id; the app sends
   `call`, `answer` and `cancel`. `serve` is read before the parser, as `__complete` is, so the
