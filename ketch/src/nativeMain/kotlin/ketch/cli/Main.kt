@@ -50,6 +50,7 @@ import kotlin.system.exitProcess
 fun main(args: Array<String>) {
     val argv = args.toList()
     intercept(argv)?.let { exitProcess(it) }
+    serveIntercept(argv)?.let { exitProcess(it) }
     when (val parsed = parse(ketchCli(), argv, terminalSettings("ketch"))) {
         is Parsed.Exit -> {
             parsed.write()

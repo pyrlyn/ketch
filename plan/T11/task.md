@@ -2,7 +2,7 @@
 status: in progress
 priority: P1
 complexity: 3
-readiness: 0%
+readiness: 85%
 agent: Claude Code / claude-opus-5-5
 ---
 
@@ -32,9 +32,12 @@ The Rust side is `crates/ketch-ffi` (`lib.rs`, `records.rs`, `callbacks.rs`, `er
    the four Rust files.
 4. A hidden `ketch serve` command (help output stays Rust's): stdin is read on its own
    thread, so answers and cancels reach a running call; calls run one at a time in arrival
-   order (the kotlinx-io `basename` race of T8); stdin closing cancels what runs and ends it.
+   order (the kotlinx-io `basename` race of T8); stdin closing declines open questions, lets
+   what was sent finish and ends it (stopping work is what `cancel` is for).
 5. End-to-end tests of `ketch serve` against the built binary: hello, a local install with
-   its events, a question answered, a cancel, a busy lock, a malformed line.
+   its events, a busy lock, a malformed line, a usage error. Questions answered and cancels
+   need input after output, which the process kit cannot drive; `ServerTest` covers them in
+   process over the same `Server`.
 
 Files: `ketch-wire/src/`, `ketch/src/nativeMain/kotlin/ketch/serve/`, `ketch/src/nativeTest/`,
 `desktop/contract/`. Check: `./gradlew build`, the Linux compile with
