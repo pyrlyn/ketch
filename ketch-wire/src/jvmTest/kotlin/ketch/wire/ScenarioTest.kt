@@ -21,7 +21,7 @@ class ScenarioTest {
     }
 
     @Test
-    fun every_scenario_round_trips_through_the_wire_types() {
+    fun everyScenarioRoundTripsThroughTheWireTypes() {
         scenarios.toList() shouldHaveAtLeastSize 19
         for (file in scenarios) {
             val text = Wire.json.parseToJsonElement(file.readText())

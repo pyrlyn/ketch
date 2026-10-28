@@ -146,7 +146,7 @@ sealed interface Event {
 /** A process holding a file an upgrade is about to replace. */
 @Serializable
 data class Holder(
-    val pid: Int,
+    val pid: Long,
     val path: String,
 )
 
@@ -202,7 +202,7 @@ sealed interface KetchError {
     @Serializable
     @SerialName("busy")
     data class Busy(
-        val pid: Int?,
+        val pid: Long?,
     ) : KetchError
 
     /** The call was cancelled; nothing was left half-installed. */
