@@ -1,6 +1,7 @@
 package ketch.core.registry
 
 import fs.createDirAll
+import fs.joinPath
 import fs.symlink
 import ketch.core.testing.read
 import ketch.core.testing.withTempDir
@@ -15,12 +16,12 @@ class RegistryUnixTest {
     @Test
     fun checkTreeNeverReadsThroughASymlinkedPackageFile(): Unit =
         withTempDir { tmp ->
-            val secret = Path(tmp, "secret.txt")
+            val secret = joinPath(tmp, "secret.txt")
             secret.write("root:x:0:0:root:/root:/bin/sh\n")
             write(tmp, "good", "source = \"github:a/b\"\n")
-            val sneaky = Path(tmp, "sneaky")
+            val sneaky = joinPath(tmp, "sneaky")
             createDirAll(sneaky)
-            symlink(secret, Path(sneaky, PACKAGE_FILE))
+            symlink(secret, joinPath(sneaky, PACKAGE_FILE))
             val report = checkTree(tmp)
             assertEquals(1, report.packages)
             val error = report.errors.single()

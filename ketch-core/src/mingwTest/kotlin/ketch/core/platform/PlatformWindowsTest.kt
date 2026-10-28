@@ -3,6 +3,7 @@ package ketch.core.platform
 import fs.copyFile
 import fs.createDirAll
 import fs.entryKind
+import fs.joinPath
 import fs.listDir
 import fs.readText
 import ketch.core.model.LinkKind
@@ -68,7 +69,7 @@ class PlatformWindowsTest {
     @Test
     fun clearForReplaceRenamesAsideARunningExe(): Unit =
         withTempDir { tmp ->
-            val path = Path(tmp, "ketch.exe")
+            val path = joinPath(tmp, "ketch.exe")
             RunningCopy(path).use {
                 clearForReplace(path)
                 assertNull(entryKind(path), "destination name must be free for the replacement copy")
@@ -82,19 +83,19 @@ class PlatformWindowsTest {
     @Test
     fun copyBinaryReplacesARunningRecordedExe(): Unit =
         withTempDir { tmp ->
-            val payload = Path(tmp, "payload")
+            val payload = joinPath(tmp, "payload")
             createDirAll(payload)
-            Path(payload, "tool.exe").write("v2")
-            val store = Path(tmp, "store/tool/1.0")
+            joinPath(payload, "tool.exe").write("v2")
+            val store = joinPath(tmp, "store/tool/1.0")
             createDirAll(store)
-            val storeTarget = Path(store, "tool.exe")
-            val bin = Path(tmp, "bin")
+            val storeTarget = joinPath(store, "tool.exe")
+            val bin = joinPath(tmp, "bin")
             createDirAll(bin)
-            val link = Path(bin, "tool.exe")
+            val link = joinPath(bin, "tool.exe")
             RunningCopy(link).use {
                 copyFile(link, storeTarget)
                 val recorded = listOf(LinkRecord(link, storeTarget, LinkKind.CopiedFile, LinkRole.Binary))
-                copyBinary(Path(payload, "tool.exe"), bin, "tool.exe", recorded, Claims())
+                copyBinary(joinPath(payload, "tool.exe"), bin, "tool.exe", recorded, Claims())
                 assertEquals("v2", readText(link))
             }
         }
@@ -104,14 +105,14 @@ class PlatformWindowsTest {
     fun aStoreSwapKeepsANameThatIsNotValidUnicode(): Unit =
         withTempDir { tmp ->
             val name = "tool\uD800"
-            val store = Path(tmp, name)
+            val store = joinPath(tmp, name)
             createDirAll(store)
-            Path(store, "tool").write("working")
-            val payload = Path(tmp, "payload")
+            joinPath(store, "tool").write("working")
+            val payload = joinPath(tmp, "payload")
             createDirAll(payload)
-            Path(payload, "tool").write("new")
+            joinPath(payload, "tool").write("new")
             swapIntoStore(payload, store) { _, _ -> fail("rename should stay on one filesystem") }
             assertEquals(listOf(name, "$name.old"), listDir(tmp).sorted())
-            assertEquals("working", readText(Path(sibling(store, ".old"), "tool")))
+            assertEquals("working", readText(joinPath(sibling(store, ".old"), "tool")))
         }
 }

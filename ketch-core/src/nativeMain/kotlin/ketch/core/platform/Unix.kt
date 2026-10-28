@@ -10,6 +10,7 @@ import fs.canon
 import fs.copyTree
 import fs.createDirAll
 import fs.entryKind
+import fs.joinPath
 import fs.mode
 import fs.readLink
 import fs.removeAny
@@ -239,7 +240,7 @@ internal fun linkBinary(
     claims: Claims,
 ): LinkRecord {
     ioAt(binDir) { createDirAll(binDir) }
-    val link = Path(binDir, name)
+    val link = joinPath(binDir, name)
     clearDestination(link, owned, recorded, claims)
     ensureExecutable(target)
     symlink(target, link)
@@ -331,7 +332,7 @@ internal fun placeCli(
         ::copyLocalTree,
         preflight = { owned ->
             val destinations = mutableSetOf<String>()
-            for ((_, name) in cliTargets(platform, plan.payloadDir, plan)) claimDestination(destinations, Path(plan.binDir, name), owned, plan)
+            for ((_, name) in cliTargets(platform, plan.payloadDir, plan)) claimDestination(destinations, joinPath(plan.binDir, name), owned, plan)
             if (destinations.isEmpty()) throw KetchError.EmptyPayload(plan.payloadDir)
             preflightExtras(plan, owned)
         },

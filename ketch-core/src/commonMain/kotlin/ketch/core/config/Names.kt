@@ -5,6 +5,7 @@ import ketch.core.text.asciiUppercase
 import ketch.core.text.eqIgnoreAsciiCase
 import ketch.core.text.isAsciiAlphanumeric
 import ketch.core.text.rustTrim
+import kotlinx.io.files.Path
 
 /** The upstream repository ketch updates itself from. */
 const val SELF_REPO = "pyrlyn/ketch"
@@ -25,7 +26,13 @@ val RENAMED_REPOS: List<Pair<String, String>> =
 fun currentRepo(repo: String): String = RENAMED_REPOS.firstOrNull { it.first.eqIgnoreAsciiCase(repo) }?.second ?: repo
 
 /** True on Windows, where file names have rules of their own. */
-internal expect val HOST_WINDOWS: Boolean
+expect val HOST_WINDOWS: Boolean
+
+/** kit's `joinPath` (the host's separator between parts, as `PathBuf::join`), for common code that cannot see kit. */
+internal expect fun joinedPath(
+    base: Path,
+    vararg parts: String,
+): Path
 
 /**
  * Accept only `owner/repo`, since it is about to become a URL. A `github:` prefix is tolerated because that is

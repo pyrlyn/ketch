@@ -1,5 +1,6 @@
 package ketch.core.lockfile
 
+import fs.joinPath
 import fs.readText
 import ketch.core.model.Arch
 import ketch.core.model.InstalledPackage
@@ -32,7 +33,7 @@ class LockfileFormatTest {
     @Test
     fun theCommittedLockSchemaDescribesEveryLockfileKey() {
         // Rust regenerates the schema from its types; the port checks its own types have not drifted from it.
-        val schema = Json.parseToJsonElement(readText(Path(RUST_FIXTURES, "lock.schema.json"))).jsonObject
+        val schema = Json.parseToJsonElement(readText(joinPath(RUST_FIXTURES, "lock.schema.json"))).jsonObject
 
         fun keys(of: kotlinx.serialization.descriptors.SerialDescriptor) = (0 until of.elementsCount).map(of::getElementName).toSet()
         assertEquals(schema.getValue("properties").jsonObject.keys, keys(serializer<Lockfile>().descriptor))
@@ -141,7 +142,7 @@ class LockfileFormatTest {
     @Test
     fun aTwoPackageLockfileRendersTheReviewedSnapshot() {
         // The Rust insta snapshot, so both ports write the same file from the same entries.
-        val snapshot = readText(Path(RUST_FIXTURES, "lockfile-two-packages.snap")).substringAfter("---\n").substringAfter("---\n")
+        val snapshot = readText(joinPath(RUST_FIXTURES, "lockfile-two-packages.snap")).substringAfter("---\n").substringAfter("---\n")
         val lock =
             Lockfile(
                 LOCK_VERSION,

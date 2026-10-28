@@ -5,6 +5,7 @@ import fs.FsException
 import fs.TempDir
 import fs.copyFile
 import fs.createDirAll
+import fs.joinPath
 import fs.removeFile
 import fs.walk
 import ketch.core.config.sanitizeComponent
@@ -130,14 +131,14 @@ private fun replaceInPlace(
     fsKitAt(cfg.cacheDir) { TempDir.createIn(cfg.cacheDir) }.use { work ->
         // The asset name is the release author's string, not ketch's. It reaches a path here, so it goes through the
         // same guard every other asset name does.
-        val download = Path(work.path, sanitizeComponent(chosen.asset.name))
+        val download = joinPath(work.path, sanitizeComponent(chosen.asset.name))
         val sha256 = report.download("download").use { progress -> source.download(chosen.asset, download, progress, cx.cancel) }
 
         // `require` is hard-coded: for its own binary ketch does not accept the trust-on-first-use path it allows for
         // packages.
         report.activity("verifying").run { verifyChecksum(source, cfg.selfRepo, release, chosen.asset, sha256, true, report) }
 
-        val unpacked = Path(work.path, "payload")
+        val unpacked = joinPath(work.path, "payload")
         report.activity("extracting").run { extractAuto(download, unpacked, platform.extractors(), report) }
         val fresh = findBinary(unpacked)
 
@@ -191,7 +192,7 @@ private fun pause(delay: Duration) {
 }
 
 /** Where `replaceBinary` parks the running image (`ketch.exe` → `ketch.exe.old`). */
-internal fun swapBackup(exe: Path): Path = Path(exe.parent ?: Path("."), "${exe.name.ifEmpty { SELF_NAME }}.old")
+internal fun swapBackup(exe: Path): Path = joinPath(exe.parent ?: Path("."), "${exe.name.ifEmpty { SELF_NAME }}.old")
 
 /**
  * Asides a self command may have left next to [binary].
@@ -207,7 +208,7 @@ internal fun asideCandidates(binary: Path): List<Path> {
             .lastIndexOf('.')
             .takeIf { it > 0 }
             ?.let { binary.name.substring(0, it) } ?: binary.name
-    val flat = Path(binary.parent ?: Path("."), "$stem.old")
+    val flat = joinPath(binary.parent ?: Path("."), "$stem.old")
     return if (flat == swap) listOf(swap) else listOf(swap, flat)
 }
 
@@ -230,7 +231,7 @@ internal fun sweepStaleAsides(
     binDir: Path,
     report: Report,
 ) {
-    for (path in asideCandidates(Path(binDir, bootstrapBinaryName()))) sweepAside(path, report)
+    for (path in asideCandidates(joinPath(binDir, bootstrapBinaryName()))) sweepAside(path, report)
 }
 
 /** `PermissionDenied`, plus Windows' two lock codes: what antivirus real-time protection returns while it holds a file for a few milliseconds. */

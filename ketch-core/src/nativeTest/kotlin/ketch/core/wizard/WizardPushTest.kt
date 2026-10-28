@@ -1,6 +1,7 @@
 package ketch.core.wizard
 
 import fs.createDir
+import fs.joinPath
 import ketch.core.push.load
 import ketch.core.testing.withTempDir
 import ketch.core.testing.write
@@ -14,9 +15,9 @@ class WizardPushTest {
         folder: String,
         body: String,
     ) = withTempDir { dir ->
-        val project = Path(dir, folder)
+        val project = joinPath(dir, folder)
         createDir(project)
-        val file = Path(project, "ketch.toml")
+        val file = joinPath(project, "ketch.toml")
         file.write(body)
         load(file)
     }

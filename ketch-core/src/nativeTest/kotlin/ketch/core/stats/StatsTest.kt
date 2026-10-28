@@ -1,5 +1,6 @@
 package ketch.core.stats
 
+import fs.joinPath
 import ketch.core.model.InstalledPackage
 import ketch.core.model.ManifestOrigin
 import ketch.core.model.PackageRef
@@ -48,7 +49,7 @@ class StatsTest {
     fun aMissingDatabaseIsCreatedAndMigratedOnFirstWrite(): Unit =
         withTempDir { dir ->
             // Two levels down: the parent does not exist either.
-            val path = Path(dir, "nested/stats.db")
+            val path = joinPath(dir, "nested/stats.db")
             recordAt(path, event("ripgrep", "14.1.0", Action.Install))
             assertTrue(SystemFileSystem.exists(path), "the database should have been created")
             assertEquals(1, historyAt(path, null, 10).size)
@@ -57,7 +58,7 @@ class StatsTest {
     @Test
     fun openingAnExistingDatabaseAgainDoesNotReRunMigrations(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "stats.db")
+            val path = joinPath(dir, "stats.db")
             recordAt(path, event("ripgrep", "14.1.0", Action.Install))
             // The row from the first write must survive the second open.
             recordAt(path, event("ripgrep", "14.1.1", Action.Upgrade))
@@ -67,7 +68,7 @@ class StatsTest {
     @Test
     fun historyIsNewestFirstAndScopedToOnePackage(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "stats.db")
+            val path = joinPath(dir, "stats.db")
             listOf("1.0.0", "1.1.0", "2.0.0").forEachIndexed { i, version ->
                 recordAt(path, event("ripgrep", version, Action.Upgrade).copy(at = i.toLong()))
             }
@@ -81,7 +82,7 @@ class StatsTest {
     @Test
     fun rowsWrittenInTheSameSecondStillComeBackNewestFirst(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "stats.db")
+            val path = joinPath(dir, "stats.db")
             listOf("1.0.0", "2.0.0").forEach { recordAt(path, event("ripgrep", it, Action.Upgrade).copy(at = 42)) }
             assertEquals("2.0.0", historyAt(path, "ripgrep", 10)[0].version, "the later write should lead")
         }
@@ -89,7 +90,7 @@ class StatsTest {
     @Test
     fun theLimitIsHonoured(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "stats.db")
+            val path = joinPath(dir, "stats.db")
             repeat(5) { recordAt(path, event("ripgrep", "1.0.0", Action.Upgrade).copy(at = it.toLong())) }
             assertEquals(2, historyAt(path, "ripgrep", 2).size)
             assertTrue(historyAt(path, "ripgrep", 0).isEmpty(), "a zero limit must return no rows")
@@ -98,7 +99,7 @@ class StatsTest {
     @Test
     fun everyEventFieldRoundTripsWithoutLoss(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "stats.db")
+            val path = joinPath(dir, "stats.db")
             val written =
                 event("unicode-☃", "2.0.0-rc.1+build.7", Action.Upgrade).copy(
                     previousVersion = "1.9.0",
@@ -165,7 +166,7 @@ class StatsTest {
     @Test
     fun aSummaryCountsEachActionAndAveragesOnlyWhatWasTimed(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "stats.db")
+            val path = joinPath(dir, "stats.db")
             recordAt(path, event("ripgrep", "1.0.0", Action.Install).copy(durationMs = 100, at = 10))
             recordAt(path, event("ripgrep", "2.0.0", Action.Upgrade).copy(durationMs = 300, at = 20))
             // An uninstall has no duration, and must not drag the mean down.
@@ -185,7 +186,7 @@ class StatsTest {
     @Test
     fun anEmptyDatabaseSummarisesToZeroRatherThanFailing(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "stats.db")
+            val path = joinPath(dir, "stats.db")
             val s = summaryAt(path)
             assertEquals(0, s.events)
             assertNull(s.meanDurationMs(), "no divisor, no mean")
@@ -198,7 +199,7 @@ class StatsTest {
     @Test
     fun aNameThatLooksLikeSqlIsStoredAsAName(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "stats.db")
+            val path = joinPath(dir, "stats.db")
             val hostile = "rg'); DROP TABLE events;--"
             recordAt(path, event(hostile, "1.0.0", Action.Install))
             val seen = historyAt(path, hostile, 10)
@@ -209,7 +210,7 @@ class StatsTest {
     @Test
     fun aCorruptDatabaseIsReportedAndLeftUntouched(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "stats.db")
+            val path = joinPath(dir, "stats.db")
             val corrupt = "this is not sqlite".encodeToByteArray()
             SystemFileSystem.sink(path).buffered().use { it.write(corrupt) }
             val historyError = assertFailsWith<ketch.core.error.KetchError> { historyAt(path, null, 10) }.message.orEmpty()
@@ -226,7 +227,7 @@ class StatsTest {
     @Test
     fun aDatabaseRustKetchMadeIsReadAndExtendedAsIs(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "stats.db")
+            val path = joinPath(dir, "stats.db")
             sqlite.open(path.toString()).use { db ->
                 db.exec(RUST_SCHEMA)
                 db.execute(
@@ -239,7 +240,7 @@ class StatsTest {
             assertEquals(listOf("fd", "jq"), historyAt(path, null, 10).map { it.packageName })
             assertTrue(historyAt(path, "jq", 1).single().checksumVerified)
 
-            val fresh = Path(dir, "fresh.db")
+            val fresh = joinPath(dir, "fresh.db")
             recordAt(fresh, event("fd", "9.0.0", Action.Install))
             recordAt(fresh, event("fd", "9.0.1", Action.Upgrade))
             listOf(path, fresh).forEach { db ->

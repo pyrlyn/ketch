@@ -5,6 +5,7 @@ package ketch.core.fsio
 import fs.EntryKind
 import fs.atomic
 import fs.entryKind
+import fs.joinPath
 import fs.mode
 import fs.readText
 import ketch.core.testing.withTempDir
@@ -19,7 +20,7 @@ class FsioUnixTest {
     @Test
     fun theFileIsPrivateEvenOverAWiderOne() =
         withTempDir { dir ->
-            val file = Path(dir, "ketch.lock")
+            val file = joinPath(dir, "ketch.lock")
             atomic(file, "old".encodeToByteArray())
             chmod(file.toString(), "644".toInt(8).convert())
             writePrivate(file, "new".encodeToByteArray())
@@ -29,8 +30,8 @@ class FsioUnixTest {
     @Test
     fun aSymlinkIsReplacedNotFollowed() =
         withTempDir { dir ->
-            val real = Path(dir, "real")
-            val link = Path(dir, "link")
+            val real = joinPath(dir, "real")
+            val link = joinPath(dir, "link")
             atomic(real, "keep".encodeToByteArray())
             check(symlink(real.toString(), link.toString()) == 0)
             writePrivate(link, "new".encodeToByteArray())

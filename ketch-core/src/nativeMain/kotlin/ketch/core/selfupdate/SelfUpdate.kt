@@ -6,6 +6,7 @@ import fs.canonicalize
 import fs.copyFile
 import fs.createDirAll
 import fs.entryKind
+import fs.joinPath
 import fs.removeAny
 import fs.removeFile
 import ketch.core.VERSION
@@ -113,8 +114,8 @@ fun installSelf(
         // A ketch copied flat into the bin dir is where the link now has to go, and the platform refuses to replace a
         // file ketch did not put there. It is moved aside rather than deleted so that a failed install still leaves a
         // ketch on PATH; the running image survives either way.
-        val flat = Path(cx.cfg.binDir, bootstrapBinaryName())
-        val aside = Path(cx.cfg.binDir, "$SELF_NAME.old").takeIf { entryKind(flat) == EntryKind.File }
+        val flat = joinPath(cx.cfg.binDir, bootstrapBinaryName())
+        val aside = joinPath(cx.cfg.binDir, "$SELF_NAME.old").takeIf { entryKind(flat) == EntryKind.File }
         if (aside != null) fsKitAt(flat) { rename(flat, aside) }
         val result = runCatching { installAndRecord(cx, sources, state, req, linkDir, docs) }
         if (aside != null) {
@@ -169,7 +170,7 @@ private fun isBootstrapRecord(
     record: LinkRecord,
     binDir: Path,
 ): Boolean =
-    record.target == Path(binDir, bootstrapBinaryName()) &&
+    record.target == joinPath(binDir, bootstrapBinaryName()) &&
         record.link.name == bootstrapBinaryName() &&
         record.link.parent?.let { parent -> runCatching { canonicalDir(parent) }.getOrNull() != binDir } == true
 
@@ -193,7 +194,7 @@ internal fun recordBootstrapLink(
     val platform = host()
     val binDir = canonicalDir(cx.cfg.binDir)
     val dir = canonicalDir(linkDir)
-    val target = Path(cx.cfg.binDir, bootstrapBinaryName())
+    val target = joinPath(cx.cfg.binDir, bootstrapBinaryName())
 
     val old =
         state
@@ -210,7 +211,7 @@ internal fun recordBootstrapLink(
     }
     if (entryKind(canon(target)) != EntryKind.File) throw KetchError.Msg("$target is missing after install")
 
-    val link = Path(dir, bootstrapBinaryName())
+    val link = joinPath(dir, bootstrapBinaryName())
     clearBootstrapDestination(link, state.get(SELF_NAME)?.links.orEmpty())
     val record = createBootstrapLink(link, target)
     val entry = state.get(SELF_NAME) ?: throw KetchError.Msg("ketch package not installed")

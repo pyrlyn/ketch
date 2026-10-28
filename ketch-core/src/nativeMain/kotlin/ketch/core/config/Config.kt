@@ -4,6 +4,7 @@ import fs.FsException
 import fs.atomic
 import fs.createDirAll
 import fs.entryKind
+import fs.joinPath
 import fs.readText
 import ketch.core.VERSION
 import ketch.core.error.KetchError
@@ -103,7 +104,7 @@ data class Config(
         if (fresh) markRoot()
     }
 
-    fun rootMarker() = Path(root, ROOT_MARKER)
+    fun rootMarker() = joinPath(root, ROOT_MARKER)
 
     fun markRoot() {
         val marker = rootMarker()
@@ -113,7 +114,7 @@ data class Config(
     fun packageDir(
         name: String,
         version: String,
-    ) = Path(Path(storeDir, name), sanitizeComponent(version))
+    ) = joinPath(joinPath(storeDir, name), sanitizeComponent(version))
 
     /** Whether [binDir] is on `PATH`, comparing entries as the shell would find them. */
     fun binDirOnPath(): Boolean {
@@ -128,7 +129,7 @@ data class Config(
             report: Report,
         ): Config {
             val root = resolveRoot(rootOverride)
-            val configFile = Path(root, "config.toml")
+            val configFile = joinPath(root, "config.toml")
             val file = readFile(configFile)
 
             val appsDir = appsDir(root, file)
@@ -147,14 +148,14 @@ data class Config(
 
             return Config(
                 root = root,
-                binDir = Path(root, "bin"),
-                storeDir = Path(root, "store"),
-                cacheDir = Path(root, "cache"),
-                manifestDir = Path(root, "manifests"),
-                pluginDir = Path(root, "plugins"),
-                stateFile = Path(root, "state.json"),
-                statsDb = Path(root, "stats.db"),
-                lockFile = Path(root, ".lock"),
+                binDir = joinPath(root, "bin"),
+                storeDir = joinPath(root, "store"),
+                cacheDir = joinPath(root, "cache"),
+                manifestDir = joinPath(root, "manifests"),
+                pluginDir = joinPath(root, "plugins"),
+                stateFile = joinPath(root, "state.json"),
+                statsDb = joinPath(root, "stats.db"),
+                lockFile = joinPath(root, ".lock"),
                 configFile = configFile,
                 appsDir = appsDir,
                 githubToken = githubToken,
@@ -169,11 +170,11 @@ data class Config(
                 registry = registry,
                 // Deliberately not in `ensureDirs`: the directory existing is how ketch knows the registry has
                 // been fetched.
-                registryDir = Path(root, "registry"),
-                registryMeta = Path(root, "registry.meta.toml"),
+                registryDir = joinPath(root, "registry"),
+                registryMeta = joinPath(root, "registry.meta.toml"),
                 target = TargetSpec.host(),
                 jobs = jobs,
-                logFile = Path(Path(root, "logs"), "ketch.log"),
+                logFile = joinPath(joinPath(root, "logs"), "ketch.log"),
                 logLevel = logLevel,
                 logFormat = logFormat,
                 maxDownload = maxDownload,
@@ -226,7 +227,7 @@ data class Config(
             val given = envOs("KETCH_APPS_DIR")?.takeIf { it.isNotEmpty() } ?: file.appsDir
             val dir =
                 given?.let { expandTilde(Path(it)) }
-                    ?: if (TargetSpec.host().os == Os.MacOs) Path("/Applications") else Path(root, "apps")
+                    ?: if (TargetSpec.host().os == Os.MacOs) Path("/Applications") else joinPath(root, "apps")
             // A relative apps dir would resolve against wherever ketch was run from, a different place each time.
             if (!dir.isAbsolute) throw KetchError.Config("apps_dir must be an absolute path, not `$dir`")
             return dir
@@ -325,12 +326,12 @@ internal fun envBool(key: String): Boolean? {
     }
 }
 
-private fun defaultRoot(): Path = Path(homeDir() ?: Path("."), ".ketch")
+private fun defaultRoot(): Path = joinPath(homeDir() ?: Path("."), ".ketch")
 
 internal fun absolutePath(path: Path): Path {
     if (path.isAbsolute) return path
     val cwd = currentDir() ?: throw KetchError.Io(Path("."), IllegalStateException("the current directory is gone"))
-    return Path(cwd, path.toString())
+    return joinPath(cwd, path.toString())
 }
 
 /**
@@ -344,12 +345,12 @@ internal fun expandTilde(path: Path): Path {
     return when {
         text == "~" -> home
         rest == null -> path
-        else -> rest.split('/', '\\').filter { it.isNotEmpty() }.fold(home) { acc, part -> Path(acc, part) }
+        else -> rest.split('/', '\\').filter { it.isNotEmpty() }.fold(home) { acc, part -> joinPath(acc, part) }
     }
 }
 
 /** The directories a `PATH`-style variable lists, in order, as Rust's `std::env::split_paths` reads them. */
-internal fun splitPathVar(value: String): List<String> = if (HOST_WINDOWS) splitWindowsPathVar(value) else value.split(':')
+fun splitPathVar(value: String): List<String> = if (HOST_WINDOWS) splitWindowsPathVar(value) else value.split(':')
 
 /**
  * A Windows `PATH`: `"` quotes a `;` into an entry (`C:\weird;name` is a valid folder) and is dropped, since no Windows

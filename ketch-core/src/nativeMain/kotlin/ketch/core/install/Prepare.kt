@@ -2,6 +2,7 @@ package ketch.core.install
 
 import fs.TempDir
 import fs.createDirAll
+import fs.joinPath
 import ketch.core.config.Config
 import ketch.core.config.sanitizeComponent
 import ketch.core.error.KetchError
@@ -224,7 +225,7 @@ private class Job(
     fun copyApp(app: Path): Payload {
         cx.report.stage(label, Stage.Downloading)
         val destName = app.name.ifEmpty { "App.app" }
-        val dest = Path(unpack, destName)
+        val dest = joinPath(unpack, destName)
         copyTree(app, dest)
         // The copy is hashed, not the original, so the digest describes exactly what gets placed. Like a local file,
         // a bundle has no published checksum to require, but a lockfile's hash still holds it.
@@ -249,7 +250,7 @@ private class Job(
         // archive. The archive is staging, never a cache, so a unique directory costs nothing.
         val cache = cx.cfg.cacheDir
         return fsKitAt(cache) { TempDir.createIn(cache) }.use { staging ->
-            val downloadPath = Path(staging.path, sanitizeComponent(asset.name))
+            val downloadPath = joinPath(staging.path, sanitizeComponent(asset.name))
             val sha256 = source.download(asset, downloadPath, progress, req.cancel)
             checkLocked(req, manifest.name, asset.name, sha256)
 

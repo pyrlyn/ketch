@@ -4,6 +4,7 @@ import fs.createDir
 import fs.createDirAll
 import fs.entryKind
 import fs.exactName
+import fs.joinPath
 import fs.listDir
 import ketch.core.error.KetchError
 import ketch.core.model.CompletionShell
@@ -22,9 +23,9 @@ import kotlin.test.assertTrue
 class PlatformTest {
     @Test
     fun siblingAppendsTheSuffixToTheFileName() {
-        val path = Path("store", "tool", "1.0")
-        assertEquals(Path("store", "tool", "1.0.old"), sibling(path, ".old"))
-        assertEquals(Path("store", "tool", "1.0.incoming"), sibling(path, ".incoming"))
+        val path = joinPath("store", "tool", "1.0")
+        assertEquals(joinPath("store", "tool", "1.0.old"), sibling(path, ".old"))
+        assertEquals(joinPath("store", "tool", "1.0.incoming"), sibling(path, ".incoming"))
     }
 
     @Test
@@ -40,36 +41,36 @@ class PlatformTest {
     @Test
     fun siblingKeepsAFileNameThatIsNotValidUnicode() {
         val name = "\uDCFF\uD800"
-        assertEquals("$name.old", sibling(Path("store", name), ".old").exactName)
+        assertEquals("$name.old", sibling(joinPath("store", name), ".old").exactName)
     }
 
     @Test
     fun swapIntoStoreOfTheSamePathDoesNotRetireIt() {
         withTempDir { tmp ->
-            val store = Path(tmp, "store")
+            val store = joinPath(tmp, "store")
             createDirAll(store)
-            Path(store, "tool").write("working")
+            joinPath(store, "tool").write("working")
             var copied = false
             assertFalse(swapIntoStore(store, store) { _, _ -> copied = true })
             assertFalse(copied)
-            assertEquals("working", Path(store, "tool").read())
+            assertEquals("working", joinPath(store, "tool").read())
         }
     }
 
     @Test
     fun swapIntoStoreRetiresThePreviousTreeAndRestorePutsItBack() {
         withTempDir { tmp ->
-            val store = Path(tmp, "store/tool/1.0")
+            val store = joinPath(tmp, "store/tool/1.0")
             createDirAll(store)
-            Path(store, "tool").write("working")
-            val payload = Path(tmp, "payload")
+            joinPath(store, "tool").write("working")
+            val payload = joinPath(tmp, "payload")
             createDirAll(payload)
-            Path(payload, "tool").write("new")
+            joinPath(payload, "tool").write("new")
             assertTrue(swapIntoStore(payload, store) { _, _ -> throw KetchError.Msg("rename should stay on one filesystem") })
-            assertEquals("new", Path(store, "tool").read())
-            assertEquals("working", Path(sibling(store, ".old"), "tool").read())
+            assertEquals("new", joinPath(store, "tool").read())
+            assertEquals("working", joinPath(sibling(store, ".old"), "tool").read())
             restoreRetiredStore(store)
-            assertEquals("working", Path(store, "tool").read())
+            assertEquals("working", joinPath(store, "tool").read())
             assertNull(entryKind(sibling(store, ".old")))
             finalizeStoreSwap(store)
         }
@@ -78,18 +79,18 @@ class PlatformTest {
     @Test
     fun swapIntoStoreCopiesWhenTheRenameOntoTheStageFails() {
         withTempDir { tmp ->
-            val store = Path(tmp, "store/1.0")
-            val payload = Path(tmp, "missing-payload")
+            val store = joinPath(tmp, "store/1.0")
+            val payload = joinPath(tmp, "missing-payload")
             // A missing source fails the rename, which is the same branch a cross-filesystem rename takes before
             // `copy` runs.
             val swapped =
                 swapIntoStore(payload, store) { from, to ->
                     assertEquals(payload, from)
                     createDir(to)
-                    Path(to, "tool").write("copied")
+                    joinPath(to, "tool").write("copied")
                 }
             assertFalse(swapped)
-            assertEquals("copied", Path(store, "tool").read())
+            assertEquals("copied", joinPath(store, "tool").read())
         }
     }
 
@@ -115,15 +116,15 @@ class PlatformTest {
     }
 
     /** What `read_dir` lists, in whatever order the file system keeps it. */
-    private fun listed(dir: Path) = listDir(dir).map { Path(dir, it) }
+    private fun listed(dir: Path) = listDir(dir).map { joinPath(dir, it) }
 
     @Test
     fun aWindowsStyleExePairChoosesThePackageNameOverTheHook() {
         withTempDir { tmp ->
             // Written hook-first. Alphabetical order still picks the hook, because `-` sorts before `.` in
             // `rtok-hook.exe` / `rtok.exe`.
-            Path(tmp, "rtok-hook.exe").write("hook")
-            Path(tmp, "rtok.exe").write("main")
+            joinPath(tmp, "rtok-hook.exe").write("hook")
+            joinPath(tmp, "rtok.exe").write("main")
             val found = orderDiscoveredExecutables(listed(tmp), "rtok")
             assertEquals("rtok.exe", found[0].name, "$found")
         }
@@ -132,8 +133,8 @@ class PlatformTest {
     @Test
     fun anUnsuffixedPairChoosesThePackageNameOverTheHook() {
         withTempDir { tmp ->
-            Path(tmp, "rtok-hook").write("hook")
-            Path(tmp, "rtok").write("main")
+            joinPath(tmp, "rtok-hook").write("hook")
+            joinPath(tmp, "rtok").write("main")
             val found = orderDiscoveredExecutables(listed(tmp), "rtok")
             assertEquals("rtok", found[0].name, "$found")
         }
@@ -142,14 +143,14 @@ class PlatformTest {
     @Test
     fun placeChoosesThePackageNamedBinaryOverASimilarlyNamedHook() {
         withTempDir { tmp ->
-            val payload = Path(tmp, "payload")
-            val shipped = Path(payload, "bin")
+            val payload = joinPath(tmp, "payload")
+            val shipped = joinPath(payload, "bin")
             // The Windows spelling of `rtok` and `rtok-hook`. On every OS a plain sort of these two names selects the
             // hook.
             program(shipped, "rtok-hook.exe")
             program(shipped, "rtok.exe")
-            val store = Path(tmp, "store/rtok/1.0")
-            val bin = Path(tmp, "bin")
+            val store = joinPath(tmp, "store/rtok/1.0")
+            val bin = joinPath(tmp, "bin")
             createDirAll(bin)
             val links = host().place(placement(payload, store, bin, tmp, name = "rtok"))
             val binaries = links.filter { it.role == LinkRole.Binary }
@@ -172,8 +173,8 @@ class PlatformTest {
 
     @Test
     fun userManRootIsUnderXdgDataHome() {
-        assertEquals(Path(dataHome(), "man"), host().userManRoot())
-        assertEquals(Path(dataHome(), "bash-completion/completions"), host().completionDir(CompletionShell.Bash))
+        assertEquals(joinPath(dataHome(), "man"), host().userManRoot())
+        assertEquals(joinPath(dataHome(), "bash-completion/completions"), host().completionDir(CompletionShell.Bash))
     }
 
     @Test

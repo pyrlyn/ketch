@@ -1,5 +1,6 @@
 package ketch.core.model
 
+import fs.joinPath
 import fs.readText
 import ketch.core.error.KetchError
 import ketch.core.manifest.BUILTIN_TOML
@@ -46,7 +47,7 @@ class ManifestSchemaTest {
 
     @Test
     fun everyManifestKetchShipsValidatesAgainstTheSchema() {
-        val own = errors(readText(Path(RUST_FIXTURES, "ketch.toml")))
+        val own = errors(readText(joinPath(RUST_FIXTURES, "ketch.toml")))
         assertTrue(own.isEmpty(), "ketch.toml: $own")
         val packages = toJson(BUILTIN_TOML, "builtin.toml").getValue("package").jsonArray
         assertTrue(packages.isNotEmpty())
@@ -66,7 +67,7 @@ class ManifestSchemaTest {
         var seen = 0
         for (file in listOf("MANIFESTS.md", "REGISTRY.md")) {
             // A Windows checkout may have turned LF into CRLF.
-            val text = readText(Path(RUST_FIXTURES, file)).replace("\r\n", "\n")
+            val text = readText(joinPath(RUST_FIXTURES, file)).replace("\r\n", "\n")
             for (block in text.split("```toml\n").drop(1)) {
                 val body = block.substringBefore("```")
                 val firstLine = body.lineSequence().first()
@@ -178,7 +179,7 @@ class ManifestSchemaTest {
 
     private fun schemaJson(): JsonObject =
         kotlinx.serialization.json.Json
-            .parseToJsonElement(readText(Path(RUST_FIXTURES, "manifest.schema.json")))
+            .parseToJsonElement(readText(joinPath(RUST_FIXTURES, "manifest.schema.json")))
             .jsonObject
 
     private companion object {

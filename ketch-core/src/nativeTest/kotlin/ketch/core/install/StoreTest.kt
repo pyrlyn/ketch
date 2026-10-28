@@ -3,6 +3,7 @@ package ketch.core.install
 import fs.createDirAll
 import fs.entryKind
 import fs.isDir
+import fs.joinPath
 import fs.listDir
 import ketch.core.config.Config
 import ketch.core.config.HOST_WINDOWS
@@ -25,7 +26,7 @@ class StoreTest {
     @Test
     fun refusesToDeleteOutsideTheStore(): Unit =
         withRoot { cfg, tmp ->
-            val outside = Path(tmp, "ketch-not-the-store")
+            val outside = joinPath(tmp, "ketch-not-the-store")
             createDirAll(outside)
             removeStoreDir(cfg, outside, silent)
             assertTrue(isDir(outside), "a path outside the store must survive")
@@ -35,7 +36,7 @@ class StoreTest {
     @Test
     fun insideStoreAcceptsTheSameCasePrefix(): Unit =
         withRoot { cfg, _ ->
-            val payload = Path(Path(cfg.storeDir, "rg"), "1.0.0")
+            val payload = joinPath(joinPath(cfg.storeDir, "rg"), "1.0.0")
             createDirAll(payload)
             assertTrue(isInsideStore(cfg.storeDir, payload), "same-case payload must be inside")
             if (HOST_WINDOWS) {
@@ -44,7 +45,7 @@ class StoreTest {
                         .toString()
                         .map { if (it.isLowerCase()) it.uppercaseChar() else it.lowercaseChar() }
                         .joinToString("")
-                val alt = Path(Path(Path(swapped), "rg"), "1.0.0")
+                val alt = joinPath(joinPath(Path(swapped), "rg"), "1.0.0")
                 assertTrue(isInsideStore(cfg.storeDir, alt), "Windows must treat differently-cased store prefixes as inside: ${cfg.storeDir} vs $alt")
             }
         }
@@ -52,22 +53,22 @@ class StoreTest {
     @Test
     fun refusesADotDotEscapeOutOfTheStore(): Unit =
         withRoot { cfg, tmp ->
-            val victim = Path(tmp, "victim")
+            val victim = joinPath(tmp, "victim")
             createDirAll(victim)
-            Path(victim, "keep").write("safe")
+            joinPath(victim, "keep").write("safe")
             // A lexical child of the store that resolves to `victim` through `..`.
-            val escape = Path(cfg.storeDir, "pkg/1.0.0/../../../victim")
+            val escape = joinPath(cfg.storeDir, "pkg/1.0.0/../../../victim")
             assertTrue(pathIsWithin(escape, cfg.storeDir), "precondition: a lexical prefix test alone would allow this")
             removeStoreDir(cfg, escape, silent)
-            assertNotNull(entryKind(Path(victim, "keep")), "`..` must not let uninstall delete outside the store")
+            assertNotNull(entryKind(joinPath(victim, "keep")), "`..` must not let uninstall delete outside the store")
         }
 
     @Test
     fun thePackageFolderGoesWholeWithStaleSwapSiblings(): Unit =
         withRoot { cfg, _ ->
-            val folder = Path(cfg.storeDir, "tool")
-            createDirAll(Path(folder, "1.0.0.old"))
-            Path(folder, "1.0.0.old/stale").write("x")
+            val folder = joinPath(cfg.storeDir, "tool")
+            createDirAll(joinPath(folder, "1.0.0.old"))
+            joinPath(folder, "1.0.0.old/stale").write("x")
             assertEquals(folder, removePackageDir(cfg, "tool", silent))
             assertNull(entryKind(folder))
             assertTrue(isDir(cfg.storeDir), "the store itself stays")
@@ -76,12 +77,12 @@ class StoreTest {
     @Test
     fun theSweepTakesSwapLeftoversAndKeepsEveryVersion(): Unit =
         withRoot { cfg, _ ->
-            val folder = Path(cfg.storeDir, "tool")
-            createDirAll(Path(folder, "1.0.0"))
-            createDirAll(Path(folder, "1.1.0.incoming"))
-            Path(folder, "1.1.0.incoming/planted").write("x")
-            createDirAll(Path(folder, "1.0.0.old"))
-            Path(folder, "0.9.0.old").write("a file, not a folder")
+            val folder = joinPath(cfg.storeDir, "tool")
+            createDirAll(joinPath(folder, "1.0.0"))
+            createDirAll(joinPath(folder, "1.1.0.incoming"))
+            joinPath(folder, "1.1.0.incoming/planted").write("x")
+            createDirAll(joinPath(folder, "1.0.0.old"))
+            joinPath(folder, "0.9.0.old").write("a file, not a folder")
             sweepSwapLeftovers(cfg, "tool", null)
             assertEquals(listOf("1.0.0"), listDir(folder).sorted())
         }
@@ -90,7 +91,7 @@ class StoreTest {
     fun theSweepNeverTakesAPrefixThePackageRecords(): Unit =
         withRoot { cfg, _ ->
             // A release really versioned like a leftover.
-            val prefix = Path(Path(cfg.storeDir, "tool"), "2.old")
+            val prefix = joinPath(joinPath(cfg.storeDir, "tool"), "2.old")
             createDirAll(prefix)
             sweepSwapLeftovers(cfg, "tool", installed("tool", "2.old", prefix))
             assertTrue(isDir(prefix))
@@ -106,7 +107,7 @@ class StoreTest {
     @Test
     fun aPackageNameThatIsNotOneComponentIsNeverRemoved(): Unit =
         withRoot { cfg, _ ->
-            val nested = Path(Path(cfg.storeDir, "a"), "b")
+            val nested = joinPath(joinPath(cfg.storeDir, "a"), "b")
             createDirAll(nested)
             for (name in listOf("a/b", "..", ".", "", "a/../a")) assertNull(removePackageDir(cfg, name, silent), name)
             assertTrue(isDir(nested))
@@ -118,7 +119,7 @@ class StoreTest {
         withRoot { cfg, _ ->
             val prefix = cfg.packageDir("tool", "1.0.0")
             createDirAll(prefix)
-            val orphan = Path(cfg.storeDir, "ghost")
+            val orphan = joinPath(cfg.storeDir, "ghost")
             createDirAll(orphan)
             val state = State()
             // Recorded under another key, so a lookup of "tool" misses it.
@@ -130,7 +131,7 @@ class StoreTest {
     @Test
     fun aNameSpelledDifferentlyOnDiskIsNotACandidate(): Unit =
         withRoot { cfg, _ ->
-            val folder = Path(cfg.storeDir, "tool")
+            val folder = joinPath(cfg.storeDir, "tool")
             createDirAll(folder)
             for (name in listOf("TOOL", "Tool")) assertNull(removePackageDir(cfg, name, silent), name)
             assertTrue(isDir(folder))
@@ -150,13 +151,13 @@ class StoreTest {
     @Test
     fun aRootWrittenWithDotDotStillCleansUpAfterItself(): Unit =
         withRoot { _, tmp ->
-            val work = Path(tmp, "work")
+            val work = joinPath(tmp, "work")
             createDirAll(work)
-            val cfg = Config.load(Path(work, "../ketch"), silent)
+            val cfg = Config.load(joinPath(work, "../ketch"), silent)
             cfg.ensureDirs()
-            val prefix = Path(Path(cfg.storeDir, "tool"), "1.0.0")
+            val prefix = joinPath(joinPath(cfg.storeDir, "tool"), "1.0.0")
             createDirAll(prefix)
-            Path(prefix, "tool").write("x")
+            joinPath(prefix, "tool").write("x")
             removeStoreDir(cfg, prefix, silent)
             assertNull(entryKind(prefix), "a `..` that came from the root must not stop the payload being removed")
         }

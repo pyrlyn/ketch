@@ -4,6 +4,7 @@ import fs.EntryKind
 import fs.atomic
 import fs.createDirAll
 import fs.entryKind
+import fs.joinPath
 import ketch.core.error.KetchError
 import ketch.core.platform.symlink
 import ketch.core.testing.withTempDir
@@ -22,12 +23,12 @@ class MacosTest {
         body: (mount: Path, dest: Path) -> T,
     ): T =
         withTempDir { root ->
-            val mount = Path(root, "volume")
-            val resources = Path(mount, "App.app/Contents/Resources")
+            val mount = joinPath(root, "volume")
+            val resources = joinPath(mount, "App.app/Contents/Resources")
             createDirAll(resources)
-            atomic(Path(resources, "real"), "x".encodeToByteArray())
-            symlink(Path(target), Path(resources, "link"))
-            val dest = Path(root, "dest")
+            atomic(joinPath(resources, "real"), "x".encodeToByteArray())
+            symlink(Path(target), joinPath(resources, "link"))
+            val dest = joinPath(root, "dest")
             createDirAll(dest)
             body(mount, dest)
         }
@@ -46,14 +47,14 @@ class MacosTest {
     fun aNestedLinkInsideAVolumeIsKept() {
         withVolumeLink("real") { mount, dest ->
             copyVolume(mount, dest)
-            assertEquals(EntryKind.Symlink, entryKind(Path(dest, "App.app/Contents/Resources/link")))
+            assertEquals(EntryKind.Symlink, entryKind(joinPath(dest, "App.app/Contents/Resources/link")))
         }
     }
 
     @Test
     fun readsTheMountPointOutOfHdiutilOutput() {
         withTempDir { root ->
-            val mount = Path(root, "dmg.T0hgqZ")
+            val mount = joinPath(root, "dmg.T0hgqZ")
             createDirAll(mount)
 
             val listing =
@@ -66,8 +67,8 @@ class MacosTest {
     @Test
     fun prefersTheLastMountWhenHdiutilListsMultipleVolumes() {
         withTempDir { root ->
-            val helper = Path(root, "helper.T0hgqZ")
-            val app = Path(root, "MyApp.T0hgqZ")
+            val helper = joinPath(root, "helper.T0hgqZ")
+            val app = joinPath(root, "MyApp.T0hgqZ")
             createDirAll(helper)
             createDirAll(app)
 
@@ -96,7 +97,7 @@ class MacosTest {
     @Test
     fun aPlainFileNamedDmgIsNotClaimedWithoutKolyTrailer() {
         withTempDir { root ->
-            val path = Path(root, "release.dmg")
+            val path = joinPath(root, "release.dmg")
             val bytes = "not a disk image".encodeToByteArray()
             atomic(path, bytes)
 
@@ -107,7 +108,7 @@ class MacosTest {
     @Test
     fun aPlainFileNamedPkgIsNotClaimedWithoutXarMagic() {
         withTempDir { root ->
-            val path = Path(root, "installer.pkg")
+            val path = joinPath(root, "installer.pkg")
             val bytes = "not a flat package".encodeToByteArray()
             atomic(path, bytes)
 
@@ -118,7 +119,7 @@ class MacosTest {
     @Test
     fun kolyTrailerIsClaimedWithoutADmgExtension() {
         withTempDir { root ->
-            val path = Path(root, "disk-image")
+            val path = joinPath(root, "disk-image")
             val bytes = ByteArray(512)
             "koly".encodeToByteArray().copyInto(bytes)
             atomic(path, bytes)
@@ -130,7 +131,7 @@ class MacosTest {
     @Test
     fun xarMagicIsClaimedWithoutAPkgExtension() {
         withTempDir { root ->
-            val path = Path(root, "flat-package")
+            val path = joinPath(root, "flat-package")
             val head = "xar!".encodeToByteArray() + byteArrayOf(0x1c)
             atomic(path, head)
 

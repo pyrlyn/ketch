@@ -1,6 +1,7 @@
 package ketch.core.source
 
 import fs.createDirAll
+import fs.joinPath
 import fs.setMode
 import ketch.core.config.Config
 import ketch.core.report.Ctx
@@ -21,7 +22,7 @@ class SourceRegistryUnixTest {
         name: String,
         body: String,
     ) {
-        val path = Path(dir, "$PLUGIN_PREFIX$name")
+        val path = joinPath(dir, "$PLUGIN_PREFIX$name")
         path.write("#!/bin/sh\n$body\n")
         setMode(path, "755".toInt(8))
     }
@@ -32,9 +33,9 @@ class SourceRegistryUnixTest {
         withTempDir { tmp ->
             val recorder = Recorder()
             val report = Report(recorder)
-            val cfg = Config.load(Path(tmp, "root"), report)
+            val cfg = Config.load(joinPath(tmp, "root"), report)
             createDirAll(cfg.pluginDir)
-            val onPath = Path(tmp, "path")
+            val onPath = joinPath(tmp, "path")
             createDirAll(onPath)
             plugin(cfg.pluginDir, "demo", "echo '{\"protocol\":$PROTOCOL_VERSION,\"scheme\":\"demo\"}'")
             plugin(cfg.pluginDir, "broken", "exit 3")

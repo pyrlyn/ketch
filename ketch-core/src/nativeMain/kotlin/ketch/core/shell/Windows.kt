@@ -7,6 +7,7 @@ import fs.FsException
 import fs.WriteOptions
 import fs.canon
 import fs.entryKind
+import fs.joinPath
 import fs.removeFile
 import ketch.core.config.Config
 import ketch.core.config.HOST_WINDOWS
@@ -144,7 +145,7 @@ fun uninstallPowershellProfile(file: Path): Boolean =
 const val DOSKEY_MACROS = "ki=ketch install $*\r\nku=ketch upgrade $*\r\nkl=ketch list $*\r\nkun=ketch uninstall $*\r\n"
 
 /** Where the macro file lives: in the root, not the versioned store prefix, so the AutoRun line naming it survives every `self upgrade`. */
-fun doskeyFile(cfg: Config) = Path(Path(Path(cfg.root, "share"), "ketch"), "ketch.doskey")
+fun doskeyFile(cfg: Config) = joinPath(joinPath(joinPath(cfg.root, "share"), "ketch"), "ketch.doskey")
 
 /**
  * The command ketch adds to AutoRun to load [file].

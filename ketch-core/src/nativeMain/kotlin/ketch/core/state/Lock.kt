@@ -6,6 +6,7 @@ import fs.FsException
 import fs.createDirAll
 import fs.createNew
 import fs.hardLink
+import fs.joinPath
 import fs.modifiedAgo
 import fs.readText
 import fs.removeFile
@@ -298,7 +299,7 @@ private fun withExtension(
     val name = path.name
     val dot = name.lastIndexOf('.')
     val stem = if (dot > 0) name.substring(0, dot) else name
-    return path.parent?.let { Path(it, "$stem.$ext") } ?: Path("$stem.$ext")
+    return path.parent?.let { joinPath(it, "$stem.$ext") } ?: Path("$stem.$ext")
 }
 
 /**

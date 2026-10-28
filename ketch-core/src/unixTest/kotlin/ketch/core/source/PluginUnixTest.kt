@@ -1,5 +1,6 @@
 package ketch.core.source
 
+import fs.joinPath
 import fs.setMode
 import ketch.core.error.KetchError
 import ketch.core.report.Report
@@ -20,7 +21,7 @@ class PluginUnixTest {
         scheme: String,
         body: String,
     ): Path {
-        val path = Path(dir, "$PLUGIN_PREFIX$scheme")
+        val path = joinPath(dir, "$PLUGIN_PREFIX$scheme")
         path.write(body)
         setMode(path, "755".toInt(8))
         return path

@@ -1,12 +1,13 @@
 package ketch.core.process
 
+import fs.joinPath
 import ketch.core.config.envOs
 import ketch.core.report.Report
 import kotlinx.io.files.Path
 import process.Command
 
 /** Windows PowerShell by full path: a `powershell.exe` earlier on PATH is not trusted to answer. */
-internal fun powershellExe(): Path = Path(envOs("SystemRoot")?.let(::Path) ?: Path("C:\\Windows"), "System32\\WindowsPowerShell\\v1.0\\powershell.exe")
+internal fun powershellExe(): Path = joinPath(envOs("SystemRoot")?.let(::Path) ?: Path("C:\\Windows"), "System32\\WindowsPowerShell\\v1.0\\powershell.exe")
 
 private const val LISTING =
     "Get-CimInstance Win32_Process | ForEach-Object { '{0}\t{1}\t{2}' -f \$_.ProcessId, \$_.ExecutablePath, \$_.CommandLine }"

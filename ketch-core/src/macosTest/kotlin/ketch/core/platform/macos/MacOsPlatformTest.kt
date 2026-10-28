@@ -3,6 +3,7 @@ package ketch.core.platform.macos
 import fs.EntryKind
 import fs.createDirAll
 import fs.entryKind
+import fs.joinPath
 import fs.listDir
 import fs.readLink
 import fs.removeAny
@@ -48,50 +49,50 @@ class MacOsPlatformTest {
     @Test
     fun appBundlesAreFoundButTheirHelpersAreNot() {
         withTempDir { root ->
-            val app = Path(root, "Thing.app")
-            createDirAll(Path(app, "Contents/Updater.app"))
-            createDirAll(Path(root, "Extra.app"))
+            val app = joinPath(root, "Thing.app")
+            createDirAll(joinPath(app, "Contents/Updater.app"))
+            createDirAll(joinPath(root, "Extra.app"))
 
             val found = findAppBundles(root).sortedBy { it.toString() }
-            assertEquals(listOf(Path(root, "Extra.app"), app), found)
+            assertEquals(listOf(joinPath(root, "Extra.app"), app), found)
         }
     }
 
     @Test
     fun aFailedUpgradeLeavesTheInstalledVersionInPlace() {
         withTempDir { tmp ->
-            val store = Path(tmp, "store/tool/1.0")
+            val store = joinPath(tmp, "store/tool/1.0")
             createDirAll(store)
-            Path(store, "tool").write("the working version")
+            joinPath(store, "tool").write("the working version")
 
             // Nothing to move: the version already installed must survive.
-            assertFailsWith<KetchError> { moveIntoStore(Path(tmp, "missing"), store) }
-            assertEquals("the working version", Path(store, "tool").read())
+            assertFailsWith<KetchError> { moveIntoStore(joinPath(tmp, "missing"), store) }
+            assertEquals("the working version", joinPath(store, "tool").read())
 
-            val payload = Path(tmp, "payload")
+            val payload = joinPath(tmp, "payload")
             createDirAll(payload)
-            Path(payload, "tool").write("the new version")
+            joinPath(payload, "tool").write("the new version")
             moveIntoStore(payload, store)
-            assertEquals("the new version", Path(store, "tool").read())
-            assertTrue(exists(Path(tmp, "store/tool/1.0.old")), "the previous version stays until links succeed")
-            assertNull(entryKind(Path(tmp, "store/tool/1.0.incoming")))
+            assertEquals("the new version", joinPath(store, "tool").read())
+            assertTrue(exists(joinPath(tmp, "store/tool/1.0.old")), "the previous version stays until links succeed")
+            assertNull(entryKind(joinPath(tmp, "store/tool/1.0.incoming")))
             restoreRetiredStore(store)
-            assertEquals("the working version", Path(store, "tool").read())
+            assertEquals("the working version", joinPath(store, "tool").read())
             finalizeStoreSwap(store)
-            assertNull(entryKind(Path(tmp, "store/tool/1.0.old")))
+            assertNull(entryKind(joinPath(tmp, "store/tool/1.0.old")))
         }
     }
 
     @Test
     fun unplaceLeavesAFileTheUserPutWhereALinkWas() {
         withTempDir { tmp ->
-            val target = Path(tmp, "store/pkg/1.0/tool")
+            val target = joinPath(tmp, "store/pkg/1.0/tool")
             createDirAll(target.parent!!)
             target.write("#!/bin/sh\n")
 
-            val bin = Path(tmp, "bin")
+            val bin = joinPath(tmp, "bin")
             createDirAll(bin)
-            val link = Path(bin, "tool")
+            val link = joinPath(bin, "tool")
             val record = LinkRecord(link, target, LinkKind.Symlink, LinkRole.Binary)
             val platform = MacOsPlatform()
 
@@ -111,50 +112,50 @@ class MacOsPlatformTest {
             platform.unplace(listOf(record), Report.silent())
 
             // A copied `.app` whose store copy is gone: same stale-record class.
-            val store = Path(tmp, "store/thing/1.0")
-            val bundle = Path(store, "Thing.app")
-            createDirAll(Path(bundle, "Contents"))
-            Path(bundle, "Contents/Info.plist").write("x")
-            val apps = Path(tmp, "Applications")
+            val store = joinPath(tmp, "store/thing/1.0")
+            val bundle = joinPath(store, "Thing.app")
+            createDirAll(joinPath(bundle, "Contents"))
+            joinPath(bundle, "Contents/Info.plist").write("x")
+            val apps = joinPath(tmp, "Applications")
             createDirAll(apps)
-            val appLink = Path(apps, "Thing.app")
+            val appLink = joinPath(apps, "Thing.app")
             copyTree(bundle, appLink)
             val appRecord = LinkRecord(appLink, bundle, LinkKind.CopiedApp, LinkRole.Binary)
 
             platform.unplace(listOf(appRecord), Report.silent())
             assertNull(entryKind(appLink))
 
-            createDirAll(Path(appLink, "Contents"))
-            Path(appLink, "Contents/mine.txt").write("the user's own copy")
+            createDirAll(joinPath(appLink, "Contents"))
+            joinPath(appLink, "Contents/mine.txt").write("the user's own copy")
             removeAny(store)
             platform.unplace(listOf(appRecord), Report.silent())
-            assertTrue(isFile(Path(appLink, "Contents/mine.txt")), "a stale record must not authorize deleting the user's bundle")
+            assertTrue(isFile(joinPath(appLink, "Contents/mine.txt")), "a stale record must not authorize deleting the user's bundle")
         }
     }
 
     @Test
     fun aBinaryNameAnotherPackageOwnsIsNotTakenOver() {
         withTempDir { tmp ->
-            val mine = Path(tmp, "store/mine")
-            val theirs = Path(tmp, "store/theirs/1.0")
-            createDirAll(Path(mine, "1.0"))
+            val mine = joinPath(tmp, "store/mine")
+            val theirs = joinPath(tmp, "store/theirs/1.0")
+            createDirAll(joinPath(mine, "1.0"))
             createDirAll(theirs)
-            val target = Path(mine, "1.0/tool")
+            val target = joinPath(mine, "1.0/tool")
             target.write("#!/bin/sh\n")
-            Path(theirs, "tool").write("#!/bin/sh\n")
+            joinPath(theirs, "tool").write("#!/bin/sh\n")
 
-            val bin = Path(tmp, "bin")
+            val bin = joinPath(tmp, "bin")
             createDirAll(bin)
-            symlink(Path(theirs, "tool"), Path(bin, "tool"))
+            symlink(joinPath(theirs, "tool"), joinPath(bin, "tool"))
             assertFailsWith<KetchError> { linkBinary(target, bin, "tool", mine, emptyList(), Claims()) }
-            assertEquals(Path(theirs, "tool"), readLink(Path(bin, "tool")), "the other package must still own its link")
+            assertEquals(joinPath(theirs, "tool"), readLink(joinPath(bin, "tool")), "the other package must still own its link")
 
             // An older version of the same package is ours to replace.
-            val old = Path(mine, "0.9")
+            val old = joinPath(mine, "0.9")
             createDirAll(old)
-            Path(old, "tool").write("#!/bin/sh\n")
-            removeFile(Path(bin, "tool"))
-            symlink(Path(old, "tool"), Path(bin, "tool"))
+            joinPath(old, "tool").write("#!/bin/sh\n")
+            removeFile(joinPath(bin, "tool"))
+            symlink(joinPath(old, "tool"), joinPath(bin, "tool"))
             val record = linkBinary(target, bin, "tool", mine, emptyList(), Claims())
             assertEquals(target, readLink(record.link))
         }
@@ -163,8 +164,8 @@ class MacOsPlatformTest {
     @Test
     fun discoverPrefersCapitalBinOverNoisySiblings() {
         withTempDir { tmp ->
-            val payload = Path(tmp, "payload")
-            val keep = program(Path(payload, "Bin"), "rg", "#!/bin/sh\necho rg\n")
+            val payload = joinPath(tmp, "payload")
+            val keep = program(joinPath(payload, "Bin"), "rg", "#!/bin/sh\necho rg\n")
             program(payload, "noise", "#!/bin/sh\necho noise\n")
 
             val found = discoverExecutables(MacOsPlatform(), payload, "rg")
@@ -175,29 +176,29 @@ class MacOsPlatformTest {
     @Test
     fun placeLinksClassifiedExtraPathsAndRecordsThem() {
         withTempDir { tmp ->
-            val payload = Path(tmp, "payload")
-            createDirAll(Path(payload, "complete"))
-            createDirAll(Path(payload, "doc"))
-            Path(payload, "complete/rg.bash").write("# bash\n")
-            Path(payload, "doc/rg.1").write(".TH RG 1\n")
+            val payload = joinPath(tmp, "payload")
+            createDirAll(joinPath(payload, "complete"))
+            createDirAll(joinPath(payload, "doc"))
+            joinPath(payload, "complete/rg.bash").write("# bash\n")
+            joinPath(payload, "doc/rg.1").write(".TH RG 1\n")
             program(payload, "rg")
 
-            val store = Path(tmp, "store/rg/1.0")
-            val bin = Path(tmp, "bin")
+            val store = joinPath(tmp, "store/rg/1.0")
+            val bin = joinPath(tmp, "bin")
             createDirAll(bin)
-            val manDest = Path(tmp, "man/man1/rg.1")
-            val compDest = Path(tmp, "completions/rg")
+            val manDest = joinPath(tmp, "man/man1/rg.1")
+            val compDest = joinPath(tmp, "completions/rg")
             val extras =
                 listOf(
                     ExtraPlacement("complete/rg.bash", compDest, LinkRole.Completion),
                     ExtraPlacement("doc/rg.1", manDest, LinkRole.Man),
                 )
-            val plan = placement(payload, store, bin, Path(tmp, "Applications"), extras = extras)
+            val plan = placement(payload, store, bin, joinPath(tmp, "Applications"), extras = extras)
             val links = MacOsPlatform().place(plan)
             assertTrue(links.any { it.role == LinkRole.Man && it.link == manDest }, "$links")
             assertTrue(links.any { it.role == LinkRole.Completion && it.link == compDest }, "$links")
-            assertEquals(Path(store, "doc/rg.1"), readLink(manDest))
-            assertEquals(Path(store, "complete/rg.bash"), readLink(compDest))
+            assertEquals(joinPath(store, "doc/rg.1"), readLink(manDest))
+            assertEquals(joinPath(store, "complete/rg.bash"), readLink(compDest))
 
             MacOsPlatform().unplace(links, Report.silent())
             assertNull(entryKind(manDest))
@@ -208,37 +209,37 @@ class MacOsPlatformTest {
     @Test
     fun placementChecksAllBinaryDestinationsBeforeReplacingAny() {
         withTempDir { tmp ->
-            val payload = Path(tmp, "payload")
+            val payload = joinPath(tmp, "payload")
             for (name in listOf("first", "second")) program(payload, name)
 
-            val bin = Path(tmp, "bin")
+            val bin = joinPath(tmp, "bin")
             createDirAll(bin)
-            val external = Path(tmp, "external")
+            val external = joinPath(tmp, "external")
             external.write("#!/bin/sh\n")
-            symlink(external, Path(bin, "second"))
+            symlink(external, joinPath(bin, "second"))
 
-            val store = Path(tmp, "store/pkg/1.0")
-            val plan = placement(payload, store, bin, Path(tmp, "Applications"), name = "pkg")
+            val store = joinPath(tmp, "store/pkg/1.0")
+            val plan = placement(payload, store, bin, joinPath(tmp, "Applications"), name = "pkg")
 
             assertFailsWith<KetchError> { preflightDestinations(MacOsPlatform(), plan, store.parent!!) }
-            assertNull(entryKind(Path(bin, "first")), "preflight must not create links")
+            assertNull(entryKind(joinPath(bin, "first")), "preflight must not create links")
         }
     }
 
     @Test
     fun placementPreflightChecksThePackageNameForASingleBuildArtifact() {
         withTempDir { tmp ->
-            val payload = Path(tmp, "payload")
+            val payload = joinPath(tmp, "payload")
             program(payload, "tool-macos-arm64")
 
-            val bin = Path(tmp, "bin")
+            val bin = joinPath(tmp, "bin")
             createDirAll(bin)
-            val external = Path(tmp, "external")
+            val external = joinPath(tmp, "external")
             external.write("#!/bin/sh\n")
-            symlink(external, Path(bin, "tool"))
+            symlink(external, joinPath(bin, "tool"))
 
-            val store = Path(tmp, "store/tool/1.0")
-            val plan = placement(payload, store, bin, Path(tmp, "Applications"), name = "tool")
+            val store = joinPath(tmp, "store/tool/1.0")
+            val plan = placement(payload, store, bin, joinPath(tmp, "Applications"), name = "tool")
 
             assertFailsWith<KetchError> { preflightDestinations(MacOsPlatform(), plan, store.parent!!) }
         }
@@ -247,18 +248,18 @@ class MacOsPlatformTest {
     @Test
     fun anAppKetchDidNotInstallIsNeverDeleted() {
         withTempDir { tmp ->
-            val packageDir = Path(tmp, "store/thing")
-            val bundle = Path(packageDir, "1.0/Thing.app")
-            createDirAll(Path(bundle, "Contents"))
-            Path(bundle, "Contents/Info.plist").write("x")
+            val packageDir = joinPath(tmp, "store/thing")
+            val bundle = joinPath(packageDir, "1.0/Thing.app")
+            createDirAll(joinPath(bundle, "Contents"))
+            joinPath(bundle, "Contents/Info.plist").write("x")
 
-            val apps = Path(tmp, "Applications")
-            val existing = Path(apps, "Thing.app")
+            val apps = joinPath(tmp, "Applications")
+            val existing = joinPath(apps, "Thing.app")
             createDirAll(existing)
-            Path(existing, "mine.txt").write("the user's own copy")
+            joinPath(existing, "mine.txt").write("the user's own copy")
 
             assertFailsWith<KetchError> { placeApp(bundle, apps, false, packageDir, emptyList(), Claims()) }
-            assertTrue(isFile(Path(existing, "mine.txt")), "must not be deleted")
+            assertTrue(isFile(joinPath(existing, "mine.txt")), "must not be deleted")
 
             // A copied bundle leaves no mark on disk; the record we wrote when we placed it is the only thing that
             // makes it ours to replace.
@@ -266,8 +267,8 @@ class MacOsPlatformTest {
             val claims = Claims()
             placeApp(bundle, apps, false, packageDir, recorded, claims)
             claims.discard()
-            assertTrue(isFile(Path(existing, "Contents/Info.plist")))
-            assertNull(entryKind(Path(existing, "mine.txt")))
+            assertTrue(isFile(joinPath(existing, "Contents/Info.plist")))
+            assertNull(entryKind(joinPath(existing, "mine.txt")))
         }
     }
 
@@ -283,24 +284,24 @@ class MacOsPlatformTest {
      * its folder should be — so placement fails after every binary link and app copy is in place.
      */
     private fun failingUpgrade(tmp: Path): FailingUpgrade {
-        val payload = Path(tmp, "payload")
+        val payload = joinPath(tmp, "payload")
         program(payload, "tool", "#!/bin/sh\necho 2.0\n")
-        Path(payload, "README").write("2.0")
-        val blocker = Path(tmp, "blocker")
+        joinPath(payload, "README").write("2.0")
+        val blocker = joinPath(tmp, "blocker")
         blocker.write("not a folder")
-        val extras = listOf(ExtraPlacement("README", Path(blocker, "README"), LinkRole.Man))
-        return FailingUpgrade(payload, Path(tmp, "store/tool/2.0"), extras)
+        val extras = listOf(ExtraPlacement("README", joinPath(blocker, "README"), LinkRole.Man))
+        return FailingUpgrade(payload, joinPath(tmp, "store/tool/2.0"), extras)
     }
 
     @Test
     fun aFailedPlacementPutsTheOldLinksBack() {
         withTempDir { tmp ->
-            val oldTarget = Path(tmp, "store/tool/1.0/tool")
+            val oldTarget = joinPath(tmp, "store/tool/1.0/tool")
             createDirAll(oldTarget.parent!!)
             oldTarget.write("#!/bin/sh\necho 1.0\n")
-            val bin = Path(tmp, "bin")
+            val bin = joinPath(tmp, "bin")
             createDirAll(bin)
-            val link = Path(bin, "tool")
+            val link = joinPath(bin, "tool")
             symlink(oldTarget, link)
             val recorded = listOf(LinkRecord(link, oldTarget, LinkKind.Symlink, LinkRole.Binary))
             val upgrade = failingUpgrade(tmp)
@@ -310,7 +311,7 @@ class MacOsPlatformTest {
                     upgrade.payload,
                     upgrade.store,
                     bin,
-                    Path(tmp, "Applications"),
+                    joinPath(tmp, "Applications"),
                     name = "tool",
                     version = "2.0",
                     replacing = recorded,
@@ -325,24 +326,24 @@ class MacOsPlatformTest {
     @Test
     fun aFailedPlacementPutsTheOldAppCopyBack() {
         withTempDir { tmp ->
-            val oldBundle = Path(tmp, "store/tool/1.0/Tool.app")
-            createDirAll(Path(oldBundle, "Contents"))
-            Path(oldBundle, "Contents/Info.plist").write("1.0")
-            val apps = Path(tmp, "Applications")
-            val copy = Path(apps, "Tool.app")
-            createDirAll(Path(copy, "Contents"))
-            Path(copy, "Contents/Info.plist").write("1.0")
+            val oldBundle = joinPath(tmp, "store/tool/1.0/Tool.app")
+            createDirAll(joinPath(oldBundle, "Contents"))
+            joinPath(oldBundle, "Contents/Info.plist").write("1.0")
+            val apps = joinPath(tmp, "Applications")
+            val copy = joinPath(apps, "Tool.app")
+            createDirAll(joinPath(copy, "Contents"))
+            joinPath(copy, "Contents/Info.plist").write("1.0")
             val recorded = listOf(LinkRecord(copy, oldBundle, LinkKind.CopiedApp, LinkRole.Binary))
             val upgrade = failingUpgrade(tmp)
-            val newBundle = Path(upgrade.payload, "Tool.app/Contents")
+            val newBundle = joinPath(upgrade.payload, "Tool.app/Contents")
             createDirAll(newBundle)
-            Path(newBundle, "Info.plist").write("2.0")
+            joinPath(newBundle, "Info.plist").write("2.0")
 
             val plan =
                 placement(
                     upgrade.payload,
                     upgrade.store,
-                    Path(tmp, "bin"),
+                    joinPath(tmp, "bin"),
                     apps,
                     name = "tool",
                     version = "2.0",
@@ -351,7 +352,7 @@ class MacOsPlatformTest {
                     extras = upgrade.extras,
                 )
             assertFailsWith<KetchError> { MacOsPlatform().place(plan) }
-            assertEquals("1.0", Path(copy, "Contents/Info.plist").read())
+            assertEquals("1.0", joinPath(copy, "Contents/Info.plist").read())
             assertEquals(listOf("Tool.app"), listDir(apps), "no aside left behind")
         }
     }
@@ -359,19 +360,19 @@ class MacOsPlatformTest {
     @Test
     fun aFailedRelinkKeepsTheLivePrefixOverAStaleOldCopy() {
         withTempDir { tmp ->
-            val store = Path(tmp, "store/tool/1.0")
+            val store = joinPath(tmp, "store/tool/1.0")
             val tool = program(store, "tool", "#!/bin/sh\necho live\n")
-            Path(store, "README").write("live")
+            joinPath(store, "README").write("live")
             // Left by an earlier swap that was interrupted before its cleanup.
-            val stale = Path(tmp, "store/tool/1.0.old")
+            val stale = joinPath(tmp, "store/tool/1.0.old")
             createDirAll(stale)
-            Path(stale, "tool").write("stale")
-            val blocker = Path(tmp, "blocker")
+            joinPath(stale, "tool").write("stale")
+            val blocker = joinPath(tmp, "blocker")
             blocker.write("not a folder")
-            val extras = listOf(ExtraPlacement("README", Path(blocker, "README"), LinkRole.Man))
+            val extras = listOf(ExtraPlacement("README", joinPath(blocker, "README"), LinkRole.Man))
 
             // Relink and rollback place a payload that is already the store.
-            val plan = placement(store, store, Path(tmp, "bin"), Path(tmp, "Applications"), name = "tool", extras = extras)
+            val plan = placement(store, store, joinPath(tmp, "bin"), joinPath(tmp, "Applications"), name = "tool", extras = extras)
             assertFailsWith<KetchError> { MacOsPlatform().place(plan) }
             assertEquals("#!/bin/sh\necho live\n", tool.read())
         }
@@ -380,11 +381,11 @@ class MacOsPlatformTest {
     @Test
     fun aLinkThatNowPointsElsewhereSurvivesUninstall() {
         withTempDir { tmp ->
-            val ours = Path(tmp, "ours")
-            val theirs = Path(tmp, "theirs")
+            val ours = joinPath(tmp, "ours")
+            val theirs = joinPath(tmp, "theirs")
             ours.write("x")
             theirs.write("x")
-            val link = Path(tmp, "tool")
+            val link = joinPath(tmp, "tool")
             symlink(theirs, link)
 
             val record = LinkRecord(link, ours, LinkKind.Symlink, LinkRole.Binary)

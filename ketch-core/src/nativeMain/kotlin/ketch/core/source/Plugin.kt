@@ -11,6 +11,7 @@
 //   download <url> <dest>     -> only when capabilities.download is true
 package ketch.core.source
 
+import fs.joinPath
 import ketch.core.cancel.Cancel
 import ketch.core.config.envOs
 import ketch.core.config.splitPathVar
@@ -153,7 +154,7 @@ fun discover(cx: Ctx): List<Result<PluginSource>> {
         // Directory order is arbitrary; a stable list keeps `plugin list` and any shadowing warning reproducible.
         val names = pluginNames(dir).sortedWith(BYTE_ORDER)
         for (name in names) {
-            val path = Path(dir, name)
+            val path = joinPath(dir, name)
             if (name in seen || !platform.isExecutable(path)) continue
             seen += name
             found +=

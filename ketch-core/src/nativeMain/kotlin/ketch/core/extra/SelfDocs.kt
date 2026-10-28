@@ -2,6 +2,7 @@ package ketch.core.extra
 
 import fs.atomic
 import fs.createDirAll
+import fs.joinPath
 import ketch.core.error.fsKitAt
 import ketch.core.model.CompletionShell
 import ketch.core.model.ExtraKind
@@ -31,7 +32,7 @@ fun writeKetchDocs(
     val extras = writeKetchManPages(prefix, docs).toMutableList()
     for (shell in CompletionShell.entries) {
         val rel = generatedCompletionRel(shell)
-        val path = Path(prefix, rel)
+        val path = joinPath(prefix, rel)
         val parent = path.parent ?: prefix
         fsKitAt(parent) { createDirAll(parent) }
         fsKitAt(path) { atomic(path, docs.completion(shell)) }
@@ -46,5 +47,5 @@ private fun writeKetchManPages(
     docs: SelfDocs,
 ): List<ExtraPath> {
     val dirRel = "share/man/man1"
-    return docs.manPages(Path(prefix, dirRel)).map { ExtraPath.Plain("$dirRel/${it.name}") }
+    return docs.manPages(joinPath(prefix, dirRel)).map { ExtraPath.Plain("$dirRel/${it.name}") }
 }

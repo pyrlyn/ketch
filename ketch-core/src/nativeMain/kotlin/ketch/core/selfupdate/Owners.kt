@@ -4,6 +4,7 @@ import fs.EntryKind
 import fs.canon
 import fs.entryKind
 import fs.isDir
+import fs.joinPath
 import ketch.core.config.Config
 import ketch.core.config.HOST_WINDOWS
 import ketch.core.config.RENAMED_REPOS
@@ -33,7 +34,7 @@ internal fun staleAsideFrom(
     binDir: Path,
     running: Path?,
 ): DoctorCheck? {
-    val paths = asideCandidates(Path(binDir, bootstrapBinaryName())).toMutableList()
+    val paths = asideCandidates(joinPath(binDir, bootstrapBinaryName())).toMutableList()
     running?.let { exe -> asideCandidates(exe).filter { it !in paths }.forEach { paths += it } }
     val present = paths.filter { entryKind(canon(it)) == EntryKind.File }
     if (present.isEmpty()) return null
@@ -54,7 +55,7 @@ internal fun staleAsideFrom(
  */
 fun caskDir(): Path? = caskDirIn(brewPrefixes())
 
-internal fun caskDirIn(prefixes: List<Path>): Path? = prefixes.map { Path(Path(it, "Caskroom"), SELF_NAME) }.firstOrNull(::isDir)
+internal fun caskDirIn(prefixes: List<Path>): Path? = prefixes.map { joinPath(joinPath(it, "Caskroom"), SELF_NAME) }.firstOrNull(::isDir)
 
 /**
  * Where Homebrew might live: its own answer first, then the two standard prefixes for Apple Silicon and Intel.
@@ -75,7 +76,7 @@ private fun brewPrefixes(): List<Path> {
 internal fun brewBinary(cask: Path): String =
     cask.parent
         ?.parent
-        ?.let { Path(Path(it, "bin"), "brew") }
+        ?.let { joinPath(joinPath(it, "bin"), "brew") }
         ?.takeIf { entryKind(canon(it)) == EntryKind.File }
         ?.toString() ?: "brew"
 
@@ -114,7 +115,7 @@ internal fun miseToolDirIn(
 ): Path? =
     dataDirs.firstNotNullOfOrNull { data ->
         // The data dir may itself sit behind a symlink; `exe` is canonical.
-        val installs = canon(Path(data, "installs"))
+        val installs = canon(joinPath(data, "installs"))
         if (!pathIsStrictWithin(exe, installs)) return@firstNotNullOfOrNull null
         val depth = rustComponents(installs).size + 1
         generateSequence(exe) { it.parent }.firstOrNull { rustComponents(it).size == depth }
@@ -185,7 +186,7 @@ private fun runOwner(
 private fun miseDataDirs(): List<Path> {
     val found = listOfNotNull(envOs("MISE_DATA_DIR")?.takeIf { it.isNotEmpty() }?.let(::Path)).toMutableList()
     // mise follows XDG on macOS too, not Application Support.
-    val default = if (HOST_WINDOWS) localDataDir()?.let { Path(it, "mise") } else Path(dataHome(), "mise")
+    val default = if (HOST_WINDOWS) localDataDir()?.let { joinPath(it, "mise") } else joinPath(dataHome(), "mise")
     if (default != null && default !in found) found += default
     return found
 }

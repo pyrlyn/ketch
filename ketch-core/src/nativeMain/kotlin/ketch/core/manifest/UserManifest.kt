@@ -6,6 +6,7 @@ import fs.FsException
 import fs.WriteOptions
 import fs.canonicalize
 import fs.createDirAll
+import fs.joinPath
 import fs.readText
 import ketch.core.config.Config
 import ketch.core.config.sanitizeComponent
@@ -25,7 +26,7 @@ private const val NEW_MANIFEST_MODE = 0b110_000_000
 fun userManifestPath(
     cfg: Config,
     name: String,
-): Path = Path(cfg.manifestDir, "${sanitizeComponent(name)}.toml")
+): Path = joinPath(cfg.manifestDir, "${sanitizeComponent(name)}.toml")
 
 /** Serialise a manifest for a user manifest file. */
 fun toToml(manifest: Manifest): String = render(manifest, "manifest")

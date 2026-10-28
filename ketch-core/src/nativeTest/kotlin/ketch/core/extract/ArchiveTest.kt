@@ -7,6 +7,7 @@ import archive.bzip2
 import archive.gzip
 import archive.gzipSource
 import fs.bytesIfExists
+import fs.joinPath
 import ketch.core.testing.withTempDir
 import kotlinx.io.Buffer
 import kotlinx.io.files.Path
@@ -27,13 +28,13 @@ class ArchiveTest {
     @Test
     fun detectionSeparatesTarGzFromALoneGz(): Unit =
         withTempDir { tmp ->
-            val tarball = Path(tmp, "a.gz")
+            val tarball = joinPath(tmp, "a.gz")
             write(tarball, tarGzWith(Triple("x", bytes("y"), octal("644"))))
             var head = readHead(tarball)
             assertTrue(TarGzExtractor.detect(tarball, head))
             assertFalse(GzFileExtractor.detect(tarball, head))
 
-            val plain = Path(tmp, "jq.gz")
+            val plain = joinPath(tmp, "jq.gz")
             write(plain, gzip(bytes("\u007fELF and then some payload")))
             head = readHead(plain)
             assertFalse(TarGzExtractor.detect(plain, head))
@@ -43,7 +44,7 @@ class ArchiveTest {
     @Test
     fun xzPlaintextArrivesInTheCallersBuffer(): Unit =
         withTempDir { tmp ->
-            val src = Path(tmp, "payload.xz")
+            val src = joinPath(tmp, "payload.xz")
             write(src, XZ_ZS)
             val got = Buffer()
             xzReader(SystemFileSystem.source(src)).use { decoder ->
@@ -61,7 +62,7 @@ class ArchiveTest {
     @Test
     fun anXzDictionaryOverTheMemoryLimitIsRefused(): Unit =
         withTempDir { tmp ->
-            val src = Path(tmp, "payload.xz")
+            val src = joinPath(tmp, "payload.xz")
             write(src, XZ_HELLO)
             xzReader(SystemFileSystem.source(src), memLimit = 1024).use { decoder ->
                 val error = assertFailsWith<ArchiveException> { decoder.readAtMostTo(Buffer(), 16) }
@@ -72,23 +73,23 @@ class ArchiveTest {
     @Test
     fun aTarXzExtractsThroughTheStreamingDecoder(): Unit =
         withTempDir { tmp ->
-            val src = Path(tmp, "tool.tar.xz")
+            val src = joinPath(tmp, "tool.tar.xz")
             write(src, TAR_XZ_TOOL)
             val dest = dir(tmp, "out")
             TarXzExtractor.extract(src, dest)
-            assertContentEquals(bytes("payload"), bytesIfExists(Path(dest, "bin/tool")))
+            assertContentEquals(bytes("payload"), bytesIfExists(joinPath(dest, "bin/tool")))
         }
 
     @Test
     fun detectionSeparatesTarXzFromALoneXz(): Unit =
         withTempDir { tmp ->
-            val tarball = Path(tmp, "a.xz")
+            val tarball = joinPath(tmp, "a.xz")
             write(tarball, TAR_XZ_XY)
             var head = readHead(tarball)
             assertTrue(TarXzExtractor.detect(tarball, head))
             assertFalse(XzFileExtractor.detect(tarball, head))
 
-            val plain = Path(tmp, "jq.xz")
+            val plain = joinPath(tmp, "jq.xz")
             write(plain, XZ_ELF_LONG)
             head = readHead(plain)
             assertFalse(TarXzExtractor.detect(plain, head))
@@ -98,23 +99,23 @@ class ArchiveTest {
     @Test
     fun aLoneXzFileIsExtractedAsTheProgram(): Unit =
         withTempDir { tmp ->
-            val src = Path(tmp, "jq.xz")
+            val src = joinPath(tmp, "jq.xz")
             write(src, XZ_ELF)
             val dest = dir(tmp, "out")
             XzFileExtractor.extract(src, dest)
-            assertContentEquals(bytes("\u007fELF payload"), bytesIfExists(Path(dest, "jq")))
+            assertContentEquals(bytes("\u007fELF payload"), bytesIfExists(joinPath(dest, "jq")))
         }
 
     @Test
     fun detectionSeparatesTarBz2FromALoneBz2(): Unit =
         withTempDir { tmp ->
-            val tarball = Path(tmp, "a.bz2")
+            val tarball = joinPath(tmp, "a.bz2")
             write(tarball, bzip2(TarWriter().apply { file("x", bytes("y"), octal("644")) }.finish()))
             var head = readHead(tarball)
             assertTrue(TarBz2Extractor.detect(tarball, head))
             assertFalse(Bz2FileExtractor.detect(tarball, head))
 
-            val plain = Path(tmp, "jq.bz2")
+            val plain = joinPath(tmp, "jq.bz2")
             write(plain, bzip2(bytes("\u007fELF payload")))
             head = readHead(plain)
             assertFalse(TarBz2Extractor.detect(plain, head))
@@ -124,7 +125,7 @@ class ArchiveTest {
     @Test
     fun aLoneGzipBombStopsAtTheBudget(): Unit =
         withTempDir { tmp ->
-            val src = Path(tmp, "tool.gz")
+            val src = joinPath(tmp, "tool.gz")
             write(src, gzip(ByteArray(4 shl 20)))
             val dest = dir(tmp, "out")
             val message =
@@ -132,7 +133,7 @@ class ArchiveTest {
                     gzipSource(SystemFileSystem.source(src)).use { extractLoneFile(it, src, dest, ".gz", Budget(1L shl 20, 10)) }
                 }
             assertTrue("unpacks to more than" in message, message)
-            val written = sizeOf(Path(dest, "tool"))
+            val written = sizeOf(joinPath(dest, "tool"))
             assertTrue(written <= 1 shl 20, "wrote $written bytes past the budget")
         }
 
@@ -142,7 +143,7 @@ class ArchiveTest {
             val archive = TarWriter().apply { file("big", ByteArray(2 shl 20), octal("644")) }.finish()
             val message = refusal { unpackTar(source(archive), dest, Budget(1L shl 20, 10)) }
             assertTrue("unpacks to more than" in message, message)
-            assertFalse(exists(Path(dest, "big")))
+            assertFalse(exists(joinPath(dest, "big")))
         }
 
     @Test
@@ -156,7 +157,7 @@ class ArchiveTest {
     @Test
     fun aZipWithTooManyMembersIsRefused(): Unit =
         withTempDir { tmp ->
-            val src = Path(tmp, "many.zip")
+            val src = joinPath(tmp, "many.zip")
             write(src, ZipWriter().apply { repeat(20) { file("f$it", ByteArray(0)) } }.finish())
             val dest = dir(tmp, "out")
             val message = refusal { unpackZip(src, dest, Budget(Long.MAX_VALUE, 10)) }
@@ -166,12 +167,12 @@ class ArchiveTest {
     @Test
     fun aZipBombStopsAtTheBudget(): Unit =
         withTempDir { tmp ->
-            val src = Path(tmp, "bomb.zip")
+            val src = joinPath(tmp, "bomb.zip")
             write(src, ZipWriter().apply { file("zeros", ByteArray(4 shl 20)) }.finish())
             val dest = dir(tmp, "out")
             val message = refusal { unpackZip(src, dest, Budget(1L shl 20, 10)) }
             assertTrue("unpacks to more than" in message, message)
-            val written = sizeOf(Path(dest, "zeros"))
+            val written = sizeOf(joinPath(dest, "zeros"))
             assertTrue(written <= 1 shl 20, "wrote $written bytes past the budget")
         }
 

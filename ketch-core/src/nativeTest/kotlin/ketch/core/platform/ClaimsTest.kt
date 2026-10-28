@@ -3,6 +3,7 @@ package ketch.core.platform
 import fs.createDirAll
 import fs.entryKind
 import fs.isDir
+import fs.joinPath
 import fs.listDir
 import ketch.core.testing.read
 import ketch.core.testing.withTempDir
@@ -17,16 +18,16 @@ class ClaimsTest {
     @Test
     fun restorePutsEveryOccupantBackAndRemovesWhatWasNew() {
         withTempDir { tmp ->
-            val occupied = Path(tmp, "tool")
+            val occupied = joinPath(tmp, "tool")
             occupied.write("old")
-            val empty = Path(tmp, "other")
+            val empty = joinPath(tmp, "other")
 
             val claims = Claims()
             claims.take(occupied)
             claims.take(empty)
             assertNull(entryKind(occupied), "moved out of the way")
             occupied.write("new")
-            createDirAll(Path(empty, "half"))
+            createDirAll(joinPath(empty, "half"))
 
             claims.restore()
 
@@ -39,16 +40,16 @@ class ClaimsTest {
     @Test
     fun discardDropsThePreviousOccupantsAndKeepsTheNewEntries() {
         withTempDir { tmp ->
-            val occupied = Path(tmp, "Tool.app")
-            createDirAll(Path(occupied, "Contents"))
+            val occupied = joinPath(tmp, "Tool.app")
+            createDirAll(joinPath(occupied, "Contents"))
 
             val claims = Claims()
             claims.take(occupied)
-            createDirAll(Path(occupied, "New"))
+            createDirAll(joinPath(occupied, "New"))
             claims.discard()
 
-            assertTrue(isDir(Path(occupied, "New")))
-            assertNull(entryKind(Path(occupied, "Contents")))
+            assertTrue(isDir(joinPath(occupied, "New")))
+            assertNull(entryKind(joinPath(occupied, "Contents")))
             assertEquals(1, listDir(tmp).size)
         }
     }

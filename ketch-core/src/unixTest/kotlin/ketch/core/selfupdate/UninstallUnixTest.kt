@@ -5,6 +5,7 @@ package ketch.core.selfupdate
 import fs.EntryKind
 import fs.createDirAll
 import fs.entryKind
+import fs.joinPath
 import fs.setMode
 import fs.symlink
 import ketch.core.error.KetchError
@@ -44,30 +45,30 @@ class UninstallUnixTest {
     @Test
     fun uninstallDoesNotWipeHomeReachedThroughASymlink(): Unit =
         withTempDir { tmp ->
-            val home = Path(tmp, "home")
+            val home = joinPath(tmp, "home")
             createDirAll(home)
-            val link = Path(tmp, "home-link")
+            val link = joinPath(tmp, "home-link")
             symlink(home, link)
             val cfg = cfg(link)
             // Even a marker does not make the home directory ketch's to empty.
             cfg.markRoot()
             createDirAll(cfg.binDir)
-            Path(cfg.binDir, "keep-me").write("stay")
+            joinPath(cfg.binDir, "keep-me").write("stay")
 
             cfg.removeRoot(home)
 
-            assertEquals(EntryKind.File, entryKind(Path(Path(home, "bin"), "keep-me")))
+            assertEquals(EntryKind.File, entryKind(joinPath(joinPath(home, "bin"), "keep-me")))
         }
 
     /** Stands in for Windows refusing to delete the running `ketch.exe`: a read-only package folder keeps its file, and so the store and the root. */
     @Test
     fun whatCannotBeRemovedNowIsHandedOnToFinishLater(): Unit =
         withTempDir { tmp ->
-            val home = Path(tmp, "home")
-            val cfg = cfg(Path(tmp, ".ketch"))
-            val locked = Path(cfg.storeDir, SELF_NAME)
+            val home = joinPath(tmp, "home")
+            val cfg = cfg(joinPath(tmp, ".ketch"))
+            val locked = joinPath(cfg.storeDir, SELF_NAME)
             createDirAll(locked)
-            Path(locked, "ketch").write("running")
+            joinPath(locked, "ketch").write("running")
             createDirAll(cfg.binDir)
             cfg.markRoot()
             setMode(locked, READ_ONLY)
@@ -95,11 +96,11 @@ class UninstallUnixTest {
     @Test
     fun uninstallHoldsTheLockWhileTheShellBlockAndTheRootGo(): Unit =
         withTempDir { tmp ->
-            val cfg = cfg(Path(tmp, ".ketch"))
+            val cfg = cfg(joinPath(tmp, ".ketch"))
             createDirAll(cfg.binDir)
-            Path(cfg.binDir, "ketch").write("bin")
+            joinPath(cfg.binDir, "ketch").write("bin")
             cfg.markRoot()
-            val fifo = Path(tmp, ".bashrc")
+            val fifo = joinPath(tmp, ".bashrc")
             assertEquals(0, mkfifo(fifo.toString(), 0b110_000_000.convert()), "mkfifo failed")
             val plan = UninstallPlan(root = cfg.root, shellFiles = listOf(fifo))
             val block = "# kept\n# >>> ketch >>>\nexport PATH=\"/tmp/ketch/bin:\$PATH\"\n# <<< ketch <<<\n# also kept\n"

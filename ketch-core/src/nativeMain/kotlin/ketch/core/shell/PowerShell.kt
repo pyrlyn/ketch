@@ -2,6 +2,7 @@
 // reads and writes the user's registry values.
 package ketch.core.shell
 
+import fs.joinPath
 import ketch.core.config.HOST_WINDOWS
 import ketch.core.error.KetchError
 import ketch.core.platform.documentsDir
@@ -35,7 +36,7 @@ enum class PowerShell(
     ;
 
     /** The CurrentUserAllHosts profile under [documents]: what `$PROFILE.CurrentUserAllHosts` names, read by every host. */
-    fun profile(documents: Path) = Path(Path(documents, dir), "profile.ps1")
+    fun profile(documents: Path) = joinPath(joinPath(documents, dir), "profile.ps1")
 
     companion object {
         /** Both editions, the current one first. */

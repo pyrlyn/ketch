@@ -7,11 +7,13 @@ package ketch.core.source
 import fs.EntryKind
 import fs.FsException
 import fs.Links
+import fs.PATH_SEPARATOR
 import fs.canonicalize
 import fs.copyFile
 import fs.createDirAll
 import fs.entryKind
 import fs.isDir
+import fs.joinPath
 import fs.linkMode
 import fs.readLink
 import fs.walk
@@ -135,7 +137,7 @@ fun absolutePath(id: String): Path {
     if (raw.isEmpty()) throw KetchError.Msg("local path is empty")
     if (Path(raw).isAbsolute) return Path(raw)
     val cwd = currentDir() ?: throw KetchError.fsKit(Path("."), FsException.ofErrno(Path(".")))
-    return Path(cwd, raw)
+    return joinPath(cwd, raw)
 }
 
 /** Absolute path that must exist (as a file, symlink, or `.app` directory). */
@@ -217,7 +219,7 @@ internal fun materializeLocalSymlink(
 ) {
     val target = readLink(symlink) ?: throw KetchError.fsKit(symlink, FsException.ofErrno(symlink))
     // Rust `Path::join`: an absolute target stands alone.
-    val resolved = if (target.isAbsolute) target else Path(symlink.parent ?: Path("."), target.toString())
+    val resolved = if (target.isAbsolute) target else joinPath(symlink.parent ?: Path("."), target.toString())
     // Last resort after the target itself: copying the link follows it for file content.
     val file = listOf(resolved, symlink).firstOrNull { isFile(it) && (it == resolved || !isDir(resolved)) }
     when {
@@ -261,7 +263,8 @@ fun sha256Tree(root: Path): String {
         ioAt(root) {
             walk(root).filter { it.kind == EntryKind.File || it.kind == EntryKind.Symlink }.map { it.path }.toList()
         }.sortedWith(PATH_ORDER)
-    val prefix = root.toString().trimEnd('/') + "/"
+    // Rust strips the root and hashes what is left as the host spells it, so Windows hashes `\`.
+    val prefix = root.toString().let { if (it.endsWith('/') || it.endsWith(PATH_SEPARATOR)) it else "$it$PATH_SEPARATOR" }
     for (path in paths) {
         val rel = path.toString().removePrefix(prefix)
         val mode = linkMode(path) ?: throw KetchError.fsKit(path, FsException.ofErrno(path))

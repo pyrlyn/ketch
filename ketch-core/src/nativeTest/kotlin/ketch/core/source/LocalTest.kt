@@ -1,6 +1,7 @@
 package ketch.core.source
 
 import fs.createDirAll
+import fs.joinPath
 import fs.setMode
 import ketch.core.config.HOST_WINDOWS
 import ketch.core.config.currentDir
@@ -27,10 +28,10 @@ class LocalTest {
     @Test
     fun twoIdenticalTreesHashTheSame(): Unit =
         withTempDir { tmp ->
-            val (a, b) = Path(tmp, "a") to Path(tmp, "b")
+            val (a, b) = joinPath(tmp, "a") to joinPath(tmp, "b")
             for (dir in listOf(a, b)) {
-                createDirAll(Path(dir, "Contents"))
-                Path(dir, "Contents/Info.plist").write("x")
+                createDirAll(joinPath(dir, "Contents"))
+                joinPath(dir, "Contents/Info.plist").write("x")
             }
             assertEquals(sha256Tree(a), sha256Tree(b))
         }
@@ -38,9 +39,9 @@ class LocalTest {
     @Test
     fun aChangedFileChangesTheTreeHash(): Unit =
         withTempDir { dir ->
-            Path(dir, "a").write("one")
+            joinPath(dir, "a").write("one")
             val first = sha256Tree(dir)
-            Path(dir, "a").write("two")
+            joinPath(dir, "a").write("two")
             assertNotEquals(first, sha256Tree(dir))
         }
 
@@ -48,13 +49,13 @@ class LocalTest {
     @Test
     fun twoFilesDoNotHashLikeOneFileThatEmbedsTheSeparator(): Unit =
         withTempDir { tmp ->
-            val split = Path(tmp, "split")
+            val split = joinPath(tmp, "split")
             createDirAll(split)
-            Path(split, "a").write("X")
-            Path(split, "b").write("Y")
-            val fused = Path(tmp, "fused")
+            joinPath(split, "a").write("X")
+            joinPath(split, "b").write("Y")
+            val fused = joinPath(tmp, "fused")
             createDirAll(fused)
-            Path(fused, "a").write("Xb\u0000Y")
+            joinPath(fused, "a").write("Xb\u0000Y")
             assertNotEquals(sha256Tree(split), sha256Tree(fused))
         }
 
@@ -62,8 +63,8 @@ class LocalTest {
     @Test
     fun theTreeHashIsTheFramingRustWrites(): Unit =
         withTempDir { dir ->
-            Path(dir, "a").write("X")
-            setMode(Path(dir, "a"), "644".toInt(8))
+            joinPath(dir, "a").write("X")
+            setMode(joinPath(dir, "a"), "644".toInt(8))
             // Windows keeps only the read-only attribute, which Rust hashes as 0o666 or 0o444.
             val mode = if (HOST_WINDOWS) 0xb6 else 0xa4
             val record =
@@ -92,7 +93,7 @@ class LocalTest {
     @Test
     fun classifiesABareBinary(): Unit =
         withTempDir { dir ->
-            val bin = Path(dir, "tool")
+            val bin = joinPath(dir, "tool")
             bin.write("#!/bin/sh\necho hi\n")
             assertEquals(LocalKind.Binary, classify(bin))
         }
@@ -100,7 +101,7 @@ class LocalTest {
     @Test
     fun refusesAPlainDirectory(): Unit =
         withTempDir { dir ->
-            val nested = Path(dir, "stuff")
+            val nested = joinPath(dir, "stuff")
             createDirAll(nested)
             assertTrue("directory" in assertFailsWith<KetchError> { classify(nested) }.message)
         }
@@ -108,14 +109,14 @@ class LocalTest {
     @Test
     fun classifiesAnAppBundle(): Unit =
         withTempDir { dir ->
-            val app = Path(dir, "Thing.app")
-            createDirAll(Path(app, "Contents/MacOS"))
+            val app = joinPath(dir, "Thing.app")
+            createDirAll(joinPath(app, "Contents/MacOS"))
             assertEquals(LocalKind.App, classify(app))
         }
 
     @Test
     fun absolutePathResolvesRelative() {
-        assertEquals(Path(currentDir()!!, "rel/tool"), absolutePath("rel/tool"))
+        assertEquals(joinPath(currentDir()!!, "rel/tool"), absolutePath("rel/tool"))
         val abs = if (HOST_WINDOWS) "C:\\ketch-local-abs-tool" else "/tmp/ketch-local-abs-tool"
         assertEquals(Path(abs), absolutePath(abs))
     }

@@ -3,6 +3,7 @@ package ketch.core.extract
 import archive.TarWriter
 import fs.bytesIfExists
 import fs.createDirAll
+import fs.joinPath
 import ketch.core.testing.withTempDir
 import kotlinx.io.files.Path
 import kotlin.test.Test
@@ -20,7 +21,7 @@ class ArchiveLinksUnixTest {
                 unpackTar(source(plantedSymlinkTar()), dest, unlimited())
             }
             // Member 2 would have been created here had the link been followed.
-            assertFalse(exists(Path(dest, "e")), "the symlink was resolved anyway")
+            assertFalse(exists(joinPath(dest, "e")), "the symlink was resolved anyway")
         }
 
     /** Each target passes the lexical check alone; through `L -> .` they all resolve above the payload. */
@@ -44,18 +45,18 @@ class ArchiveLinksUnixTest {
     @Test
     fun resolvesInsideFollowsEveryLinkAndJudgesDanglingOnesByTheirTarget(): Unit =
         withTempDir { outer ->
-            val root = Path(outer, "root")
-            createDirAll(Path(root, "bin"))
-            write(Path(root, "bin/tool"), bytes("x"))
+            val root = joinPath(outer, "root")
+            createDirAll(joinPath(root, "bin"))
+            write(joinPath(root, "bin/tool"), bytes("x"))
 
             fun link(
                 name: String,
                 target: String,
-            ) = Path(root, name).also { fs.symlink(Path(target), it) }
+            ) = joinPath(root, name).also { fs.symlink(Path(target), it) }
             assertTrue(resolvesInside(link("alias", "bin/tool"), root))
             assertTrue(resolvesInside(link("dangling", "bin/missing"), root))
             link("self", ".")
-            assertTrue(resolvesInside(Path(root, "self/self/bin/tool"), root))
+            assertTrue(resolvesInside(joinPath(root, "self/self/bin/tool"), root))
             assertFalse(resolvesInside(link("up", "self/.."), root))
             assertFalse(resolvesInside(link("gone", "self/../nothing"), root))
             assertFalse(resolvesInside(link("abs", "/etc/passwd"), root))
@@ -73,7 +74,7 @@ class ArchiveLinksUnixTest {
                         symlink("bin/tool-alias", "tool")
                     }.finish()
             unpackTar(source(archive), dest, unlimited())
-            val alias = Path(dest, "bin/tool-alias")
+            val alias = joinPath(dest, "bin/tool-alias")
             assertTrue(isSymlink(alias))
             assertContentEquals(bytes("hi"), bytesIfExists(alias))
         }
@@ -92,7 +93,7 @@ class ArchiveLinksUnixTest {
                         file("bin/tool", bytes("hi"), octal("755"))
                     }.finish()
             unpackTar(source(archive), dest, unlimited())
-            val alias = Path(dest, "bin/tool-alias")
+            val alias = joinPath(dest, "bin/tool-alias")
             assertTrue(isSymlink(alias))
             assertContentEquals(bytes("hi"), bytesIfExists(alias))
         }

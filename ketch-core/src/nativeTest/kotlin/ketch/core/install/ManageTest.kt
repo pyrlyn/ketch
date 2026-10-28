@@ -3,6 +3,7 @@ package ketch.core.install
 import fs.createDirAll
 import fs.entryKind
 import fs.isDir
+import fs.joinPath
 import fs.listDir
 import ketch.core.cancel.Cancel
 import ketch.core.config.Config
@@ -26,7 +27,7 @@ import kotlin.test.assertTrue
 class ManageTest {
     private fun <T> withLocal(body: (Ctx, Path) -> T): T =
         withTempDir { tmp ->
-            val cfg = Config.load(Path(tmp, "root"), Report.silent())
+            val cfg = Config.load(joinPath(tmp, "root"), Report.silent())
             body(Ctx(cfg, Report.silent()), tmp)
         }
 
@@ -91,10 +92,11 @@ class ManageTest {
             val reqs = names.map { localRequest(program(tmp, it, "#!/bin/sh\necho $it\n")) }
             val state = State()
 
-            val outcomes = batch(cx, SourceRegistry.load(cx), state, reqs, 2)
+            val placed = batch(cx, SourceRegistry.load(cx), state, reqs, 2).map { it.getOrThrow().pkg.name }
 
-            assertEquals(names, outcomes.map { it.getOrThrow().pkg.name })
-            assertEquals(names, state.names().sorted())
+            // Windows names a local file after its whole path, as Rust does; the order is what this checks.
+            assertEquals(names, placed.map { it.substringAfterLast('-') })
+            assertEquals(placed.sorted(), state.names().sorted())
         }
 
     @Test
@@ -115,22 +117,22 @@ class ManageTest {
         withLocal { cx, tmp ->
             val tool = program(tmp, "gonetool", "#!/bin/sh\necho hi\n")
             val state = State()
-            install(cx, SourceRegistry.load(cx), state, localRequest(tool))
+            val name = install(cx, SourceRegistry.load(cx), state, localRequest(tool)).pkg.name
             // Named by the record: Windows places `gonetool.exe`.
             val link =
                 state
-                    .get("gonetool")!!
+                    .get(name)!!
                     .links
                     .single()
                     .link
             assertTrue(entryKind(link) != null, "linked first")
 
-            assertEquals("gonetool", uninstall(cx, state, "gonetool").name)
+            assertEquals(name, uninstall(cx, state, name).name)
 
-            assertNull(state.get("gonetool"))
+            assertNull(state.get(name))
             assertNull(entryKind(link), "no link")
-            assertNull(entryKind(Path(cx.cfg.storeDir, "gonetool")), "no store folder")
-            assertFailsWith<KetchError.NotInstalled> { uninstall(cx, state, "gonetool") }
+            assertNull(entryKind(joinPath(cx.cfg.storeDir, name)), "no store folder")
+            assertFailsWith<KetchError.NotInstalled> { uninstall(cx, state, name) }
         }
 
     @Test
@@ -138,22 +140,22 @@ class ManageTest {
         withLocal { cx, tmp ->
             val tool = program(tmp, "backtool", "#!/bin/sh\necho hi\n")
             val state = State()
-            install(cx, SourceRegistry.load(cx), state, localRequest(tool))
+            val name = install(cx, SourceRegistry.load(cx), state, localRequest(tool)).pkg.name
             val link =
                 state
-                    .get("backtool")!!
+                    .get(name)!!
                     .links
                     .single()
                     .link
 
-            unlink(cx, state, "backtool")
+            unlink(cx, state, name)
             assertNull(entryKind(link))
-            assertTrue(state.get("backtool")!!.links.isEmpty())
-            assertTrue(isDir(state.get("backtool")!!.prefix))
+            assertTrue(state.get(name)!!.links.isEmpty())
+            assertTrue(isDir(state.get(name)!!.prefix))
 
-            relink(cx, state, "backtool")
+            relink(cx, state, name)
             assertTrue(entryKind(link) != null)
-            assertTrue(state.get("backtool")!!.links.isNotEmpty())
+            assertTrue(state.get(name)!!.links.isNotEmpty())
         }
 
     @Test

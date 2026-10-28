@@ -8,6 +8,7 @@ import fs.EntryKind
 import fs.createDirAll
 import fs.entryKind
 import fs.isDir
+import fs.joinPath
 import fs.listDir
 import fs.readLink
 import ketch.core.error.KetchError
@@ -170,5 +171,5 @@ fun unwrapSingleDir(dir: Path): Path {
     // A lone `.app` is the commonest shape a macOS zip or dmg has, and it is the payload — not a wrapper around it.
     // Unwrapping here would hand back the bundle's `Contents`, and nothing downstream would ever see an app to
     // install.
-    return Path(dir, only).takeIf { isDir(it) && !isBundleName(only) } ?: dir
+    return joinPath(dir, only).takeIf { isDir(it) && !isBundleName(only) } ?: dir
 }

@@ -15,6 +15,7 @@ import archive.xzSource
 import fs.EntryKind
 import fs.copyFile
 import fs.entryKind
+import fs.joinPath
 import fs.removeFile
 import fs.setTimes
 import ketch.core.error.KetchError
@@ -200,7 +201,7 @@ object RawBinaryExtractor : Extractor {
         src: Path,
         dest: Path,
     ) {
-        val out = Path(dest, safeMemberPath(src.name.ifEmpty { "payload" }))
+        val out = joinPath(dest, safeMemberPath(src.name.ifEmpty { "payload" }))
         ioAt(out) { copyFile(src, out) }
         setUnixMode(out, EXECUTABLE)
     }
@@ -274,7 +275,7 @@ private class TarUnpack(
         entry: TarEntry,
     ) {
         val safe = safeMemberPath(entry.path)
-        val out = Path(dest, safe)
+        val out = joinPath(dest, safe)
         budget.entry()
         when (entry.type) {
             TarType.Directory -> {
@@ -362,7 +363,7 @@ private fun zipMember(
     // Finder metadata, not payload.
     if (name.startsWith("__MACOSX/") || name.endsWith("/.DS_Store")) return
     val safe = safeMemberPath(name)
-    val out = Path(dest, safe)
+    val out = joinPath(dest, safe)
     budget.entry()
     if (entry.isDir) return walkInside(dest, safe, create = true)
     val mode = entry.unixMode
@@ -415,7 +416,7 @@ internal fun extractLoneFile(
     budget: Budget,
 ) {
     val stem = src.name.ifEmpty { "payload" }.removeSuffix(suffix)
-    val out = Path(dest, safeMemberPath(stem))
+    val out = joinPath(dest, safeMemberPath(stem))
     budget.entry()
     writeFile(decoder, out, budget)
     setUnixMode(out, EXECUTABLE)

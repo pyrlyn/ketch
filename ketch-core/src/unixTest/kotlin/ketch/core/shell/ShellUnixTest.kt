@@ -2,6 +2,7 @@ package ketch.core.shell
 
 import fs.createDirAll
 import fs.entryKind
+import fs.joinPath
 import fs.mode
 import fs.setMode
 import fs.symlink
@@ -25,15 +26,15 @@ class ShellUnixTest {
     @Test
     fun aStartupFileKeepsItsModeAndANewOneGetsTheOrdinaryMode(): Unit =
         withTempDir { dir ->
-            val private = Path(dir, ".zshrc")
+            val private = joinPath(dir, ".zshrc")
             private.write("old")
             setMode(private, "600".toInt(8))
             write(private, "new")
             assertEquals("600".toInt(8), mode(private))
 
-            val reference = Path(dir, "by-std")
+            val reference = joinPath(dir, "by-std")
             SystemFileSystem.sink(reference).buffered().use { it.writeString("x") }
-            val fresh = Path(dir, "config/fish/config.fish")
+            val fresh = joinPath(dir, "config/fish/config.fish")
             write(fresh, "new")
             assertEquals(mode(reference), mode(fresh))
         }
@@ -41,16 +42,16 @@ class ShellUnixTest {
     @Test
     fun noRegistryEntriesAreFoundOffWindows(): Unit =
         withTempDir { tmp ->
-            assertEquals(emptyList(), registryEntries(Config.load(Path(tmp, "root"), Report.silent())))
+            assertEquals(emptyList(), registryEntries(Config.load(joinPath(tmp, "root"), Report.silent())))
         }
 
     // The Windows case is an 8.3 short name; a link is how the same folder gets a second spelling on a unix host.
     @Test
     fun aPathEntryThatResolvesToTheBinDirIsTheBinDir(): Unit =
         withTempDir { tmp ->
-            val bin = Path(tmp, "bin")
+            val bin = joinPath(tmp, "bin")
             createDirAll(bin)
-            val link = Path(tmp, "alias")
+            val link = joinPath(tmp, "alias")
             symlink(bin, link)
             val path = "/usr/bin;$link"
             assertTrue(windowsPathHas(path, bin))
@@ -61,20 +62,20 @@ class ShellUnixTest {
     @Test
     fun installFollowsALinkedStartupFileAndUninstallRestoresIt(): Unit =
         withTempDir { tmp ->
-            val home = Path(tmp, "home")
-            val dotfiles = Path(tmp, "dotfiles")
+            val home = joinPath(tmp, "home")
+            val dotfiles = joinPath(tmp, "dotfiles")
             createDirAll(home)
             createDirAll(dotfiles)
-            val real = Path(dotfiles, "zshrc")
+            val real = joinPath(dotfiles, "zshrc")
             real.write("# mine\n")
-            fs.symlink(real, Path(home, ".zshrc"))
+            fs.symlink(real, joinPath(home, ".zshrc"))
             withEnv(listOf("ZDOTDIR", "XDG_CONFIG_HOME"), mapOf("HOME" to home.toString(), "SHELL" to "/bin/zsh")) {
-                val cfg = Config.load(Path(tmp, "root"), Report.silent())
+                val cfg = Config.load(joinPath(tmp, "root"), Report.silent())
                 val change = install(cfg, Shell.Zsh, dryRun = false)
                 assertEquals(Outcome.Added, change.outcome)
-                assertEquals(fs.EntryKind.Symlink, entryKind(Path(home, ".zshrc")))
+                assertEquals(fs.EntryKind.Symlink, entryKind(joinPath(home, ".zshrc")))
                 assertTrue(cfg.binDir.toString() in real.read())
-                assertEquals(listOf(Path(home, ".zshrc")), configuredIn(cfg))
+                assertEquals(listOf(joinPath(home, ".zshrc")), configuredIn(cfg))
                 assertEquals(Outcome.Unchanged, install(cfg, Shell.Zsh, dryRun = false).outcome)
                 assertEquals(Outcome.Removed, uninstall(Shell.Zsh, dryRun = false).outcome)
                 assertEquals("# mine\n", real.read())

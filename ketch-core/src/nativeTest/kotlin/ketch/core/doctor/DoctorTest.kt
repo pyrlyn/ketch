@@ -3,6 +3,7 @@ package ketch.core.doctor
 import fs.canonicalize
 import fs.createDir
 import fs.createDirAll
+import fs.joinPath
 import ketch.core.config.Config
 import ketch.core.config.HOST_WINDOWS
 import ketch.core.model.nowUnix
@@ -28,9 +29,9 @@ class DoctorTest {
     @Test
     fun orphanStoreDirsAreNamesNotInState(): Unit =
         withTempDir { tmp ->
-            createDir(Path(tmp, "ghost"))
-            createDir(Path(tmp, "ripgrep"))
-            Path(tmp, "file").write("x")
+            createDir(joinPath(tmp, "ghost"))
+            createDir(joinPath(tmp, "ripgrep"))
+            joinPath(tmp, "file").write("x")
             assertEquals(listOf("ghost"), orphanStoreDirs(tmp, setOf("ripgrep")))
         }
 
@@ -38,9 +39,9 @@ class DoctorTest {
     fun registryCheckReportsAgeFromMetaWithoutANetwork(): Unit =
         withTempDir { tmp ->
             val cfg = scratchConfig(tmp)
-            val pkg = Path(cfg.registryDir, "jq")
+            val pkg = joinPath(cfg.registryDir, "jq")
             createDirAll(pkg)
-            Path(pkg, "ketch.toml").write("source = \"github:jqlang/jq\"\n")
+            joinPath(pkg, "ketch.toml").write("source = \"github:jqlang/jq\"\n")
             val fetchedAt = (nowUnix() - 7200).coerceAtLeast(0)
             cfg.registryMeta.write("repo = \"${cfg.registry}\"\nfetched_at = $fetchedAt\n")
             val check = registryCheck(Ctx(cfg, Report.silent()))
@@ -83,7 +84,7 @@ class DoctorTest {
     @Test
     fun sameBinaryFoldsWindowsDriveLetterCase(): Unit =
         withTempDir { tmp ->
-            val file = Path(tmp, "ketch.bin")
+            val file = joinPath(tmp, "ketch.bin")
             file.write("x")
             val canon = canonicalize(file).toString()
             val first = canon.first()
@@ -98,9 +99,9 @@ class DoctorTest {
             val cfg = scratchConfig(tmp)
             createDirAll(cfg.binDir)
             storeKetchLink(cfg).write("store")
-            val shadowDir = Path(tmp, "cargo-bin")
+            val shadowDir = joinPath(tmp, "cargo-bin")
             createDirAll(shadowDir)
-            Path(shadowDir, if (HOST_WINDOWS) "ketch.exe" else "ketch").write("stale")
+            joinPath(shadowDir, if (HOST_WINDOWS) "ketch.exe" else "ketch").write("stale")
             val check = assertNotNull(pathBinaryCheckFrom(cfg, joinPaths(shadowDir, cfg.binDir)), "shadowed")
             assertEquals(CheckStatus.Warn, check.status)
             assertTrue("PATH runs" in check.detail, check.detail)
@@ -124,13 +125,13 @@ class DoctorTest {
     @Test
     fun aMissingLockFileIsNotACheck(): Unit =
         withTempDir { tmp ->
-            assertNull(lockCheckAt(Path(tmp, ".lock")) { true })
+            assertNull(lockCheckAt(joinPath(tmp, ".lock")) { true })
         }
 
     @Test
     fun aStaleLockFileIsAWarning(): Unit =
         withTempDir { tmp ->
-            val path = Path(tmp, ".lock")
+            val path = joinPath(tmp, ".lock")
             path.write("12345\n")
             val check = assertNotNull(lockCheckAt(path) { false })
             assertEquals(CheckStatus.Warn, check.status)
@@ -141,7 +142,7 @@ class DoctorTest {
     @Test
     fun aHeldLockFileNamesThePid(): Unit =
         withTempDir { tmp ->
-            val path = Path(tmp, ".lock")
+            val path = joinPath(tmp, ".lock")
             path.write("9")
             val check = assertNotNull(lockCheckAt(path) { it == 9L })
             assertTrue("pid 9" in check.detail)

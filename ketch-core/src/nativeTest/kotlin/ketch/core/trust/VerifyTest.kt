@@ -1,5 +1,6 @@
 package ketch.core.trust
 
+import fs.joinPath
 import ketch.core.error.KetchError
 import ketch.core.model.Provenance
 import ketch.core.model.Release
@@ -24,7 +25,7 @@ class VerifyTest {
 
     private fun verifyMinisign(mode: TrustMode): Provenance? =
         withTempDir { dir ->
-            val download = Path(dir, "tool.tar.gz")
+            val download = joinPath(dir, "tool.tar.gz")
             download.write("payload")
             val release =
                 Release(Version.parse("1.0.0"), "v1.0.0", assets = listOf(asset("tool.tar.gz"), asset("tool.tar.gz.minisig")))

@@ -5,6 +5,7 @@ package ketch.core.selfupdate
 import fs.createDir
 import fs.createDirAll
 import fs.entryKind
+import fs.joinPath
 import ketch.core.config.Config
 import ketch.core.report.Ctx
 import ketch.core.report.Event
@@ -33,47 +34,47 @@ class UninstallTest {
     @Test
     fun uninstallDoesNotWipeBinWhenTheRootIsHome(): Unit =
         withTempDir { tmp ->
-            val home = Path(tmp, "home")
+            val home = joinPath(tmp, "home")
             createDirAll(home)
             val cfg = cfg(home)
             createDirAll(cfg.binDir)
-            Path(cfg.binDir, "keep-me").write("stay")
+            joinPath(cfg.binDir, "keep-me").write("stay")
             createDirAll(cfg.storeDir)
-            Path(cfg.storeDir, "mine").write("also")
+            joinPath(cfg.storeDir, "mine").write("also")
 
             cfg.removeRoot(home)
 
-            assertEquals("stay", Path(cfg.binDir, "keep-me").read())
-            assertEquals("also", Path(cfg.storeDir, "mine").read())
+            assertEquals("stay", joinPath(cfg.binDir, "keep-me").read())
+            assertEquals("also", joinPath(cfg.storeDir, "mine").read())
         }
 
     @Test
     fun uninstallKeepsForeignFilesUnderARootKetchDidNotCreate(): Unit =
         withTempDir { tmp ->
-            val home = Path(tmp, "home")
+            val home = joinPath(tmp, "home")
             createDirAll(home)
             // `KETCH_ROOT=/usr/local`: a shared prefix that existed before ketch.
-            val cfg = cfg(Path(tmp, "usr-local"))
+            val cfg = cfg(joinPath(tmp, "usr-local"))
             createDirAll(cfg.binDir)
-            Path(cfg.binDir, "someone-elses").write("stay")
+            joinPath(cfg.binDir, "someone-elses").write("stay")
             createDirAll(cfg.cacheDir)
-            Path(cfg.cacheDir, "theirs").write("stay")
+            joinPath(cfg.cacheDir, "theirs").write("stay")
 
             cfg.removeRoot(home)
 
-            assertEquals("stay", Path(cfg.binDir, "someone-elses").read())
-            assertEquals("stay", Path(cfg.cacheDir, "theirs").read())
+            assertEquals("stay", joinPath(cfg.binDir, "someone-elses").read())
+            assertEquals("stay", joinPath(cfg.cacheDir, "theirs").read())
         }
 
     @Test
     fun uninstallWipesTheDefaultRootWithoutAMarker(): Unit =
         withTempDir { tmp ->
             // Roots made before the marker existed: `~/.ketch` is ketch's by name.
-            val home = Path(tmp, "home")
-            val root = Path(home, ".ketch")
+            val home = joinPath(tmp, "home")
+            val root = joinPath(home, ".ketch")
             val cfg = cfg(root)
             createDirAll(cfg.binDir)
-            Path(cfg.binDir, "gone").write("x")
+            joinPath(cfg.binDir, "gone").write("x")
 
             cfg.removeRoot(home) { _, _ -> fail("nothing was left to finish later") }
 
@@ -83,9 +84,9 @@ class UninstallTest {
     @Test
     fun sameDirFoldsCaseAndTrailingSeparators(): Unit =
         withTempDir { tmp ->
-            val home = Path(tmp, "Home")
+            val home = joinPath(tmp, "Home")
             createDirAll(home)
-            assertTrue(sameDir(Path(tmp, "HOME"), home))
+            assertTrue(sameDir(joinPath(tmp, "HOME"), home))
             assertTrue(sameDir(Path("$home/"), home))
             assertTrue(containsDir(tmp, home))
             assertFalse(containsDir(home, tmp))
@@ -94,12 +95,12 @@ class UninstallTest {
     @Test
     fun uninstallWipesADedicatedRoot(): Unit =
         withTempDir { tmp ->
-            val home = Path(tmp, "home")
+            val home = joinPath(tmp, "home")
             createDirAll(home)
-            val root = Path(tmp, ".ketch")
+            val root = joinPath(tmp, ".ketch")
             val cfg = cfg(root)
             createDirAll(cfg.binDir)
-            Path(cfg.binDir, "gone").write("x")
+            joinPath(cfg.binDir, "gone").write("x")
             cfg.markRoot()
 
             cfg.removeRoot(home) { _, _ -> fail("nothing was left to finish later") }
@@ -111,10 +112,10 @@ class UninstallTest {
     @Test
     fun aRootThatIsHomeIsNeverHandedOn(): Unit =
         withTempDir { tmp ->
-            val home = Path(tmp, "home")
+            val home = joinPath(tmp, "home")
             val cfg = cfg(home)
             createDirAll(cfg.storeDir)
-            Path(cfg.storeDir, "mine").write("x")
+            joinPath(cfg.storeDir, "mine").write("x")
 
             cfg.removeRoot(home) { _, _ -> fail("the home directory must never be scheduled for removal") }
         }
@@ -123,11 +124,11 @@ class UninstallTest {
     @Test
     fun uninstallWarnsAndFinishesWhenTheRunningBinaryCannotBeRemoved(): Unit =
         withTempDir { tmp ->
-            val cfg = cfg(Path(tmp, ".ketch"))
+            val cfg = cfg(joinPath(tmp, ".ketch"))
             createDirAll(cfg.root)
-            val shell = Path(tmp, ".bashrc")
+            val shell = joinPath(tmp, ".bashrc")
             shell.write("# kept\n# >>> ketch >>>\nexport PATH=\"/tmp/ketch/bin:\$PATH\"\n# <<< ketch <<<\n")
-            val exe = Path(tmp, "ketch.exe")
+            val exe = joinPath(tmp, "ketch.exe")
             createDir(exe)
 
             val plan = UninstallPlan(shellFiles = listOf(shell), exe = exe)

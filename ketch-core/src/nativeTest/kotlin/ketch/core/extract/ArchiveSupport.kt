@@ -12,6 +12,7 @@ import fs.bytesIfExists
 import fs.createDirAll
 import fs.entryKind
 import fs.isDir
+import fs.joinPath
 import fs.mode
 import fs.removeAny
 import ketch.core.error.KetchError
@@ -54,7 +55,7 @@ internal fun sizeOf(path: Path) = SystemFileSystem.metadataOrNull(path)?.size ?:
 internal fun dir(
     root: Path,
     name: String,
-) = Path(root, name).also { createDirAll(it) }
+) = joinPath(root, name).also { createDirAll(it) }
 
 internal fun refusal(body: () -> Unit) = assertFailsWith<KetchError> { body() }.message
 

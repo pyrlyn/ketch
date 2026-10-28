@@ -1,5 +1,6 @@
 package ketch.core.process
 
+import fs.joinPath
 import ketch.core.report.Report
 import ketch.core.shell.nativeSpelling
 import ketch.core.state.processAlive
@@ -33,7 +34,7 @@ class ProcessWindowsTest {
     @Test
     fun listsAChildRunningACmdScript(): Unit =
         withTempDir { tmp ->
-            val script = Path(tmp, "tool.cmd")
+            val script = joinPath(tmp, "tool.cmd")
             script.write("@echo off\r\nping -n 30 127.0.0.1 >nul\r\n")
             val run = CoroutineScope(Dispatchers.Default).async { runCatching { Command(nativeSpelling(script)).runBounded(2.minutes, 1L shl 20) } }
             val deadline = TimeSource.Monotonic.markNow() + 30.seconds
@@ -53,7 +54,7 @@ class ProcessWindowsTest {
     @Test
     fun cmdHitsFoldsCommandLineCase(): Unit =
         withTempDir { tmp ->
-            val path = Path(tmp, "tool.cmd")
+            val path = joinPath(tmp, "tool.cmd")
             path.write("@echo off\r\n")
             val shouted = nativeSpelling(path).uppercase()
             assertTrue(cmdHits("C:\\WINDOWS\\system32\\cmd.exe /c \"$shouted\"", path, pathKey(path)))

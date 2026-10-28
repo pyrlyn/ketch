@@ -1,5 +1,6 @@
 package ketch.core.importer
 
+import fs.joinPath
 import fs.readText
 import ketch.core.testing.RUST_FIXTURES
 import kotlinx.io.files.Path
@@ -8,4 +9,4 @@ import kotlinx.io.files.Path
 internal fun fixture(
     backend: String,
     name: String,
-) = readText(Path(Path(Path(RUST_FIXTURES, "import"), backend), name))
+) = readText(joinPath(joinPath(joinPath(RUST_FIXTURES, "import"), backend), name))

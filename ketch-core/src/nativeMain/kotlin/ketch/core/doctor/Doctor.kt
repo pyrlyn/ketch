@@ -3,6 +3,7 @@ package ketch.core.doctor
 import fs.FsException
 import fs.canon
 import fs.isDir
+import fs.joinPath
 import fs.listDir
 import fs.readText
 import ketch.core.config.Config
@@ -221,7 +222,7 @@ internal fun orphanStoreDirs(
         } catch (_: FsException) {
             return emptyList()
         }
-    return names.filter { !it.startsWith('.') && isDir(Path(store, it)) && it !in known }.sorted()
+    return names.filter { !it.startsWith('.') && isDir(joinPath(store, it)) && it !in known }.sorted()
 }
 
 /** A Homebrew cask left behind after `ketch self uninstall` removed the rest. */
@@ -255,7 +256,7 @@ internal fun lockCheckAt(
 }
 
 /** The `ketch` (or `ketch.exe`) the store is supposed to expose on PATH. */
-fun storeKetchLink(cfg: Config): Path = Path(cfg.binDir, bootstrapBinaryName())
+fun storeKetchLink(cfg: Config): Path = joinPath(cfg.binDir, bootstrapBinaryName())
 
 /** Whether two paths name the same file, after resolving links. */
 fun sameBinary(
@@ -266,7 +267,7 @@ fun sameBinary(
 /** First `ketch`/`ketch.exe` on PATH, canonicalised when the file exists. */
 fun firstKetchOnPath(): Path? = envOs("PATH")?.let(::firstKetchOnPathFrom)
 
-private fun firstKetchOnPathFrom(path: String): Path? = splitPathVar(path).map { Path(Path(it), bootstrapBinaryName()) }.firstOrNull(::isFile)?.let(::canon)
+private fun firstKetchOnPathFrom(path: String): Path? = splitPathVar(path).map { joinPath(Path(it), bootstrapBinaryName()) }.firstOrNull(::isFile)?.let(::canon)
 
 /**
  * Warn when PATH finds a ketch that is not the store link.

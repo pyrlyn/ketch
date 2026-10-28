@@ -5,6 +5,7 @@ import fs.FsException
 import fs.canon
 import fs.entryKind
 import fs.isDir
+import fs.joinPath
 import fs.removeAny
 import fs.removeEmptyDir
 import fs.removeFile
@@ -304,7 +305,7 @@ private fun ownsRoot(
 ): Boolean =
     when {
         home != null && containsDir(cfg.root, home) -> false
-        home != null && sameDir(cfg.root, Path(home, ".ketch")) -> true
+        home != null && sameDir(cfg.root, joinPath(home, ".ketch")) -> true
         else -> entryKind(canon(cfg.rootMarker())) == EntryKind.File
     }
 
@@ -368,7 +369,7 @@ private fun moveOutOf(
     val exe = runCatching { currentExe() }.getOrNull() ?: return
     if (!pathIsWithin(exe, dir)) return
     try {
-        rename(exe, Path(systemTempDir(), "ketch-uninstalled-${getpid()}.exe"))
+        rename(exe, joinPath(systemTempDir(), "ketch-uninstalled-${getpid()}.exe"))
     } catch (e: FsException) {
         report.warn("could not move $exe out of mise's tree (${e.detail}); mise may fail to remove it")
     }

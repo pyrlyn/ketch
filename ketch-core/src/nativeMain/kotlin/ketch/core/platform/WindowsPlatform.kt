@@ -10,6 +10,7 @@ import fs.canon
 import fs.copyFile
 import fs.createDirAll
 import fs.entryKind
+import fs.joinPath
 import fs.listDir
 import fs.readLink
 import fs.removeAny
@@ -112,7 +113,7 @@ class WindowsPlatform(
             if (!destinations.add(destKey(dest))) throw KetchError.Msg("multiple payload entries want to create $dest")
             destinationAvailable(dest, plan.replacing)
         }
-        for ((_, name) in cliTargets(plan.payloadDir, plan)) claim(Path(plan.binDir, name))
+        for ((_, name) in cliTargets(plan.payloadDir, plan)) claim(joinPath(plan.binDir, name))
         for (extra in plan.extras) {
             resolveUnder(plan.payloadDir, extra.relPath)
             claim(extra.dest)
@@ -150,7 +151,7 @@ class WindowsPlatform(
 
     override fun completionDir(shell: CompletionShell): Path =
         if (shell == CompletionShell.Powershell) {
-            Path(Path(documentsDir() ?: dataHome(), "PowerShell"), "Completions")
+            joinPath(joinPath(documentsDir() ?: dataHome(), "PowerShell"), "Completions")
         } else {
             completionDirFor(shell)
         }
@@ -251,7 +252,7 @@ internal fun sweepBusyAsides(links: List<LinkRecord>) {
         val name = record.link.name
         val entries = dir?.takeIf { name.isNotEmpty() }?.let { runCatching { listDir(it) }.getOrNull() } ?: continue
         for (entry in entries.filter { isBusyAsideOf(name, it) }) {
-            val aside = Path(dir, entry)
+            val aside = joinPath(dir, entry)
             if (entryKind(aside) == EntryKind.File) runCatching { removeFile(aside) }
         }
     }
@@ -289,7 +290,7 @@ private fun retiredTargets(
         if (parts.take(storeParts.size) != storeParts) {
             record
         } else {
-            record.copy(target = parts.drop(storeParts.size).fold(retired) { dir, part -> Path(dir, part) })
+            record.copy(target = parts.drop(storeParts.size).fold(retired) { dir, part -> joinPath(dir, part) })
         }
     }
 }
@@ -375,10 +376,10 @@ internal fun copyBinary(
     claims: Claims,
 ): LinkRecord {
     ioAt(binDir) { createDirAll(binDir) }
-    val link = Path(binDir, name)
+    val link = joinPath(binDir, name)
     // Case-insensitive: Tool.exe and tool.exe are the same destination.
-    runCatching { listDir(binDir) }.getOrNull()?.firstOrNull { destKey(Path(binDir, it)) == destKey(link) }?.let {
-        clearDestination(Path(binDir, it), recorded, claims)
+    runCatching { listDir(binDir) }.getOrNull()?.firstOrNull { destKey(joinPath(binDir, it)) == destKey(link) }?.let {
+        clearDestination(joinPath(binDir, it), recorded, claims)
     }
     clearDestination(link, recorded, claims)
     ioAt(link) { copyOver(target, link) }

@@ -1,6 +1,7 @@
 package ketch.core.hooks
 
 import fs.canonicalize
+import fs.joinPath
 import fs.readText
 import ketch.core.config.HOST_WINDOWS
 import ketch.core.error.KetchError
@@ -42,9 +43,9 @@ class HooksTest {
     @Test
     fun aHookRunsInThePrefixWithThePackageInItsEnvironment(): Unit =
         withTempDir { tmp ->
-            val prefix = Path(tmp, "prefix")
+            val prefix = joinPath(tmp, "prefix")
             SystemFileSystem.createDirectories(prefix)
-            val out = Path(tmp, "out")
+            val out = joinPath(tmp, "out")
             val script =
                 if (HOST_WINDOWS) {
                     "(echo %KETCH_HOOK% %KETCH_PACKAGE% %KETCH_VERSION% %KETCH_PREVIOUS_VERSION% && cd) > \"${nativeSpelling(out)}\""

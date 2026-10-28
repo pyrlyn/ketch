@@ -3,6 +3,7 @@ package ketch.core.platform
 import fs.EntryKind
 import fs.createDirAll
 import fs.entryKind
+import fs.joinPath
 import ketch.core.error.KetchError
 import ketch.core.model.LinkKind
 import ketch.core.model.LinkRecord
@@ -24,44 +25,44 @@ class LinuxPlatformTest {
     @Test
     fun placeSymlinksADiscoveredBinary() {
         withTempDir { tmp ->
-            val payload = Path(tmp, "payload")
-            program(Path(payload, "bin"), "rg", "#!/bin/sh\necho rg\n")
-            val store = Path(tmp, "store/rg/1.0")
-            val bin = Path(tmp, "bin")
+            val payload = joinPath(tmp, "payload")
+            program(joinPath(payload, "bin"), "rg", "#!/bin/sh\necho rg\n")
+            val store = joinPath(tmp, "store/rg/1.0")
+            val bin = joinPath(tmp, "bin")
             createDirAll(bin)
 
             val links = LinuxPlatform().place(placement(payload, store, bin, tmp))
             assertEquals(1, links.size)
             assertEquals(LinkKind.Symlink, links[0].kind)
-            assertEquals(Path(bin, "rg"), links[0].link)
-            assertEquals(EntryKind.Symlink, entryKind(Path(bin, "rg")))
+            assertEquals(joinPath(bin, "rg"), links[0].link)
+            assertEquals(EntryKind.Symlink, entryKind(joinPath(bin, "rg")))
         }
     }
 
     @Test
     fun placePrefersCapitalBinOverNoisySiblings() {
         withTempDir { tmp ->
-            val payload = Path(tmp, "payload")
-            program(Path(payload, "Bin"), "rg", "#!/bin/sh\necho rg\n")
+            val payload = joinPath(tmp, "payload")
+            program(joinPath(payload, "Bin"), "rg", "#!/bin/sh\necho rg\n")
             program(payload, "noise", "#!/bin/sh\necho noise\n")
-            val store = Path(tmp, "store/rg/1.0")
-            val bin = Path(tmp, "bin")
+            val store = joinPath(tmp, "store/rg/1.0")
+            val bin = joinPath(tmp, "bin")
             createDirAll(bin)
 
             val links = LinuxPlatform().place(placement(payload, store, bin, tmp))
             assertEquals(1, links.size, "$links")
-            assertEquals(Path(bin, "rg"), links[0].link)
-            assertNull(entryKind(Path(bin, "noise")))
+            assertEquals(joinPath(bin, "rg"), links[0].link)
+            assertNull(entryKind(joinPath(bin, "noise")))
         }
     }
 
     @Test
     fun unplaceLeavesAFileTheUserPutWhereALinkWas() {
         withTempDir { tmp ->
-            val target = program(Path(tmp, "store/pkg/1.0"), "tool")
-            val bin = Path(tmp, "bin")
+            val target = program(joinPath(tmp, "store/pkg/1.0"), "tool")
+            val bin = joinPath(tmp, "bin")
             createDirAll(bin)
-            val link = Path(bin, "tool")
+            val link = joinPath(bin, "tool")
             symlink(target, link)
             val record = LinkRecord(link, target, LinkKind.Symlink, LinkRole.Binary)
             val p = LinuxPlatform()
@@ -77,16 +78,16 @@ class LinuxPlatformTest {
     @Test
     fun occupiedDestinationThatIsNotOursIsLeftAlone() {
         withTempDir { tmp ->
-            val payload = Path(tmp, "payload")
-            program(Path(payload, "bin"), "tool", "#!/bin/sh\necho new\n")
-            val store = Path(tmp, "store/pkg/1.0")
-            val bin = Path(tmp, "bin")
+            val payload = joinPath(tmp, "payload")
+            program(joinPath(payload, "bin"), "tool", "#!/bin/sh\necho new\n")
+            val store = joinPath(tmp, "store/pkg/1.0")
+            val bin = joinPath(tmp, "bin")
             createDirAll(bin)
-            Path(bin, "tool").write("mine")
+            joinPath(bin, "tool").write("mine")
 
             val err = assertFailsWith<KetchError> { LinuxPlatform().place(placement(payload, store, bin, tmp)) }
             assertTrue(err.message.orEmpty().contains("already exists"), err.message)
-            assertEquals("mine", Path(bin, "tool").read())
+            assertEquals("mine", joinPath(bin, "tool").read())
         }
     }
 

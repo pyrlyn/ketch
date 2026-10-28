@@ -2,6 +2,7 @@ package ketch.core.shell
 
 import fs.createDirAll
 import fs.entryKind
+import fs.joinPath
 import ketch.core.config.Config
 import ketch.core.model.Os
 import ketch.core.model.TargetSpec
@@ -43,7 +44,7 @@ class ShellTest {
             val file = doskeyFile(cfg)
             createDirAll(assertNotNull(file.parent))
             file.write(DOSKEY_MACROS)
-            val mine = Path(Path(cfg.root, "share"), "mine.txt")
+            val mine = joinPath(joinPath(cfg.root, "share"), "mine.txt")
             mine.write("keep")
             uninstallCmdMacros(cfg)
             assertNull(entryKind(file))
@@ -54,7 +55,7 @@ class ShellTest {
     @Test
     fun uninstallingAProfileKetchCreatedDeletesIt(): Unit =
         withTempDir { tmp ->
-            val profile = Path(tmp, "profile.ps1")
+            val profile = joinPath(tmp, "profile.ps1")
             profile.write("$BEGIN\n. 'k.ps1'\n$END\n")
             assertTrue(uninstallPowershellProfile(profile))
             assertNull(entryKind(profile))
@@ -67,8 +68,8 @@ class ShellTest {
         withTempDir { tmp ->
             // Windows takes the home directory from USERPROFILE.
             withEnv(listOf("ZDOTDIR", "XDG_CONFIG_HOME"), mapOf("HOME" to tmp.toString(), "USERPROFILE" to tmp.toString())) {
-                val cfg = Config.load(Path(tmp, "root"), Report.silent())
-                val fish = Path(tmp, ".config/fish/config.fish")
+                val cfg = Config.load(joinPath(tmp, "root"), Report.silent())
+                val fish = joinPath(tmp, ".config/fish/config.fish")
                 assertEquals(Outcome.Added, install(cfg, Shell.Fish, dryRun = true).outcome)
                 assertNull(entryKind(fish))
                 createDirAll(assertNotNull(fish.parent))

@@ -1,6 +1,7 @@
 package ketch.core.state
 
 import fs.atomic
+import fs.joinPath
 import fs.readText
 import ketch.core.model.Channel
 import ketch.core.model.InstalledPackage
@@ -83,7 +84,7 @@ class StateTest {
     @Test
     fun anEmptyStateFileIsNotAnEmptyInstall(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "state.json")
+            val path = joinPath(dir, "state.json")
             write(path, "")
             assertFailsWith<Exception>("corruption must be loud") { State.loadPath(path) }
             fs.removeFile(path)
@@ -93,7 +94,7 @@ class StateTest {
     @Test
     fun roundTripsThroughDisk(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "state.json")
+            val path = joinPath(dir, "state.json")
             State().apply { insert(pkg("ripgrep")) }.savePath(path)
             val loaded = State.loadPath(path)
             assertEquals(STATE_VERSION, loaded.version)
@@ -103,13 +104,13 @@ class StateTest {
     @Test
     fun missingFileIsAnEmptyState(): Unit =
         withTempDir { dir ->
-            assertTrue(State.loadPath(Path(dir, "nope.json")).packages.isEmpty())
+            assertTrue(State.loadPath(joinPath(dir, "nope.json")).packages.isEmpty())
         }
 
     @Test
     fun refusesANewerStateVersion(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "state.json")
+            val path = joinPath(dir, "state.json")
             write(path, """{"version":99,"packages":{}}""")
             assertFailsWith<Exception> { State.loadPath(path) }
         }
@@ -125,7 +126,7 @@ class StateTest {
     @Test
     fun aV1StateWithoutRetentionFieldsStillLoads(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "state.json")
+            val path = joinPath(dir, "state.json")
             write(path, v1())
             val loaded = State.loadPath(path)
             assertEquals(STATE_VERSION, loaded.version)
@@ -145,7 +146,7 @@ class StateTest {
         withTempDir { dir ->
             // InstalledPackage does not deny unknown fields in Rust, so a field from a newer ketch must not lose the
             // whole record here.
-            val path = Path(dir, "state.json")
+            val path = joinPath(dir, "state.json")
             write(path, v1(", \"from_the_future\": true"))
             assertNotNull(State.loadPath(path).get("ripgrep"))
         }
@@ -153,7 +154,7 @@ class StateTest {
     @Test
     fun provenanceRoundTripsAndStaysOutOfUnsignedRecords(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "state.json")
+            val path = joinPath(dir, "state.json")
             val signed = Provenance(Verifier.Minisign, "minisign key RWQ", "a.tar.gz.minisig", "1".repeat(64), signed = "SHA256SUMS")
             val state = State()
             state.insert(pkg("signed").copy(provenance = signed))
@@ -170,7 +171,7 @@ class StateTest {
     @Test
     fun aBinChoiceRoundTripsAndStaysOutOfRecordsWithoutOne(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "state.json")
+            val path = joinPath(dir, "state.json")
             val state = State()
             state.insert(pkg("chosen").copy(binChoice = "rtok-cli"))
             state.insert(pkg("plain"))
@@ -185,7 +186,7 @@ class StateTest {
     @Test
     fun aV1LinkWithoutARoleStillReadsAsABinary(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "state.json")
+            val path = joinPath(dir, "state.json")
             write(path, v1(""", "links": [{"link": "/tmp/bin/rg", "target": "/tmp/x/rg", "kind": "symlink"}]"""))
             val pkg = assertNotNull(State.loadPath(path).get("ripgrep"))
             assertEquals(1, pkg.links.size)
@@ -196,7 +197,7 @@ class StateTest {
     @Test
     fun aPreChannelRoundTripsAndStableStaysOutOfTheFile(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "state.json")
+            val path = joinPath(dir, "state.json")
             val state = State()
             state.insert(pkg("beta").copy(channel = Channel.Pre))
             state.insert(pkg("plain"))
@@ -212,7 +213,7 @@ class StateTest {
     fun theFileIsLaidOutAsSerdeJsonWritesIt(): Unit =
         withTempDir { dir ->
             // Two-space indent, `"key": value`, packages in name order and a trailing newline, as Rust ketch writes it.
-            val path = Path(dir, "state.json")
+            val path = joinPath(dir, "state.json")
             val state = State()
             state.insert(pkg("zeta"))
             state.insert(pkg("alpha"))

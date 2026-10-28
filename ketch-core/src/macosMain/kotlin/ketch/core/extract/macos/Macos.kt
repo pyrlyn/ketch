@@ -10,6 +10,7 @@ import fs.EntryKind
 import fs.TempDir
 import fs.entryKind
 import fs.isDir
+import fs.joinPath
 import fs.listDir
 import fs.walk
 import ketch.core.error.KetchError
@@ -177,8 +178,8 @@ internal fun copyVolume(
 ) {
     // Volume bookkeeping and the customary `/Applications` drop-target.
     val names =
-        ioAt(mount) { listDir(mount) }.filter { !it.startsWith('.') && entryKind(Path(mount, it)) != EntryKind.Symlink }
-    for (name in names) copyTree(Path(mount, name), Path(dest, name))
+        ioAt(mount) { listDir(mount) }.filter { !it.startsWith('.') && entryKind(joinPath(mount, it)) != EntryKind.Symlink }
+    for (name in names) copyTree(joinPath(mount, name), joinPath(dest, name))
     if (names.isEmpty()) throw KetchError.EmptyPayload(mount)
     ensureLinksInside(dest)
 }
@@ -215,12 +216,12 @@ object PkgExtractor : Extractor {
         dest: Path,
     ) = ioAt(dest) { TempDir.create() }.use { work ->
         // `pkgutil` insists the destination not exist yet.
-        val expanded = Path(work.path, "expanded")
+        val expanded = joinPath(work.path, "expanded")
         runTool(PKGUTIL, listOf("--expand-full", src.toString(), expanded.toString()))
         val payloads = findPayloadRoots(expanded)
         if (payloads.isEmpty()) throw KetchError.Msg("$src expanded but contained no payload")
         for (payload in payloads) {
-            for (name in ioAt(payload) { listDir(payload) }) copyTree(Path(payload, name), Path(dest, name))
+            for (name in ioAt(payload) { listDir(payload) }) copyTree(joinPath(payload, name), joinPath(dest, name))
         }
         ensureLinksInside(dest)
     }

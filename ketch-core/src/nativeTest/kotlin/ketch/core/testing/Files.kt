@@ -2,6 +2,7 @@ package ketch.core.testing
 
 import fs.atomic
 import fs.createDirAll
+import fs.joinPath
 import fs.readText
 import fs.setMode
 import kotlinx.io.files.Path
@@ -21,7 +22,7 @@ fun program(
     body: String = "#!/bin/sh\n",
 ): Path {
     createDirAll(dir)
-    val path = Path(dir, name)
+    val path = joinPath(dir, name)
     path.write(body)
     setMode(path, RWXR_XR_X)
     return path

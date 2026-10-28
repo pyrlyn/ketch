@@ -1,5 +1,6 @@
 package ketch.core.extra
 
+import ketch.core.config.joinedPath
 import ketch.core.error.KetchError
 import ketch.core.extract.safeMemberPath
 import ketch.core.model.ClassifiedExtra
@@ -121,13 +122,13 @@ private fun destination(
         ExtraKind.Man -> {
             val section =
                 classified.section ?: throw KetchError.Msg("extra path `${classified.relPath}` is a man page without a section")
-            Path(manRoot, "man$section", basename)
+            joinedPath(manRoot, "man$section", basename)
         }
 
         ExtraKind.Completion -> {
             val shell =
                 classified.shell ?: throw KetchError.Msg("extra path `${classified.relPath}` is a completion without a shell")
-            Path(completionDir(shell), completionDestName(basename, shell))
+            joinedPath(completionDir(shell), completionDestName(basename, shell))
         }
     }
 }

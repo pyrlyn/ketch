@@ -1,6 +1,8 @@
 package ketch.core.extra
 
+import fs.joinPath
 import ketch.core.error.KetchError
+import ketch.core.platform.pathIsWithin
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 
@@ -9,8 +11,8 @@ fun resolveUnder(
     root: Path,
     rel: String,
 ): Path {
-    val target = Path(root, contained(rel))
-    if (!target.toString().startsWith("$root/")) throw KetchError.Msg("extra path `$rel` must stay inside the package")
+    val target = joinPath(root, contained(rel))
+    if (!pathIsWithin(target, root)) throw KetchError.Msg("extra path `$rel` must stay inside the package")
     if (SystemFileSystem.metadataOrNull(target)?.isRegularFile != true) {
         throw KetchError.Msg("extra path `$rel` is not a file in the payload")
     }

@@ -14,6 +14,7 @@ import fs.TempDir
 import fs.createDirAll
 import fs.entryKind
 import fs.isDir
+import fs.joinPath
 import fs.listDir
 import fs.readText
 import fs.removeAny
@@ -62,7 +63,7 @@ fun update(cx: Ctx): Int {
     cx.report.step("updating", "registry $repo")
     // Staged inside the root, so the finished tree can be renamed into place without crossing a filesystem.
     return fsKitAt(cfg.root) { TempDir.createIn(cfg.root) }.use { staging ->
-        val tarball = Path(staging.path, "registry.tar.gz")
+        val tarball = joinPath(staging.path, "registry.tar.gz")
         // The API tarball endpoint follows the default branch and honours the token, which keeps unauthenticated rate
         // limits out of the way. It answers 415 to the octet-stream `Accept` that asset downloads use, so ask for the
         // API media type and let it redirect to the gzip.
@@ -70,7 +71,7 @@ fun update(cx: Ctx): Int {
         cx.report.download("download").use { progress ->
             Http(cx).download(tarballUrl(repo), tarball, headers, true, progress, cx.cancel)
         }
-        val unpacked = Path(staging.path, "tree")
+        val unpacked = joinPath(staging.path, "tree")
         fsKitAt(unpacked) { createDirAll(unpacked) }
         cx.report.stage("registry", Stage.Extracting)
         // The tarball download already drew a byte bar. Unpacking has no member count ahead of time, so this is a
@@ -175,7 +176,7 @@ private inline fun renameAt(
 /** Sibling of the live registry, unique per process so a leftover aside from a crashed run is not the path this swap uses. */
 internal fun asidePath(registryDir: Path): Path {
     val sibling = ".${registryDir.name}.aside-${getpid()}"
-    return registryDir.parent?.let { Path(it, sibling) } ?: Path(sibling)
+    return registryDir.parent?.let { joinPath(it, sibling) } ?: Path(sibling)
 }
 
 /** One package file that failed [checkTree]. */
@@ -219,7 +220,7 @@ private fun checkFolders(
     val packages = mutableListOf<Pair<Manifest, Path>>()
     val errors = mutableListOf<ValidationError>()
     for (folder in folders) {
-        val path = Path(folder, PACKAGE_FILE)
+        val path = joinPath(folder, PACKAGE_FILE)
         if (!isPackageFile(path)) {
             errors += ValidationError(path.toString(), "`$PACKAGE_FILE` must be a regular file, not a symlink")
             continue
@@ -286,7 +287,7 @@ fun fixturePayload(
     fixture: Path,
     name: String,
 ): Path {
-    val entry = Path(fixture, name)
+    val entry = joinPath(fixture, name)
     return when (entryKind(entry)) {
         null -> throw KetchError.Msg("no fixture for `$name`")
         EntryKind.File -> entry
@@ -299,7 +300,7 @@ private fun onlyFile(
     dir: Path,
     name: String,
 ): Path {
-    val files = fsKitAt(dir) { listDir(dir) }.sortedWith(BYTE_ORDER).map { Path(dir, it) }.filter { fsKitAt(it) { entryKind(it) } == EntryKind.File }
+    val files = fsKitAt(dir) { listDir(dir) }.sortedWith(BYTE_ORDER).map { joinPath(dir, it) }.filter { fsKitAt(it) { entryKind(it) } == EntryKind.File }
     return when (files.size) {
         1 -> files[0]
         0 -> throw KetchError.Msg("fixture `$name` is an empty directory")
@@ -312,7 +313,7 @@ private fun loadDir(
     report: Report,
 ): List<Pair<Manifest, Path>> =
     candidatePackageDirs(dir).mapNotNull { folder ->
-        val path = Path(folder, PACKAGE_FILE)
+        val path = joinPath(folder, PACKAGE_FILE)
         val name = sanitize(folder.name)
         when {
             !isPackageFile(path) -> {
@@ -339,7 +340,7 @@ private fun loadDir(
 @Suppress("SwallowedException")
 private fun candidatePackageDirs(dir: Path): List<Path> =
     try {
-        listDir(dir).sortedWith(BYTE_ORDER).map { Path(dir, it) }.filter { isDir(it) && entryKind(Path(it, PACKAGE_FILE)) != null }
+        listDir(dir).sortedWith(BYTE_ORDER).map { joinPath(dir, it) }.filter { isDir(it) && entryKind(joinPath(it, PACKAGE_FILE)) != null }
     } catch (_: FsException) {
         // A registry that cannot be read has no packages, which every caller already reports.
         emptyList()

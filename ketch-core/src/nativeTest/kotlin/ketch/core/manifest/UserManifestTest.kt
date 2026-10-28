@@ -2,6 +2,7 @@ package ketch.core.manifest
 
 import fs.atomic
 import fs.entryKind
+import fs.joinPath
 import fs.readText
 import ketch.core.error.KetchError
 import ketch.core.testing.withTempDir
@@ -18,7 +19,7 @@ internal fun <T> userFile(
     test: (dir: Path, path: Path) -> T,
 ): T =
     withTempDir { dir ->
-        val path = Path(dir, "rtok.toml")
+        val path = joinPath(dir, "rtok.toml")
         atomic(path, body.encodeToByteArray())
         test(dir, path)
     }
@@ -98,7 +99,7 @@ class UserManifestTest {
     @Test
     fun writeManifestCreatesTheDirectoryAndTheFile(): Unit =
         withTempDir { dir ->
-            val path = Path(Path(dir, "manifests"), "fly.toml")
+            val path = joinPath(joinPath(dir, "manifests"), "fly.toml")
             val body = "name = \"fly\"\nsource = \"github:superfly/flyctl\"\n"
             writeManifest(path, body)
             assertEquals(body, readText(path))
@@ -107,7 +108,7 @@ class UserManifestTest {
     @Test
     fun writeManifestRefusesTextThatIsNotAManifestAndWritesNothing(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "fly.toml")
+            val path = joinPath(dir, "fly.toml")
             assertFailsWith<KetchError> { writeManifest(path, "name = [\n") }
             assertNull(entryKind(path))
         }

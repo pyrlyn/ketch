@@ -5,6 +5,7 @@
 package ketch.core.manifest
 
 import fs.FsException
+import fs.joinPath
 import fs.listDir
 import fs.readText
 import ketch.core.error.KetchError
@@ -122,7 +123,7 @@ internal fun loadUserManifests(
         } catch (_: FsException) {
             return emptyList()
         }
-    return names.filter(::isTomlFileName).sorted().map { Path(dir, it) }.flatMap { path ->
+    return names.filter(::isTomlFileName).sorted().map { joinPath(dir, it) }.flatMap { path ->
         // Both error kinds already name the file, so the warning does not.
         try {
             parseRegistry(readText(path), path.toString()).map { it to path }

@@ -2,6 +2,7 @@ package ketch.core.config
 
 import fs.createDirAll
 import fs.entryKind
+import fs.joinPath
 import ketch.core.error.KetchError
 import ketch.core.log.Format
 import ketch.core.log.Level
@@ -28,7 +29,7 @@ class ConfigTest {
     fun resolvesRelativeRootsAgainstTheCurrentDirectory() {
         val root = absolutePath(Path("scratch"))
         assertTrue(root.isAbsolute)
-        assertEquals(Path(currentDir()!!, "scratch"), root)
+        assertEquals(joinPath(currentDir()!!, "scratch"), root)
     }
 
     @Test
@@ -58,12 +59,12 @@ class ConfigTest {
     fun expandTildeAcceptsSlashBackslashAndBareHome() {
         val home = homeDir()!!
         assertEquals(home, expandTilde(Path("~")))
-        assertEquals(Path(home, "scratch"), expandTilde(Path("~/scratch")))
-        assertEquals(Path(home, ".ketch"), expandTilde(Path("~\\.ketch")))
+        assertEquals(joinPath(home, "scratch"), expandTilde(Path("~/scratch")))
+        assertEquals(joinPath(home, ".ketch"), expandTilde(Path("~\\.ketch")))
         assertEquals(Path("/abs"), expandTilde(Path("/abs")))
         // Multi-component PowerShell paths must not collapse into one segment.
-        assertEquals(Path(Path(home, ".ketch"), "bin"), expandTilde(Path("~\\.ketch\\bin")))
-        assertEquals(Path(Path(home, "scratch"), "nested"), expandTilde(Path("~/scratch\\nested")))
+        assertEquals(joinPath(joinPath(home, ".ketch"), "bin"), expandTilde(Path("~\\.ketch\\bin")))
+        assertEquals(joinPath(joinPath(home, "scratch"), "nested"), expandTilde(Path("~/scratch\\nested")))
     }
 
     @Test
@@ -135,9 +136,9 @@ class ConfigTest {
             )
         withEnv(keys) {
             withTempDir { dir ->
-                val root = Path(dir, "root")
+                val root = joinPath(dir, "root")
                 createDirAll(root)
-                Path(root, "config.toml").write(Config.defaultToml())
+                joinPath(root, "config.toml").write(Config.defaultToml())
                 val cfg = load(root)
                 assertFalse(cfg.prerelease)
                 assertTrue(cfg.allowEmulation)
@@ -160,7 +161,7 @@ class ConfigTest {
     fun maxDownloadComesFromTheEnvironmentOverTheFile(): Unit =
         withEnv(listOf("KETCH_ROOT", "KETCH_MAX_DOWNLOAD_MIB")) {
             withTempDir { dir ->
-                Path(dir, "config.toml").write("max_download_mib = 10\n")
+                joinPath(dir, "config.toml").write("max_download_mib = 10\n")
                 assertEquals(10uL * 1024uL * 1024uL, load(dir).maxDownload)
                 setEnv("KETCH_MAX_DOWNLOAD_MIB", "3")
                 assertEquals(3uL * 1024uL * 1024uL, load(dir).maxDownload)
@@ -176,7 +177,7 @@ class ConfigTest {
         withEnv(listOf("KETCH_ROOT", "KETCH_SELF_REPO", "KETCH_REGISTRY")) {
             withTempDir { dir ->
                 // A config.toml written by an install from before the move.
-                Path(dir, "config.toml").write("self_repo = \"listepo/ketch\"\nregistry = \"github:listepo/ketch-registry\"\n")
+                joinPath(dir, "config.toml").write("self_repo = \"listepo/ketch\"\nregistry = \"github:listepo/ketch-registry\"\n")
                 val cfg = load(dir)
                 assertEquals(SELF_REPO, cfg.selfRepo)
                 assertEquals(REGISTRY_REPO, cfg.registry)
@@ -192,7 +193,7 @@ class ConfigTest {
     @Test
     fun ensureDirsMarksARootItCreates(): Unit =
         withTempDir { dir ->
-            val cfg = load(Path(dir, "fresh"))
+            val cfg = load(joinPath(dir, "fresh"))
             cfg.ensureDirs()
             assertTrue(SystemFileSystem.metadataOrNull(cfg.rootMarker())?.isRegularFile == true)
         }
@@ -209,7 +210,7 @@ class ConfigTest {
     fun anUnknownKeyInTheFileIsRefused(): Unit =
         withEnv(listOf("KETCH_ROOT")) {
             withTempDir { dir ->
-                Path(dir, "config.toml").write("prerelase = true\n")
+                joinPath(dir, "config.toml").write("prerelase = true\n")
                 assertFailsWith<KetchError.Parse> { load(dir) }
             }
         }
@@ -218,7 +219,7 @@ class ConfigTest {
     fun aRootInTheFileIsReportedAsIgnored(): Unit =
         withEnv(listOf("KETCH_ROOT")) {
             withTempDir { dir ->
-                Path(dir, "config.toml").write("root = \"/elsewhere\"\n")
+                joinPath(dir, "config.toml").write("root = \"/elsewhere\"\n")
                 val recorder = ketch.core.report.Recorder()
                 val cfg = Config.load(dir, Report(recorder))
                 assertEquals(dir, cfg.root)

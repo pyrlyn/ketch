@@ -10,6 +10,7 @@ package ketch.core.platform
 import fs.FsException
 import fs.entryKind
 import fs.exactParent
+import fs.joinPath
 import fs.removeAny
 import ketch.core.error.KetchError
 import ketch.core.error.fsKit
@@ -77,4 +78,4 @@ internal fun rename(
 internal fun withFileName(
     path: Path,
     name: String,
-): Path = path.exactParent?.let { Path(it, name) } ?: Path(name)
+): Path = path.exactParent?.let { joinPath(it, name) } ?: Path(name)

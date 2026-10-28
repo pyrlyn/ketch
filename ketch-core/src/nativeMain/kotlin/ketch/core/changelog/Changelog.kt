@@ -8,6 +8,7 @@ package ketch.core.changelog
 
 import fs.FsException
 import fs.isDir
+import fs.joinPath
 import fs.listDir
 import ketch.core.error.KetchError
 import ketch.core.error.ioAt
@@ -52,19 +53,19 @@ private val SUBDIRS = listOf("", "doc", "docs", "share/doc")
  */
 fun findFile(prefix: Path): Path? =
     SUBDIRS.firstNotNullOfOrNull { dir ->
-        val base = if (dir.isEmpty()) prefix else Path(prefix, dir)
+        val base = if (dir.isEmpty()) prefix else joinPath(prefix, dir)
         // Some projects ship `share/doc/<pkg>/CHANGELOG.md`, one level deeper than the directory itself. One level,
         // not a walk. Sorted, so which copy wins does not depend on the directory's order on disk.
         namedIn(base) ?: subdirs(base).firstNotNullOfOrNull(::namedIn)
     }
 
-private fun namedIn(dir: Path) = NAMES.map { Path(dir, it) }.firstOrNull { SystemFileSystem.metadataOrNull(it)?.isRegularFile == true }
+private fun namedIn(dir: Path) = NAMES.map { joinPath(dir, it) }.firstOrNull { SystemFileSystem.metadataOrNull(it)?.isRegularFile == true }
 
 /** A directory that cannot be listed simply has nothing in it worth reading. */
 @Suppress("SwallowedException")
 private fun subdirs(dir: Path): List<Path> =
     try {
-        listDir(dir).sortedWith(BYTE_ORDER).map { Path(dir, it) }.filter(::isDir)
+        listDir(dir).sortedWith(BYTE_ORDER).map { joinPath(dir, it) }.filter(::isDir)
     } catch (_: FsException) {
         emptyList()
     }

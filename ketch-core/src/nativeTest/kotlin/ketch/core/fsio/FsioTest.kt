@@ -1,6 +1,7 @@
 package ketch.core.fsio
 
 import fs.atomic
+import fs.joinPath
 import fs.listDir
 import fs.readText
 import ketch.core.error.KetchError
@@ -14,7 +15,7 @@ class FsioTest {
     @Test
     fun writesIntoAMissingDirectoryAndReplacesWhole() =
         withTempDir { dir ->
-            val file = Path(dir, "a/b/state.json")
+            val file = joinPath(dir, "a/b/state.json")
             writePrivate(file, "one".encodeToByteArray())
             writePrivate(file, "two".encodeToByteArray())
             assertEquals("two", readText(file))
@@ -24,9 +25,9 @@ class FsioTest {
     @Test
     fun anErrorNamesThePathOnce() =
         withTempDir { dir ->
-            val blocker = Path(dir, "file")
+            val blocker = joinPath(dir, "file")
             atomic(blocker, "x".encodeToByteArray())
-            val err = assertFailsWith<KetchError> { writePrivate(Path(blocker, "child"), "x".encodeToByteArray()) }
+            val err = assertFailsWith<KetchError> { writePrivate(joinPath(blocker, "child"), "x".encodeToByteArray()) }
             assertEquals(1, err.message.split("child").size - 1, err.message)
         }
 }

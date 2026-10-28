@@ -1,5 +1,6 @@
 package ketch.core.testing
 
+import fs.joinPath
 import fs.readText
 import io.github.optimumcode.json.schema.JsonSchema
 import io.github.optimumcode.json.schema.ValidationError
@@ -22,7 +23,7 @@ class Schema private constructor(
 
     companion object {
         /** A committed schema, as an editor would load it. */
-        fun file(name: String) = Schema(JsonSchema.fromDefinition(readText(Path(RUST_FIXTURES, name))))
+        fun file(name: String) = Schema(JsonSchema.fromDefinition(readText(joinPath(RUST_FIXTURES, name))))
 
         /**
          * A schema `pattern` as an editor runs it: ECMA-262, where `$` is the end of the text. The validator compiles

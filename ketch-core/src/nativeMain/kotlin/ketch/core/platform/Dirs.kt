@@ -3,6 +3,7 @@ package ketch.core.platform
 import fs.FsException
 import fs.createNew
 import fs.entryKind
+import fs.joinPath
 import fs.removeFile
 import ketch.core.config.HOST_WINDOWS
 import ketch.core.config.envOs
@@ -19,7 +20,7 @@ import kotlin.random.Random
 private fun xdg(
     key: String,
     fallback: String,
-): Path = envOs(key)?.takeIf { it.isNotEmpty() }?.let(::Path) ?: Path(homeDir() ?: Path("."), fallback)
+): Path = envOs(key)?.takeIf { it.isNotEmpty() }?.let(::Path) ?: joinPath(homeDir() ?: Path("."), fallback)
 
 /** `$XDG_DATA_HOME`, falling back to `~/.local/share` on every OS. */
 fun dataHome(): Path = xdg("XDG_DATA_HOME", ".local/share")
@@ -69,11 +70,11 @@ private fun sameParts(
 /** Unix-style completion directories. */
 fun completionDirFor(shell: CompletionShell): Path =
     when (shell) {
-        CompletionShell.Bash -> Path(dataHome(), "bash-completion/completions")
-        CompletionShell.Zsh -> Path(dataHome(), "zsh/site-functions")
-        CompletionShell.Fish -> Path(configHome(), "fish/completions")
-        CompletionShell.Elvish -> Path(configHome(), "elvish/lib")
-        CompletionShell.Powershell -> Path(configHome(), "powershell/Completions")
+        CompletionShell.Bash -> joinPath(dataHome(), "bash-completion/completions")
+        CompletionShell.Zsh -> joinPath(dataHome(), "zsh/site-functions")
+        CompletionShell.Fish -> joinPath(configHome(), "fish/completions")
+        CompletionShell.Elvish -> joinPath(configHome(), "elvish/lib")
+        CompletionShell.Powershell -> joinPath(configHome(), "powershell/Completions")
     }
 
 /** Doctor lines for the destinations `place` will write. Missing directories are reported as ok: install creates them rather than surprising the user with a write they were not shown. */
@@ -100,7 +101,7 @@ private fun destCheck(
 /** Create and remove a file in [dir], as Rust's `tempfile_in` probe does; the error's text, or null when it worked. */
 internal fun probeWritable(dir: Path): String? =
     try {
-        val probe = Path(dir, ".ketch-probe" + Random.nextLong().toULong().toString(PROBE_RADIX))
+        val probe = joinPath(dir, ".ketch-probe" + Random.nextLong().toULong().toString(PROBE_RADIX))
         createNew(probe, ByteArray(0))
         removeFile(probe)
         null

@@ -9,6 +9,7 @@ package ketch.core.shell
 import fs.EntryKind
 import fs.canon
 import fs.entryKind
+import fs.joinPath
 import ketch.core.config.envOs
 import ketch.core.model.Os
 import ketch.core.model.TargetSpec
@@ -42,15 +43,15 @@ enum class Shell(
         when (this) {
             Bash -> {
                 val files = listOf(".bash_profile", ".bashrc")
-                (if (TargetSpec.host().os == Os.MacOs) files else files.reversed()).map { Path(home, it) }
+                (if (TargetSpec.host().os == Os.MacOs) files else files.reversed()).map { joinPath(home, it) }
             }
 
             Zsh -> {
-                listOf(Path(zdotdir(home), ".zshrc"))
+                listOf(joinPath(zdotdir(home), ".zshrc"))
             }
 
             Fish -> {
-                listOf(Path(Path(configHome(home), "fish"), "config.fish"))
+                listOf(joinPath(joinPath(configHome(home), "fish"), "config.fish"))
             }
         }
 
@@ -110,4 +111,4 @@ private fun absoluteEnv(key: String) = envOs(key)?.takeIf { it.startsWith('/') }
 /** zsh reads its files from `$ZDOTDIR` when that is set, and only falls back to the home directory when it is not. */
 private fun zdotdir(home: Path) = absoluteEnv("ZDOTDIR") ?: home
 
-private fun configHome(home: Path) = absoluteEnv("XDG_CONFIG_HOME") ?: Path(home, ".config")
+private fun configHome(home: Path) = absoluteEnv("XDG_CONFIG_HOME") ?: joinPath(home, ".config")

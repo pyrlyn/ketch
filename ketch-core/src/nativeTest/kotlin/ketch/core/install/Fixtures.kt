@@ -1,5 +1,6 @@
 package ketch.core.install
 
+import fs.joinPath
 import ketch.core.cancel.Cancel
 import ketch.core.config.Config
 import ketch.core.model.InstalledPackage
@@ -49,7 +50,7 @@ internal fun installed(
 /** A config rooted in a fresh temporary directory with its folders made, and that directory. */
 internal fun <T> withRoot(body: (Config, Path) -> T): T =
     withTempDir { tmp ->
-        val cfg = Config.load(Path(tmp, "ketch"), Report.silent())
+        val cfg = Config.load(joinPath(tmp, "ketch"), Report.silent())
         cfg.ensureDirs()
         body(cfg, tmp)
     }

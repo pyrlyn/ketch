@@ -3,6 +3,7 @@ package ketch.core.tomlfile
 import fs.EntryKind
 import fs.canonicalize
 import fs.entryKind
+import fs.joinPath
 import fs.listDir
 import fs.readText
 import ketch.core.config.currentDir
@@ -48,11 +49,11 @@ class TomlOwnerTest {
         val root = repositoryRoot()
         val sources = mutableListOf<Path>()
         for (module in listDir(root)) {
-            val src = Path(root, module, "src")
+            val src = joinPath(root, module, "src")
             if (entryKind(src) != EntryKind.Dir) continue
-            listDir(src).filter { it.endsWith("Main") }.forEach { kotlinFiles(Path(src, it), sources) }
+            listDir(src).filter { it.endsWith("Main") }.forEach { kotlinFiles(joinPath(src, it), sources) }
         }
-        val owner = canonicalize(Path(root, "ketch-core/src/commonMain/kotlin/ketch/core/tomlfile/TomlFile.kt"))
+        val owner = canonicalize(joinPath(root, "ketch-core/src/commonMain/kotlin/ketch/core/tomlfile/TomlFile.kt"))
         assertTrue(sources.any { canonicalize(it) == owner }, "the scan misses its own module")
         val offenders =
             sources.filter { canonicalize(it) != owner }.flatMap { path ->
@@ -68,7 +69,7 @@ class TomlOwnerTest {
         out: MutableList<Path>,
     ) {
         for (name in listDir(dir)) {
-            val path = Path(dir, name)
+            val path = joinPath(dir, name)
             when {
                 entryKind(path) == EntryKind.Dir -> kotlinFiles(path, out)
                 name.endsWith(".kt") -> out += path
@@ -79,7 +80,7 @@ class TomlOwnerTest {
     /** The test runs in its module's directory; the repository root is the nearest one with the Gradle settings. */
     private fun repositoryRoot(): Path {
         var dir = canonicalize(checkNotNull(currentDir()))
-        while (entryKind(Path(dir, "settings.gradle.kts")) != EntryKind.File) dir = checkNotNull(dir.parent) { "no settings.gradle.kts above the test" }
+        while (entryKind(joinPath(dir, "settings.gradle.kts")) != EntryKind.File) dir = checkNotNull(dir.parent) { "no settings.gradle.kts above the test" }
         return dir
     }
 

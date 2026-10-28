@@ -1,6 +1,7 @@
 package ketch.core.listing
 
 import fs.FsException
+import fs.joinPath
 import fs.readText
 import ketch.core.config.Config
 import ketch.core.error.KetchError
@@ -145,7 +146,7 @@ private fun askAll(
     }
 }
 
-internal fun cachePath(cfg: Config) = Path(cfg.cacheDir, CACHE_FILE)
+internal fun cachePath(cfg: Config) = joinPath(cfg.cacheDir, CACHE_FILE)
 
 @Serializable
 @JsonIgnoreUnknownKeys

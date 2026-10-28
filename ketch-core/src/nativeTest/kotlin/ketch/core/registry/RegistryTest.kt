@@ -3,6 +3,7 @@ package ketch.core.registry
 import fs.createDirAll
 import fs.entryKind
 import fs.isDir
+import fs.joinPath
 import ketch.core.config.Config
 import ketch.core.error.KetchError
 import ketch.core.report.Ctx
@@ -27,9 +28,9 @@ internal fun write(
     folder: String,
     body: String,
 ) {
-    val pkg = Path(dir, folder)
+    val pkg = joinPath(dir, folder)
     createDirAll(pkg)
-    Path(pkg, PACKAGE_FILE).write(body)
+    joinPath(pkg, PACKAGE_FILE).write(body)
 }
 
 class RegistryTest {
@@ -58,8 +59,8 @@ class RegistryTest {
     @Test
     fun nonPackageFoldersAndBrokenEntriesAreSkipped(): Unit =
         withTempDir { tmp ->
-            createDirAll(Path(tmp, ".github/workflows"))
-            Path(tmp, "README.md").write("hi")
+            createDirAll(joinPath(tmp, ".github/workflows"))
+            joinPath(tmp, "README.md").write("hi")
             write(tmp, "broken", "source = 12\n")
             write(tmp, "jq", "source = \"github:jqlang/jq\"\n")
             assertEquals(listOf("jq"), loadSilently(tmp).map { it.first.name })
@@ -85,12 +86,12 @@ class RegistryTest {
             val cfg = Config.load(tmp, report)
             val cx = Ctx(cfg, report)
             write(cfg.registryDir, "jq", "source = \"github:jqlang/jq\"\n")
-            val empty = Path(tmp, "empty")
+            val empty = joinPath(tmp, "empty")
             createDirAll(empty)
             assertFailsWith<KetchError> { swapIn(cx, empty, "someone/registry") }
             assertEquals(1, load(cx).size, "the old registry must still be there")
 
-            val fresh = Path(tmp, "fresh")
+            val fresh = joinPath(tmp, "fresh")
             write(fresh, "fd", "source = \"github:sharkdp/fd\"\n")
             write(fresh, "rg", "source = \"github:BurntSushi/ripgrep\"\n")
             assertEquals(2, swapIn(cx, fresh, "someone/registry"))
@@ -130,7 +131,7 @@ class RegistryTest {
         withTempDir { tmp ->
             write(tmp, "broken", "source = 12\n")
             val error = checkTree(tmp).errors.single()
-            assertTrue(error.path.endsWith("broken/ketch.toml"), error.path)
+            assertTrue(error.path.endsWith(joinPath("broken", "ketch.toml").toString()), error.path)
             assertTrue(error.path !in error.message, "the report prints the path in front of the message: ${error.message}")
         }
 
@@ -150,7 +151,7 @@ class RegistryTest {
     @Test
     fun checkTreeRefusesAnEmptyTree(): Unit =
         withTempDir { tmp ->
-            Path(tmp, "README.md").write("hi")
+            joinPath(tmp, "README.md").write("hi")
             val report = checkTree(tmp)
             assertEquals(0, report.packages)
             assertTrue(PACKAGE_FILE in report.errors.single().message)
@@ -159,7 +160,7 @@ class RegistryTest {
     @Test
     fun checkTreeErrorsWhenThePathIsMissing(): Unit =
         withTempDir { tmp ->
-            val report = checkTree(Path(tmp, "nope"))
+            val report = checkTree(joinPath(tmp, "nope"))
             assertEquals(0, report.packages)
             assertTrue("no such directory" in report.errors.single().message)
         }
@@ -187,8 +188,8 @@ class RegistryTest {
     fun theRevisionIsReadFromTheTarballWrapper(): Unit =
         withTempDir { tmp ->
             val sha = "0123456789abcdef0123456789abcdef01234567"
-            assertEquals(sha, gitRevision(Path(tmp, "pyrlyn-ketch-registry-$sha")))
-            assertNull(gitRevision(Path(tmp, "fresh")))
+            assertEquals(sha, gitRevision(joinPath(tmp, "pyrlyn-ketch-registry-$sha")))
+            assertNull(gitRevision(joinPath(tmp, "fresh")))
         }
 
     @Test
@@ -197,7 +198,7 @@ class RegistryTest {
             val report = Report.silent()
             val cfg = Config.load(tmp, report)
             val sha = "abcdef0123456789abcdef0123456789abcdef01"
-            val fresh = Path(tmp, "owner-registry-$sha")
+            val fresh = joinPath(tmp, "owner-registry-$sha")
             write(fresh, "jq", "source = \"github:jqlang/jq\"\n")
             assertEquals(1, swapIn(Ctx(cfg, report), fresh, "someone/registry"))
             val meta = assertNotNull(loadMeta(cfg))
@@ -217,9 +218,9 @@ class RegistryTest {
     @Test
     fun aFixtureMayBeAFolderWithOneFile(): Unit =
         withTempDir { tmp ->
-            val pkg = Path(tmp, "tool")
+            val pkg = joinPath(tmp, "tool")
             createDirAll(pkg)
-            val asset = Path(pkg, "tool.tar.gz")
+            val asset = joinPath(pkg, "tool.tar.gz")
             asset.write("bytes")
             assertEquals(asset, fixturePayload(tmp, "tool"))
         }
@@ -227,10 +228,10 @@ class RegistryTest {
     @Test
     fun anAmbiguousFixtureFolderIsRefused(): Unit =
         withTempDir { tmp ->
-            val pkg = Path(tmp, "tool")
+            val pkg = joinPath(tmp, "tool")
             createDirAll(pkg)
-            Path(pkg, "a.tar.gz").write("a")
-            Path(pkg, "b.tar.gz").write("b")
+            joinPath(pkg, "a.tar.gz").write("a")
+            joinPath(pkg, "b.tar.gz").write("b")
             val err = assertFailsWith<KetchError> { fixturePayload(tmp, "tool") }
             assertTrue("more than one file" in err.message.orEmpty(), err.message)
         }
@@ -239,18 +240,18 @@ class RegistryTest {
     @Test
     fun aFailedRenameBackRestoresThePreviousRegistryByCopy(): Unit =
         withTempDir { tmp ->
-            val live = Path(tmp, "registry")
+            val live = joinPath(tmp, "registry")
             write(live, "jq", "source = \"github:jqlang/jq\"\n")
-            val fresh = Path(tmp, "fresh")
+            val fresh = joinPath(tmp, "fresh")
             write(fresh, "fd", "source = \"github:sharkdp/fd\"\n")
             val err =
                 assertFailsWith<KetchError> {
                     replaceDir(live, fresh) { from, to -> if (to == live) throw IOException("cross-device link") else SystemFileSystem.atomicMove(from, to) }
                 }
             assertTrue("cross-device link" in err.message.orEmpty(), err.message)
-            assertNotNull(entryKind(Path(Path(live, "jq"), PACKAGE_FILE)))
+            assertNotNull(entryKind(joinPath(joinPath(live, "jq"), PACKAGE_FILE)))
             assertNull(entryKind(asidePath(live)))
-            assertNotNull(entryKind(Path(Path(fresh, "fd"), PACKAGE_FILE)))
+            assertNotNull(entryKind(joinPath(joinPath(fresh, "fd"), PACKAGE_FILE)))
             assertTrue(isDir(live))
         }
 

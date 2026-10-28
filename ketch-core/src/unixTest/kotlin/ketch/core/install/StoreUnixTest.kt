@@ -2,6 +2,7 @@ package ketch.core.install
 
 import fs.createDirAll
 import fs.entryKind
+import fs.joinPath
 import fs.setMode
 import fs.symlink
 import ketch.core.error.KetchError
@@ -22,21 +23,21 @@ class StoreUnixTest {
     @Test
     fun refusesAStoreSymlinkThatPointsOutside(): Unit =
         withRoot { cfg, tmp ->
-            val victim = Path(tmp, "victim")
+            val victim = joinPath(tmp, "victim")
             createDirAll(victim)
-            Path(victim, "keep").write("safe")
-            val decoy = Path(cfg.storeDir, "decoy")
+            joinPath(victim, "keep").write("safe")
+            val decoy = joinPath(cfg.storeDir, "decoy")
             symlink(victim, decoy)
             removeStoreDir(cfg, decoy, silent)
-            assertNotNull(entryKind(Path(victim, "keep")), "a symlink inside the store must not delete its outside target")
+            assertNotNull(entryKind(joinPath(victim, "keep")), "a symlink inside the store must not delete its outside target")
             assertNotNull(entryKind(decoy))
         }
 
     @Test
     fun aLeftoverTheSweepCannotRemoveStopsTheInstallAndIsNamed(): Unit =
         withRoot { cfg, _ ->
-            val folder = Path(cfg.storeDir, "tool")
-            createDirAll(Path(folder, "1.0.0.old"))
+            val folder = joinPath(cfg.storeDir, "tool")
+            createDirAll(joinPath(folder, "1.0.0.old"))
             setMode(folder, "555".toInt(8))
             val err =
                 try {
@@ -50,11 +51,11 @@ class StoreUnixTest {
     @Test
     fun aPackageFolderLinkedOutsideTheStoreIsLeftAlone(): Unit =
         withRoot { cfg, tmp ->
-            val victim = Path(tmp, "victim")
+            val victim = joinPath(tmp, "victim")
             createDirAll(victim)
-            Path(victim, "keep").write("safe")
-            symlink(victim, Path(cfg.storeDir, "tool"))
+            joinPath(victim, "keep").write("safe")
+            symlink(victim, joinPath(cfg.storeDir, "tool"))
             assertNull(removePackageDir(cfg, "tool", silent))
-            assertEquals("safe", Path(victim, "keep").read())
+            assertEquals("safe", joinPath(victim, "keep").read())
         }
 }

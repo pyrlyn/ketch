@@ -2,6 +2,7 @@ package ketch.core.install
 
 import fs.createDirAll
 import fs.entryKind
+import fs.joinPath
 import fs.listDir
 import fs.removeAny
 import ketch.core.binchoice.Known
@@ -116,7 +117,7 @@ private class StubSource(
 }
 
 class InstallTest {
-    private fun config(tmp: Path) = Config.load(Path(tmp, "root"), Report.silent()).copy(target = TargetSpec(Os.MacOs, Arch.Aarch64))
+    private fun config(tmp: Path) = Config.load(joinPath(tmp, "root"), Report.silent()).copy(target = TargetSpec(Os.MacOs, Arch.Aarch64))
 
     @Test
     fun dropsAssetsThePlatformCannotRun(): Unit =
@@ -165,7 +166,7 @@ class InstallTest {
     @Test
     fun anInstallCancelledBeforeItCommitsLeavesNoStoreFolderOrStateEntry(): Unit =
         withTempDir { tmp ->
-            val cfg = Config.load(Path(tmp, "root"), Report.silent())
+            val cfg = Config.load(joinPath(tmp, "root"), Report.silent())
             val tool = program(tmp, "canceltool", "#!/bin/sh\necho hi\n")
             val cx = Ctx(cfg, Report.silent())
             val state = State()
@@ -175,24 +176,24 @@ class InstallTest {
             cancel.cancel()
             assertFailsWith<KetchError.Cancelled> { commit(cx, state, prepared) }
             assertTrue(state.iter().isEmpty(), "no state entry")
-            assertNull(entryKind(Path(cfg.storeDir, "canceltool")), "no store folder")
+            assertNull(entryKind(joinPath(cfg.storeDir, "canceltool")), "no store folder")
             assertEquals(0, runCatching { listDir(cfg.cacheDir).size }.getOrDefault(0), "temp dir removed")
-            assertNull(entryKind(Path(cfg.binDir, "canceltool")), "no link")
+            assertNull(entryKind(joinPath(cfg.binDir, "canceltool")), "no link")
         }
 
     @Test
     fun aReinstallWhoseLinkingFailsAfterTheSwapPutsThePreviousStoreBack(): Unit =
         withTempDir { tmp ->
-            val cfg = Config.load(Path(tmp, "root"), Report.silent())
+            val cfg = Config.load(joinPath(tmp, "root"), Report.silent())
             val tool = program(tmp, "swaptool", "#!/bin/sh\necho hi\n")
             val cx = Ctx(cfg, Report.silent())
             val sources = SourceRegistry.load(cx)
             val state = State()
             val req = localRequest(tool)
-            install(cx, sources, state, req)
-            val before = assertNotNull(state.get("swaptool"))
+            val name = install(cx, sources, state, req).pkg.name
+            val before = assertNotNull(state.get(name))
             // Marks the tree state names, so a swapped-in copy cannot pass for it.
-            Path(before.prefix, "previous").write("kept")
+            joinPath(before.prefix, "previous").write("kept")
             // A local reinstall lands on the same version, so the swap goes into the prefix state already records —
             // the case the orphan guard skips. A file where the bin dir was passes preflight and fails only when
             // linking creates the dir, after the swap.
@@ -202,18 +203,18 @@ class InstallTest {
             val err = assertFailsWith<KetchError> { install(cx, sources, state, req.copy(force = true)) }
             // Any earlier failure would leave the store untouched and prove nothing.
             assertTrue(cfg.binDir.toString() in err.message, err.message)
-            assertEquals(before.prefix, state.get("swaptool")?.prefix)
-            assertEquals("kept", Path(before.prefix, "previous").read(), "the store state names is the one that was there before")
+            assertEquals(before.prefix, state.get(name)?.prefix)
+            assertEquals("kept", joinPath(before.prefix, "previous").read(), "the store state names is the one that was there before")
             assertNull(entryKind(Path("${before.prefix}.old")), "no retired copy left behind")
         }
 
     /** A payload with two executables that share the package name and none named exactly like it, so only a decision can pick. */
     private fun pickWith(decider: Decider): BinPick? =
         withTempDir { tmp ->
-            val payload = Path(tmp, "payload")
+            val payload = joinPath(tmp, "payload")
             createDirAll(payload)
             for (stem in listOf("rtok-cli", "rtok-hook")) program(payload, stem)
-            val cx = Ctx(Config.load(Path(tmp, "root"), Report.silent()), Report.silent()).withDecider(decider)
+            val cx = Ctx(Config.load(joinPath(tmp, "root"), Report.silent()), Report.silent()).withDecider(decider)
             pickBin(cx, host(), payload, null, "rtok", Known())
         }
 

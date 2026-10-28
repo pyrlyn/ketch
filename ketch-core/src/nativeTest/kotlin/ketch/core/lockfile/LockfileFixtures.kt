@@ -1,5 +1,6 @@
 package ketch.core.lockfile
 
+import fs.joinPath
 import fs.readText
 import ketch.core.model.Arch
 import ketch.core.model.InstalledPackage
@@ -42,7 +43,7 @@ internal fun installed(
     sha256 = "a".repeat(64),
     checksumVerified = true,
     installedAt = 0,
-    prefix = Path("/store", name),
+    prefix = joinPath("/store", name),
     origin = ManifestOrigin.Inferred,
 )
 

@@ -2,6 +2,7 @@ package ketch.core.selfupdate
 
 import fs.createDirAll
 import fs.isDir
+import fs.joinPath
 import ketch.core.config.SELF_REPO
 import ketch.core.testing.withEnv
 import ketch.core.testing.withTempDir
@@ -15,12 +16,12 @@ class OwnersTest {
     @Test
     fun aCaskroomDirectoryIsWhatSaysBrewInstalledKetch(): Unit =
         withTempDir { tmp ->
-            val prefix = Path(tmp, "homebrew")
+            val prefix = joinPath(tmp, "homebrew")
             withEnv(listOf("HOMEBREW_PREFIX"), mapOf("HOMEBREW_PREFIX" to prefix.toString())) {
-                val standard = listOf("/opt/homebrew", "/usr/local").map { Path(Path(Path(it), "Caskroom"), SELF_NAME) }.firstOrNull(::isDir)
+                val standard = listOf("/opt/homebrew", "/usr/local").map { joinPath(joinPath(Path(it), "Caskroom"), SELF_NAME) }.firstOrNull(::isDir)
                 assertEquals(standard, caskDir(), "no cask under the prefix means brew did not install ketch")
 
-                val cask = Path(Path(prefix, "Caskroom"), SELF_NAME)
+                val cask = joinPath(joinPath(prefix, "Caskroom"), SELF_NAME)
                 createDirAll(cask)
                 assertEquals(cask, caskDir())
             }
@@ -31,8 +32,8 @@ class OwnersTest {
         val data = Path("/home/u/.local/share/mise")
         // Before and after the move from listepo to pyrlyn.
         for (tool in listOf("github-pyrlyn-ketch", "github-listepo-ketch")) {
-            val exe = Path(data, "installs/$tool/0.4.7/ketch")
-            assertEquals(Path(Path(data, "installs"), tool), miseToolDirIn(exe, listOf(Path("/elsewhere"), data)))
+            val exe = joinPath(data, "installs/$tool/0.4.7/ketch")
+            assertEquals(joinPath(joinPath(data, "installs"), tool), miseToolDirIn(exe, listOf(Path("/elsewhere"), data)))
         }
     }
 
@@ -58,7 +59,7 @@ class OwnersTest {
                 "-listepo-ketch" to "-listepo-ketch",
                 "github-other-ketch" to "github-other-ketch",
             )
-        for ((dir, tool) in cases) assertEquals(tool, miseToolName(Path(Path("/mise/installs"), dir), SELF_REPO), dir)
+        for ((dir, tool) in cases) assertEquals(tool, miseToolName(joinPath(Path("/mise/installs"), dir), SELF_REPO), dir)
         // A fork is not renamed: only its own directory maps back.
         assertEquals("github:someone/ketch", miseToolName(Path("/mise/installs/github-someone-ketch"), "someone/ketch"))
         assertEquals("github-listepo-ketch", miseToolName(Path("/mise/installs/github-listepo-ketch"), "someone/ketch"))
@@ -69,7 +70,7 @@ class OwnersTest {
         // Not asserted against the environment: the machine running the suite may well have a cask, and that is a
         // valid answer too.
         for (prefix in listOf(Path("/opt/homebrew"), Path("/usr/local"))) {
-            val cask = Path(Path(prefix, "Caskroom"), SELF_NAME)
+            val cask = joinPath(joinPath(prefix, "Caskroom"), SELF_NAME)
             assertEquals(cask.takeIf(::isDir), caskDirIn(listOf(prefix)))
         }
     }
@@ -77,10 +78,10 @@ class OwnersTest {
     @Test
     fun homebrewPrefixDoesNotHideACaskUnderAnotherPrefix(): Unit =
         withTempDir { tmp ->
-            val active = Path(tmp, "opt-homebrew")
-            val other = Path(tmp, "usr-local")
-            createDirAll(Path(active, "bin"))
-            val cask = Path(Path(other, "Caskroom"), SELF_NAME)
+            val active = joinPath(tmp, "opt-homebrew")
+            val other = joinPath(tmp, "usr-local")
+            createDirAll(joinPath(active, "bin"))
+            val cask = joinPath(joinPath(other, "Caskroom"), SELF_NAME)
             createDirAll(cask)
             // Active brew answered, but the cask lives under the other tree — the same shape as an Apple Silicon
             // HOMEBREW_PREFIX with a leftover Intel cask.
@@ -90,14 +91,14 @@ class OwnersTest {
     @Test
     fun theBrewBesideTheCaskIsPreferredToTheOneOnPath(): Unit =
         withTempDir { tmp ->
-            val prefix = Path(tmp, "homebrew")
-            val cask = Path(Path(prefix, "Caskroom"), SELF_NAME)
+            val prefix = joinPath(tmp, "homebrew")
+            val cask = joinPath(joinPath(prefix, "Caskroom"), SELF_NAME)
             createDirAll(cask)
             // Nothing installed there yet, so there is no better answer than PATH.
             assertEquals("brew", brewBinary(cask))
 
-            val brew = Path(Path(prefix, "bin"), "brew")
-            createDirAll(Path(prefix, "bin"))
+            val brew = joinPath(joinPath(prefix, "bin"), "brew")
+            createDirAll(joinPath(prefix, "bin"))
             brew.write("#!/bin/sh\n")
             assertEquals(brew.toString(), brewBinary(cask))
         }

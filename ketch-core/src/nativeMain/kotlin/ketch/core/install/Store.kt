@@ -4,6 +4,7 @@ import fs.FsException
 import fs.canonicalize
 import fs.entryKind
 import fs.isDir
+import fs.joinPath
 import fs.listDir
 import fs.removeAny
 import ketch.core.config.Config
@@ -83,7 +84,7 @@ internal fun sweepSwapLeftovers(
     val recorded = existing?.let { pkg -> listOf(pkg.prefix) + pkg.retained.map { it.prefix } }.orEmpty()
     entries
         .filter { it.endsWith(".incoming") || it.endsWith(".old") }
-        .map { Path(dir, it) }
+        .map { joinPath(dir, it) }
         .filter { it !in recorded }
         // Removed without following a link, so a link is removed as a link and never followed out of the store.
         .forEach { path -> fsKitAt(path) { removeAny(path) } }
@@ -102,7 +103,7 @@ internal fun packageDirCandidate(
     name: String,
 ): Path? {
     val plain = name != ".." && rustComponents(Path(name)) == listOf(name)
-    val dir = Path(cfg.storeDir, name)
+    val dir = joinPath(cfg.storeDir, name)
     val inside = plain && entryKind(dir) != null && isInsideStore(cfg.storeDir, dir)
     val spelledSo = inside && runCatching { name in listDir(cfg.storeDir) }.getOrDefault(false)
     return dir.takeIf { spelledSo }

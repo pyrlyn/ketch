@@ -1,5 +1,6 @@
 package ketch.core.install
 
+import fs.joinPath
 import ketch.core.cancel.Cancel
 import ketch.core.config.Config
 import ketch.core.decide.Decider
@@ -40,7 +41,7 @@ class InstallUnixTest {
         withTempDir { tmp ->
             val recorder = Recorder()
             val report = Report(recorder)
-            val cfg = Config.load(Path(tmp, "root"), report)
+            val cfg = Config.load(joinPath(tmp, "root"), report)
             val cx = Ctx(cfg, report)
             val tool = program(tmp, "tool", "#!/bin/sh\necho tool\n")
             install(cx, SourceRegistry.builtinOnly(cx), State(), InstallRequest(PackageSpec.parse("local:$tool")))

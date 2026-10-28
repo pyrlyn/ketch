@@ -1,5 +1,6 @@
 package ketch.core.install
 
+import fs.joinPath
 import ketch.core.cancel.Cancel
 import ketch.core.config.Config
 import ketch.core.error.KetchError
@@ -30,7 +31,7 @@ class UpgradeTest {
         return upgrade to warns.all
     }
 
-    private fun <T> withConfig(body: (Config) -> T): T = withTempDir { body(Config.load(Path(it, "ketch"), Report.silent())) }
+    private fun <T> withConfig(body: (Config) -> T): T = withTempDir { body(Config.load(joinPath(it, "ketch"), Report.silent())) }
 
     @Test
     fun aPackageOnThePreChannelLooksForPrereleasesWithoutPre() {

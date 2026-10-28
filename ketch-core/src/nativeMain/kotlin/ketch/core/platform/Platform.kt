@@ -5,6 +5,7 @@
 // OS means adding a backend and one `actual` of [host] — no changes anywhere else.
 package ketch.core.platform
 
+import fs.joinPath
 import ketch.core.config.Config
 import ketch.core.extra.ExtraPlacement
 import ketch.core.extract.Extractor
@@ -167,7 +168,7 @@ interface Platform {
      * User-writable man root. Pages go in `manN/` underneath. `$XDG_DATA_HOME/man` or `~/.local/share/man`, not the
      * platform data directory, which on macOS is Application Support — a place `man` never looks.
      */
-    fun userManRoot(): Path = Path(dataHome(), "man")
+    fun userManRoot(): Path = joinPath(dataHome(), "man")
 
     /** Directory this shell searches for user completion scripts. */
     fun completionDir(shell: CompletionShell): Path = completionDirFor(shell)

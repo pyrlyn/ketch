@@ -1,5 +1,6 @@
 package ketch.core.extra
 
+import ketch.core.config.joinedPath
 import ketch.core.error.KetchError
 import ketch.core.model.ClassifiedExtra
 import ketch.core.model.CompletionShell
@@ -101,9 +102,9 @@ class ExtraTest {
                 if (shell == CompletionShell.Bash) Path("/home/me/.local/share/bash-completion/completions") else Path("/tmp/$shell")
             }
         assertEquals(2, planned.size)
-        assertEquals(Path("/home/me/.local/share/bash-completion/completions/rg"), planned[0].dest)
+        assertEquals(joinedPath(Path("/home/me/.local/share/bash-completion/completions"), "rg"), planned[0].dest)
         assertEquals(LinkRole.Completion, planned[0].role)
-        assertEquals(Path("/home/me/.local/share/man/man1/rg.1"), planned[1].dest)
+        assertEquals(joinedPath(Path("/home/me/.local/share/man"), "man1", "rg.1"), planned[1].dest)
         assertEquals(LinkRole.Man, planned[1].role)
     }
 

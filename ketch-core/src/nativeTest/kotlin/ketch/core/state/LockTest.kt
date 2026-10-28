@@ -5,6 +5,7 @@ package ketch.core.state
 import fs.FsException
 import fs.atomic
 import fs.createNew
+import fs.joinPath
 import fs.listDir
 import fs.readText
 import fs.removeFile
@@ -55,7 +56,7 @@ class LockTest {
     @Test
     fun aLockLeftByADeadProcessIsReclaimedWithoutResidue(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "lock")
+            val path = joinPath(dir, "lock")
             // Above the pid ceiling, so it can never name a running process.
             write(path, "999999")
             val lock = acquire(path)
@@ -67,7 +68,7 @@ class LockTest {
     @Test
     fun aSecondLockInThisProcessIsBusyUntilTheFirstCloses(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, ".lock")
+            val path = joinPath(dir, ".lock")
             val held = acquire(path)
             assertTrue(exists(path))
             assertEquals(me, assertFailsWith<KetchError.Busy> { acquire(path) }.pid)
@@ -81,13 +82,13 @@ class LockTest {
     @Test
     fun aLockHeldUnderOnePathDoesNotBlockAnotherPath(): Unit =
         withTempDir { dir ->
-            acquire(Path(dir, "a")).use { acquire(Path(dir, "b")).close() }
+            acquire(joinPath(dir, "a")).use { acquire(joinPath(dir, "b")).close() }
         }
 
     @Test
     fun aFailedAcquireLeavesNoClaimBehind(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "lock")
+            val path = joinPath(dir, "lock")
             // A live foreign holder: busy, and must not poison later attempts. pid 1 is init only on Unix.
             if (!HOST_WINDOWS) {
                 write(path, "1")
@@ -100,7 +101,7 @@ class LockTest {
     @Test
     fun aLockFileNamingThisProcessWithoutAHolderIsStale(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "lock")
+            val path = joinPath(dir, "lock")
             write(path, me.toString())
             acquire(path).close()
             assertFalse(exists(path))
@@ -109,7 +110,7 @@ class LockTest {
     @Test
     fun aHeldLockCanBeContendedFromAnotherThread(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "lock")
+            val path = joinPath(dir, "lock")
             acquire(path).use {
                 val other = runBlocking { withContext(Dispatchers.Default) { runCatching { acquire(path).close() } } }
                 assertIs<KetchError.Busy>(other.exceptionOrNull())
@@ -119,7 +120,7 @@ class LockTest {
     @Test
     fun anEmptyLockFileIsBusyUntilItIsOld(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "lock")
+            val path = joinPath(dir, "lock")
             // What a holder that has created the file but not yet written its pid looks like from outside.
             createNew(path, ByteArray(0))
             assertEquals(null, assertFailsWith<KetchError.Busy> { acquire(path) }.pid)
@@ -132,7 +133,7 @@ class LockTest {
     @Test
     fun aLateReclaimNeverTakesAFreshLockAway(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "lock")
+            val path = joinPath(dir, "lock")
             write(path, "999999")
             // This process reclaims the dead pid's lock first...
             val held = acquire(path)
@@ -149,7 +150,7 @@ class LockTest {
     @Test
     fun closingALockLeavesAFileAnotherProcessWrote(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "lock")
+            val path = joinPath(dir, "lock")
             val held = acquire(path)
             removeFile(path)
             write(path, "1")
@@ -161,16 +162,16 @@ class LockTest {
     @Test
     fun lockContender() {
         val dir = getenv(CONTENDER)?.toKString()?.let(::Path) ?: return
-        val lock = Path(dir, "lock")
-        val inside = Path(dir, "inside")
+        val lock = joinPath(dir, "lock")
+        val inside = joinPath(dir, "inside")
         // Proof for the parent that the filter reached this test, not an empty run that passes.
-        write(Path(dir, "ran.$me"), "")
+        write(joinPath(dir, "ran.$me"), "")
         for (round in 0 until ROUNDS) {
             val held = runCatching { acquire(lock) }.getOrNull() ?: continue
             try {
                 createNew(inside, ByteArray(0))
             } catch (e: FsException) {
-                write(Path(dir, "overlap.$me"), e.kind.name)
+                write(joinPath(dir, "overlap.$me"), e.kind.name)
             }
             usleep(HOLD_MICROS)
             runCatching { removeFile(inside) }
@@ -189,7 +190,7 @@ class LockTest {
     @Test
     fun processesNeverHoldTheLockTogether(): Unit =
         withTempDir { dir ->
-            write(Path(dir, "lock"), "999999")
+            write(joinPath(dir, "lock"), "999999")
             // The test binary itself, filtered down to the contender.
             val exe = checkNotNull(Platform.programName) { "no program name to run the contenders with" }
             val filter = "--ktest_filter=ketch.core.state.LockTest.${LockTest::lockContender.name}"

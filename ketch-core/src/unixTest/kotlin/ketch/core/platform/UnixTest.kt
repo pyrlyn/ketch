@@ -3,6 +3,7 @@ package ketch.core.platform
 import fs.EntryKind
 import fs.createDirAll
 import fs.entryKind
+import fs.joinPath
 import fs.mode
 import fs.removeAny
 import fs.setMode
@@ -31,8 +32,8 @@ class UnixTest {
     @Test
     fun aBinGlobPrefersTheLinkNamedBinaryOverAHelperBesideIt() {
         withTempDir { tmp ->
-            Path(tmp, "rtok-hook").write("hook")
-            Path(tmp, "rtok").write("main")
+            joinPath(tmp, "rtok-hook").write("hook")
+            joinPath(tmp, "rtok").write("main")
             val got = resolveBinSpecs(tmp, listOf(BinSpec(path = "rtok*", name = "rtok")))
             assertEquals(1, got.size)
             assertEquals("rtok", got[0].first.name)
@@ -43,20 +44,20 @@ class UnixTest {
     @Test
     fun aPayloadLinkRoutedThroughAnotherLinkOutOfTheTreeIsNotAProgram() {
         withTempDir { outer ->
-            val root = Path(outer, "payload")
+            val root = joinPath(outer, "payload")
             createDirAll(root)
-            Path(outer, "outside").write("#!/bin/sh\n")
-            Path(root, "inside").write("#!/bin/sh\n")
-            symlink(Path("."), Path(root, "L"))
+            joinPath(outer, "outside").write("#!/bin/sh\n")
+            joinPath(root, "inside").write("#!/bin/sh\n")
+            symlink(Path("."), joinPath(root, "L"))
             // Planted by a payload no extractor checked (a DMG or PKG copy): one hop reads `abs`, which is inside, and
             // stops there.
-            symlink(Path(outer, "outside"), Path(root, "abs"))
-            symlink(Path("abs"), Path(root, "escape"))
-            symlink(Path("L/inside"), Path(root, "alias"))
+            symlink(joinPath(outer, "outside"), joinPath(root, "abs"))
+            symlink(Path("abs"), joinPath(root, "escape"))
+            symlink(Path("L/inside"), joinPath(root, "alias"))
 
             fun entryFor(name: String) = walk(root, onError = {}).first { it.path.name == name }
             assertNull(payloadExecutableEntry(entryFor("escape"), root))
-            assertEquals(Path(root, "alias"), payloadExecutableEntry(entryFor("alias"), root))
+            assertEquals(joinPath(root, "alias"), payloadExecutableEntry(entryFor("alias"), root))
         }
     }
 
@@ -72,7 +73,7 @@ class UnixTest {
     @Test
     fun makingABinaryExecutableLeavesEveryOtherBitAlone() {
         withTempDir { tmp ->
-            val path = Path(tmp, "tool")
+            val path = joinPath(tmp, "tool")
             path.write("#!/bin/sh\n")
             setMode(path, octal("600"))
 
@@ -86,7 +87,7 @@ class UnixTest {
     @Test
     fun makingABinaryExecutableAddsTheReadAScriptNeeds() {
         withTempDir { tmp ->
-            val path = Path(tmp, "tool")
+            val path = joinPath(tmp, "tool")
             path.write("#!/bin/sh\n")
             // What a tar member with a write-only header mode unpacks as.
             setMode(path, octal("200"))
@@ -100,9 +101,9 @@ class UnixTest {
     @Test
     fun emptyDestinationIsAvailable() {
         withTempDir { tmp ->
-            val owned = Path(tmp, "store/pkg")
+            val owned = joinPath(tmp, "store/pkg")
             createDirAll(owned)
-            destinationAvailable(Path(tmp, "bin/tool"), owned, emptyList())
+            destinationAvailable(joinPath(tmp, "bin/tool"), owned, emptyList())
         }
     }
 
@@ -111,7 +112,7 @@ class UnixTest {
         tmp: Path,
         target: Path,
     ): Path {
-        val link = Path(tmp, "bin/tool")
+        val link = joinPath(tmp, "bin/tool")
         createDirAll(link.parent!!)
         symlink(target, link)
         return link
@@ -119,9 +120,9 @@ class UnixTest {
 
     /** `store/pkg` with a program in its `1.0`. */
     private fun ownedTool(tmp: Path): Pair<Path, Path> {
-        val owned = Path(tmp, "store/pkg")
-        createDirAll(Path(owned, "1.0"))
-        val target = Path(owned, "1.0/tool")
+        val owned = joinPath(tmp, "store/pkg")
+        createDirAll(joinPath(owned, "1.0"))
+        val target = joinPath(owned, "1.0/tool")
         target.write("#!/bin/sh\n")
         return owned to target
     }
@@ -139,9 +140,9 @@ class UnixTest {
     @Test
     fun occupiedDestinationThatIsNotOursReturnsAnError() {
         withTempDir { tmp ->
-            val owned = Path(tmp, "store/pkg")
+            val owned = joinPath(tmp, "store/pkg")
             createDirAll(owned)
-            val elsewhere = Path(tmp, "elsewhere")
+            val elsewhere = joinPath(tmp, "elsewhere")
             elsewhere.write("#!/bin/sh\n")
             val link = linkTo(tmp, elsewhere)
             assertFalse(isOurs(link, owned, emptyList()))
@@ -152,11 +153,11 @@ class UnixTest {
     @Test
     fun aSymlinkTargetWithDotdotIsNotTreatedAsOurs() {
         withTempDir { tmp ->
-            val owned = Path(tmp, "store/pkg")
+            val owned = joinPath(tmp, "store/pkg")
             createDirAll(owned)
-            Path(tmp, "elsewhere").write("x")
+            joinPath(tmp, "elsewhere").write("x")
             // Lexically under `owned`, but resolves outside via `..`.
-            val sneaky = Path(owned, "1.0", "..", "..", "..", "elsewhere")
+            val sneaky = joinPath(owned, "1.0", "..", "..", "..", "elsewhere")
             assertTrue(sneaky.toString().startsWith("$owned/"), "precondition: lexical starts_with alone would allow this")
             val link = linkTo(tmp, sneaky)
             assertFalse(isOurs(link, owned, emptyList()), "`..` in a symlink target must not count as owned")
@@ -177,17 +178,17 @@ class UnixTest {
         tmp: Path,
         occupant: Occupant,
     ): Pair<Path, Path> {
-        val owned = Path(tmp, "store/pkg")
+        val owned = joinPath(tmp, "store/pkg")
         createDirAll(owned)
-        val link = Path(tmp, "dest")
+        val link = joinPath(tmp, "dest")
         when (occupant) {
             Occupant.RegularFile -> {
                 link.write("x")
             }
 
             Occupant.Directory -> {
-                createDirAll(Path(link, "Contents"))
-                Path(link, "Contents/Info.plist").write("x")
+                createDirAll(joinPath(link, "Contents"))
+                joinPath(link, "Contents/Info.plist").write("x")
             }
         }
         return owned to link
@@ -208,7 +209,7 @@ class UnixTest {
         // the store copy is still there.
         withTempDir { tmp ->
             val (owned, link) = prepareDestination(tmp, Occupant.Directory)
-            val target = Path(owned, "1.0/App.app")
+            val target = joinPath(owned, "1.0/App.app")
             createDirAll(target)
             val recorded = listOf(LinkRecord(link, target, LinkKind.CopiedApp, LinkRole.Binary))
             assertTrue(isOurs(link, owned, recorded))
@@ -224,7 +225,7 @@ class UnixTest {
         // The user replaced ketch's link with a copy of their own. A stale record must not authorize deleting it.
         withTempDir { tmp ->
             val (owned, link) = prepareDestination(tmp, Occupant.RegularFile)
-            val recorded = listOf(LinkRecord(link, Path(owned, "1.0/tool"), LinkKind.Symlink, LinkRole.Binary))
+            val recorded = listOf(LinkRecord(link, joinPath(owned, "1.0/tool"), LinkKind.Symlink, LinkRole.Binary))
 
             assertFalse(isOurs(link, owned, recorded))
             assertFailsWith<KetchError> { destinationAvailable(link, owned, recorded) }
@@ -236,12 +237,12 @@ class UnixTest {
     @Test
     fun aRecordedSymlinkThatPointsSomewhereElseIsNotOurs() {
         withTempDir { tmp ->
-            val owned = Path(tmp, "store/pkg")
-            createDirAll(Path(owned, "1.0"))
-            val elsewhere = Path(tmp, "elsewhere")
+            val owned = joinPath(tmp, "store/pkg")
+            createDirAll(joinPath(owned, "1.0"))
+            val elsewhere = joinPath(tmp, "elsewhere")
             elsewhere.write("x")
             val link = linkTo(tmp, elsewhere)
-            val recorded = listOf(LinkRecord(link, Path(owned, "1.0/tool"), LinkKind.Symlink, LinkRole.Binary))
+            val recorded = listOf(LinkRecord(link, joinPath(owned, "1.0/tool"), LinkKind.Symlink, LinkRole.Binary))
 
             assertFalse(isOurs(link, owned, recorded))
             assertFailsWith<KetchError> { clearDestination(link, owned, recorded, Claims()) }
@@ -291,17 +292,17 @@ class UnixTest {
     @Test
     fun aFailedPlaceAfterTheSwapRestoresThePreviousStore() {
         withTempDir { tmp ->
-            val store = Path(tmp, "store/tool/1.0")
+            val store = joinPath(tmp, "store/tool/1.0")
             createDirAll(store)
-            Path(store, "tool").write("working")
-            val payload = Path(tmp, "payload")
+            joinPath(store, "tool").write("working")
+            val payload = joinPath(tmp, "payload")
             createDirAll(payload)
-            Path(payload, "tool").write("new")
+            joinPath(payload, "tool").write("new")
             moveIntoStore(payload, store)
-            assertEquals("new", Path(store, "tool").read())
+            assertEquals("new", joinPath(store, "tool").read())
             assertEquals(EntryKind.Dir, entryKind(sibling(store, ".old")))
             restoreRetiredStore(store)
-            assertEquals("working", Path(store, "tool").read())
+            assertEquals("working", joinPath(store, "tool").read())
             finalizeStoreSwap(store)
             assertNull(entryKind(sibling(store, ".old")))
         }

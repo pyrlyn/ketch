@@ -1,5 +1,6 @@
 package ketch.core.config
 
+import fs.joinPath
 import fs.readText
 import ketch.core.testing.RUST_FIXTURES
 import kotlinx.io.files.Path
@@ -11,7 +12,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class ConfigSchemaTest {
-    private val text = readText(Path(RUST_FIXTURES, "config.schema.json"))
+    private val text = readText(joinPath(RUST_FIXTURES, "config.schema.json"))
 
     @Test
     fun theCommittedSchemaDescribesEveryConfigKey() {

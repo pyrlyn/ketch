@@ -11,6 +11,7 @@ import fs.createDir
 import fs.entryKind
 import fs.hardLink
 import fs.isDir
+import fs.joinPath
 import fs.removeFile
 import fs.setMode
 import ketch.core.config.HOST_WINDOWS
@@ -38,7 +39,7 @@ internal fun setUnixMode(
 internal fun join(
     base: Path,
     rel: String,
-) = if (rel.startsWith('/')) Path(rel) else Path(base, rel)
+) = if (rel.startsWith('/')) Path(rel) else joinPath(base, rel)
 
 private fun isFile(path: Path) = entryKind(canon(path)) == EntryKind.File
 
@@ -81,7 +82,7 @@ internal fun walkInside(
 ) {
     var built = dest
     for (part in rel.split('/').filter { it.isNotEmpty() }) {
-        built = Path(built, part)
+        built = joinPath(built, part)
         when (entryKind(built)) {
             EntryKind.Symlink -> throw KetchError.Msg("refusing archive entry that resolves through $built")
 
@@ -103,7 +104,7 @@ internal fun ensureParent(
     rel: String,
 ) {
     walkInside(dest, rel.substringBeforeLast('/', ""), create = true)
-    val out = Path(dest, rel)
+    val out = joinPath(dest, rel)
     if (entryKind(out) == EntryKind.Symlink) ioAt(out) { removeFile(out) }
 }
 
@@ -122,7 +123,7 @@ internal fun finishDeferredLinks(
         // The kernel resolves the source too, so a hard link to `planted-link/.ssh/id_rsa` would pull a file from
         // outside the payload into it.
         walkInside(dest, safeTarget, create = false)
-        writeHardlink(Path(dest, safeTarget), out)
+        writeHardlink(joinPath(dest, safeTarget), out)
     }
     for ((out, target) in symlinks) writeSymlink(target, out)
     // Only now, with every link in place, does a target mean what the kernel will make of it: a later link can

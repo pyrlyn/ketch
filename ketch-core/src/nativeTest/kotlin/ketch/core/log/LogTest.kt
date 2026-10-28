@@ -1,5 +1,6 @@
 package ketch.core.log
 
+import fs.joinPath
 import fs.readText
 import ketch.core.config.Config
 import ketch.core.report.Report
@@ -14,7 +15,7 @@ class LogTest {
     @Test
     fun verboseWritesDebugDetailToTheLogFile(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "ketch.log")
+            val path = joinPath(dir, "ketch.log")
             val previous = Log.swap(null)
             Log.swap(Log.open(path, Log.fileLevel(Level.Info, true), Format.Text))
             Log.record(Level.Debug, "root /tmp/ketch · target aarch64 · token no")
@@ -29,7 +30,7 @@ class LogTest {
     fun turningTheLogOffClosesTheSinkAnEarlierInitOpened(): Unit =
         withTempDir { dir ->
             val previous = Log.swap(null)
-            val cfg = Config.load(Path(dir, "root"), Report.silent())
+            val cfg = Config.load(joinPath(dir, "root"), Report.silent())
             Log.init(cfg.copy(logLevel = Level.Info), false)
             assertNotNull(Log.path(), "first operation logs")
 

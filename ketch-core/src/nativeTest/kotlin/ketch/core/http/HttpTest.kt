@@ -1,5 +1,6 @@
 package ketch.core.http
 
+import fs.joinPath
 import http.HttpBody
 import http.HttpClient
 import http.HttpHead
@@ -80,7 +81,7 @@ class HttpTest {
         withTempDir { dir ->
             val reply = "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".encodeToByteArray() + ByteArray(1024 * 1024) { 7 }
             LoopbackServer { reply }.use { server ->
-                val dest = Path(dir, "big.bin")
+                val dest = joinPath(dir, "big.bin")
                 val http = Http(null, Report.silent()).withMaxDownload(64 * 1024)
                 val err = assertFailsWith<KetchError> { download(http, "${server.url}/big.bin", dest) }
                 assertTrue("refusing the download" in err.message, err.message)
@@ -104,7 +105,7 @@ class HttpTest {
 
                     override fun close() = Unit
                 }
-            val dest = Path(dir, "huge.bin")
+            val dest = joinPath(dir, "huge.bin")
             val err = assertFailsWith<KetchError> { download(Http(null, Report.silent(), client = client), "https://x/huge.bin", dest) }
             assertTrue("refusing the download" in err.message, err.message)
             assertEquals(emptyList(), SystemFileSystem.list(dir))
@@ -128,7 +129,7 @@ class HttpTest {
 
                         override fun finish(message: String) = Unit
                     }
-                val dest = Path(dir, "c.bin")
+                val dest = joinPath(dir, "c.bin")
                 assertFailsWith<KetchError.Cancelled> {
                     download(Http(null, Report.silent()), "${server.url}/c.bin", dest, stopAfterFirstChunk, cancel)
                 }
@@ -141,7 +142,7 @@ class HttpTest {
     fun aDownloadIsHashedAsItStreams(): Unit =
         withTempDir { dir ->
             LoopbackServer { "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nabc".encodeToByteArray() }.use { server ->
-                val dest = Path(dir, "sub/f")
+                val dest = joinPath(dir, "sub/f")
                 val hex = download(Http(null, Report.silent()), "${server.url}/f", dest)
                 assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", hex)
                 assertEquals(hex, sha256File(dest))
@@ -166,7 +167,7 @@ class HttpTest {
     @Test
     fun hashesFiles(): Unit =
         withTempDir { dir ->
-            val path = Path(dir, "f")
+            val path = joinPath(dir, "f")
             path.write("abc")
             assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", sha256File(path))
         }

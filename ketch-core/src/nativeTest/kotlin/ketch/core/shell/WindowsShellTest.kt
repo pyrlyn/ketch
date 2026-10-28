@@ -1,6 +1,7 @@
 package ketch.core.shell
 
 import fs.createDirAll
+import fs.joinPath
 import ketch.core.error.KetchError
 import ketch.core.testing.withEnv
 import ketch.core.testing.withTempDir
@@ -110,8 +111,8 @@ class WindowsShellTest {
     @Test
     fun profilesAreTheAllHostsOnesForBothEditions() {
         val docs = Path("D")
-        assertEquals(Path(Path(docs, "PowerShell"), "profile.ps1"), PowerShell.Core.profile(docs))
-        assertEquals(Path(Path(docs, "WindowsPowerShell"), "profile.ps1"), PowerShell.Desktop.profile(docs))
+        assertEquals(joinPath(joinPath(docs, "PowerShell"), "profile.ps1"), PowerShell.Core.profile(docs))
+        assertEquals(joinPath(joinPath(docs, "WindowsPowerShell"), "profile.ps1"), PowerShell.Desktop.profile(docs))
     }
 
     @Test
@@ -156,7 +157,7 @@ class WindowsShellTest {
     @Test
     fun aPathEntryForAMissingFolderMatchesOnlyBySpelling(): Unit =
         withTempDir { tmp ->
-            val gone = Path(tmp, "gone")
+            val gone = joinPath(tmp, "gone")
             assertFalse(windowsPathHas(tmp.toString(), gone))
             assertTrue(windowsPathHas(gone.toString(), gone))
         }
@@ -164,10 +165,10 @@ class WindowsShellTest {
     @Test
     fun onlyKetchBinDirsThatAreGoneAreStale(): Unit =
         withTempDir { tmp ->
-            val live = Path(Path(tmp, ".ketch"), "bin")
+            val live = joinPath(joinPath(tmp, ".ketch"), "bin")
             createDirAll(live)
             val goneDefault = "C:\\Users\\u\\.ketch\\bin"
-            val goneCustom = Path(Path(tmp, "custom"), "bin")
+            val goneCustom = joinPath(joinPath(tmp, "custom"), "bin")
             val path = "C:\\Windows;$live;$goneDefault;$goneCustom;C:\\gone\\tools\\bin"
             assertEquals(listOf(goneDefault, goneCustom.toString()), stalePathEntries(path, goneCustom))
         }
@@ -184,7 +185,7 @@ class WindowsShellTest {
     fun aBinDirWrittenWithAVariableIsAlreadyOnThePath(): Unit =
         withTempDir { tmp ->
             withEnv(emptyList(), mapOf("KETCH_TEST_B95_ROOT" to tmp.toString())) {
-                val dir = Path(tmp, "bin")
+                val dir = joinPath(tmp, "bin")
                 val path = "%SystemRoot%\\system32;%KETCH_TEST_B95_ROOT%\\bin;%JAVA_HOME%\\bin"
                 assertTrue(windowsPathHas(path, dir))
                 assertNull(windowsPathPrepend(path, dir))

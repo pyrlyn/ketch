@@ -2,6 +2,7 @@ package ketch.core.extra
 
 import fs.atomic
 import fs.createDirAll
+import fs.joinPath
 import fs.readText
 import ketch.core.model.ExtraKind
 import ketch.core.testing.withTempDir
@@ -17,7 +18,7 @@ class SelfDocsTest {
                 SelfDocs(
                     manPages = { dir ->
                         createDirAll(dir)
-                        listOf("ketch.1", "ketch-install.1").map { Path(dir, it).also { p -> atomic(p, "page".encodeToByteArray()) } }
+                        listOf("ketch.1", "ketch-install.1").map { joinPath(dir, it).also { p -> atomic(p, "page".encodeToByteArray()) } }
                     },
                     completion = { shell -> "complete ${shell.asStr}".encodeToByteArray() },
                 )

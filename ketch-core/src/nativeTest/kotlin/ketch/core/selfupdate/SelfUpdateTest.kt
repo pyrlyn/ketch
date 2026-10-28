@@ -5,6 +5,7 @@ import fs.FsException
 import fs.canonicalize
 import fs.createDirAll
 import fs.entryKind
+import fs.joinPath
 import fs.readLink
 import ketch.core.VERSION
 import ketch.core.config.Config
@@ -89,7 +90,7 @@ class SelfUpdateTest {
     @Test
     fun aPreviousSwapBackupIsRemovedAndAMissingOneIsFine(): Unit =
         withTempDir { tmp ->
-            val backup = swapBackup(Path(tmp, bootstrapBinaryName()))
+            val backup = swapBackup(joinPath(tmp, bootstrapBinaryName()))
             backup.write("old")
             sweepAside(backup, Report.silent())
             assertNull(entryKind(backup))
@@ -100,7 +101,7 @@ class SelfUpdateTest {
     fun doctorNotesAStaleAsideAndStaysQuietWithoutOne(): Unit =
         withTempDir { tmp ->
             assertNull(staleAsideFrom(tmp, null))
-            val backup = swapBackup(Path(tmp, bootstrapBinaryName()))
+            val backup = swapBackup(joinPath(tmp, bootstrapBinaryName()))
             backup.write("old")
             val check = assertNotNull(staleAsideFrom(tmp, null))
             assertEquals("backup", check.name)
@@ -164,16 +165,16 @@ class SelfUpdateTest {
     @Test
     fun aBootstrapLinkDirIsRecordedAndPlaced(): Unit =
         withTempDir { tmp ->
-            val cfg = Config.load(Path(tmp, "root"), Report.silent())
+            val cfg = Config.load(joinPath(tmp, "root"), Report.silent())
             createDirAll(cfg.binDir)
-            val bin = Path(cfg.binDir, bootstrapBinaryName())
+            val bin = joinPath(cfg.binDir, bootstrapBinaryName())
             bin.write("ketch")
             val state = State.load(cfg)
-            state.insert(installedKetch(Path(cfg.storeDir, SELF_NAME)))
-            val bootstrap = Path(tmp, "bootstrap")
+            state.insert(installedKetch(joinPath(cfg.storeDir, SELF_NAME)))
+            val bootstrap = joinPath(tmp, "bootstrap")
             recordBootstrapLink(Ctx(cfg, Report.silent()), state, bootstrap)
 
-            val link = Path(canonicalize(bootstrap), bootstrapBinaryName())
+            val link = joinPath(canonicalize(bootstrap), bootstrapBinaryName())
             if (HOST_WINDOWS) {
                 assertEquals(EntryKind.File, entryKind(link))
             } else {
@@ -190,12 +191,12 @@ class SelfUpdateTest {
     @Test
     fun aLinkDirThatIsTheBinDirIsLeftAlone(): Unit =
         withTempDir { tmp ->
-            val cfg = Config.load(Path(tmp, "root"), Report.silent())
+            val cfg = Config.load(joinPath(tmp, "root"), Report.silent())
             createDirAll(cfg.binDir)
-            val bin = Path(cfg.binDir, bootstrapBinaryName())
+            val bin = joinPath(cfg.binDir, bootstrapBinaryName())
             bin.write("ketch")
             val state = State.load(cfg)
-            state.insert(installedKetch(Path(cfg.storeDir, SELF_NAME)))
+            state.insert(installedKetch(joinPath(cfg.storeDir, SELF_NAME)))
             recordBootstrapLink(Ctx(cfg, Report.silent()), state, cfg.binDir)
 
             assertEquals(EntryKind.File, entryKind(bin), "the installed binary must still be the binary, not a link to itself")

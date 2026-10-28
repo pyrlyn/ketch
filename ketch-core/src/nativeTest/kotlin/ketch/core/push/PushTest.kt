@@ -1,6 +1,7 @@
 package ketch.core.push
 
 import fs.createDir
+import fs.joinPath
 import ketch.core.error.KetchError
 import ketch.core.report.Report
 import ketch.core.testing.withTempDir
@@ -117,9 +118,9 @@ class PushTest {
     private fun proposal(): Proposal =
         withTempDir { dir ->
             // Project folder must match `name` — the same rule registry folders use.
-            val project = Path(dir, "tool")
+            val project = joinPath(dir, "tool")
             createDir(project)
-            val file = Path(project, "ketch.toml")
+            val file = joinPath(project, "ketch.toml")
             file.write("name = \"tool\"\nsource = \"github:acme/tool\"\ndescription = \"A tool\"\n")
             load(file)
         }
@@ -131,9 +132,9 @@ class PushTest {
         check: (Path) -> T,
     ): T =
         withTempDir { dir ->
-            val project = Path(dir, folder)
+            val project = joinPath(dir, folder)
             createDir(project)
-            val file = Path(project, "ketch.toml")
+            val file = joinPath(project, "ketch.toml")
             file.write(text)
             check(file)
         }

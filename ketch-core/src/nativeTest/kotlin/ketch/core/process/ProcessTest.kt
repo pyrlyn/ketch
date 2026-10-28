@@ -4,6 +4,7 @@ package ketch.core.process
 
 import fs.atomic
 import fs.copyFile
+import fs.joinPath
 import fs.setMode
 import fs.textOrEmpty
 import ketch.core.config.Config
@@ -52,8 +53,8 @@ class ProcessTest {
     private class Sleeper(
         dir: Path,
     ) : AutoCloseable {
-        val copy = Path(dir, if (HOST_WINDOWS) "sleeper.exe" else "sleeper")
-        private val pidFile = Path(dir, "pid")
+        val copy = joinPath(dir, if (HOST_WINDOWS) "sleeper.exe" else "sleeper")
+        private val pidFile = joinPath(dir, "pid")
         val run: Deferred<Result<Output>>
 
         init {
@@ -99,7 +100,7 @@ class ProcessTest {
     @Test
     fun sleepsOnlyWhenSpawnedAsTheSleeper() {
         val dir = getenv(SLEEPER_ENV)?.toKString()?.let(::Path) ?: return
-        atomic(Path(dir, "pid"), getpid().toString().encodeToByteArray())
+        atomic(joinPath(dir, "pid"), getpid().toString().encodeToByteArray())
         sleep(SLEEP_SECONDS)
     }
 
@@ -142,7 +143,7 @@ class ProcessTest {
         dir: Path,
         name: String,
     ): Pair<Path, String> {
-        val path = Path(dir, name)
+        val path = joinPath(dir, name)
         path.write("#!/bin/sh\n")
         return path to path.toString().replace('/', '\\')
     }
@@ -182,7 +183,7 @@ class ProcessTest {
     @Test
     fun aProgramNamedOnAnotherCommandLineIsNotAnOccupant() {
         withTempDir { tmp ->
-            val rg = Path(tmp, "rg")
+            val rg = joinPath(tmp, "rg")
             val spelled = rg.toString().replace('/', '\\')
             val key = pathKey(rg)
             val magics =

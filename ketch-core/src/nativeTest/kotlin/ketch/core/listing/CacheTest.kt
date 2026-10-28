@@ -1,5 +1,6 @@
 package ketch.core.listing
 
+import fs.joinPath
 import ketch.core.config.Config
 import ketch.core.install.InstalledBuild
 import ketch.core.model.Channel
@@ -48,7 +49,7 @@ class CacheTest {
     @Test
     fun theCacheRoundTripsAndAMalformedOneIsEmpty(): Unit =
         withTempDir { tmp ->
-            val path = Path(tmp, "cache", CACHE_FILE)
+            val path = joinPath(tmp, "cache", CACHE_FILE)
             Cache(entries = mapOf("test:alpha#stable" to CacheEntry(found("1.2.3"), 5))).save(path, Report.silent())
             assertEquals(found("1.2.3"), Cache.load(path, Report.silent()).entries["test:alpha#stable"]?.found)
             path.write("not json")
@@ -59,7 +60,7 @@ class CacheTest {
     fun aCachedLatestIsFilledInAndAnUnknownOneStaysUnchecked(): Unit =
         withTempDir { tmp ->
             val report = Report.silent()
-            val cfg = Config.load(Path(tmp, "root"), report)
+            val cfg = Config.load(joinPath(tmp, "root"), report)
             Cache(
                 entries =
                     mapOf(

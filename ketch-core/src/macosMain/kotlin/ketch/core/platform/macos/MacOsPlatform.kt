@@ -8,6 +8,7 @@ package ketch.core.platform.macos
 import fs.EntryKind
 import fs.createDirAll
 import fs.entryKind
+import fs.joinPath
 import fs.walk
 import ketch.core.config.Config
 import ketch.core.error.KetchError
@@ -240,8 +241,8 @@ internal fun preflightDestinations(
     val bundles = if (plan.kind != PackageKind.Binary) findAppBundles(plan.payloadDir) else emptyList()
     val binaries = if (wantBinaries(plan.kind) { bundles.isEmpty() }) binaryTargets(platform, plan.payloadDir, plan) else emptyList()
     val destinations = mutableSetOf<String>()
-    for (bundle in bundles) claimDestination(destinations, Path(plan.appsDir, bundle.name), owned, plan)
-    for ((_, name) in binaries) claimDestination(destinations, Path(plan.binDir, name), owned, plan)
+    for (bundle in bundles) claimDestination(destinations, joinPath(plan.appsDir, bundle.name), owned, plan)
+    for ((_, name) in binaries) claimDestination(destinations, joinPath(plan.binDir, name), owned, plan)
     preflightExtras(plan, owned)
     for (extra in plan.extras) {
         if (!destinations.add(extra.dest.toString())) throw KetchError.Msg("multiple payload entries want to create ${extra.dest}")
@@ -258,7 +259,7 @@ internal fun placeApp(
     claims: Claims,
 ): LinkRecord {
     ioAt(appsDir) { createDirAll(appsDir) }
-    val link = Path(appsDir, bundle.name)
+    val link = joinPath(appsDir, bundle.name)
     clearDestination(link, owned, recorded, claims)
     if (linkApps) {
         symlink(bundle, link)

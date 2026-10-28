@@ -1,5 +1,6 @@
 package ketch.core.config
 
+import fs.joinPath
 import ketch.core.error.KetchError
 import ketch.core.log.Format
 import ketch.core.log.Level
@@ -23,7 +24,7 @@ class ConfigSettingsTest {
         val set = listOfNotNull(levelEnv?.let { "KETCH_LOG_LEVEL" to it }, formatEnv?.let { "KETCH_LOG_FORMAT" to it })
         return withEnv(listOf("KETCH_ROOT", "KETCH_LOG_LEVEL", "KETCH_LOG_FORMAT"), set.toMap()) {
             withTempDir { dir ->
-                Path(dir, "config.toml").write(body)
+                joinPath(dir, "config.toml").write(body)
                 load(dir).let { it.logLevel to it.logFormat }
             }
         }
@@ -96,7 +97,7 @@ class ConfigSettingsTest {
     ): Boolean =
         withEnv(listOf("KETCH_ROOT", "KETCH_EMOJI"), listOfNotNull(env?.let { "KETCH_EMOJI" to it }).toMap()) {
             withTempDir { dir ->
-                Path(dir, "config.toml").write(body)
+                joinPath(dir, "config.toml").write(body)
                 load(dir).emoji
             }
         }
