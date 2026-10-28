@@ -7,13 +7,13 @@ import ketch.core.error.KetchError
 import ketch.core.log.Format
 import ketch.core.log.Level
 import ketch.core.report.Report
-import ketch.core.testing.setEnv
 import ketch.core.testing.withEnv
 import ketch.core.testing.withTempDir
 import ketch.core.testing.write
 import ketch.core.tomlfile.parse
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
+import process.setEnv
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith

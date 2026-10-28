@@ -1,6 +1,8 @@
 package ketch.core.testing
 
 import ketch.core.config.envOs
+import process.setEnv
+import process.unsetEnv
 
 /**
  * Rust's `CleanEnv`: [keys] are cleared, [set] applied, and every variable either touches is put back afterwards.
@@ -21,10 +23,3 @@ fun <T> withEnv(
         saved.forEach { (k, v) -> if (v == null) unsetEnv(k) else setEnv(k, v) }
     }
 }
-
-expect fun setEnv(
-    key: String,
-    value: String,
-)
-
-expect fun unsetEnv(key: String)
