@@ -15,12 +15,19 @@ import ketch.cmd.changelog
 import ketch.cmd.doctor
 import ketch.cmd.history
 import ketch.cmd.info
+import ketch.cmd.install
 import ketch.cmd.installCompletions
+import ketch.cmd.link
 import ketch.cmd.list
 import ketch.cmd.outdated
+import ketch.cmd.pin
+import ketch.cmd.prune
 import ketch.cmd.releases
+import ketch.cmd.rollback
 import ketch.cmd.search
 import ketch.cmd.stats
+import ketch.cmd.uninstall
+import ketch.cmd.upgrade
 import ketch.cmd.why
 import ketch.core.config.Config
 import ketch.core.error.KetchError
@@ -132,6 +139,15 @@ private val COMMANDS: Map<String, (Config, Matches) -> Unit> =
         "stats" to ::stats,
         "doctor" to ::doctor,
         "completions" to ::installCompletions,
+        "install" to ::install,
+        "uninstall" to ::uninstall,
+        "upgrade" to ::upgrade,
+        "rollback" to ::rollback,
+        "prune" to ::prune,
+        "pin" to { cfg, args -> pin(cfg, args, true) },
+        "unpin" to { cfg, args -> pin(cfg, args, false) },
+        "link" to { cfg, args -> link(cfg, args, true) },
+        "unlink" to { cfg, args -> link(cfg, args, false) },
     )
 
 private fun dispatch(
