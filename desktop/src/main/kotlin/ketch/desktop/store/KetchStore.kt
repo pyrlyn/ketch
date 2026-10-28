@@ -106,6 +106,23 @@ class KetchStore(
         return found
     }
 
+    /**
+     * Shows the package a `ketch://` link names. Nothing a link says installs, upgrades or removes anything: the core
+     * checks the link, which is untrusted, and a refusal or an unknown package is an alert like any other.
+     */
+    suspend fun open(link: String) {
+        caught {
+            val name = core.value<String>(Call.PackageForLink(link))
+            val known =
+                state.value.installed.any { it.name == name } ||
+                    core.value<SearchResults>(Call.Search(name, SEARCH_LIMIT)).known.any { it.name == name }
+            if (!known) throw CoreException(KetchError.NotFound(name))
+            mutable.update { it.copy(linked = name) }
+        }?.let { report(it, retry = null) }
+    }
+
+    fun clearLink() = mutable.update { it.copy(linked = null) }
+
     suspend fun runDoctor() {
         caught {
             val checks = core.value<List<Check>>(Call.Doctor)

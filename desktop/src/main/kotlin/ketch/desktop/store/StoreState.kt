@@ -77,6 +77,8 @@ data class StoreState(
     /** An error to show once, in the core's wording; the screen dismisses it. */
     val error: String? = null,
     val pending: Pending? = null,
+    /** A package a `ketch://` link asked to show; the window opens its page and clears it. */
+    val linked: String? = null,
     val lastChecked: Instant? = null,
 ) {
     val isRunning: Boolean get() = activity != null
