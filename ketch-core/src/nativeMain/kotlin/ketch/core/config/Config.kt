@@ -348,8 +348,28 @@ internal fun expandTilde(path: Path): Path {
     }
 }
 
-/** The directories a `PATH`-style variable lists, in order. */
-internal fun splitPathVar(value: String): List<String> = value.split(if (HOST_WINDOWS) ';' else ':')
+/** The directories a `PATH`-style variable lists, in order, as Rust's `std::env::split_paths` reads them. */
+internal fun splitPathVar(value: String): List<String> = if (HOST_WINDOWS) splitWindowsPathVar(value) else value.split(':')
+
+/**
+ * A Windows `PATH`: `"` quotes a `;` into an entry (`C:\weird;name` is a valid folder) and is dropped, since no Windows
+ * name can hold one. Empty entries between separators stay, and an empty value lists nothing, as in Rust's std.
+ */
+internal fun splitWindowsPathVar(value: String): List<String> {
+    val entries = mutableListOf<String>()
+    val entry = StringBuilder()
+    var quoted = false
+    for (c in value) {
+        when {
+            c == '"' -> quoted = !quoted
+            c == ';' && !quoted -> entries += entry.toString().also { entry.clear() }
+            else -> entry.append(c)
+        }
+    }
+    // The last entry counts when it has text or follows a separator.
+    if (entry.isNotEmpty() || entries.isNotEmpty()) entries += entry.toString()
+    return entries
+}
 
 /** A `PATH` entry as the shell matches it: either separator, no trailing one, case folded on Windows. */
 internal fun pathLookupKey(p: String): String {

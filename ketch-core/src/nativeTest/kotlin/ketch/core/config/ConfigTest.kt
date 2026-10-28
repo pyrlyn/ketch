@@ -67,6 +67,14 @@ class ConfigTest {
     }
 
     @Test
+    fun aWindowsPathKeepsAQuotedSemicolonInsideItsEntry() {
+        assertEquals(listOf("c:\\foo", "c:\\some;dir", "c:\\bar"), splitWindowsPathVar("c:\\foo;c:\\som\"e;di\"r;c:\\bar"))
+        assertEquals(listOf("C:\\Program Files\\x", "", "y", ""), splitWindowsPathVar("\"C:\\Program Files\\x\";;y;"))
+        assertEquals(emptyList(), splitWindowsPathVar(""))
+        assertEquals(emptyList(), splitWindowsPathVar("\"\""))
+    }
+
+    @Test
     fun pathLookupKeyFoldsCaseSeparatorsAndTrailingSlash() {
         assertEquals(pathLookupKey("C:\\Users\\u\\.ketch\\bin"), pathLookupKey("C:/Users/u/.ketch/bin/"))
         if (HOST_WINDOWS) assertEquals(pathLookupKey("C:\\Users\\U\\.ketch\\bin"), pathLookupKey("c:\\users\\u\\.ketch\\bin"))
