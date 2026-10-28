@@ -62,3 +62,12 @@ fun Sandbox.fails(vararg args: String): String {
     assertTrue(!out.success, "`ketch ${args.joinToString(" ")}` was expected to fail but succeeded\n--- stdout ---\n${out.stdout}")
     return out.stderr
 }
+
+/**
+ * Run the ketch under test in this process's environment, as a script would (Rust `assert_cmd`'s `cargo_bin`). The
+ * build already points `HOME` and `KETCH_HOME` at a scratch directory for the whole test run.
+ */
+fun ketchBare(
+    vararg args: String,
+    envs: Map<String, String> = emptyMap(),
+) = process.Command(KETCH_EXE, args.toList()).apply { envs.forEach { (k, v) -> env(k, v) } }.runOnce()

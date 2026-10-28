@@ -36,6 +36,12 @@ kotlin {
             val exe = target.binaries.getExecutable(NativeBuildType.DEBUG)
             dependsOn(exe.linkTaskProvider)
             environment("KETCH_EXE", exe.outputFile.absolutePath)
+            environment(
+                "TRYCMD_DIR",
+                layout.projectDirectory
+                    .dir("src/nativeTest/cases")
+                    .asFile.absolutePath,
+            )
         }
     }
 }
