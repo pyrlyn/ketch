@@ -101,6 +101,10 @@ Taken during the port:
   two new in kit `http`); octocrab has no Kotlin counterpart. Rust's test that octocrab can be
   built without a running tokio runtime becomes a check that the client is built from plain
   synchronous code. Rust's `push::File` is `RemoteFile`, which says where the file lives.
+- **Desktop app (T12).** The creator's choices on claiming it: five subtasks (T12.1–T12.5);
+  Material 3 on the brand tokens of `desktop/design/tokens.json` rather than an imitation of
+  Liquid Glass; no self-updates (Sparkle has no counterpart for a jpackage app); the native
+  `ketch` ships inside the app's package, and `KETCH_EXE` overrides it.
 - **`ketch serve` (T11).** One JSON object per line each way, `:ketch-wire`'s records with the
   Rust field names: `hello` first, then `event`, `ask` and `result` per call id; the app sends
   `call`, `answer` and `cancel`. `serve` is read before the parser, as `__complete` is, so the
@@ -126,6 +130,7 @@ Taken during the port:
 | `src/tui` | Creator's choice (see Decisions) |
 | `crates/ketch-capi`, `crates/ketch-ffi` (UniFFI) | The desktop app runs `ketch serve` instead of linking the core |
 | `desktop/macos`, `desktop/windows` | Replaced by `desktop/` (Compose) |
+| Sparkle self-updates of the macOS app | Creator's choice (see Decisions); see `ideas.md` |
 | `fuzz/` | No cargo-fuzz on Kotlin/Native; see `ideas.md` |
 | `workspace-hack`, `site/` | Rust build plumbing and the docs website |
 
