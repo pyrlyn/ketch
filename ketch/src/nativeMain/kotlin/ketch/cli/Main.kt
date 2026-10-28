@@ -25,6 +25,7 @@ import ketch.cmd.lock
 import ketch.cmd.outdated
 import ketch.cmd.pin
 import ketch.cmd.prune
+import ketch.cmd.registry
 import ketch.cmd.releases
 import ketch.cmd.rollback
 import ketch.cmd.search
@@ -146,6 +147,7 @@ private val COMMANDS: Map<String, (Config, Matches) -> Unit> =
         "lock" to ::lock,
         "sync" to ::sync,
         "import" to ::importPackage,
+        "registry" to ::registry,
         "completions" to ::installCompletions,
         "install" to ::install,
         "uninstall" to ::uninstall,
