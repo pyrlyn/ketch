@@ -13,6 +13,7 @@ import fs.copyFile
 import fs.createDirAll
 import fs.listDir
 import fs.setMode
+import fs.symlink
 import fs.textOrEmpty
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.toKString
@@ -157,6 +158,16 @@ class Sandbox : AutoCloseable {
         writeText(mise, "#!/bin/sh\nprintf '%s' \"$*\" > ${shellQuote(log)}\nrm -rf ${shellQuote(miseToolDir())} || exit 1\n")
         makeExecutable(mise)
         return dir to log
+    }
+
+    /** A directory holding the ketch under test as `ketch`, for a script that runs it by that name from PATH. */
+    fun ketchOnPathDir(): Path {
+        val dir = child("ketch-bin")
+        if (!SystemFileSystem.exists(dir)) {
+            createDirAll(dir)
+            symlink(Path(KETCH_EXE), dir.resolve("ketch"))
+        }
+        return dir
     }
 
     /** Run [program], a ketch copied somewhere else, against this sandbox with [extra] in front of PATH. */
