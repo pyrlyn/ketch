@@ -8,6 +8,7 @@ import fs.entryKind
 import fs.readLink
 import ketch.core.VERSION
 import ketch.core.config.Config
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.model.InstalledPackage
 import ketch.core.model.ManifestOrigin
 import ketch.core.model.PackageRef
@@ -114,7 +115,7 @@ class SelfUpdateTest {
         val result =
             ioRetry({
                 calls += 1
-                if (calls < 3) throw FsException.ofErrno(null, EACCES) else "done"
+                if (calls < 3) throw FsException(null, FsException.Kind.PermissionDenied, null, "busy") else "done"
             }) { pauses += it }
         assertEquals("done", result)
         assertEquals(3, calls)
@@ -173,8 +174,12 @@ class SelfUpdateTest {
             recordBootstrapLink(Ctx(cfg, Report.silent()), state, bootstrap)
 
             val link = Path(canonicalize(bootstrap), bootstrapBinaryName())
-            assertEquals(EntryKind.Symlink, entryKind(link), "the bootstrap path must follow the bin-dir binary")
-            assertEquals(canonicalize(bin), canonicalize(assertNotNull(readLink(link))))
+            if (HOST_WINDOWS) {
+                assertEquals(EntryKind.File, entryKind(link))
+            } else {
+                assertEquals(EntryKind.Symlink, entryKind(link), "the bootstrap path must follow the bin-dir binary")
+                assertEquals(canonicalize(bin), canonicalize(assertNotNull(readLink(link))))
+            }
             assertEquals("ketch", link.read())
             val pkg = assertNotNull(state.get(SELF_NAME))
             assertEquals(1, pkg.links.size)

@@ -6,6 +6,7 @@ import fs.isDir
 import fs.listDir
 import fs.readText
 import ketch.core.config.Config
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.config.envOs
 import ketch.core.config.pathLookupKey
 import ketch.core.config.splitPathVar
@@ -28,6 +29,7 @@ import ketch.core.shell.Setup
 import ketch.core.shell.Shell
 import ketch.core.shell.configuredIn
 import ketch.core.shell.detect
+import ketch.core.shell.installUser
 import ketch.core.shell.isFile
 import ketch.core.shell.pathCheck
 import ketch.core.shell.staleRegistryCheck
@@ -91,16 +93,27 @@ fun failed(checks: List<DoctorCheck>): Int = checks.count { it.status == CheckSt
 fun fix(cx: Ctx): List<Setup> {
     val cfg = cx.cfg
     if (cfg.binDirOnPath() || configuredIn(cfg).isNotEmpty() || userPathConfigured(cfg)) return emptyList()
-    // The Windows user PATH branch comes with the rest of the Windows code (T13).
-    return shellsToFix(cx).mapNotNull { sh ->
+    // Windows keeps PATH in the registry, not in a startup file.
+    return if (HOST_WINDOWS) fixUserPath(cx) else fixShellFiles(cx)
+}
+
+private fun fixShellFiles(cx: Ctx): List<Setup> =
+    shellsToFix(cx).mapNotNull { sh ->
         try {
-            Setup.ShellFile(installShell(cfg, sh, false))
+            Setup.ShellFile(installShell(cx.cfg, sh, false))
         } catch (e: KetchError) {
             cx.report.warn("${sh.shellName}: ${e.message}")
             null
         }
     }
-}
+
+private fun fixUserPath(cx: Ctx): List<Setup> =
+    try {
+        listOf(Setup.UserPath(installUser(cx.cfg, false)))
+    } catch (e: KetchError) {
+        cx.report.warn(e.message.orEmpty())
+        emptyList()
+    }
 
 /** The shells `fix` sets up, or none after a warning saying why. */
 private fun shellsToFix(cx: Ctx): List<Shell> {

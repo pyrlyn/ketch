@@ -5,11 +5,13 @@ import fs.canon
 import fs.entryKind
 import fs.isDir
 import ketch.core.config.Config
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.config.RENAMED_REPOS
 import ketch.core.config.envOs
 import ketch.core.model.rustComponents
 import ketch.core.platform.DoctorCheck
 import ketch.core.platform.dataHome
+import ketch.core.platform.localDataDir
 import ketch.core.platform.pathIsStrictWithin
 import ketch.core.report.Report
 import ketch.core.text.eqIgnoreAsciiCase
@@ -183,7 +185,7 @@ private fun runOwner(
 private fun miseDataDirs(): List<Path> {
     val found = listOfNotNull(envOs("MISE_DATA_DIR")?.takeIf { it.isNotEmpty() }?.let(::Path)).toMutableList()
     // mise follows XDG on macOS too, not Application Support.
-    val default = Path(dataHome(), "mise")
-    if (default !in found) found += default
+    val default = if (HOST_WINDOWS) localDataDir()?.let { Path(it, "mise") } else Path(dataHome(), "mise")
+    if (default != null && default !in found) found += default
     return found
 }

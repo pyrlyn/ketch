@@ -256,7 +256,7 @@ internal fun <T> ioRetry(
  * Run `exe --version`, stopping it after [timeout]. A child that starts and never exits is stopped with its process
  * group, so it cannot keep holding the new binary.
  */
-private fun probeRuns(
+internal fun probeRuns(
     exe: Path,
     timeout: Duration,
 ) {

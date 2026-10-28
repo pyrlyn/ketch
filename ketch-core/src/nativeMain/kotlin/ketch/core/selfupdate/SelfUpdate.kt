@@ -3,6 +3,7 @@ package ketch.core.selfupdate
 import fs.EntryKind
 import fs.canon
 import fs.canonicalize
+import fs.copyFile
 import fs.createDirAll
 import fs.entryKind
 import fs.removeAny
@@ -12,6 +13,7 @@ import ketch.core.config.HOST_WINDOWS
 import ketch.core.error.KetchError
 import ketch.core.error.fsKitAt
 import ketch.core.extra.SelfDocs
+import ketch.core.extra.generatedCompletionRel
 import ketch.core.extra.plan
 import ketch.core.extra.writeKetchDocs
 import ketch.core.install.InstallRequest
@@ -231,9 +233,16 @@ private fun createBootstrapLink(
     target: Path,
 ): LinkRecord {
     link.parent?.let { fsKitAt(it) { createDirAll(it) } }
-    // Windows copies instead (T13); everywhere this port runs, a symlink follows the bin-dir binary.
-    symlink(target, link)
-    return LinkRecord(link = link, target = target, kind = LinkKind.Symlink, role = LinkRole.Binary)
+    // Windows copies: a symlink there needs a privilege most users lack.
+    val kind =
+        if (HOST_WINDOWS) {
+            fsKitAt(link) { copyFile(target, link) }
+            LinkKind.CopiedFile
+        } else {
+            symlink(target, link)
+            LinkKind.Symlink
+        }
+    return LinkRecord(link = link, target = target, kind = kind, role = LinkRole.Binary)
 }
 
 /** Generate ketch's man page and completions into the store prefix and link them into the user directories `doctor` reports. */
@@ -251,7 +260,11 @@ internal fun exposeSelfDocs(
     val fresh = extraLinks.map { it.link }.toSet()
     val stale = pkg.links.filter { it.role != LinkRole.Binary && it.link !in fresh }
     if (stale.isNotEmpty()) platform.unplace(stale, cx.report)
-    // Windows also needs a PowerShell profile block and cmd's AutoRun to switch completion on; that waits for T13.
+    // Windows loads neither directory by itself: a profile block and AutoRun are what switch completion on there.
+    if (HOST_WINDOWS) {
+        val powershellRel = generatedCompletionRel(CompletionShell.Powershell)
+        enableWindowsCompletion(cx, planned.firstOrNull { it.relPath == powershellRel }?.dest)
+    }
     val current = state.get(SELF_NAME) ?: return
     val links = current.links.filter { it.role == LinkRole.Binary || it.link in fresh }.toMutableList()
     for (link in extraLinks) if (links.none { it.link == link.link }) links += link

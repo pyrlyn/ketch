@@ -8,7 +8,10 @@ import fs.isDir
 import fs.removeAny
 import fs.removeEmptyDir
 import fs.removeFile
+import fs.rename
+import fs.systemTempDir
 import ketch.core.config.Config
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.config.homeDir
 import ketch.core.error.KetchError
 import ketch.core.install.uninstall
@@ -21,12 +24,14 @@ import ketch.core.shell.doskeyFile
 import ketch.core.shell.filesWithBlock
 import ketch.core.shell.powershellProfilesWithBlock
 import ketch.core.shell.registryEntries
+import ketch.core.shell.removeRegistryEntry
 import ketch.core.shell.uninstallCmdMacros
 import ketch.core.shell.uninstallFile
 import ketch.core.shell.uninstallPowershellProfile
 import ketch.core.state.Lock
 import ketch.core.state.State
 import kotlinx.io.files.Path
+import platform.posix.getpid
 
 /**
  * What [uninstallSelf] will remove, worked out before anything is touched.
@@ -97,8 +102,8 @@ fun uninstallSelf(
     var finishing: Path? = null
     Lock.acquire(cx).use {
         removePackages(cx, plan, removed)
-        // The registry entries go before the root too (T13): a Path entry spelled differently from the bin dir is
-        // matched by resolving both, which needs the folder still there.
+        // The registry entries go before the root too: a Path entry spelled differently from the bin dir is matched by
+        // resolving both, which needs the folder still there.
         removeLoaders(cx, plan, removed)
         // Shell blocks before the root too: removing the root unlinks the lock file, and these files live outside it.
         // Reported after the cask, which is where they have always appeared in the list this function returns.
@@ -119,7 +124,10 @@ fun uninstallSelf(
 
     // Last: mise deletes the very binary running this, and on Windows that fails outright while it runs, so everything
     // else is done by then.
-    plan.mise?.let { if (unuseMise(it.tool, cx.report)) removed += it.dir }
+    plan.mise?.let {
+        if (HOST_WINDOWS) moveOutOf(it.dir, cx.report)
+        if (unuseMise(it.tool, cx.report)) removed += it.dir
+    }
     return removed
 }
 
@@ -136,12 +144,19 @@ private fun removePackages(
     state.save(cx.cfg)
 }
 
-/** cmd's macro file and the PowerShell completion block: what loads ketch itself, rather than its packages. */
+/** The registry values, cmd's macro file and the PowerShell completion block: what Windows loads ketch and its bin dir from. */
 private fun removeLoaders(
     cx: Ctx,
     plan: UninstallPlan,
     removed: MutableList<Path>,
 ) {
+    for (entry in plan.registry) {
+        try {
+            removeRegistryEntry(cx.cfg, entry)
+        } catch (e: KetchError) {
+            cx.report.warn("${entry.describe()}: ${e.message}")
+        }
+    }
     // Before the root: the macro file lives in it, and the root is removed only when nothing ketch did not name is
     // left inside. A macro file AutoRun no longer names is still ketch's to delete.
     if (RegistryEntry.CmdMacros !in plan.registry && entryKind(doskeyFile(cx.cfg)) != null) {
@@ -205,7 +220,7 @@ private fun isWithin(
 private fun removeRoot(
     cx: Ctx,
     root: Path,
-): Pair<List<Path>, Boolean> = removeRootAt(cx, root, homeDir()) { _, _ -> finishAfterExit() }
+): Pair<List<Path>, Boolean> = removeRootAt(cx, root, homeDir()) { r, left -> finishAfterExit(r, left, cx.report) }
 
 /**
  * Take the root apart by naming what ketch owns, then removing the directory itself only if nothing else is left in
@@ -333,10 +348,28 @@ private fun removeOwnedDir(
     }
 }
 
+/** Hand [left] and then [root] to a process that removes them once this one has exited; whether one will. */
+internal expect fun finishAfterExit(
+    root: Path,
+    left: List<Path>,
+    report: Report,
+): Boolean
+
 /**
- * Windows will not delete the image of a running process, so there a detached PowerShell finishes the job once this
- * process exits (T13). Elsewhere a running binary can be deleted, so what is left now stays left: the warnings
- * already named it.
+ * Windows refuses to delete a running image but lets it be renamed, and mise removes its tree with this binary still
+ * running from it. The process keeps its handle either way. The temp dir is on the same volume as the profile mise
+ * lives in, so this is a rename, not a copy, and the file is left for the system's own temp cleanup: nothing else can
+ * delete it while this process still runs.
  */
-@Suppress("FunctionOnlyReturningConstant")
-private fun finishAfterExit(): Boolean = false
+private fun moveOutOf(
+    dir: Path,
+    report: Report,
+) {
+    val exe = runCatching { currentExe() }.getOrNull() ?: return
+    if (!pathIsWithin(exe, dir)) return
+    try {
+        rename(exe, Path(systemTempDir(), "ketch-uninstalled-${getpid()}.exe"))
+    } catch (e: FsException) {
+        report.warn("could not move $exe out of mise's tree (${e.detail}); mise may fail to remove it")
+    }
+}
