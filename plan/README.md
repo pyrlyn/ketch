@@ -101,6 +101,16 @@ Taken during the port:
   two new in kit `http`); octocrab has no Kotlin counterpart. Rust's test that octocrab can be
   built without a running tokio runtime becomes a check that the client is built from plain
   synchronous code. Rust's `push::File` is `RemoteFile`, which says where the file lives.
+- **`ketch serve` (T11).** One JSON object per line each way, `:ketch-wire`'s records with the
+  Rust field names: `hello` first, then `event`, `ask` and `result` per call id; the app sends
+  `call`, `answer` and `cancel`. `serve` is read before the parser, as `__complete` is, so the
+  help, man pages and completions stay Rust's. Input is read on its own coroutine, so answers
+  and cancels reach a running call; calls run one at a time in arrival order. A cancel declines
+  the call's open questions and ends a queued call at once; the end of input declines open
+  questions and lets what was sent finish. A line that is no message, or a call id still in
+  use, gets `rejected`; an answer or cancel for a call that ended is dropped. `KetchCore`
+  (`lib.rs`) passes the call's cancel into `Ctx` too, because the Kotlin core checks it in
+  lookups and the registry download.
 
 ## Goals of the port
 
@@ -143,8 +153,8 @@ The Rust modules each task covers. ✅ ported with tests green, 🟡 partial, �
 | T7 | `http`, `source` (github, local, plugin), `resolve`, `releases`, `changelog`, `info`, `registry` | ✅ |
 | T8 | `install`, `listing`, `stats`, `doctor`, `wizard`, `self_update` | ✅ |
 | T9 | `import` (brew, linux, winget, apply, fetch), `push` | ✅ |
-| T10 | `src/` command line: `cli`, `cmd/*`, `ui`, `complete`, `man`, `self_docs`; `tests/*.rs` end-to-end | ⬜ |
-| T11 | `ketch serve` and `:ketch-wire` (the `ketch-ffi` surface), contract scenarios | ⬜ |
+| T10 | `src/` command line: `cli`, `cmd/*`, `ui`, `complete`, `man`, `self_docs`; `tests/*.rs` end-to-end | ✅ |
+| T11 | `ketch serve` and `:ketch-wire` (the `ketch-ffi` surface), contract scenarios | ✅ |
 | T12 | Compose desktop app (the SwiftUI and WinUI screens) | ⬜ |
 | T13 | Windows: mingwX64, `platform/windows`, Windows completions | ⬜ |
 | T14 | `trust`: sigstore, minisign, OpenPGP | ⬜ |
