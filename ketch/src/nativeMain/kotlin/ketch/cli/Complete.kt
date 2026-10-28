@@ -12,13 +12,23 @@ package ketch.cli
 
 import cli.Command
 import cli.CompletionShell
+import cli.Matches
+import cli.Parsed
+import cli.PossibleValue
+import cli.Settings
+import cli.ValueKind
+import cli.command
 import cli.completions
+import cli.parse
 import cli.valueOptions
 import ketch.core.config.Config
 import ketch.core.config.sanitizeComponent
-import ketch.core.report.Ctx
-import ketch.core.report.Report
+import ketch.core.error.KetchError
 import ketch.core.state.State
+import ketch.ui.ctx
+import ketch.ui.out
+import ketch.ui.report
+import kotlinx.io.files.Path
 
 /** The argument that routes a run to the completion lookup instead of the command line. */
 internal const val COMPLETE_COMMAND = "__complete"
@@ -32,6 +42,54 @@ internal enum class Kind(
 
     /** Packages in the local registry copy. Never fetched: completion runs on every <TAB> and must not wait. */
     Registry("registry"),
+}
+
+/** `__complete [--root DIR] <KIND> [PREFIX]`. The prefix is whatever the user typed so far, a lone `-` included. */
+private val REQUEST =
+    command(COMPLETE_COMMAND) {
+        disableHelpFlag = true
+        option("root") {
+            valueName = "DIR"
+            value = ValueKind.NonEmpty
+        }
+        positional("kind") {
+            required = true
+            value = ValueKind.OneOf(Kind.entries.map { PossibleValue(it.id) })
+        }
+        positional("prefix") { allowHyphenValues = true }
+    }
+
+/** clap's exit code for a command line it cannot read. */
+private const val USAGE_EXIT = 2
+
+/** Answer a completion request, when [args] (without the binary's name) is one; null for every other command line. */
+internal fun intercept(args: List<String>): Int? = if (args.firstOrNull() == COMPLETE_COMMAND) complete(args.drop(1)) else null
+
+private fun complete(args: List<String>): Int =
+    when (val parsed = parse(REQUEST, args, Settings(COMPLETE_COMMAND))) {
+        is Parsed.Exit -> {
+            // The parser's message carries its own `error: ` headline; ui adds one.
+            ketch.ui.error(KetchError.Msg(parsed.text.removePrefix("error: ").trimEnd()))
+            USAGE_EXIT
+        }
+
+        is Parsed.Run -> {
+            lookup(parsed.matches)
+        }
+    }
+
+private fun lookup(request: Matches): Int {
+    // A completion that fails prints nothing: the shell falls back to its default, and an error message in the middle
+    // of a command line helps no one.
+    val cfg =
+        try {
+            Config.load(request.value("root")?.let(::Path), report())
+        } catch (_: KetchError) {
+            return 1
+        }
+    val kind = Kind.entries.first { it.id == request.value("kind") }
+    candidates(cfg, kind, request.value("prefix").orEmpty()).forEach(::out)
+    return 0
 }
 
 /**
@@ -74,7 +132,7 @@ internal fun candidates(
 
             Kind.Registry -> {
                 ketch.core.registry
-                    .load(Ctx(cfg, Report.silent()))
+                    .load(ctx(cfg))
                     .map { it.first.name }
             }
         }

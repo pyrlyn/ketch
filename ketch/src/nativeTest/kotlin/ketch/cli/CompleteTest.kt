@@ -116,4 +116,9 @@ class CompleteTest {
             assertEquals(emptyList(), candidates(cfg, Kind.Installed, ""))
         }
     }
+
+    @Test
+    fun interceptIgnoresOrdinaryCommandLines() {
+        assertEquals(null, intercept(listOf("install", "__complete")))
+    }
 }

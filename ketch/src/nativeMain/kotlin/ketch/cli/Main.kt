@@ -1,54 +1,115 @@
 // ketch — catch releases straight from GitHub: the port of src/main.rs.
 //
-// `main` parses arguments and hands off to a command; every failure path converges here so a single place decides
-// how errors are shown and what the process exits with.
+// `main` does three things and nothing else: parse arguments, build the `Config`, and hand off to a command. Every
+// failure path converges here so a single place decides how errors are shown and what the process exits with.
 package ketch.cli
 
 import cli.CompletionShell
 import cli.Matches
 import cli.Parsed
+import cli.Subcommand
 import cli.parse
 import cli.terminalSettings
 import cli.write
+import ketch.core.config.Config
+import ketch.core.error.KetchError
+import ketch.core.log.Log
+import ketch.ui.debug
+import ketch.ui.note
+import ketch.ui.out
+import ketch.ui.report
+import ketch.ui.setEmoji
+import ketch.ui.success
+import ketch.ui.warnUnlogged
 import kotlinx.io.files.Path
-import platform.posix.fputs
-import platform.posix.stderr
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
-    when (val parsed = parse(ketchCli(), args.toList(), terminalSettings("ketch"))) {
+    val argv = args.toList()
+    intercept(argv)?.let { exitProcess(it) }
+    when (val parsed = parse(ketchCli(), argv, terminalSettings("ketch"))) {
         is Parsed.Exit -> {
             parsed.write()
             exitProcess(parsed.code)
         }
 
         is Parsed.Run -> {
-            exitProcess(run(parsed.matches))
+            exitProcess(start(parsed.matches, argv))
         }
     }
 }
 
-// The commands land with the port of cmd/; until then a parsed line says which one is missing. `completions` and
-// `man` print and write already, so their output can be compared with Rust ketch's.
-@OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
-private fun run(matches: Matches): Int {
-    val command = matches.subcommand ?: return 1
-    return when {
-        // Completions must work before any directory exists, so they are printed before the config is built.
+private fun start(
+    cli: Matches,
+    argv: List<String>,
+): Int {
+    ketch.ui.init(if (cli.flag("no_color")) false else null, cli.flag("quiet"), cli.flag("verbose"))
+    return try {
+        run(cli, argv)
+        0
+    } catch (err: KetchError) {
+        if (err is KetchError.Reported) return err.code
+        ketch.ui.error(err)
+        // What npm and cargo do, and for the same reason: the terminal shows the failure, the log shows the run that
+        // led to it.
+        Log.path()?.let { note("the full log of this run is in $it") }
+        err.exitCode()
+    }
+}
+
+private fun run(
+    cli: Matches,
+    argv: List<String>,
+) {
+    val command = checkNotNull(cli.subcommand) { "the command tree requires a subcommand" }
+    when {
+        // Completions must work before any directory exists, so they are handled before the config is built.
         command.name == "completions" && !command.matches.flag("install") -> {
             val shell = CompletionShell.entries.first { it.id == command.matches.value("shell") }
-            println(script(shell).trimEnd('\n'))
-            0
+            out(script(shell).trimEnd('\n'))
         }
 
+        // Man pages are rendered from the command tree alone; a packager runs this on a build machine where no ketch
+        // root should appear.
         command.name == "man" -> {
-            writeTo(Path(command.matches.values("out").single()))
-            0
+            man(Path(command.matches.values("out").single()))
+        }
+
+        // `config create` writes a project file in the working tree. Creating the ketch root for it would leave empty
+        // store/bin/cache dirs behind a questionnaire that never uses them.
+        command.name == "config" && command.matches.subcommand?.name == "create" -> {
+            dispatch(load(cli), command)
         }
 
         else -> {
-            fputs("error: `ketch ${command.name}` is not ported yet\n", stderr)
-            1
+            val cfg = load(cli)
+            cfg.ensureDirs()
+            // Not `warn`: that would try to log the failure to the log.
+            try {
+                Log.init(cfg, cli.flag("verbose"), argv)
+            } catch (e: KetchError) {
+                warnUnlogged(e.message)
+            }
+            debug("root ${cfg.root} · target ${cfg.target} · token ${if (cfg.githubToken != null) "yes" else "no"}")
+            dispatch(cfg, command)
         }
     }
 }
+
+private fun load(cli: Matches): Config {
+    val cfg = Config.load(cli.value("root")?.let(::Path), report())
+    setEmoji(cfg.emoji && !cli.flag("no_emoji"))
+    return cfg
+}
+
+private fun man(out: Path) {
+    val written = writeTo(out)
+    success("Wrote", "${written.size} man pages to $out")
+}
+
+// The commands land with the port of cmd/; until then a parsed line says which one is missing.
+@Suppress("UnusedParameter")
+private fun dispatch(
+    cfg: Config,
+    command: Subcommand,
+): Unit = throw KetchError.Msg("`ketch ${command.name}` is not ported yet")
