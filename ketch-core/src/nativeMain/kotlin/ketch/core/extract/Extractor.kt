@@ -5,22 +5,23 @@
 package ketch.core.extract
 
 import fs.EntryKind
+import fs.FsException
 import fs.createDirAll
 import fs.entryKind
 import fs.isDir
 import fs.joinPath
 import fs.listDir
 import fs.readLink
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.error.KetchError
 import ketch.core.error.ioAt
+import ketch.core.model.rustComponents
 import ketch.core.report.Report
 import kotlinx.io.Buffer
 import kotlinx.io.RawSource
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.readByteArray
-import platform.posix.ENOENT
-import platform.posix.errno
 
 /** One archive format. */
 interface Extractor {
@@ -94,8 +95,8 @@ internal fun resolvesInside(
     root: Path,
 ): Boolean {
     val hops = Hops()
-    val inside = resolve(root.toString(), hops)
-    val resolved = resolve(path.toString(), hops)
+    val inside = resolve(rustComponents(root), hops)
+    val resolved = resolve(rustComponents(path), hops)
     return inside != null && resolved != null && resolved.take(inside.size) == inside
 }
 
@@ -103,16 +104,39 @@ private class Hops {
     var count = 0
 }
 
-/** The components of [path] with every existing symlink on it followed and `..` applied, or null on a loop or an unreadable entry. */
+/** The leading [rustComponents] of an absolute path: the root, and on Windows the prefix before it. */
+private val ROOT_PARTS = if (HOST_WINDOWS) 2 else 1
+
+private fun isAbsolute(parts: List<String>) = parts.size >= ROOT_PARTS && parts[ROOT_PARTS - 1] == "" && parts[0].isNotEmpty() == HOST_WINDOWS
+
+/** Rust `PathBuf::join`: an absolute [rel] replaces [base], and one with a root but no prefix keeps [base]'s prefix. */
+private fun join(
+    base: List<String>,
+    rel: List<String>,
+) = when {
+    isAbsolute(rel) -> rel
+    rel.firstOrNull() == "" -> base.take(ROOT_PARTS - 1) + rel
+    else -> base + rel
+}
+
+private fun pathOf(parts: List<String>) =
+    Path(
+        if (HOST_WINDOWS) parts[0] + "\\" + parts.drop(ROOT_PARTS).joinToString("\\") else parts.drop(ROOT_PARTS).joinToString("/", prefix = "/"),
+    )
+
+/** [parts] with every existing symlink on them followed and `..` applied, or null on a loop or an unreadable entry. */
 private fun resolve(
-    path: String,
+    parts: List<String>,
     hops: Hops,
 ): List<String>? {
-    val absolute = if (path.startsWith('/')) path else currentDir()?.let { "$it/$path" } ?: return null
-    return absolute.split('/').filter { it.isNotEmpty() && it != "." }.fold(emptyList<String>() as List<String>?) { at, part ->
+    val cwd = if (isAbsolute(parts)) emptyList() else currentDir()?.let { rustComponents(Path(it)) }.orEmpty()
+    // Still relative without a current directory, or on Windows when it names a drive but no root (`C:tool`): Rust's
+    // walk cannot place either under the root.
+    val absolute = join(cwd, parts).takeIf(::isAbsolute) ?: return null
+    return absolute.drop(ROOT_PARTS).fold(absolute.take(ROOT_PARTS) as List<String>?) { at, part ->
         when {
             at == null -> null
-            part == ".." -> at.dropLast(1)
+            part == ".." -> if (at.size > ROOT_PARTS) at.dropLast(1) else at
             else -> follow(at, part, hops)
         }
     }
@@ -125,21 +149,20 @@ private fun follow(
     hops: Hops,
 ): List<String>? {
     val next = resolved + name
-    val at = Path(next.joinToString("/", prefix = "/"))
+    val at = pathOf(next)
     return when (entryKind(at)) {
         EntryKind.Symlink -> {
             hops.count++
-            val target = readLink(at)?.toString()
+            val target = readLink(at)
             when {
                 hops.count > MAX_LINK_HOPS || target == null -> null
-                target.startsWith('/') -> resolve(target, hops)
-                else -> resolve(resolved.joinToString("/", prefix = "/", postfix = "/") + target, hops)
+                else -> resolve(join(resolved, rustComponents(target)), hops)
             }
         }
 
         // Nothing there yet: what a dangling link names is judged by the path alone.
         null -> {
-            next.takeIf { errno == ENOENT }
+            next.takeIf { FsException.ofErrno(at).kind == FsException.Kind.NotFound }
         }
 
         else -> {
