@@ -51,7 +51,7 @@ fun DiscoverScreen(
                         if (pkg.name in installed) {
                             Chip("Installed", status.installed, status.installedSubtle)
                         } else {
-                            FilledTonalButton(onClick = { actions.run { install(pkg.name) } }, enabled = !state.isRunning) { Text("Install") }
+                            FilledTonalButton(onClick = { actions.install(pkg.name) }, enabled = !state.isRunning) { Text("Install") }
                         }
                     }
                 }
@@ -61,7 +61,7 @@ fun DiscoverScreen(
                 items(found.repositories, key = { "repo-${it.spec}" }) { repo ->
                     val summary = listOfNotNull(repo.description, repo.stars?.let { "★ $it" }).joinToString(" · ")
                     PackageRow(repo.spec.removePrefix("github:"), summary.ifEmpty { null }, "discover-${repo.spec}", null) {
-                        FilledTonalButton(onClick = { actions.run { install(repo.spec) } }, enabled = !state.isRunning) { Text("Install") }
+                        FilledTonalButton(onClick = { actions.install(repo.spec) }, enabled = !state.isRunning) { Text("Install") }
                     }
                 }
             }

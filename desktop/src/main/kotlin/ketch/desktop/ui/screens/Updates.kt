@@ -10,8 +10,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -19,6 +17,7 @@ import ketch.desktop.store.StoreState
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.Confirm
 import ketch.desktop.ui.LocalSpacing
+import ketch.desktop.ui.Navigation
 import ketch.desktop.ui.plural
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -27,8 +26,10 @@ import java.time.format.DateTimeFormatter
 fun UpdatesScreen(
     state: StoreState,
     actions: Actions,
+    navigation: Navigation,
 ) {
-    var confirming by remember { mutableStateOf(false) }
+    // The navigation's, not the screen's: the tray's Update all asks for this confirmation too.
+    var confirming by navigation::confirmingUpdateAll
     val updates = state.updates
     Page(
         "Updates",

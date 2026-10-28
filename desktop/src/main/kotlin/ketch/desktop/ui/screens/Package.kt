@@ -113,7 +113,7 @@ private fun Buttons(
     val uri = LocalUriHandler.current
     when {
         installed != null && update != null -> Button(onClick = { actions.run { upgrade(listOf(name)) } }, enabled = !state.isRunning) { Text("Update to $update") }
-        installed == null -> Button(onClick = { actions.run { install(name) } }, enabled = !state.isRunning) { Text("Install") }
+        installed == null -> Button(onClick = { actions.install(name) }, enabled = !state.isRunning) { Text("Install") }
     }
     repo?.let { OutlinedButton(onClick = { uri.openUri("https://github.com/$it") }) { Text("Open on GitHub") } }
     if (installed != null) {

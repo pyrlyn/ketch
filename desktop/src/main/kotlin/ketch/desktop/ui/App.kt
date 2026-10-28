@@ -26,13 +26,20 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import ketch.desktop.settings.AppSettings
+import ketch.desktop.settings.LoginItem
+import ketch.desktop.settings.MemoryKeyValues
+import ketch.desktop.settings.Unavailable
 import ketch.desktop.store.KetchStore
 import ketch.desktop.store.StoreState
+import ketch.desktop.store.UpdateChecks
+import ketch.desktop.store.UpdateNotifier
 import ketch.desktop.ui.screens.ActivityScreen
 import ketch.desktop.ui.screens.DiscoverScreen
 import ketch.desktop.ui.screens.DoctorScreen
 import ketch.desktop.ui.screens.InstalledScreen
 import ketch.desktop.ui.screens.PackageScreen
+import ketch.desktop.ui.screens.SettingsScreen
 import ketch.desktop.ui.screens.UpdatesScreen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.ReceiveChannel
@@ -47,6 +54,48 @@ enum class Section(
     Updates("Updates", "updates"),
     Activity("Activity", "activity"),
     Doctor("Doctor", "doctor"),
+    Settings("Settings", "settings"),
+}
+
+/** Where the window is, so the tray, a notice and the app menu can steer it as the sidebar does. */
+class Navigation {
+    var section by mutableStateOf(Section.Installed)
+        private set
+    var open by mutableStateOf<String?>(null)
+    var confirmingUpdateAll by mutableStateOf(false)
+    var showingAbout by mutableStateOf(false)
+    var windowVisible by mutableStateOf(true)
+
+    /** Bumped to bring the window to the front. */
+    var windowRequests by mutableStateOf(0)
+        private set
+
+    fun show(section: Section) {
+        this.section = section
+        open = null
+    }
+
+    fun bringForward() {
+        windowVisible = true
+        windowRequests++
+    }
+}
+
+/** The app's own parts the screens use; the defaults suit a test, which refreshes once instead of on a timer. */
+class AppParts(
+    val settings: AppSettings = AppSettings(MemoryKeyValues()),
+    val notifier: UpdateNotifier = NoNotices,
+    val login: LoginItem = Unavailable,
+    val periodic: Boolean = false,
+)
+
+object NoNotices : UpdateNotifier {
+    override suspend fun requestAuthorization() = false
+
+    override fun post(
+        title: String,
+        body: String,
+    ) = Unit
 }
 
 /**
@@ -56,68 +105,74 @@ enum class Section(
 class Actions(
     val store: KetchStore,
     private val scope: CoroutineScope,
+    private val settings: AppSettings,
 ) {
     fun run(action: suspend KetchStore.() -> Unit) {
         scope.launch { store.action() }
     }
+
+    /** Installs take the prerelease setting, as the macOS app's do. */
+    fun install(spec: String) = run { install(spec, settings.state.value.prereleases) }
 }
 
 @Composable
 fun KetchApp(
     store: KetchStore,
     links: ReceiveChannel<String>? = null,
+    navigation: Navigation = remember { Navigation() },
+    parts: AppParts = remember { AppParts() },
 ) {
     val state by store.state.collectAsState()
     val scope = rememberCoroutineScope()
-    val actions = remember(store, scope) { Actions(store, scope) }
-    var section by remember { mutableStateOf(Section.Installed) }
-    var open by remember { mutableStateOf<String?>(null) }
+    val actions = remember(store, scope) { Actions(store, scope, parts.settings) }
+    val checks = remember(store) { UpdateChecks(store, parts.settings, parts.notifier) }
 
     LaunchedEffect(store) {
-        store.refresh()
+        if (parts.periodic) launch { checks.run() } else store.refresh()
         store.runDoctor()
     }
     LaunchedEffect(links) { links?.let { for (link in it) store.open(link) } }
     LaunchedEffect(state.linked) {
         state.linked?.let {
-            open = it
+            navigation.open = it
             store.clearLink()
         }
     }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Row {
-            Sidebar(state, section) {
-                section = it
-                open = null
-            }
+            Sidebar(state, navigation.section, navigation::show)
             Column(Modifier.fillMaxSize()) {
                 Bars(state, actions)
-                val page = open
+                val page = navigation.open
                 if (page != null) {
-                    PackageScreen(page, state, actions, onBack = { open = null })
+                    PackageScreen(page, state, actions, onBack = { navigation.open = null })
                 } else {
-                    Screen(section, state, actions, onOpen = { open = it })
+                    Screen(state, actions, navigation, parts, checks)
                 }
             }
         }
         Questions(state, actions)
+        if (navigation.showingAbout) About(store.coreVersion) { navigation.showingAbout = false }
     }
 }
 
 @Composable
 private fun Screen(
-    section: Section,
     state: StoreState,
     actions: Actions,
-    onOpen: (String) -> Unit,
+    navigation: Navigation,
+    parts: AppParts,
+    checks: UpdateChecks,
 ) {
-    when (section) {
+    val onOpen = { name: String -> navigation.open = name }
+    when (navigation.section) {
         Section.Installed -> InstalledScreen(state, actions, onOpen)
         Section.Discover -> DiscoverScreen(state, actions, onOpen)
-        Section.Updates -> UpdatesScreen(state, actions)
+        Section.Updates -> UpdatesScreen(state, actions, navigation)
         Section.Activity -> ActivityScreen(state)
         Section.Doctor -> DoctorScreen(state, actions)
+        Section.Settings -> SettingsScreen(actions, parts, checks, onAbout = { navigation.showingAbout = true })
     }
 }
 

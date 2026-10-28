@@ -19,6 +19,7 @@ import ketch.wire.KetchError
 import ketch.wire.Package
 import ketch.wire.Question
 import ketch.wire.SearchResults
+import ketch.wire.Settings
 import ketch.wire.Stage
 import ketch.wire.TaskKind
 import ketch.wire.Upgrade
@@ -45,6 +46,9 @@ class KetchStore(
 ) {
     private val mutable = MutableStateFlow(StoreState())
     val state: StateFlow<StoreState> = mutable.asStateFlow()
+
+    /** The version the core said hello with, for About. */
+    val coreVersion: String get() = core.version
 
     private var token: CancelToken? = null
     private var searches = 0
@@ -103,6 +107,13 @@ class KetchStore(
                     core.value<List<Changelog>>(Call.ChangelogRange(name, from, to))
                 }
         }?.let { report(it, retry = null) }
+        return found
+    }
+
+    /** ketch's own settings (its root and config.toml), for the Settings screen; null when the core could not say. */
+    suspend fun config(): Settings? {
+        var found: Settings? = null
+        caught { found = core.value<Settings>(Call.Config) }?.let { report(it, retry = null) }
         return found
     }
 
@@ -299,8 +310,6 @@ class KetchStore(
         }
     }
 
-    private fun downloading(progress: PackageProgress?) = progress ?: PackageProgress(Stage.Downloading)
-
     private fun progress(
         pkg: String,
         change: (PackageProgress?) -> PackageProgress,
@@ -384,3 +393,5 @@ class KetchStore(
             }
     }
 }
+
+private fun downloading(progress: PackageProgress?) = progress ?: PackageProgress(Stage.Downloading)
