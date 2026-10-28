@@ -78,7 +78,9 @@ Taken during the port:
   `Path.name` and `Path.parent` with `basename(3)` and `dirname(3)`, which return a shared static
   buffer (`core/apple/src/files/FileSystemApple.kt` on its `master`, checked 2026-10-27): two
   threads preparing packages read each other's file names (`aravo` for `alpha` and `bravo`).
-  The order of results, per-package failures and the commit sequence stay Rust's. For the same
+  The order of results, per-package failures and the commit sequence stay Rust's, and with
+  `jobs` above one every request is still prepared against the state from before the batch
+  (T10), so a package asked for twice installs cleanly as it does in Rust. For the same
   reason `ketch list` asks each source for its `latest` one after another, not `jobs` at a time.
 - **Statistics (T8).** `stats.db` goes through SQLDelight 2.4.1 (the creator's choice; Rust uses
   diesel) on kotlin-kit's `pyrlyn.kit:db-sqldelight`, a `SqlDriver` over kit `db`, so SQLite stays

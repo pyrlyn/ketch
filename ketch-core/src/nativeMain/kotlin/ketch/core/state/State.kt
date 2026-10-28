@@ -81,6 +81,9 @@ class State(
         writePrivate(path, "$json\n".encodeToByteArray())
     }
 
+    /** A copy that later changes to this one do not reach (Rust `State::clone`). */
+    fun snapshot() = State(version, retention, byName)
+
     fun get(name: String): InstalledPackage? = byName[name]
 
     fun insert(pkg: InstalledPackage) {

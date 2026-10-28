@@ -17,8 +17,17 @@ fun batch(
     sources: SourceRegistry,
     state: State,
     reqs: List<InstallRequest>,
-    @Suppress("UNUSED_PARAMETER") jobs: Int,
-): List<Result<Installed>> = reqs.map { req -> outcome { install(cx, sources, state, req) } }
+    jobs: Int,
+): List<Result<Installed>> {
+    if (jobs <= 1 || reqs.size <= 1) return reqs.map { req -> outcome { install(cx, sources, state, req) } }
+    // Rust's workers prepare against the state as it was before the batch and only `commit` reads the live one, so a
+    // package asked for twice is placed twice rather than refused as already installed. One at a time, that snapshot
+    // is what keeps `--jobs` meaning the same thing here.
+    val snapshot = state.snapshot()
+    return cx.report.batch().use { bars ->
+        reqs.map { req -> outcome { bars.download(req.spec.label()).use { commit(cx, state, prepare(cx, sources, snapshot, req, it)) } } }
+    }
+}
 
 /** A package's failure is its own result; anything else is a bug and stops the batch. */
 private inline fun outcome(block: () -> Installed): Result<Installed> =
