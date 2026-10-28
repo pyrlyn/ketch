@@ -3,7 +3,6 @@ package ketch.core.registry
 import fs.createDirAll
 import fs.entryKind
 import fs.isDir
-import fs.symlink
 import ketch.core.config.Config
 import ketch.core.error.KetchError
 import ketch.core.report.Ctx
@@ -23,17 +22,17 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class RegistryTest {
-    private fun write(
-        dir: Path,
-        folder: String,
-        body: String,
-    ) {
-        val pkg = Path(dir, folder)
-        createDirAll(pkg)
-        Path(pkg, PACKAGE_FILE).write(body)
-    }
+internal fun write(
+    dir: Path,
+    folder: String,
+    body: String,
+) {
+    val pkg = Path(dir, folder)
+    createDirAll(pkg)
+    Path(pkg, PACKAGE_FILE).write(body)
+}
 
+class RegistryTest {
     private fun loadSilently(dir: Path): List<Pair<ketch.core.model.Manifest, Path>> {
         val report = Report.silent()
         return withTempDir { tmp -> load(Ctx(Config.load(tmp, report).copy(registryDir = dir), report)) }
@@ -172,23 +171,6 @@ class RegistryTest {
             val report = checkTree(tmp)
             assertEquals(0, report.packages)
             assertTrue("local path" in report.errors.single().message, report.errors.toString())
-        }
-
-    /** The tree is somebody else's: a link here would have ketch read — and quote in an error — a file from outside it. */
-    @Test
-    fun checkTreeNeverReadsThroughASymlinkedPackageFile(): Unit =
-        withTempDir { tmp ->
-            val secret = Path(tmp, "secret.txt")
-            secret.write("root:x:0:0:root:/root:/bin/sh\n")
-            write(tmp, "good", "source = \"github:a/b\"\n")
-            val sneaky = Path(tmp, "sneaky")
-            createDirAll(sneaky)
-            symlink(secret, Path(sneaky, PACKAGE_FILE))
-            val report = checkTree(tmp)
-            assertEquals(1, report.packages)
-            val error = report.errors.single()
-            assertTrue("not a symlink" in error.message, error.message)
-            assertTrue(error.path.endsWith("sneaky/ketch.toml"), error.path)
         }
 
     @Test

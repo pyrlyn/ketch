@@ -171,4 +171,24 @@ class PlatformTest {
         assertFalse(pathIsStrictWithin(root, root))
         assertFalse(pathIsWithin(Path("/Users/ivan/.ketch/other"), root))
     }
+
+    @Test
+    fun pathIsWithinFoldsAsciiCaseOnWindows() {
+        val root = "C:\\Users\\ivan\\.ketch\\store"
+        val folded = "C:\\Users\\IVAN\\.ketch\\store\\rg\\1.0"
+        assertTrue(pathIsWithinFor(folded, root, windows = true))
+        assertTrue(pathIsStrictWithinFor(folded, root, windows = true))
+        assertFalse(pathIsStrictWithinFor("C:\\Users\\IVAN\\.ketch\\store", root, windows = true))
+        assertFalse(pathIsWithinFor(folded, root, windows = false))
+    }
+
+    // kotlinx-io joins with `/` on Windows too, so a store path ketch builds is spelled with both separators.
+    @Test
+    fun windowsPathsMatchAcrossSeparatorsAndDriveCase() {
+        val root = "C:\\Users\\ivan\\.ketch"
+        assertTrue(pathIsWithinFor("c:/Users/ivan/.ketch/store/rg", root, windows = true))
+        assertFalse(pathIsWithinFor("D:\\Users\\ivan\\.ketch\\store", root, windows = true))
+        assertFalse(pathIsWithinFor("C:\\Users\\ivan\\.ketchup", root, windows = true))
+        assertFalse(pathIsWithinFor("x", "", windows = true))
+    }
 }

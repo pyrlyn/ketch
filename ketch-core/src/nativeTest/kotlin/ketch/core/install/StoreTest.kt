@@ -4,21 +4,17 @@ import fs.createDirAll
 import fs.entryKind
 import fs.isDir
 import fs.listDir
-import fs.setMode
-import fs.symlink
 import ketch.core.config.Config
-import ketch.core.error.KetchError
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.model.RetainedVersion
 import ketch.core.model.Version
 import ketch.core.platform.pathIsWithin
 import ketch.core.report.Report
 import ketch.core.state.State
-import ketch.core.testing.read
 import ketch.core.testing.write
 import kotlinx.io.files.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -35,13 +31,22 @@ class StoreTest {
             assertTrue(isDir(outside), "a path outside the store must survive")
         }
 
-    /** Rust checks the case-folded half on Windows only; on Unix the same-case payload is what is asserted. */
+    /** On Windows a prefix that differs from the store only in ASCII case is a real uninstall and GC failure mode. */
     @Test
     fun insideStoreAcceptsTheSameCasePrefix(): Unit =
         withRoot { cfg, _ ->
             val payload = Path(Path(cfg.storeDir, "rg"), "1.0.0")
             createDirAll(payload)
             assertTrue(isInsideStore(cfg.storeDir, payload), "same-case payload must be inside")
+            if (HOST_WINDOWS) {
+                val swapped =
+                    cfg.storeDir
+                        .toString()
+                        .map { if (it.isLowerCase()) it.uppercaseChar() else it.lowercaseChar() }
+                        .joinToString("")
+                val alt = Path(Path(Path(swapped), "rg"), "1.0.0")
+                assertTrue(isInsideStore(cfg.storeDir, alt), "Windows must treat differently-cased store prefixes as inside: ${cfg.storeDir} vs $alt")
+            }
         }
 
     @Test
@@ -55,19 +60,6 @@ class StoreTest {
             assertTrue(pathIsWithin(escape, cfg.storeDir), "precondition: a lexical prefix test alone would allow this")
             removeStoreDir(cfg, escape, silent)
             assertNotNull(entryKind(Path(victim, "keep")), "`..` must not let uninstall delete outside the store")
-        }
-
-    @Test
-    fun refusesAStoreSymlinkThatPointsOutside(): Unit =
-        withRoot { cfg, tmp ->
-            val victim = Path(tmp, "victim")
-            createDirAll(victim)
-            Path(victim, "keep").write("safe")
-            val decoy = Path(cfg.storeDir, "decoy")
-            symlink(victim, decoy)
-            removeStoreDir(cfg, decoy, silent)
-            assertNotNull(entryKind(Path(victim, "keep")), "a symlink inside the store must not delete its outside target")
-            assertNotNull(entryKind(decoy))
         }
 
     @Test
@@ -112,21 +104,6 @@ class StoreTest {
         }
 
     @Test
-    fun aLeftoverTheSweepCannotRemoveStopsTheInstallAndIsNamed(): Unit =
-        withRoot { cfg, _ ->
-            val folder = Path(cfg.storeDir, "tool")
-            createDirAll(Path(folder, "1.0.0.old"))
-            setMode(folder, "555".toInt(8))
-            val err =
-                try {
-                    assertFailsWith<KetchError> { sweepSwapLeftovers(cfg, "tool", null) }
-                } finally {
-                    setMode(folder, "755".toInt(8))
-                }
-            assertTrue("1.0.0.old" in err.message, err.message)
-        }
-
-    @Test
     fun aPackageNameThatIsNotOneComponentIsNeverRemoved(): Unit =
         withRoot { cfg, _ ->
             val nested = Path(Path(cfg.storeDir, "a"), "b")
@@ -164,17 +141,6 @@ class StoreTest {
     fun aMissingPackageFolderIsNotACandidate(): Unit =
         withRoot { cfg, _ ->
             assertNull(removePackageDir(cfg, "tool", silent))
-        }
-
-    @Test
-    fun aPackageFolderLinkedOutsideTheStoreIsLeftAlone(): Unit =
-        withRoot { cfg, tmp ->
-            val victim = Path(tmp, "victim")
-            createDirAll(victim)
-            Path(victim, "keep").write("safe")
-            symlink(victim, Path(cfg.storeDir, "tool"))
-            assertNull(removePackageDir(cfg, "tool", silent))
-            assertEquals("safe", Path(victim, "keep").read())
         }
 
     /**

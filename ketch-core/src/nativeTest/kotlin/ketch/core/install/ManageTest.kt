@@ -116,12 +116,19 @@ class ManageTest {
             val tool = program(tmp, "gonetool", "#!/bin/sh\necho hi\n")
             val state = State()
             install(cx, SourceRegistry.load(cx), state, localRequest(tool))
-            assertTrue(entryKind(Path(cx.cfg.binDir, "gonetool")) != null, "linked first")
+            // Named by the record: Windows places `gonetool.exe`.
+            val link =
+                state
+                    .get("gonetool")!!
+                    .links
+                    .single()
+                    .link
+            assertTrue(entryKind(link) != null, "linked first")
 
             assertEquals("gonetool", uninstall(cx, state, "gonetool").name)
 
             assertNull(state.get("gonetool"))
-            assertNull(entryKind(Path(cx.cfg.binDir, "gonetool")), "no link")
+            assertNull(entryKind(link), "no link")
             assertNull(entryKind(Path(cx.cfg.storeDir, "gonetool")), "no store folder")
             assertFailsWith<KetchError.NotInstalled> { uninstall(cx, state, "gonetool") }
         }
@@ -132,7 +139,12 @@ class ManageTest {
             val tool = program(tmp, "backtool", "#!/bin/sh\necho hi\n")
             val state = State()
             install(cx, SourceRegistry.load(cx), state, localRequest(tool))
-            val link = Path(cx.cfg.binDir, "backtool")
+            val link =
+                state
+                    .get("backtool")!!
+                    .links
+                    .single()
+                    .link
 
             unlink(cx, state, "backtool")
             assertNull(entryKind(link))

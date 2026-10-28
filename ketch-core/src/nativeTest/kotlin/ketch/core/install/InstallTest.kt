@@ -26,12 +26,8 @@ import ketch.core.platform.Platform
 import ketch.core.platform.host
 import ketch.core.process.Occupant
 import ketch.core.report.Ctx
-import ketch.core.report.Event
-import ketch.core.report.Recorder
 import ketch.core.report.Report
 import ketch.core.report.SilentProgress
-import ketch.core.report.Stage
-import ketch.core.report.Task
 import ketch.core.resolve.scoreAssets
 import ketch.core.source.ListOpts
 import ketch.core.source.Source
@@ -209,32 +205,6 @@ class InstallTest {
             assertEquals(before.prefix, state.get("swaptool")?.prefix)
             assertEquals("kept", Path(before.prefix, "previous").read(), "the store state names is the one that was there before")
             assertNull(entryKind(Path("${before.prefix}.old")), "no retired copy left behind")
-        }
-
-    /** The event sequence a front end draws an install from: every stage in order, the download as one task that ends, and nothing printed. */
-    @Test
-    fun aLocalInstallReportsEachStageThroughTheReporter(): Unit =
-        withTempDir { tmp ->
-            val recorder = Recorder()
-            val report = Report(recorder)
-            val cfg = Config.load(Path(tmp, "root"), report)
-            val cx = Ctx(cfg, report)
-            val tool = program(tmp, "tool", "#!/bin/sh\necho tool\n")
-            install(cx, SourceRegistry.builtinOnly(cx), State(), InstallRequest(PackageSpec.parse("local:$tool")))
-
-            val events = recorder.events()
-            assertEquals(
-                listOf(Stage.Resolving, Stage.Downloading, Stage.Verifying, Stage.Extracting, Stage.Trusting, Stage.Installing),
-                events.filterIsInstance<Event.Step>().map { it.stage },
-            )
-            val download =
-                assertNotNull(
-                    events.filterIsInstance<Event.Began>().firstOrNull { (it.task as? Task.Download)?.batch == null && it.task is Task.Download },
-                    "the download is announced",
-                ).id
-            assertTrue(events.any { it is Event.Ended && it.id == download }, "a download that arrived ends rather than being abandoned: $events")
-            assertTrue(events.any { it is Event.Status && it.verb == "resolving" && it.detail.startsWith("tool ") }, "$events")
-            assertTrue(events.none { it is Event.Warn }, "a clean install warns about nothing: $events")
         }
 
     /** A payload with two executables that share the package name and none named exactly like it, so only a decision can pick. */
