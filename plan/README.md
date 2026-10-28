@@ -160,7 +160,7 @@ The Rust modules each task covers. ✅ ported with tests green, 🟡 partial, �
 | T9 | `import` (brew, linux, winget, apply, fetch), `push` | ✅ |
 | T10 | `src/` command line: `cli`, `cmd/*`, `ui`, `complete`, `man`, `self_docs`; `tests/*.rs` end-to-end | ✅ |
 | T11 | `ketch serve` and `:ketch-wire` (the `ketch-ffi` surface), contract scenarios | ✅ |
-| T12 | Compose desktop app (the SwiftUI and WinUI screens) | ⬜ |
+| T12 | Compose desktop app (the SwiftUI and WinUI screens) | ✅ |
 | T13 | Windows: mingwX64, `platform/windows`, Windows completions | ⬜ |
 | T14 | `trust`: sigstore, minisign, OpenPGP | ⬜ |
 | T15 | release: install scripts, self-update artefacts, CI, docs | ⬜ |
