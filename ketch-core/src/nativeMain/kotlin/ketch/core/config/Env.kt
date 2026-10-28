@@ -1,21 +1,9 @@
-@file:OptIn(ExperimentalForeignApi::class)
-
 package ketch.core.config
 
-import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.pointed
-import kotlinx.cinterop.readBytes
-import kotlinx.cinterop.toKString
 import kotlinx.io.files.Path
-import platform.posix.free
-import platform.posix.getcwd
-import platform.posix.getenv
-import platform.posix.getpwuid
-import platform.posix.getuid
-import platform.posix.strlen
 
-/** The variable's bytes, as Rust `var_os` sees them; null when unset. */
-private fun envBytes(key: String): ByteArray? = getenv(key)?.let { it.readBytes(strlen(it).toInt()) }
+/** The variable's bytes, as Rust `var_os` sees them; null when unset. UTF-8 off Windows by convention, WTF-8 on it. */
+internal expect fun envBytes(key: String): ByteArray?
 
 /** Rust `env::var(key).ok()`: null when unset or not UTF-8. */
 internal fun env(key: String): String? = envBytes(key)?.let { decodeStrict(it) }
@@ -46,23 +34,8 @@ private fun decodeStrict(bytes: ByteArray): String? =
         null
     }
 
-/** Rust `dirs::home_dir`: `HOME` when set, else the user's entry in the password database. */
-internal fun homeDir(): Path? {
-    envOs("HOME")?.takeIf { it.isNotEmpty() }?.let { return Path(it) }
-    return getpwuid(getuid())
-        ?.pointed
-        ?.pw_dir
-        ?.toKString()
-        ?.takeIf { it.isNotEmpty() }
-        ?.let { Path(it) }
-}
+/** Rust `dirs::home_dir`. */
+internal expect fun homeDir(): Path?
 
 /** Rust `env::current_dir`; null when the directory is gone. */
-fun currentDir(): Path? {
-    val buf = getcwd(null, 0u) ?: return null
-    try {
-        return Path(buf.toKString())
-    } finally {
-        free(buf)
-    }
-}
+expect fun currentDir(): Path?

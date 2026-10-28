@@ -9,6 +9,7 @@ import fs.listDir
 import fs.readText
 import fs.removeFile
 import fs.setModifiedAgo
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.error.KetchError
 import ketch.core.report.Report
 import ketch.core.testing.withTempDir
@@ -18,8 +19,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
+import kotlinx.io.writeString
 import platform.posix.getenv
 import platform.posix.getpid
 import platform.posix.usleep
@@ -62,16 +65,6 @@ class LockTest {
         }
 
     @Test
-    fun aLockHeldByAnotherUsersProcessIsNotStolen(): Unit =
-        withTempDir { dir ->
-            val path = Path(dir, "lock")
-            // pid 1 is running and is not ours to signal — the case that reads as "process is gone" if aliveness is
-            // judged by `kill(pid, 0)` alone.
-            write(path, "1")
-            assertFailsWith<KetchError.Busy> { acquire(path) }
-        }
-
-    @Test
     fun aSecondLockInThisProcessIsBusyUntilTheFirstCloses(): Unit =
         withTempDir { dir ->
             val path = Path(dir, ".lock")
@@ -95,10 +88,12 @@ class LockTest {
     fun aFailedAcquireLeavesNoClaimBehind(): Unit =
         withTempDir { dir ->
             val path = Path(dir, "lock")
-            // A live foreign holder: busy, and must not poison later attempts.
-            write(path, "1")
-            assertFailsWith<KetchError.Busy> { acquire(path) }
-            removeFile(path)
+            // A live foreign holder: busy, and must not poison later attempts. pid 1 is init only on Unix.
+            if (!HOST_WINDOWS) {
+                write(path, "1")
+                assertFailsWith<KetchError.Busy> { acquire(path) }
+                removeFile(path)
+            }
             acquire(path).close()
         }
 
@@ -181,8 +176,9 @@ class LockTest {
             runCatching { removeFile(inside) }
             if (round % CRASH_EVERY == 0) {
                 // A crash: the file stays behind naming a pid that is gone, and every other contender judges it
-                // stale at once.
-                write(lock, "999999")
+                // stale at once. Written in place, as Rust's `fs::write` does: replacing it would need every other
+                // handle on it to allow deletion, and on Windows one often does not for about a second.
+                SystemFileSystem.sink(lock).buffered().use { it.writeString("999999") }
                 releaseClaim(lock)
             } else {
                 held.close()

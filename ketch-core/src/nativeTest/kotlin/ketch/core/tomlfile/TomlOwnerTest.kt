@@ -1,5 +1,3 @@
-@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
-
 package ketch.core.tomlfile
 
 import fs.EntryKind
@@ -7,9 +5,8 @@ import fs.canonicalize
 import fs.entryKind
 import fs.listDir
 import fs.readText
-import kotlinx.cinterop.toKString
+import ketch.core.config.currentDir
 import kotlinx.io.files.Path
-import platform.posix.getcwd
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -81,7 +78,7 @@ class TomlOwnerTest {
 
     /** The test runs in its module's directory; the repository root is the nearest one with the Gradle settings. */
     private fun repositoryRoot(): Path {
-        var dir = canonicalize(Path(checkNotNull(getcwd(null, 0u)).toKString()))
+        var dir = canonicalize(checkNotNull(currentDir()))
         while (entryKind(Path(dir, "settings.gradle.kts")) != EntryKind.File) dir = checkNotNull(dir.parent) { "no settings.gradle.kts above the test" }
         return dir
     }

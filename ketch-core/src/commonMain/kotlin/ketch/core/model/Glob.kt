@@ -1,5 +1,6 @@
 package ketch.core.model
 
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.error.KetchError
 import ketch.core.text.BYTE_ORDER
 import ketch.core.text.asciiLowercase
@@ -79,12 +80,67 @@ fun globPreferred(
     )
 }
 
-/** Rust's `Path::components` for a `/` path: empty and `.` parts dropped, a leading `/` its own first part. */
-internal fun rustComponents(path: Path): List<String> {
-    val text = path.toString()
-    val parts = text.split('/').filter { it.isNotEmpty() && it != "." }
-    return if (text.startsWith('/')) listOf("") + parts else parts
+/**
+ * Rust's `Path::components`: empty and `.` parts dropped, the root its own `""` part. On Windows both `/` and `\` part
+ * names, and a prefix leads: a drive as `C:` (Rust compares drive letters folded), or a UNC or verbatim prefix.
+ */
+internal fun rustComponents(path: Path): List<String> = rustComponentsFor(path.toString(), HOST_WINDOWS)
+
+internal fun rustComponentsFor(
+    text: String,
+    windows: Boolean,
+): List<String> {
+    if (!windows) {
+        val parts = text.split('/').filter { it.isNotEmpty() && it != "." }
+        return if (text.startsWith('/')) listOf("") + parts else parts
+    }
+    val (prefix, rest) = windowsPrefix(text)
+    // A verbatim path is passed to Win32 as it is: `/` there is part of a name.
+    val parts = rest.split(*if (prefix.startsWith(VERBATIM)) charArrayOf('\\') else charArrayOf('/', '\\'))
+    val names = parts.filter { it.isNotEmpty() && it != "." }
+    val rooted = rest.startsWith('\\') || (!prefix.startsWith(VERBATIM) && rest.startsWith('/'))
+    return listOfNotNull(prefix.ifEmpty { null }) + (if (rooted || prefix.startsWith('\\')) listOf("") else emptyList()) + names
 }
+
+private const val VERBATIM = "\\\\?\\"
+
+/** The prefix Rust's Windows parser finds, and the text after it. */
+private fun windowsPrefix(text: String): Pair<String, String> =
+    when {
+        text.startsWith(VERBATIM) -> verbatimPrefix(text)
+        isUncStart(text) -> uncPrefix(text)
+        isDrive(text, 0) -> text.substring(0, 2).uppercase() to text.substring(2)
+        else -> "" to text
+    }
+
+private fun isSeparator(c: Char) = c == '/' || c == '\\'
+
+private fun isDrive(
+    text: String,
+    at: Int,
+) = text.length >= at + 2 && text[at + 1] == ':' && text[at].let { it in 'a'..'z' || it in 'A'..'Z' }
+
+private fun isUncStart(text: String) = text.length > 2 && text.take(2).all(::isSeparator) && !isSeparator(text[2])
+
+private fun verbatimPrefix(text: String): Pair<String, String> {
+    val at = VERBATIM.length
+    if (isDrive(text, at)) return VERBATIM + text.substring(at, at + 2).uppercase() to text.substring(at + 2)
+    val end = text.indexOf('\\', at).let { if (it < 0) text.length else it }
+    return text.substring(0, end) to text.substring(end)
+}
+
+/** `\\server\share`: both names belong to the prefix. */
+private fun uncPrefix(text: String): Pair<String, String> {
+    val server = text.indexOfFirst(2, ::isSeparator)
+    val share = if (server < 0) -1 else text.indexOfFirst(server + 1, ::isSeparator)
+    val end = if (share < 0) text.length else share
+    return text.substring(0, end).replace('/', '\\') to text.substring(end)
+}
+
+private inline fun String.indexOfFirst(
+    from: Int,
+    predicate: (Char) -> Boolean,
+): Int = (from until length).firstOrNull { predicate(this[it]) } ?: -1
 
 /** Rust orders paths component by component, each by its bytes. */
 internal val PATH_ORDER =

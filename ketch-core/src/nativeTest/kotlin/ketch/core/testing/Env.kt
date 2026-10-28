@@ -1,11 +1,6 @@
-@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
-
 package ketch.core.testing
 
-import kotlinx.cinterop.toKString
-import platform.posix.getenv
-import platform.posix.setenv
-import platform.posix.unsetenv
+import ketch.core.config.envOs
 
 /**
  * Rust's `CleanEnv`: [keys] are cleared, [set] applied, and every variable either touches is put back afterwards.
@@ -17,19 +12,19 @@ fun <T> withEnv(
     body: () -> T,
 ): T {
     val touched = keys + set.keys
-    val saved = touched.associateWith { getenv(it)?.toKString() }
+    val saved = touched.associateWith { envOs(it) }
     try {
-        keys.forEach { unsetenv(it) }
+        keys.forEach { unsetEnv(it) }
         set.forEach { (k, v) -> setEnv(k, v) }
         return body()
     } finally {
-        saved.forEach { (k, v) -> if (v == null) unsetenv(k) else setEnv(k, v) }
+        saved.forEach { (k, v) -> if (v == null) unsetEnv(k) else setEnv(k, v) }
     }
 }
 
-fun setEnv(
+expect fun setEnv(
     key: String,
     value: String,
-) {
-    check(setenv(key, value, 1) == 0) { "setenv $key" }
-}
+)
+
+expect fun unsetEnv(key: String)

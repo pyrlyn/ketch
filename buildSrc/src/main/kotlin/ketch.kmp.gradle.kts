@@ -1,7 +1,8 @@
 import org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
 
 // A Kotlin Multiplatform module. The native targets (macosArm64, plus Linux with diffuser.allTargets)
-// come from ci.diffuser.native in the root build; a module that the desktop app also reads adds jvm().
+// come from ci.diffuser.native in the root build; a module ported to Windows adds mingwX64(), one the desktop app
+// also reads adds jvm().
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("org.jetbrains.kotlin.plugin.serialization")
@@ -10,6 +11,17 @@ plugins {
 val catalog = versionCatalogs.named("libs")
 
 kotlin {
+    // unixMain holds the POSIX code macOS and Linux share; mingwMain the Windows side of the same API.
+    applyDefaultHierarchyTemplate {
+        common {
+            group("native") {
+                group("unix") {
+                    group("apple")
+                    group("linux")
+                }
+            }
+        }
+    }
     compilerOptions {
         allWarningsAsErrors.set(true)
     }

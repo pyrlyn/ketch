@@ -16,8 +16,6 @@ import ketch.core.report.Report
 import ketch.core.text.rustTrim
 import kotlinx.io.files.Path
 import platform.posix.getpid
-import process.Command
-import process.runBounded
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -303,22 +301,12 @@ private fun withExtension(
     return path.parent?.let { Path(it, "$stem.$ext") } ?: Path("$stem.$ext")
 }
 
-private val PS_TIMEOUT = 10.seconds
-private const val PS_OUTPUT = 4096L
-
 /**
  * Is that pid still running? Only consulted when a lock file already exists, so running a program costs nothing on
- * the normal path.
- *
- * `ps` rather than `kill(pid, 0)`: signalling a process owned by another user fails with EPERM, which reading as
- * "gone" would turn into stealing a lock that is very much still held. Unsure means "assume held" — never steal on
- * doubt.
+ * the normal path. Asked of a program (`ps`, `tasklist`) whose answer is unambiguous; unsure means "assume held" —
+ * never steal on doubt.
  */
-fun processAlive(pid: Long): Boolean =
-    runCatching { Command("/bin/ps", listOf("-p", pid.toString(), "-o", "pid=")).runBounded(PS_TIMEOUT, PS_OUTPUT) }
-        .getOrNull()
-        ?.status
-        ?.success ?: true
+expect fun processAlive(pid: Long): Boolean
 
 private inline fun <T> io(
     path: Path,

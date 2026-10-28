@@ -1,6 +1,5 @@
 package ketch.core.stats
 
-import db.room.RoomDbDriver
 import ketch.core.model.InstalledPackage
 import ketch.core.model.ManifestOrigin
 import ketch.core.model.PackageRef
@@ -228,7 +227,7 @@ class StatsTest {
     fun aDatabaseRustKetchMadeIsReadAndExtendedAsIs(): Unit =
         withTempDir { dir ->
             val path = Path(dir, "stats.db")
-            RoomDbDriver.open(path.toString()).use { db ->
+            sqlite.open(path.toString()).use { db ->
                 db.exec(RUST_SCHEMA)
                 db.execute(
                     "INSERT INTO events (package, action, version, tag, source, target, asset_name, sha256, checksum_verified, at, ketch_version) " +
@@ -244,7 +243,7 @@ class StatsTest {
             recordAt(fresh, event("fd", "9.0.0", Action.Install))
             recordAt(fresh, event("fd", "9.0.1", Action.Upgrade))
             listOf(path, fresh).forEach { db ->
-                val versions = RoomDbDriver.open(db.toString()).use { it.query("SELECT version FROM __diesel_schema_migrations") { r -> r.string(0) } }
+                val versions = sqlite.open(db.toString()).use { it.query("SELECT version FROM __diesel_schema_migrations") { r -> r.string(0) } }
                 assertEquals(listOf("20260904000000"), versions, "$db")
             }
         }

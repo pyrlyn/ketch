@@ -1,7 +1,7 @@
 package ketch.core
 
-import db.room.RoomDbDriver
 import ketch.core.hash.Sha256
+import ketch.core.stats.sqlite
 import kotlinx.serialization.json.JsonPrimitive
 import semver.VersionKey
 import toml.TomlParser
@@ -43,6 +43,6 @@ class SharedLibsTest {
 
     @Test
     fun bundledSqliteAnswers() {
-        assertTrue(RoomDbDriver.version().first().isDigit())
+        assertTrue(sqlite.version().first().isDigit())
     }
 }

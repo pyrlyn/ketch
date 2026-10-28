@@ -6,6 +6,8 @@ plugins {
 }
 
 kotlin {
+    // Windows is ketch's own target, not ci-diffuser's: the shared plugin also builds rtok, which has none.
+    mingwX64()
     sourceSets {
         commonMain.dependencies {
             api(libs.kotlinx.io.core)
@@ -17,12 +19,11 @@ kotlin {
             implementation("pyrlyn.kit:yaml-aot")
             implementation("pyrlyn.kit:semver")
             implementation("pyrlyn.kit:http-ktor")
-            implementation("pyrlyn.kit:db-room")
             implementation("pyrlyn.kit:db-sqldelight")
             // Streaming SHA-256 for downloads that do not fit in memory (Rust: sha2), behind ketch.core.hash.Sha256.
             implementation(libs.kotlincrypto.sha2)
         }
-        // Crash-safe writes of config, state and lock files (Rust: fs-kit); POSIX only.
+        // Crash-safe writes of config, state and lock files (Rust: fs-kit).
         nativeMain.dependencies {
             implementation("pyrlyn.kit:fs")
             // Hooks run under a deadline with capped output and a killable process group (Rust: run_with_deadline).
@@ -31,6 +32,10 @@ kotlin {
             // flate2, lzma-rust2, bzip2).
             implementation("pyrlyn.kit:archive")
         }
+        // stats.db's SQLite: androidx.sqlite's bundled build on macOS and Linux; it has no Windows build, so Windows
+        // links SQLite's own C API.
+        unixMain.dependencies { implementation("pyrlyn.kit:db-room") }
+        mingwMain.dependencies { implementation("pyrlyn.kit:db-native") }
         // Checks the committed config and manifest schemas against what ketch accepts (Rust: jsonschema).
         nativeTest.dependencies {
             implementation(libs.json.schema.validator)
@@ -41,6 +46,8 @@ kotlin {
 }
 
 sqldelight {
+    // SQLite comes from db-room or db-native, never the system's: Windows has no libsqlite3 to link.
+    linkSqlite.set(false)
     databases {
         create("StatsDatabase") {
             packageName.set("ketch.core.stats.db")

@@ -10,7 +10,6 @@
 package ketch.core.stats
 
 import app.cash.sqldelight.db.SqlDriver
-import db.room.RoomDbDriver
 import db.sqldelight.KitSqlDriver
 import fs.createDirAll
 import ketch.core.VERSION
@@ -113,7 +112,7 @@ private class Connection(
 private fun open(path: Path): Connection {
     val parent = path.parent ?: Path(".")
     fsKitAt(parent) { createDirAll(parent) }
-    val connection = step("could not open $path") { Connection(KitSqlDriver(RoomDbDriver.open(path.toString()))) }
+    val connection = step("could not open $path") { Connection(KitSqlDriver(sqlite.open(path.toString()))) }
     try {
         step("could not configure $path") { connection.queries.setBusyTimeout() }
         step("could not migrate $path") { migrate(connection) }

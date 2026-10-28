@@ -69,6 +69,7 @@ class ConfigTest {
     @Test
     fun pathLookupKeyFoldsCaseSeparatorsAndTrailingSlash() {
         assertEquals(pathLookupKey("C:\\Users\\u\\.ketch\\bin"), pathLookupKey("C:/Users/u/.ketch/bin/"))
+        if (HOST_WINDOWS) assertEquals(pathLookupKey("C:\\Users\\U\\.ketch\\bin"), pathLookupKey("c:\\users\\u\\.ketch\\bin"))
     }
 
     @Test
@@ -76,7 +77,7 @@ class ConfigTest {
         withTempDir { dir ->
             val cfg = load(dir)
             val mixed = cfg.binDir.toString().replace('\\', '/')
-            val on = withEnv(emptyList(), mapOf("PATH" to "/elsewhere:$mixed/")) { cfg.binDirOnPath() }
+            val on = withEnv(emptyList(), mapOf("PATH" to listOf("/elsewhere", "$mixed/").joinToString(if (HOST_WINDOWS) ";" else ":"))) { cfg.binDirOnPath() }
             assertTrue(on, "folded PATH entry must count as on PATH")
         }
 

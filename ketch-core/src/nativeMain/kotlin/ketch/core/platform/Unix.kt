@@ -175,16 +175,20 @@ internal fun payloadExecutableEntry(
  */
 internal fun parentDirIsBin(path: Path): Boolean = path.parent?.name?.eqIgnoreAsciiCase("bin") == true
 
-/** Every executable file in the payload that is a plausible entry point, the package-named binary first. */
+/**
+ * Every executable file in the payload that is a plausible entry point, the package-named binary first. [bundles]
+ * skips `.app` and `.framework` directories, which only Unix payloads hold programs inside.
+ */
 internal fun discoverExecutables(
     platform: Platform,
     root: Path,
     pkg: String,
+    bundles: Boolean = true,
 ): List<Path> {
     val found =
         walk(root, maxDepth = 4, onError = {}) { entry ->
             val name = entry.path.name.asciiLowercase()
-            entry.depth == 0 || !(name.endsWith(".app") || name.endsWith(".framework") || name in NOISE_DIRS)
+            entry.depth == 0 || !((bundles && (name.endsWith(".app") || name.endsWith(".framework"))) || name in NOISE_DIRS)
         }.mapNotNull { payloadExecutableEntry(it, root) }
             .filter { platform.isExecutable(it) }
             .toList()
@@ -192,10 +196,15 @@ internal fun discoverExecutables(
     return orderDiscoveredExecutables(inBin.ifEmpty { found }, pkg)
 }
 
-/** Resolve the manifest's explicit binary list against the extracted payload. */
+/**
+ * Resolve the manifest's explicit binary list against the extracted payload. [named] says whether a file name is the
+ * one a `name`-only entry asks for, and [linkName] turns the entry's name into the link's.
+ */
 internal fun resolveBinSpecs(
     root: Path,
     specs: List<BinSpec>,
+    named: (file: String, want: String) -> Boolean = { file, want -> file == want },
+    linkName: (String) -> String = { it },
 ): List<Pair<Path, String>> {
     val rootParts = rustComponents(root)
     val candidates =
@@ -211,13 +220,13 @@ internal fun resolveBinSpecs(
                     }
                 globPreferred(root, pattern, hits, spec.name)
             } else {
-                candidates.firstOrNull { it.name == spec.name.orEmpty() }
+                candidates.firstOrNull { named(it.name, spec.name.orEmpty()) }
             }
         val path =
             matched ?: throw KetchError.Msg(
                 "manifest expects `${spec.path ?: spec.name ?: "<unnamed>"}` but the release payload does not contain it",
             )
-        path to (spec.name ?: path.name)
+        path to linkName(spec.name ?: path.name)
     }
 }
 

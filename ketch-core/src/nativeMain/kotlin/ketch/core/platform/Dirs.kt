@@ -4,12 +4,15 @@ import fs.FsException
 import fs.createNew
 import fs.entryKind
 import fs.removeFile
+import ketch.core.config.HOST_WINDOWS
 import ketch.core.config.envOs
 import ketch.core.config.homeDir
 import ketch.core.extra.ExtraPlacement
 import ketch.core.model.CompletionShell
 import ketch.core.model.LinkRecord
 import ketch.core.model.rustComponents
+import ketch.core.model.rustComponentsFor
+import ketch.core.text.eqIgnoreAsciiCase
 import kotlinx.io.files.Path
 import kotlin.random.Random
 
@@ -26,22 +29,42 @@ fun configHome(): Path = xdg("XDG_CONFIG_HOME", ".config")
 
 /**
  * True when [path] is [root] or a descendant of it, component by component as Rust's `Path::starts_with` compares.
- * Windows folds ASCII case here as well; that half arrives with the Windows backend.
+ * Windows also folds ASCII case: a store root typed `C:\Users\IVAN\…` and a payload recorded as `C:\Users\ivan\…` must
+ * still count as inside, or uninstall refuses to delete the files and leaves orphans forever.
  */
 fun pathIsWithin(
     path: Path,
     root: Path,
-): Boolean {
-    if (root.toString().isEmpty()) return false
-    val parts = rustComponents(root)
-    return rustComponents(path).take(parts.size) == parts
-}
+) = pathIsWithinFor(path.toString(), root.toString(), HOST_WINDOWS)
 
 /** Like [pathIsWithin], but false when [path] and [root] are the same. */
 fun pathIsStrictWithin(
     path: Path,
     root: Path,
-) = pathIsWithin(path, root) && rustComponents(path) != rustComponents(root)
+) = pathIsStrictWithinFor(path.toString(), root.toString(), HOST_WINDOWS)
+
+/** [pathIsWithin] with the Windows rules switched on or off, so both are tested on every host. */
+internal fun pathIsWithinFor(
+    path: String,
+    root: String,
+    windows: Boolean,
+): Boolean {
+    if (root.isEmpty()) return false
+    val parts = rustComponentsFor(root, windows)
+    return sameParts(rustComponentsFor(path, windows).take(parts.size), parts, windows)
+}
+
+internal fun pathIsStrictWithinFor(
+    path: String,
+    root: String,
+    windows: Boolean,
+) = pathIsWithinFor(path, root, windows) && !sameParts(rustComponentsFor(path, windows), rustComponentsFor(root, windows), windows)
+
+private fun sameParts(
+    a: List<String>,
+    b: List<String>,
+    windows: Boolean,
+) = a == b || (windows && a.size == b.size && a.zip(b).all { (x, y) -> x.eqIgnoreAsciiCase(y) })
 
 /** Unix-style completion directories. */
 fun completionDirFor(shell: CompletionShell): Path =
@@ -87,10 +110,13 @@ internal fun probeWritable(dir: Path): String? =
 
 private const val PROBE_RADIX = 36
 
-/** Link classified extras from [root] (the store prefix) to their destinations. */
+/** Link classified extras from [root] (the store prefix) to their destinations; on Windows, copy them. */
 fun exposeExtras(
     extras: List<ExtraPlacement>,
     root: Path,
     owned: Path,
     recorded: List<LinkRecord>,
-): List<LinkRecord> = withClaims { linkPlannedExtras(extras, root, owned, recorded, it) }
+): List<LinkRecord> =
+    withClaims {
+        if (HOST_WINDOWS) linkPlannedWindowsExtras(extras, root, recorded, it) else linkPlannedExtras(extras, root, owned, recorded, it)
+    }
