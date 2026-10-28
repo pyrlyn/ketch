@@ -2,3 +2,5 @@ build/
 .gradle/
 .kotlin/
 local.properties
+# PowerShell's module cache, written into the working directory when a Windows test home has no AppData\Local.
+**/Microsoft/Windows/PowerShell/
