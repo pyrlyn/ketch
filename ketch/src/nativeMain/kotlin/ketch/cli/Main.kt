@@ -11,6 +11,17 @@ import cli.Subcommand
 import cli.parse
 import cli.terminalSettings
 import cli.write
+import ketch.cmd.changelog
+import ketch.cmd.doctor
+import ketch.cmd.history
+import ketch.cmd.info
+import ketch.cmd.installCompletions
+import ketch.cmd.list
+import ketch.cmd.outdated
+import ketch.cmd.releases
+import ketch.cmd.search
+import ketch.cmd.stats
+import ketch.cmd.why
 import ketch.core.config.Config
 import ketch.core.error.KetchError
 import ketch.core.log.Log
@@ -107,23 +118,36 @@ private fun man(out: Path) {
     success("Wrote", "${written.size} man pages to $out")
 }
 
+/** The commands that need nothing but the config and their own arguments. */
+private val COMMANDS: Map<String, (Config, Matches) -> Unit> =
+    mapOf(
+        "list" to ::list,
+        "outdated" to ::outdated,
+        "info" to ::info,
+        "releases" to ::releases,
+        "why" to ::why,
+        "changelog" to ::changelog,
+        "search" to ::search,
+        "history" to ::history,
+        "stats" to ::stats,
+        "doctor" to ::doctor,
+        "completions" to ::installCompletions,
+    )
+
 private fun dispatch(
     cfg: Config,
     command: Subcommand,
 ) {
     val args = command.matches
+    COMMANDS[command.name]?.let { return it(cfg, args) }
     when (command.name) {
         "update" -> ketch.cmd.update(cfg)
-
-        "doctor" -> ketch.cmd.doctor(cfg, args)
 
         "path" -> ketch.cmd.path(cfg, args.subcommand)
 
         "plugin" -> ketch.cmd.plugin(cfg, checkNotNull(args.subcommand))
 
         "self" -> ketch.cmd.zelf(cfg, checkNotNull(args.subcommand))
-
-        "completions" -> ketch.cmd.installCompletions(cfg, args)
 
         "man" -> man(Path(args.values("out").single()))
 
