@@ -10,6 +10,7 @@ import cli.ManPage
 import cli.manPages
 import fs.atomic
 import fs.createDirAll
+import fs.joinPath
 import ketch.core.VERSION
 import ketch.core.error.ioAt
 import ketch.core.log.timestamp
@@ -45,7 +46,7 @@ private const val DATE = 10
 internal fun writeTo(dir: Path): List<Path> {
     ioAt(dir) { createDirAll(dir) }
     return pages().map { page ->
-        val path = Path(dir, page.fileName)
+        val path = joinPath(dir, page.fileName)
         ioAt(path) { atomic(path, page.roff.encodeToByteArray()) }
         path
     }

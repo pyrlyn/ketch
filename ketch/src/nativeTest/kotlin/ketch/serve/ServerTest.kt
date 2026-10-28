@@ -3,6 +3,7 @@ package ketch.serve
 import fs.TempDir
 import fs.createDirAll
 import fs.isDir
+import fs.joinPath
 import ketch.core.config.Config
 import ketch.core.report.Report
 import ketch.wire.AppMessage
@@ -37,7 +38,7 @@ class ServerTest {
     ) {
         private val input = Channel<String?>(Channel.UNLIMITED)
         private val output = Channel<ServeMessage>(Channel.UNLIMITED)
-        val root = Path(dir, "root")
+        val root = joinPath(dir, "root")
         private val server =
             Server(KetchCore(root), { runBlocking { input.receive() } }) {
                 output.trySend(Wire.json.decodeFromString(ServeMessage.serializer(), it))
@@ -78,8 +79,8 @@ class ServerTest {
 
     /** A folder a failed uninstall left behind for `ghost`, so uninstalling it asks a question. */
     private fun Session.leftover(): Path {
-        val leftover = Path(Config.load(root, Report.silent()).storeDir, "ghost")
-        createDirAll(Path(leftover, "1.0.0.old"))
+        val leftover = joinPath(Config.load(root, Report.silent()).storeDir, "ghost")
+        createDirAll(joinPath(leftover, "1.0.0.old"))
         return leftover
     }
 

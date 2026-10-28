@@ -7,6 +7,7 @@ import cli.Matches
 import fs.TempDir
 import fs.atomic
 import fs.isDir
+import fs.joinPath
 import ketch.core.changelog.sanitize
 import ketch.core.config.Config
 import ketch.core.config.validateRepo
@@ -208,7 +209,7 @@ private fun probeFixtures(
 ): List<ValidationError> {
     if (!isDir(fixture)) return listOf(ValidationError(fixture.toString(), "no such directory"))
     val names =
-        (if (changed.isEmpty()) parsed.map { it.first.name }.filter { SystemFileSystem.exists(Path(fixture, it)) } else changed)
+        (if (changed.isEmpty()) parsed.map { it.first.name }.filter { SystemFileSystem.exists(joinPath(fixture, it)) } else changed)
             .distinct()
             .sortedWith(BYTE_ORDER)
     return inThrowawayRoot(registryDir) { root -> probeIn(root, registryDir, fixture, names, parsed.associate { it.first.name to it.first }) }
@@ -243,7 +244,7 @@ private fun probeIn(
         }
     return names.mapNotNull { name ->
         val manifest = byName[name] ?: return@mapNotNull ValidationError(registryDir.toString(), "no package named `$name` to offline-install")
-        val at = Path(fixture, name).toString()
+        val at = joinPath(fixture, name).toString()
         try {
             val payload =
                 try {

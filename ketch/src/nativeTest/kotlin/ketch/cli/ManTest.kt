@@ -3,6 +3,7 @@ package ketch.cli
 import cli.Command
 import fs.TempDir
 import fs.isDir
+import fs.joinPath
 import fs.readText
 import kotlinx.io.files.Path
 import kotlin.test.Test
@@ -59,7 +60,7 @@ class ManTest {
     @Test
     fun writeToCreatesTheDirectoryAndEveryPage() {
         TempDir.create("ketch-test-").use { tmp ->
-            val written = writeTo(Path(tmp.path, "out/man1"))
+            val written = writeTo(joinPath(tmp.path, "out/man1"))
             assertEquals(pages().size, written.size)
             assertTrue(written.all { !isDir(it) && readText(it).isNotEmpty() })
         }

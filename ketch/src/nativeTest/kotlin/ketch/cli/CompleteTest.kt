@@ -5,6 +5,7 @@ import cli.CompletionShell
 import fs.TempDir
 import fs.atomic
 import fs.createDirAll
+import fs.joinPath
 import ketch.core.config.Config
 import ketch.core.registry.PACKAGE_FILE
 import ketch.core.report.Report
@@ -107,9 +108,9 @@ class CompleteTest {
         TempDir.create("ketch-test-").use { tmp ->
             val cfg = Config.load(tmp.path, Report.silent())
             for (name in listOf("ripgrep", "ripcord", "fd", "$(evil)")) {
-                val dir = Path(cfg.registryDir, name)
+                val dir = joinPath(cfg.registryDir, name)
                 createDirAll(dir)
-                atomic(Path(dir, PACKAGE_FILE), "name = \"$name\"\nsource = \"test:$name\"\n".encodeToByteArray())
+                atomic(joinPath(dir, PACKAGE_FILE), "name = \"$name\"\nsource = \"test:$name\"\n".encodeToByteArray())
             }
             assertEquals(listOf("ripcord", "ripgrep"), candidates(cfg, Kind.Registry, "rip"))
             assertEquals(3, candidates(cfg, Kind.Registry, "").size)

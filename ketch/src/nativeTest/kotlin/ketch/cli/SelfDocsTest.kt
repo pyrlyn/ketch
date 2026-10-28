@@ -3,6 +3,7 @@ package ketch.cli
 import cli.CompletionShell
 import fs.TempDir
 import fs.isDir
+import fs.joinPath
 import fs.readText
 import ketch.core.extra.classify
 import ketch.core.extra.writeKetchDocs
@@ -13,7 +14,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class SelfDocsTest {
-    private fun <T> withPrefix(body: (Path) -> T): T = TempDir.create("ketch-test-").use { body(Path(it.path, "store/ketch/1.0.0")) }
+    private fun <T> withPrefix(body: (Path) -> T): T = TempDir.create("ketch-test-").use { body(joinPath(it.path, "store/ketch/1.0.0")) }
 
     private fun isFile(path: Path) = !isDir(path) && readText(path).isNotEmpty()
 
@@ -21,10 +22,10 @@ class SelfDocsTest {
     fun generatedKetchDocsClassifyAndStayInThePrefix() =
         withPrefix { prefix ->
             val extras = writeKetchDocs(prefix, SELF_DOCS)
-            assertTrue(isFile(Path(prefix, "share/man/man1/ketch.1")))
-            assertTrue(isFile(Path(prefix, "share/ketch/completions/ketch")))
+            assertTrue(isFile(joinPath(prefix, "share/man/man1/ketch.1")))
+            assertTrue(isFile(joinPath(prefix, "share/ketch/completions/ketch")))
             extras.forEach(::classify)
-            val man = readText(Path(prefix, "share/man/man1/ketch.1"))
+            val man = readText(joinPath(prefix, "share/man/man1/ketch.1"))
             assertTrue(man.contains(".TH KETCH 1"), man)
             assertTrue(man.contains(".SH SUBCOMMANDS"), man)
         }
@@ -34,13 +35,13 @@ class SelfDocsTest {
         withPrefix { prefix ->
             val recorded = writeKetchDocs(prefix, SELF_DOCS).map(::classify).filter { it.kind == ExtraKind.Man }.map { it.relPath }
             assertEquals(pages().map { "share/man/man1/${it.fileName}" }, recorded)
-            assertTrue(recorded.all { isFile(Path(prefix, it)) })
+            assertTrue(recorded.all { isFile(joinPath(prefix, it)) })
         }
 
     @Test
     fun theScriptSelfInstallWritesIsTheOneCompletionsPrints() =
         withPrefix { prefix ->
             writeKetchDocs(prefix, SELF_DOCS)
-            assertEquals(script(CompletionShell.Bash), readText(Path(prefix, "share/ketch/completions/ketch")))
+            assertEquals(script(CompletionShell.Bash), readText(joinPath(prefix, "share/ketch/completions/ketch")))
         }
 }
