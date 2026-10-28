@@ -105,6 +105,10 @@ Taken during the port:
   Material 3 on the brand tokens of `desktop/design/tokens.json` rather than an imitation of
   Liquid Glass; no self-updates (Sparkle has no counterpart for a jpackage app); the native
   `ketch` ships inside the app's package, and `KETCH_EXE` overrides it.
+- **Windows (T13).** The creator's choices on claiming it: three subtasks (T13.1–T13.3);
+  mingwX64 and the Windows implementations go into kotlin-kit itself; tests run on a Windows
+  VM in Parallels on the Mac (Windows on Arm, which runs the x64 binaries under emulation). No
+  subtask closes without that run.
 - **`ketch serve` (T11).** One JSON object per line each way, `:ketch-wire`'s records with the
   Rust field names: `hello` first, then `event`, `ask` and `result` per call id; the app sends
   `call`, `answer` and `cancel`. `serve` is read before the parser, as `__complete` is, so the
