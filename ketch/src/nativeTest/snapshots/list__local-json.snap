@@ -1,0 +1,30 @@
+---
+source: tests/list.rs
+expression: local
+---
+[
+  {
+    "channel": "stable",
+    "installed": "1.0.0",
+    "name": "alpha",
+    "pinned": false,
+    "retained": [],
+    "source": "test:alpha"
+  },
+  {
+    "channel": "stable",
+    "installed": "1.0.0",
+    "name": "bravo",
+    "pinned": false,
+    "retained": [],
+    "source": "test:bravo"
+  },
+  {
+    "channel": "stable",
+    "installed": "1.0.0",
+    "name": "charlie",
+    "pinned": true,
+    "retained": [],
+    "source": "test:charlie"
+  }
+]

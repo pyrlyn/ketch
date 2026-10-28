@@ -9,3 +9,5 @@ complexity:
   TooManyFunctions:
     allowedFunctionsPerClass: 25
     allowedFunctionsPerFile: 25
+    # A ported test class mirrors one Rust test file, test for test.
+    excludes: ['**/commonTest/**', '**/nativeTest/**', '**/jvmTest/**', '**/macosTest/**', '**/test/**']
