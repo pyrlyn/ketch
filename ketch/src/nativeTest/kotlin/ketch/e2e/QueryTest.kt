@@ -1,6 +1,7 @@
 // Regression tests for read-only query commands (Rust tests/query.rs).
 package ketch.e2e
 
+import ketch.e2e.support.CHANGELOG
 import ketch.e2e.support.Entry
 import ketch.e2e.support.Release
 import ketch.e2e.support.Sandbox
@@ -19,8 +20,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-
-private const val CHANGELOG = "# Changelog\n\n## [2.0.0] - 2024-06-01\n\n- the second one\n\n## [1.0.0] - 2024-05-01\n\n- the first one\n"
 
 class QueryTest {
     private val sandbox = Sandbox()

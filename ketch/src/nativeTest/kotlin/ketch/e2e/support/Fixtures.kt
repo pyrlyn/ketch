@@ -11,6 +11,9 @@ import kotlinx.io.files.Path
 /** The environment variable naming the file [Entry.sleeper] creates once it is running. */
 const val SLEEPER_READY = "KETCH_TEST_SLEEPER_READY"
 
+/** A changelog with one section per version, the same whatever version ships it, so a test can prove the section printed is the one installed. */
+const val CHANGELOG = "# Changelog\n\n## [2.0.0] - 2024-06-01\n\n- the second one\n\n## [1.0.0] - 2024-05-01\n\n- the first one\n"
+
 private const val FILE_MODE = 0x1a4
 private const val PROGRAM_MODE = 0x1ed
 

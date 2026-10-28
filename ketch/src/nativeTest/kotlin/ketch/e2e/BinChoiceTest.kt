@@ -4,13 +4,11 @@
 package ketch.e2e
 
 import fs.readText
-import ketch.cmd.PRETTY
 import ketch.e2e.support.Archive
 import ketch.e2e.support.Entry
 import ketch.e2e.support.Release
 import ketch.e2e.support.Sandbox
 import ketch.e2e.support.fails
-import ketch.e2e.support.json
 import ketch.e2e.support.ketch
 import ketch.e2e.support.nativeName
 import ketch.e2e.support.ok
@@ -19,7 +17,6 @@ import ketch.e2e.support.said
 import ketch.e2e.support.writeText
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.AfterTest
@@ -49,14 +46,7 @@ class BinChoiceTest {
 
     private fun exists(path: Path) = SystemFileSystem.exists(path)
 
-    private fun setBinChoice(choice: String) {
-        val path = sandbox.root.resolve("state.json")
-        val state = json(readText(path)) as JsonObject
-        val packages = state.getValue("packages") as JsonObject
-        val rtok = packages.getValue("rtok") as JsonObject
-        val edited = JsonObject(state + ("packages" to JsonObject(packages + ("rtok" to JsonObject(rtok + ("bin_choice" to JsonPrimitive(choice)))))))
-        writeText(path, PRETTY.encodeToString(JsonElement.serializer(), edited))
-    }
+    private fun setBinChoice(choice: String) = sandbox.editPackage("rtok") { JsonObject(it + ("bin_choice" to JsonPrimitive(choice))) }
 
     /** A user manifest whose one `bin` entry globs `rtok*`, with [extra] added to the entry. */
     private fun globManifest(extra: String) = writeText(sandbox.root.resolve("manifests/rtok.toml"), "name   = \"rtok\"\nsource = \"test:rtok\"\nbin = [{ path = \"rtok*\"$extra }]\n")

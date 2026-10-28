@@ -15,12 +15,15 @@ import fs.listDir
 import fs.setMode
 import fs.symlink
 import fs.textOrEmpty
+import ketch.cmd.PRETTY
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.toKString
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.write
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import platform.posix.getenv
 import process.Command
 import process.ExitStatus
@@ -182,6 +185,18 @@ class Sandbox : AutoCloseable {
 
     /** The install record, `state.json`, as written. */
     fun state() = textOrEmpty(root.resolve("state.json"))
+
+    /** Rewrite [name]'s record in `state.json` through [edit], the way a tree that drifted from its record would look. */
+    fun editPackage(
+        name: String,
+        edit: (JsonObject) -> JsonObject,
+    ) {
+        val path = root.resolve("state.json")
+        val state = json(textOrEmpty(path)) as JsonObject
+        val packages = state.getValue("packages") as JsonObject
+        val edited = JsonObject(state + ("packages" to JsonObject(packages + (name to edit(packages.getValue(name) as JsonObject)))))
+        writeText(path, PRETTY.encodeToString(JsonElement.serializer(), edited))
+    }
 
     /** Write a registry package, as `ketch update` would have fetched it. */
     fun registryPackage(
