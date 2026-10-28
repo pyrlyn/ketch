@@ -26,6 +26,9 @@ class Version private constructor(
     /** True when semver, strict or relaxed, could read it. */
     val isSemver: Boolean get() = sem != null
 
+    /** The semver this compares as, without a leading `v` and with a relaxed spelling filled out; null when there is none. */
+    val semver: String? get() = sem?.toString()
+
     /** Compare ignoring a leading `v`, for matching a user-supplied tag. */
     fun matchesRequest(requested: String): Boolean = raw.trimStart('v', 'V').eqIgnoreAsciiCase(requested.rustTrim().trimStart('v', 'V'))
 
@@ -59,7 +62,11 @@ class Version private constructor(
 internal class Semver(
     val key: VersionKey,
     private val build: List<String>,
+    // A strict version prints as it was written, so the text it was read from is its display.
+    private val text: String,
 ) : Comparable<Semver> {
+    override fun toString() = text
+
     override fun compareTo(other: Semver): Int {
         val byKey = key.compareTo(other.key)
         return if (byKey != 0) byKey else compareBuild(build, other.build)
@@ -74,7 +81,7 @@ internal class Semver(
         fun parse(text: String): Semver? {
             val build = STRICT.matchEntire(text)?.groupValues?.get(1)
             val key = build?.let { VersionKey.parse(text) }
-            return key?.let { Semver(it, build.takeIf(String::isNotEmpty)?.split('.').orEmpty()) }
+            return key?.let { Semver(it, build.takeIf(String::isNotEmpty)?.split('.').orEmpty(), text) }
         }
 
         // Numeric identifiers by value, then the one with fewer leading zeros; numeric before alphanumeric.
