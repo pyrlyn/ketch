@@ -1,4 +1,4 @@
-# Overrides on top of the shared ci-diffuser and default detekt config, the same ones octo uses.
+# Overrides on top of the shared-settings and default detekt config, the same ones octo uses.
 style:
   MagicNumber:
     excludes: ['**/*Test/**', '**/test/**']

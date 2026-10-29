@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
 
 // A Kotlin Multiplatform module. The native targets (macosArm64, plus Linux with diffuser.allTargets)
-// come from ci.diffuser.native in the root build; a module ported to Windows adds mingwX64(), one the desktop app
+// come from shared.settings.native in the root build; a module ported to Windows adds mingwX64(), one the desktop app
 // also reads adds jvm().
 plugins {
     id("org.jetbrains.kotlin.multiplatform")

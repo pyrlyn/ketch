@@ -6,7 +6,7 @@ plugins {
 }
 
 kotlin {
-    // Windows is ketch's own target, not ci-diffuser's: the shared plugin also builds rtok, which has none.
+    // Windows is ketch's own target, not the shared plugin's: it also builds rtok, which has none.
     mingwX64()
     sourceSets {
         commonMain.dependencies {

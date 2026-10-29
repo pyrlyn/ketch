@@ -5,9 +5,9 @@
 | JDK 21 (Temurin) | mise | Runs Gradle, the Kotlin daemon and the desktop app; its jpackage builds the app's dmg, deb and msi | https://adoptium.net |
 | Gradle 9.8.2 | wrapper (`./gradlew`) | Build | https://github.com/gradle/gradle |
 | Kotlin 2.4.21 | Gradle plugin | Language, Kotlin/Native, Kotlin Multiplatform | https://github.com/JetBrains/kotlin |
-| ci-diffuser | sibling checkout at `../ci-diffuser` (or `CI_DIFFUSER_DIR`), local included build | Shared targets, release size, ktlint, detekt, settings | `apps/ci-diffuser` (no remote) |
-| kotlin-kit | checkout at `../../packages/kotlin-kit` (or `KOTLIN_KIT_DIR`), local included build | File, TOML, YAML, semver, HTTP, SQLite and child-process libraries shared with rtok-kotlin | `packages/kotlin-kit` (no remote) |
-| kotlin-snapshot | checkout at `../../packages/kotlin-snapshot` (or `KOTLIN_SNAPSHOT_DIR`), local included build | insta-format snapshot assertions | `packages/kotlin-snapshot` (no remote) |
+| shared-settings | `packages/shared-settings` above the build (or `SHARED_SETTINGS_DIR`), local included build | Shared targets, release size, ktlint, detekt, settings | `packages/shared-settings` (no remote) |
+| kotlin-kit | `packages/kotlin-kit` above the build (or `KOTLIN_KIT_DIR`), local included build | File, TOML, YAML, semver, HTTP, SQLite and child-process libraries shared with rtok-kotlin | `packages/kotlin-kit` (no remote) |
+| kotlin-snapshot | `packages/kotlin-snapshot` above the build (or `KOTLIN_SNAPSHOT_DIR`), local included build | insta-format snapshot assertions | `packages/kotlin-snapshot` (no remote) |
 | git | system | Version control | https://git-scm.com |
 | conan 2.33.0 | mise (kotlin-kit) | Fetches the static bzip2 and liblzma that kotlin-kit's `archive` links | https://github.com/conan-io/conan |
 | zlib | Kotlin/Native platform library (`platform.zlib`), via kotlin-kit | gzip and deflate in archives | https://zlib.net |
@@ -34,8 +34,8 @@
 | org.jetbrains.kotlin:kotlin-test | local | https://github.com/JetBrains/kotlin | Tests |
 | Compose Multiplatform 1.12.2 (`org.jetbrains.compose`) | local | https://github.com/JetBrains/compose-multiplatform | Desktop UI, and its UI tests (`compose.uiTest`) |
 | com.mikepenz:multiplatform-markdown-renderer-m3 0.46.0 | local | https://github.com/mikepenz/multiplatform-markdown-renderer | Changelog Markdown in the desktop app (macOS app: `AttributedString(markdown:)`) |
-| org.jlleitschuh.gradle.ktlint 14.2.0 (ktlint 1.8.0) | via ci-diffuser | https://github.com/JLLeitschuh/ktlint-gradle | Formatting lint |
-| dev.detekt 2.0.0-alpha.6 | via ci-diffuser | https://github.com/detekt/detekt | Static analysis |
+| org.jlleitschuh.gradle.ktlint 14.2.0 (ktlint 1.8.0) | via shared-settings | https://github.com/JLLeitschuh/ktlint-gradle | Formatting lint |
+| dev.detekt 2.0.0-alpha.6 | via shared-settings | https://github.com/detekt/detekt | Static analysis |
 | com.github.burrunan.s3-build-cache 1.9.10 | local (settings) | https://github.com/burrunan/gradle-s3-build-cache | Optional S3/R2 remote build cache; off without its keys |
 
 ## Conan (ConanCenter, via kotlin-kit)

@@ -26,8 +26,8 @@ its output, the config and manifest TOML, `ketch.lock`, `state.json`, the `~/.ke
 
 ## Build and test
 
-Needs JDK 21, a checkout of `ci-diffuser` next to this one (`../ci-diffuser`, or
-`CI_DIFFUSER_DIR`) and one of `kotlin-kit` (`../../packages/kotlin-kit`, or `KOTLIN_KIT_DIR`).
+Needs JDK 21 and the `shared-settings`, `kotlin-kit` and `kotlin-snapshot` builds in `packages/`,
+found in any ancestor directory (or `SHARED_SETTINGS_DIR`, `KOTLIN_KIT_DIR`, `KOTLIN_SNAPSHOT_DIR`).
 Files, TOML, YAML, semver, HTTP and SQLite come from kotlin-kit: change them there, not here.
 
 ```bash

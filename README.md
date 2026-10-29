@@ -13,10 +13,12 @@ Status: early port. What is ported so far is tracked in [plan/README.md](plan/RE
 
 ## Build
 
-Needs JDK 21 and a checkout of `ci-diffuser` at `../ci-diffuser` (or `CI_DIFFUSER_DIR`), which
-supplies the shared Kotlin/Native settings, ktlint, detekt and the optional remote build cache, and
-a checkout of `kotlin-kit` at `../../packages/kotlin-kit` (or `KOTLIN_KIT_DIR`), which supplies the
-TOML, YAML, semver, HTTP and SQLite libraries.
+Needs JDK 21 and three shared builds in the workspace's `packages/` (`../../packages/` from the
+main checkout): `shared-settings` supplies the shared Kotlin/Native settings, ktlint, detekt and the
+optional remote build cache; `kotlin-kit` supplies the TOML, YAML, semver, HTTP and SQLite
+libraries; `kotlin-snapshot` supplies the snapshot assertions the tests use. Every directory above
+the build is searched for `packages/`, so a nested worktree finds them too; set
+`SHARED_SETTINGS_DIR`, `KOTLIN_KIT_DIR` or `KOTLIN_SNAPSHOT_DIR` when they live elsewhere.
 
 ```bash
 ./gradlew build

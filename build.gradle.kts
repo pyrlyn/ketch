@@ -1,7 +1,7 @@
-// Targets, release-size options, ktlint and detekt for every Kotlin module come from ci-diffuser;
+// Targets, release-size options, ktlint and detekt for every Kotlin module come from shared-settings;
 // the Kotlin and Compose plugins themselves are on the classpath through buildSrc.
 plugins {
-    id("ci.diffuser.native")
+    id("shared.settings.native")
 }
 
 // Tests never see the real home: every native test run gets a per-module temp HOME and KETCH_HOME under build/.
