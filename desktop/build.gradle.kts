@@ -16,16 +16,23 @@ dependencies {
 }
 
 // The native ketch this host links: ServeCore's tests run it and the app's package carries it. A host with no native
-// target (Windows until T13) runs only the scripted tests and packages the app without one.
+// target runs only the scripted tests and packages the app without one.
 val hostTarget =
     System.getProperty("os.name").let { os ->
         val allTargets = providers.gradleProperty("diffuser.allTargets").orNull == "true"
         when {
             os.startsWith("Mac") -> "macosArm64"
             os.startsWith("Linux") && allTargets -> if (System.getProperty("os.arch") == "aarch64") "linuxArm64" else "linuxX64"
+            os.startsWith("Windows") -> "mingwX64"
             else -> null
         }
     }
+
+// Kotlin/Native names a Windows executable `.exe` and every other one `.kexe`; the app looks for `ketch.exe` or `ketch`.
+fun linkedKetch(
+    target: String,
+    build: String,
+) = rootProject.file("ketch/build/bin/$target/${build}Executable/ketch.${if (target == "mingwX64") "exe" else "kexe"}")
 
 // The release ketch in Compose's resource folder for this OS and architecture, which the launcher hands the app as
 // compose.application.resources.dir.
@@ -34,15 +41,16 @@ val bundledKetch =
         into(layout.buildDirectory.dir("app-resources"))
         hostTarget?.let { target ->
             dependsOn(":ketch:linkReleaseExecutable${target.replaceFirstChar(Char::uppercase)}")
-            from(rootProject.file("ketch/build/bin/$target/releaseExecutable/ketch.kexe")) {
+            from(linkedKetch(target, "release")) {
                 into(
                     when (target) {
                         "macosArm64" -> "macos-arm64"
                         "linuxArm64" -> "linux-arm64"
+                        "mingwX64" -> "windows-x64"
                         else -> "linux-x64"
                     },
                 )
-                rename { "ketch" }
+                rename { if (target == "mingwX64") "ketch.exe" else "ketch" }
             }
         }
     }
@@ -117,7 +125,7 @@ compose.desktop {
 tasks.test {
     hostTarget?.let { target ->
         dependsOn(":ketch:linkDebugExecutable${target.replaceFirstChar(Char::uppercase)}")
-        environment("KETCH_EXE", rootProject.file("ketch/build/bin/$target/debugExecutable/ketch.kexe").absolutePath)
+        environment("KETCH_EXE", linkedKetch(target, "debug").absolutePath)
     }
 }
 
