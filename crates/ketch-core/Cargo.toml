@@ -71,7 +71,7 @@ fs-kit.workspace = true
 # relative path between two absolute paths (copy_tree, platform link checks)
 pathdiff = "0.2"
 # parse Windows archive member paths correctly on any host (zip-slip guard)
-typed-path = "0.12"
+typed-path = "0.13"
 thiserror = "2"
 diesel = { version = "2.3", features = ["sqlite", "returning_clauses_for_sqlite_3_35"], optional = true }
 diesel_migrations = { version = "2.3", optional = true }
