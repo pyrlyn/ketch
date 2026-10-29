@@ -135,6 +135,37 @@ Taken during the port:
   kotlinx-io's. `splitPathVar` reads a Windows PATH as Rust's `split_paths` does: `"` quotes a `;`
   into an entry and is dropped (the registry edits keep their own split, which leaves quotes in
   place because they write the value back).
+- **The CLI on Windows (T13.3).** Paths are joined with the host separator everywhere, through
+  kit's `joinPath`, so what ketch prints matches Rust's `PathBuf::join` (`C:\Users\u\.ketch\bin`);
+  a one-argument `Path("a/b")` keeps what it was given, as Rust's `PathBuf::from` does.
+  kotlinx-io's `Path` drops a trailing separator, so a prefix to strip is built as text with
+  kit's `PATH_SEPARATOR`. Paths are compared by component (`pathIsWithin`), never as strings.
+  A `local:` file installs under a name made from its whole path on Windows, because Rust's
+  `short_name` splits only on `/`; that is kept, and the tests use the name the install
+  reports, as Rust's do. The console layer is `isTerminal` (`GetConsoleMode`, since `_isatty`
+  also says yes to `NUL`), `terminalColumns` (`GetConsoleScreenBufferInfo`) and the
+  virtual-terminal switch Rust gets from `console`; `main` sets the console's code pages to
+  UTF-8. The test-only `setEnv`/`unsetEnv` moved into kit `process`. `install_ps1.rs` stays
+  with the installers (T15). The VM has PowerShell 7.6.9 and Temurin 21.0.12 from their
+  official MSIs, so the completion test drives both PowerShells, as Rust's does.
+  stdout and stderr are put in binary mode, as Rust writes bytes: the CRT's text mode would turn
+  every `\n` into `\r\n`. The log is opened through kit's `appendSink`, shared for deletion as
+  Rust's file is, because `self uninstall` removes the log directory while the log is still open.
+  kit's piped children run in a job that ends them with the test, so the job allows breakaway
+  and a detached child (the uninstall's cleanup PowerShell) leaves it. `resolvesInside` reads
+  paths by Rust component (prefix, root, both separators). Only SYSTEM can create the symlinks
+  that check is for, so the suite runs as SYSTEM too.
+  Windows runs only an `.exe` it finds on PATH, so the tests' fake `mise` is a small mingwX64
+  program of the `ketch` module (`fakeTool`), as Rust compiles its fakes with rustc. Windows
+  PowerShell's default policy refuses scripts, so the completion test lifts it with
+  `-ExecutionPolicy Bypass` for its own process only; the machine's policy is never changed.
+  Every ketch call lists processes through `Get-CimInstance`, as Rust's does, which is most of
+  what makes the Windows suite slow.
+  The MSI carries the mingwX64 release `ketch.exe` in the app's `windows-x64` resources and is
+  built on a Windows host, since jpackage packages only for the host it runs on. That host
+  builds kit's Conan libraries itself: Conan 2.33.0, CMake 3.31.12 and Ninja 1.13.2 sit in
+  `C:\Users\Public\tools` on the VM, put on PATH by the build's own shell only, and kit's
+  `conan.gradle.kts` reads K/N's Windows prebuilt and drives its clang with Ninja there.
 - **`ketch serve` (T11).** One JSON object per line each way, `:ketch-wire`'s records with the
   Rust field names: `hello` first, then `event`, `ask` and `result` per call id; the app sends
   `call`, `answer` and `cancel`. `serve` is read before the parser, as `__complete` is, so the
