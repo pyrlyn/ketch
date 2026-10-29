@@ -97,7 +97,7 @@ workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 insta = "1.48"
 pretty_assertions = "1.4.1"
 proptest = "1.11"
-rstest = "0.26"
+rstest = "0.28"
 # Only the schema drift tests use it; the derives are `cfg_attr(test, ...)`.
 schemars = "1.2"
 # Checks that the files ketch ships validate against the schemas it publishes.
