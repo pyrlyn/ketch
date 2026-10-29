@@ -132,11 +132,11 @@ jobs:
 
       - uses: pyrlyn/ci/.github/actions/setup-rust@main
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2.87.30
         with:
           tool: nextest
 
@@ -264,11 +264,11 @@ jobs:
 
       - uses: pyrlyn/ci/.github/actions/setup-rust@main
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2.87.30
         with:
           tool: nextest
 
@@ -322,7 +322,7 @@ jobs:
       # build output, same as the ketch-ffi job's `--debug` library.
       - uses: pyrlyn/ci/.github/actions/setup-rust@main
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
       - name: XCFramework and bindings
         working-directory: ${{ github.workspace }}
@@ -366,7 +366,7 @@ jobs:
 
       - uses: pyrlyn/ci/.github/actions/setup-rust@main
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
       # Inline copy of pyrlyn/ci's swift-cache action (pyrlyn/ci#80): re-pin to it once merged.
       - name: Swift build cache
@@ -414,7 +414,7 @@ jobs:
         with:
           install-args: rust dotnet cargo:https://github.com/dennisameling/uniffi-bindgen-cs
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
       - name: Library and bindings
         run: scripts/csharp.sh --debug
@@ -443,7 +443,7 @@ jobs:
 
       - uses: pyrlyn/ci/.github/actions/setup-rust@main
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
       # mise has no valac or json-glib, so the Vala toolchain is the
       # distribution's, on the runner only.
@@ -489,7 +489,7 @@ jobs:
         with:
           install-args: rust dotnet cargo:https://github.com/dennisameling/uniffi-bindgen-cs
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
       - name: Library and bindings
         working-directory: .
@@ -649,7 +649,7 @@ jobs:
           install-args: rust cargo-dist git-cliff
 
       - if: env.RUN == 'true'
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
       # OS-independent script checks: once, on Linux.
       - if: env.RUN == 'true' && runner.os == 'Linux'
