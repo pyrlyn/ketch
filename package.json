@@ -5,7 +5,7 @@
     "css": "tailwindcss -i site/css/mini-ui.src.css -o site/static/css/mini-ui.css"
   },
   "devDependencies": {
-    "@commitlint/cli": "21.2.3",
+    "@commitlint/cli": "21.2.4",
     "@commitlint/config-conventional": "21.2.3",
     "@google/design.md": "0.4.0",
     "@tailwindcss/cli": "4.3.3",
