@@ -32,7 +32,7 @@ workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 cbindgen = { version = "0.29.4", default-features = false }
 ketch-ffi = { path = "../ketch-ffi", features = ["schema"] }
 # Checks real answers against the committed schema; offline without defaults.
-jsonschema = { version = "0.58", default-features = false }
+jsonschema = { version = "0.60", default-features = false }
 pretty_assertions = "1.4.1"
 schemars = "1.2"
 tempfile = "3"
