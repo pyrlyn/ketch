@@ -3,9 +3,9 @@
 On Windows the desktop app wears the `ketch Store — Windows 11` canvas in the colours of the
 `Pyrlyn Windows 11` design system: every screen and dialog of the canvas, driven by the store's
 data. Linux and Windows high contrast keep Material 3. `KETCH_LOOK` shows a look on another system.
-Commits on branch `T17-fluent-design`, and the `kotlin-fluent` package on the `kotlin-fluent` branch
-of pyrlyn/packages, which stands on https://github.com/pyrlyn/packages/pull/1: the app's build needs
-both packages.
+Commits on branch `T17-fluent-design`, and the `kotlin-fluent` package in
+https://github.com/pyrlyn/packages/pull/2, which stands on https://github.com/pyrlyn/packages/pull/1:
+the app's build needs both packages.
 
 ## What was done
 
