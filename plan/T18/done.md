@@ -19,7 +19,9 @@ stay unconfirmed: a Snap Layouts choice and a second monitor. See "Not confirmed
 - `java.logging` joined the runtime's modules, as JNA logs through it and jlink would leave it out.
 - `conan`, `cmake` and `ninja` went on the VM's user `PATH`, and `:desktop:packageMsi` ran there.
 
-Package commits, on the branch of https://github.com/pyrlyn/packages/pull/2:
+Package commits, on the `kotlin-fluent` branch of `pyrlyn/packages`. They came after
+https://github.com/pyrlyn/packages/pull/2 was merged, so they are not on `main` yet, and this task
+builds only against that branch:
 
 - `a558f7b` `feat(kotlin-fluent): give an undecorated window Windows 11's frame`
 - `17f1fe1` `fix(kotlin-kit): keep a zip member's bytes past one buffer segment`, found while running
