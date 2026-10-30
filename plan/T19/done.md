@@ -25,7 +25,7 @@ posts the notice and waits for it, for up to 10 minutes, and the app's AppUserMo
 under `HKCU`. Any failure falls back to the tray's balloon.
 
 Package commit: `d397cbf` `feat(kotlin-fluent): add TerminalOutput, a command and what it printed`,
-on the `kotlin-fluent` branch of `pyrlyn/packages`, with T18's package commits and not on `main` yet.
+in https://github.com/pyrlyn/packages/pull/3, with T18's package commits.
 
 ## What was not done
 
