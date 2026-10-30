@@ -33,6 +33,7 @@ import ketch.core.process.offerToStop
 import ketch.core.report.Ctx
 import ketch.core.report.LogReporter
 import ketch.core.report.Report
+import ketch.core.resolve.explain
 import ketch.core.shell.installHere
 import ketch.core.source.SourceRegistry
 import ketch.core.state.Lock
@@ -48,6 +49,7 @@ import ketch.wire.PathChange
 import ketch.wire.PathStatus
 import ketch.wire.Pruned
 import ketch.wire.Repository
+import ketch.wire.Resolution
 import ketch.wire.SearchResults
 import ketch.wire.Settings
 import ketch.wire.Upgrade
@@ -344,6 +346,16 @@ class KetchCore(
         pkg: String?,
         limit: Int,
     ): List<HistoryEvent> = failing { statsHistory(operation().cfg, pkg, limit.coerceAtLeast(0).toLong()).map { it.toWire() } }
+
+    /** How `ketch install` would choose for [pkg], asked of its source; installs nothing. */
+    fun why(
+        pkg: String,
+        listener: Listener? = null,
+    ): Resolution =
+        failing {
+            val cx = operation(listener).ctx()
+            explain(cx, SourceRegistry.load(cx), PackageSpec.parse(pkg)).toWire()
+        }
 
     /** What `ketch info` shows about [pkg], installed or not. A source that cannot be reached leaves its part out. */
     fun info(

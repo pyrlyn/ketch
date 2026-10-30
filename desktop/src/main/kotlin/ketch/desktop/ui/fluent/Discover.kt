@@ -17,6 +17,10 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,8 +37,10 @@ import ketch.desktop.ui.Section
 import ketch.desktop.ui.Source
 import ketch.desktop.ui.copyToClipboard
 import ketch.desktop.ui.glass.Mark
+import ketch.desktop.ui.screens.PackageTab
 import ketch.desktop.ui.screens.githubRepo
 import ketch.wire.RegistryPackage
+import ketch.wire.Repository
 import pyrlyn.fluent.AppIconSize
 import pyrlyn.fluent.BusyButton
 import pyrlyn.fluent.ButtonStyle
@@ -54,6 +60,7 @@ import pyrlyn.fluent.LocalFluentType
 import pyrlyn.fluent.PageHead
 import pyrlyn.fluent.PageTitle
 import pyrlyn.fluent.SectionHead
+import pyrlyn.fluent.SelectorBar
 import pyrlyn.fluent.Tile
 import pyrlyn.glass.AutoGrid
 import pyrlyn.glass.Glyph
@@ -66,8 +73,10 @@ fun FluentDiscover(
     query: String,
 ) {
     val source = navigation.source
-    val known = if (source == Source.Releases) emptyList() else state.search.known
-    val repositories = if (source == Source.Registry) emptyList() else state.search.repositories
+    var kind by remember { mutableStateOf(Kind.All) }
+    val known = if (source == Source.Releases) emptyList() else state.search.known.filter(kind.admits)
+    // A repository says nothing about what it ships, so only All can claim to hold it.
+    val repositories = if (source == Source.Registry || kind != Kind.All) emptyList() else state.search.repositories
     LazyVerticalGrid(
         GridCells.Adaptive(TILE_WIDTH),
         Modifier.fillMaxSize().testTag("page-discover"),
@@ -75,31 +84,68 @@ fun FluentDiscover(
         horizontalArrangement = Arrangement.spacedBy(TILE_GAP),
         verticalArrangement = Arrangement.spacedBy(TILE_GAP),
     ) {
-        block { PageHead(title = { PageTitle(source?.title ?: "Discover") }) }
+        block {
+            PageHead(
+                title = { PageTitle(source?.title ?: "Discover") },
+                actions = {
+                    if (source != Source.Releases) {
+                        SelectorBar(Kind.entries, kind, { it.title }, itemModifier = { Modifier.testTag("kind-${it.name}") }) { kind = it }
+                    }
+                },
+            )
+        }
         if (query.isBlank() && source == null) {
-            block { Hero(state.search.known.firstOrNull()) { navigation.open = it } }
+            block { Hero(state.search.known.firstOrNull(), navigation) }
             block { Features() }
         }
-        if (known.isEmpty() && repositories.isEmpty()) block { EmptyNote(emptyWords(query, source)) }
-        if (known.isNotEmpty()) {
-            wide {
-                SectionHead(if (query.isBlank()) "In the registry" else "Results", large = true) {
-                    if (source == null) FluentLink("See all", glyph = Glyph.Forward) { navigation.show(Source.Registry) }
-                }
+        if (known.isEmpty() && repositories.isEmpty()) block { EmptyNote(emptyWords(query, source, kind)) }
+        knownPackages(known, query, state, actions, navigation)
+        repositoryTiles(repositories, state, actions)
+    }
+}
+
+private fun LazyGridScope.knownPackages(
+    known: List<RegistryPackage>,
+    query: String,
+    state: StoreState,
+    actions: Actions,
+    navigation: Navigation,
+) {
+    if (known.isNotEmpty()) {
+        wide {
+            SectionHead(if (query.isBlank()) "In the registry" else "Results", large = true) {
+                if (navigation.source == null) FluentLink("See all", glyph = Glyph.Forward) { navigation.show(Source.Registry) }
             }
         }
-        items(known, key = { "known-${it.name}" }) { KnownTile(it, state, actions, navigation) }
-        if (repositories.isNotEmpty()) wide { SectionHead("On GitHub", Modifier.padding(top = PageGap - TILE_GAP), large = true) }
-        items(repositories, key = { "repo-${it.spec}" }) { repo ->
-            val name = repo.spec.removePrefix("github:")
-            PackageTile(
-                name.substringAfterLast('/'),
-                listOfNotNull(name, repo.stars?.let { "★ $it" }).joinToString(" · "),
-                repo.description,
-                Modifier.testTag("discover-${repo.spec}"),
-            ) { FluentButton("Get", ButtonStyle.Accent, Modifier.widthIn(min = BUTTON_WIDTH), enabled = !state.isRunning) { actions.install(repo.spec) } }
-        }
     }
+    items(known, key = { "known-${it.name}" }) { KnownTile(it, state, actions, navigation) }
+}
+
+private fun LazyGridScope.repositoryTiles(
+    repositories: List<Repository>,
+    state: StoreState,
+    actions: Actions,
+) {
+    if (repositories.isNotEmpty()) wide { SectionHead("On GitHub", Modifier.padding(top = PageGap - TILE_GAP), large = true) }
+    items(repositories, key = { "repo-${it.spec}" }) { repo ->
+        val name = repo.spec.removePrefix("github:")
+        PackageTile(
+            name.substringAfterLast('/'),
+            listOfNotNull(name, repo.stars?.let { "★ $it" }).joinToString(" · "),
+            repo.description,
+            Modifier.testTag("discover-${repo.spec}"),
+        ) { FluentButton("Get", ButtonStyle.Accent, Modifier.widthIn(min = BUTTON_WIDTH), enabled = !state.isRunning) { actions.install(repo.spec) } }
+    }
+}
+
+/** Which packages a filter keeps. Few manifests name their kind, and one that does not is taken for a tool. */
+private enum class Kind(
+    val title: String,
+    val admits: (RegistryPackage) -> Boolean,
+) {
+    All("All", { true }),
+    Tools("CLI tools", { !it.isApp }),
+    Apps("Apps", { it.isApp }),
 }
 
 private fun LazyGridScope.wide(content: @Composable () -> Unit) = item(span = { GridItemSpan(maxLineSpan) }) { content() }
@@ -110,8 +156,10 @@ private fun LazyGridScope.block(content: @Composable () -> Unit) = wide { Column
 private fun emptyWords(
     query: String,
     source: Source?,
+    kind: Kind,
 ) = when {
     query.isNotBlank() -> "No package matches \"${query.trim()}\""
+    kind == Kind.Apps -> "The registry names no apps yet"
     source == Source.Releases -> "Type owner/repo to find a project's releases"
     else -> "The registry lists nothing yet"
 }
@@ -164,7 +212,7 @@ private fun PackageTile(
 @Composable
 private fun Hero(
     pick: RegistryPackage?,
-    onOpen: (String) -> Unit,
+    navigation: Navigation,
 ) {
     val type = LocalFluentType.current
     val name = pick?.name ?: "ketch"
@@ -185,7 +233,10 @@ private fun Hero(
         pick?.let {
             val command = "ketch install ${githubRepo(it.source) ?: it.name}"
             CommandField(command, "Copy the command", Modifier.widthIn(max = 470.dp).fillMaxWidth()) { copyToClipboard(command) }
-            FluentButton("See ${it.name}", ButtonStyle.Accent, large = true) { onOpen(it.name) }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FluentButton("See ${it.name}", ButtonStyle.Accent, large = true) { navigation.open = it.name }
+                FluentButton("How ketch picks the asset", ButtonStyle.Glass, large = true) { navigation.open(it.name, PackageTab.Overview) }
+            }
         }
     }
 }

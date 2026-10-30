@@ -70,6 +70,8 @@ data class StoreState(
     val outdated: List<Upgrade> = emptyList(),
     val search: SearchResults = SearchResults(emptyList(), emptyList()),
     val checks: List<Check> = emptyList(),
+    /** Checks a Fix repaired in this run of the app. */
+    val fixed: Set<String> = emptySet(),
     val activity: Activity? = null,
     val log: List<LogEntry> = emptyList(),
     /** Set when the core refused because another process holds the lock. */

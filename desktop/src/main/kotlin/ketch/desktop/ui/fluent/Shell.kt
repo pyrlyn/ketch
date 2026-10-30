@@ -200,7 +200,7 @@ private fun Screen(
         Section.Installed -> FluentInstalled(state, actions, navigation, config)
         Section.Updates -> FluentUpdates(state, actions, navigation)
         Section.Activity -> FluentActivity(state, actions)
-        Section.Doctor -> FluentDoctor(state, actions)
+        Section.Doctor -> FluentDoctor(state, actions, config)
         Section.Settings -> FluentSettings(navigation, parts, checks, config)
     }
 }

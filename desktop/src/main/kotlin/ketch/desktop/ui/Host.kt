@@ -39,6 +39,15 @@ fun reveal(path: String) {
     }
 }
 
+/** Opens the folder [path] in the file manager. */
+fun openFolder(path: String) {
+    try {
+        if (Desktop.isDesktopSupported()) Desktop.getDesktop().open(File(path))
+    } catch (e: IOException) {
+        System.err.println("ketch: could not open $path: ${e.message}")
+    }
+}
+
 fun copyToClipboard(text: String) {
     if (!GraphicsEnvironment.isHeadless()) Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
 }

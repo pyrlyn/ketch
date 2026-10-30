@@ -68,6 +68,8 @@ data class RegistryPackage(
     val description: String?,
     /** The newest version an earlier listing found, null when no fresh answer is cached. */
     val latest: String?,
+    /** The manifest says this is an app; most say nothing, and a tool is the safer guess for those. */
+    @SerialName("is_app") val isApp: Boolean = false,
 )
 
 /** A repository a source found for a search, installable by [spec] (`github:owner/repo`). */
@@ -147,6 +149,8 @@ data class Check(
     val detail: String,
     /** What to do about it, when there is something to do. */
     val fix: String?,
+    /** [Call.DoctorFix] repairs this one. */
+    val fixable: Boolean = false,
 )
 
 /** One thing that happened to a package, as `stats.db` recorded it. */
@@ -252,6 +256,22 @@ enum class PathOutcome {
     @SerialName("unchanged")
     Unchanged,
 }
+
+/** How `ketch install` would choose for a package, from the same resolver: what `ketch why` prints. */
+@Serializable
+data class Resolution(
+    @SerialName("package") val pkg: String,
+    /** `scheme:id`, the source that answers for the package. */
+    val source: String,
+    /** The release that won, null when the source has none. */
+    val version: String?,
+    /** The asset that would be installed, null when none fits this machine. */
+    val asset: String?,
+    /** Why that asset won. */
+    val reason: String?,
+    /** What install would do about the checksum. Nothing has been downloaded or checked yet. */
+    val checksum: String,
+)
 
 /** One place `path_install` or `doctor_fix` set up, or would set up. */
 @Serializable

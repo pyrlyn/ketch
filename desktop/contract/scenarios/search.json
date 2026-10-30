@@ -13,12 +13,14 @@
       "known": [
         {
           "description": "Line-oriented search tool",
+          "is_app": false,
           "latest": "14.1.1",
           "name": "ripgrep",
           "source": "github:BurntSushi/ripgrep"
         },
         {
           "description": null,
+          "is_app": false,
           "latest": null,
           "name": "ugrep",
           "source": "github:Genivia/ugrep"

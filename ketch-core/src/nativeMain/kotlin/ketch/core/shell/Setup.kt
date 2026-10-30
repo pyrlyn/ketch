@@ -131,6 +131,8 @@ fun configuredIn(cfg: Config): List<Path> {
  * broken (the shell that started ketch simply predates the edit), and calling that a failure sends the user round the
  * same loop forever.
  */
+const val PATH_CHECK = "PATH"
+
 fun pathCheck(cfg: Config): DoctorCheck {
     val bin = cfg.binDir.toString()
     val configured = configuredIn(cfg)
@@ -138,15 +140,15 @@ fun pathCheck(cfg: Config): DoctorCheck {
     val places = configured.map { it.toString() } + listOfNotNull("the user PATH".takeIf { user })
     return when {
         cfg.binDirOnPath() -> {
-            DoctorCheck.ok("PATH", "$bin is on PATH")
+            DoctorCheck.ok(PATH_CHECK, "$bin is on PATH")
         }
 
         places.isEmpty() -> {
-            DoctorCheck.fail("PATH", "$bin is not on PATH", "Run `ketch path install`, or `ketch doctor --fix`.")
+            DoctorCheck.fail(PATH_CHECK, "$bin is not on PATH", "Run `ketch path install`, or `ketch doctor --fix`.")
         }
 
         else -> {
-            DoctorCheck.warn("PATH", "$bin is set up in ${places.joinToString(", ")} but not in this shell", "Open a new shell.")
+            DoctorCheck.warn(PATH_CHECK, "$bin is set up in ${places.joinToString(", ")} but not in this shell", "Open a new shell.")
         }
     }
 }

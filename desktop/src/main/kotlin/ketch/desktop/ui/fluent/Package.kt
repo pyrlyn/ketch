@@ -15,8 +15,10 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +35,7 @@ import ketch.desktop.ui.Actions
 import ketch.desktop.ui.ChangelogText
 import ketch.desktop.ui.Navigation
 import ketch.desktop.ui.changelogOrigin
+import ketch.desktop.ui.checksumWords
 import ketch.desktop.ui.copyToClipboard
 import ketch.desktop.ui.packageDetails
 import ketch.desktop.ui.screens.ChangelogRead
@@ -44,6 +47,7 @@ import ketch.desktop.ui.tilde
 import ketch.desktop.ui.trustSeal
 import ketch.wire.Changelog
 import ketch.wire.Package
+import ketch.wire.Resolution
 import pyrlyn.fluent.AppIconSize
 import pyrlyn.fluent.BadgeKind
 import pyrlyn.fluent.Breadcrumb
@@ -60,6 +64,8 @@ import pyrlyn.fluent.ProgressRing
 import pyrlyn.fluent.ReleaseTag
 import pyrlyn.fluent.SelectorBar
 import pyrlyn.fluent.StatusBadge
+import pyrlyn.fluent.TerminalLine
+import pyrlyn.fluent.TerminalOutput
 
 @Composable
 fun FluentPackage(
@@ -69,7 +75,7 @@ fun FluentPackage(
     navigation: Navigation,
 ) {
     val facts = PackageFacts(name, state)
-    var tab by remember(name) { mutableStateOf(PackageTab.Changelog) }
+    var tab by remember(name) { mutableStateOf(navigation.takeFirstTab()) }
     var uninstalling by remember(name) { mutableStateOf(false) }
     val changelog = readChangelog(facts, actions)
     FluentPage("package") {
@@ -79,12 +85,12 @@ fun FluentPackage(
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             if (maxWidth >= TWO_COLUMNS) {
                 Row(horizontalArrangement = Arrangement.spacedBy(COLUMN_GAP)) {
-                    Tab(tab, facts, changelog, Modifier.weight(1f))
+                    Tab(tab, facts, changelog, actions, Modifier.weight(1f))
                     Details(facts, Modifier.width(ASIDE_WIDTH))
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(COLUMN_GAP)) {
-                    Tab(tab, facts, changelog, Modifier.fillMaxWidth())
+                    Tab(tab, facts, changelog, actions, Modifier.fillMaxWidth())
                     Details(facts, Modifier.fillMaxWidth())
                 }
             }
@@ -143,11 +149,12 @@ private fun Tab(
     tab: PackageTab,
     facts: PackageFacts,
     changelog: ChangelogRead,
+    actions: Actions,
     modifier: Modifier,
 ) {
     Panel(modifier.testTag("package-${tab.name.lowercase()}"), spacing = 18.dp) {
         when (tab) {
-            PackageTab.Overview -> Overview(facts)
+            PackageTab.Overview -> Overview(facts, actions)
             PackageTab.Changelog -> Changes(changelog, facts.installed?.version)
             PackageTab.Files -> Files(facts.installed)
         }
@@ -155,11 +162,52 @@ private fun Tab(
 }
 
 @Composable
-private fun Overview(facts: PackageFacts) {
+private fun Overview(
+    facts: PackageFacts,
+    actions: Actions,
+) {
     val command = "ketch install ${facts.repo ?: facts.name}"
     Text(facts.registry?.description ?: "No description.", color = LocalFluent.current.ink, style = LocalFluentType.current.body)
     CommandField(command, "Copy the command", Modifier.fillMaxWidth()) { copyToClipboard(command) }
+    Why(facts.name, actions)
 }
+
+/** What `ketch why` says: asked only here, since it goes to the package's source. */
+@Composable
+private fun Why(
+    name: String,
+    actions: Actions,
+) {
+    var asked by remember(name) { mutableStateOf(false) }
+    var resolution by remember(name) { mutableStateOf<Resolution?>(null) }
+    // Keyed on the name: a page that moved on cancels the question, and its reply never lands on the next package.
+    LaunchedEffect(name) {
+        resolution = actions.store.why(name)
+        asked = true
+    }
+    val found = resolution
+    when {
+        !asked -> {
+            ProgressRing()
+        }
+
+        found == null -> {
+            Text("ketch could not ask this package's source.", color = LocalFluent.current.ink2, style = LocalFluentType.current.body)
+        }
+
+        else -> {
+            SelectionContainer { TerminalOutput("ketch why $name", whyLines(found), Modifier.fillMaxWidth().testTag("package-why")) }
+        }
+    }
+}
+
+private fun whyLines(found: Resolution) =
+    listOfNotNull(
+        TerminalLine("resolve", "${found.source} → ${found.version ?: "no release"}", good = found.version != null),
+        TerminalLine("asset", found.asset ?: "none fits this machine"),
+        found.reason?.let { TerminalLine("reason", it) },
+        TerminalLine("sha256", checksumWords(found.checksum)),
+    )
 
 @Composable
 private fun Changes(

@@ -65,7 +65,14 @@ fun FluentInstalled(
         if (rows.isEmpty()) {
             if (needle.isEmpty()) EmptyNote("Nothing is installed yet", "Find something in Discover.") else EmptyNote("No installed package matches \"$needle\"")
         }
-        RowGroup { for (pkg in rows) InstalledRow(pkg, state, actions, navigation) { uninstalling = pkg } }
+        RowGroup {
+            for (pkg in rows) {
+                InstalledRow(pkg, state, actions, navigation) {
+                    navigation.selected = pkg.name
+                    uninstalling = pkg
+                }
+            }
+        }
     }
     uninstalling?.let { pkg -> UninstallConfirm(pkg, actions) { uninstalling = null } }
 }
@@ -82,6 +89,7 @@ private fun InstalledRow(
     val pinned = state.held.any { it.name == pkg.name }
     ListRow(
         Modifier.testTag("installed-${pkg.name}").clip(Corners.Item).clickable { navigation.open = pkg.name },
+        selected = navigation.selected == pkg.name,
         leading = { PackageIcon(pkg.name, AppIconSize.Small, raised = it) },
         actions = {
             if (update != null) FluentButton("Upgrade", ButtonStyle.Update, enabled = !state.isRunning) { actions.run { upgrade(listOf(pkg.name)) } }

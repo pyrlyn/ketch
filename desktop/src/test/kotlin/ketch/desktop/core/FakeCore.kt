@@ -13,6 +13,7 @@ import ketch.wire.Question
 import ketch.wire.Scenario
 import ketch.wire.ScriptStep
 import ketch.wire.Wire
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonArray
@@ -52,12 +53,16 @@ class FakeCore(
     private var installed = emptyList<Package>()
     private val made = mutableListOf<Call>()
     private val asked = mutableListOf<Pair<Question, Answer>>()
+    private val held = mutableMapOf<String, CompletableDeferred<Unit>>()
 
     /** Every call made, in order. */
     val calls: List<Call> get() = synchronized(lock) { made.toList() }
 
     /** Every question put to the app, with its answer. */
     val answers: List<Pair<Question, Answer>> get() = synchronized(lock) { asked.toList() }
+
+    /** Keeps calls of [op] waiting until the result is completed, so a test can look at the screen meanwhile. */
+    fun hold(op: String): CompletableDeferred<Unit> = CompletableDeferred<Unit>().also { synchronized(lock) { held[op] = it } }
 
     /** Answer [scenario]'s operation as the core did in it. */
     fun script(scenario: Scenario): FakeCore =
@@ -86,9 +91,14 @@ class FakeCore(
         cancel: CancelToken,
     ): JsonElement {
         val op = operation(call)
-        val (read, scenario) =
+        val gate =
             synchronized(lock) {
                 made += call
+                held[op]
+            }
+        gate?.await()
+        val (read, scenario) =
+            synchronized(lock) {
                 val read = if (op == "installed") Wire.json.encodeToJsonElement(PACKAGES, installed) else reads[op]
                 read to scripted[op]
             }

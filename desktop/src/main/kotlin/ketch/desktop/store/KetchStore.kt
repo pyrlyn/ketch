@@ -17,7 +17,9 @@ import ketch.wire.Event
 import ketch.wire.InstallOptions
 import ketch.wire.KetchError
 import ketch.wire.Package
+import ketch.wire.PathChange
 import ketch.wire.Question
+import ketch.wire.Resolution
 import ketch.wire.SearchResults
 import ketch.wire.Settings
 import ketch.wire.Stage
@@ -40,6 +42,8 @@ import java.time.Instant
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
+// Every screen's way to the core: one small function per thing a screen can ask.
+@Suppress("TooManyFunctions")
 class KetchStore(
     private val core: Core,
     private val now: () -> Instant = Instant::now,
@@ -140,6 +144,29 @@ class KetchStore(
             val checks = core.value<List<Check>>(Call.Doctor)
             mutable.update { it.copy(checks = checks) }
         }?.let { report(it) { runDoctor() } }
+    }
+
+    /** Repairs what `doctor` can, then asks again: the new report is what says whether it held. */
+    suspend fun fixDoctor() {
+        caught {
+            val fixable =
+                state.value.checks
+                    .filter { it.fixable }
+                    .map { it.name }
+            val changes = core.value<List<PathChange>>(Call.DoctorFix)
+            val checks = core.value<List<Check>>(Call.Doctor)
+            mutable.update { it.copy(checks = checks, fixed = if (changes.isEmpty()) it.fixed else it.fixed + fixable) }
+        }?.let { report(it) { fixDoctor() } }
+    }
+
+    /**
+     * How an install of [name] would choose, or null when its source cannot say. The page says so itself, and a page
+     * that is only being read is not worth an alert.
+     */
+    suspend fun why(name: String): Resolution? {
+        var found: Resolution? = null
+        caught { found = core.value<Resolution>(Call.Why(name)) }
+        return found
     }
 
     // Operations

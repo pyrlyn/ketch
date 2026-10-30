@@ -26,6 +26,7 @@ import ketch.core.selfupdate.bootstrapBinaryName
 import ketch.core.selfupdate.caskDir
 import ketch.core.selfupdate.displayVersion
 import ketch.core.selfupdate.staleAsideCheck
+import ketch.core.shell.PATH_CHECK
 import ketch.core.shell.Setup
 import ketch.core.shell.Shell
 import ketch.core.shell.configuredIn
@@ -97,6 +98,9 @@ fun fix(cx: Ctx): List<Setup> {
     // Windows keeps PATH in the registry, not in a startup file.
     return if (HOST_WINDOWS) fixUserPath(cx) else fixShellFiles(cx)
 }
+
+/** Whether [fix] answers [check]: a PATH set up nowhere is the one thing it repairs. */
+fun repairable(check: DoctorCheck) = check.name == PATH_CHECK && check.status == CheckStatus.Fail
 
 private fun fixShellFiles(cx: Ctx): List<Setup> =
     shellsToFix(cx).mapNotNull { sh ->

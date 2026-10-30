@@ -9,17 +9,23 @@ import ketch.desktop.core.FakeCore
 import ketch.desktop.core.scenario
 import ketch.wire.Answer
 import ketch.wire.Call
+import ketch.wire.Check
 import ketch.wire.CheckOutcome
 import ketch.wire.InstallOptions
 import ketch.wire.KetchError
 import ketch.wire.Outcome
+import ketch.wire.PathChange
+import ketch.wire.PathOutcome
+import ketch.wire.Scenario
 import ketch.wire.Stage
+import ketch.wire.Wire
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonElement
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -257,4 +263,43 @@ class KetchStoreTest {
         val two = Activity("two", mapOf("a" to PackageProgress(Stage.Resolving), "b" to PackageProgress(Stage.Verifying)))
         assertEquals((0.0 + 2.0 / Stage.entries.size) / 2, two.fraction)
     }
+
+    private fun checks(vararg checks: Check) = Scenario("doctor", "", Call.Doctor, emptyList(), Outcome.Ok(Wire.json.encodeToJsonElement(ListSerializer(Check.serializer()), checks.toList())))
+
+    private fun fix(vararg changes: PathChange) = Scenario("doctor-fix", "", Call.DoctorFix, emptyList(), Outcome.Ok(Wire.json.encodeToJsonElement(ListSerializer(PathChange.serializer()), changes.toList())))
+
+    @Test
+    fun aRepairReChecksAndRemembersWhatItFixed() =
+        runTest {
+            val core = FakeCore().script(checks(Check("PATH", CheckOutcome.Fail, "missing", null, fixable = true), Check("links", CheckOutcome.Warn, "old", null)))
+            val store = KetchStore(core)
+            store.runDoctor()
+            core.script(fix(PathChange("user PATH", null, PathOutcome.Added))).script(checks(Check("PATH", CheckOutcome.Warn, "restart", null)))
+            store.fixDoctor()
+            assertEquals(setOf("PATH"), store.state.value.fixed)
+            assertEquals(
+                CheckOutcome.Warn,
+                store.state.value.checks
+                    .single()
+                    .outcome,
+            )
+        }
+
+    @Test
+    fun aRepairThatChangedNothingFixedNothing() =
+        runTest {
+            val core = FakeCore().script(checks(Check("PATH", CheckOutcome.Fail, "missing", null, fixable = true))).script(fix())
+            val store = KetchStore(core)
+            store.runDoctor()
+            store.fixDoctor()
+            assertEquals(emptySet(), store.state.value.fixed)
+        }
+
+    @Test
+    fun aPackageThatCannotSayWhyRaisesNoAlert() =
+        runTest {
+            val store = KetchStore(FakeCore())
+            assertNull(store.why("ripgrep"))
+            assertNull(store.state.value.error)
+        }
 }

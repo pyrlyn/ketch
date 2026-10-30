@@ -7,6 +7,7 @@ import ketch.desktop.settings.MemoryKeyValues
 import ketch.desktop.settings.Prefs
 import ketch.desktop.ui.Appearance
 import ketch.desktop.ui.Look
+import ketch.desktop.ui.checksumWords
 import ketch.desktop.ui.fileName
 import ketch.desktop.ui.linkedTo
 import ketch.desktop.ui.lookFor
@@ -43,6 +44,14 @@ class FluentHelpersTest {
         assertEquals("C:\\Users\\menace\\x", tilde("C:\\Users\\menace\\x", "C:\\Users\\me"))
         assertEquals("uv.exe", fileName("C:\\Users\\me\\.ketch\\bin\\uv.exe"))
         assertEquals("~\\bin\\uv.exe, uvx.exe", linkedTo(listOf("C:\\Users\\me\\bin\\uv.exe", "C:\\Users\\me\\bin\\uvx.exe"), "C:\\Users\\me"))
+    }
+
+    @Test
+    fun eachChecksumPolicyHasItsWords() {
+        assertEquals("checked against the published sha256", checksumWords("published-digest"))
+        assertEquals("refused unless a checksum is published", checksumWords("require"))
+        assertEquals("no published checksum: the first download is trusted", checksumWords("trust-on-first-use"))
+        assertEquals("nothing to check yet", checksumWords("unknown"))
     }
 
     @Test

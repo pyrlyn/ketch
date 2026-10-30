@@ -197,6 +197,7 @@ internal fun dispatch(
     when (call) {
         Call.Root -> core.root()
         Call.InstalledPackages -> core.installed()
+        is Call.Why -> core.why(call.pkg, listener)
         is Call.Search -> core.search(call.query, call.limit, listener, cancel)
         Call.Outdated -> core.outdated(listener, cancel)
         is Call.Install -> core.install(call.specs, call.options, listener, asker, cancel)

@@ -42,6 +42,7 @@ import ketch.desktop.ui.screens.DiscoverScreen
 import ketch.desktop.ui.screens.DoctorScreen
 import ketch.desktop.ui.screens.InstalledScreen
 import ketch.desktop.ui.screens.PackageScreen
+import ketch.desktop.ui.screens.PackageTab
 import ketch.desktop.ui.screens.SettingsScreen
 import ketch.desktop.ui.screens.UpdatesScreen
 import kotlinx.coroutines.CoroutineScope
@@ -92,7 +93,16 @@ class Navigation(
     /** The package whose page is over the section. */
     var open: String?
         get() = place.page
-        set(value) = go(place.copy(page = value))
+        set(value) {
+            if (value != null) selected = value
+            go(place.copy(page = value))
+        }
+
+    /** The package last acted on; its row stays lit, as a list's does on Windows. */
+    var selected by mutableStateOf<String?>(null)
+
+    /** The tab the next package page opens on. */
+    private var firstTab: PackageTab? = null
 
     /** Set when the person asks for the search field; the screen that has one takes it. */
     var wantsSearch by mutableStateOf(false)
@@ -105,6 +115,17 @@ class Navigation(
         private set
 
     fun show(section: Section) = go(Place(section))
+
+    fun open(
+        name: String,
+        tab: PackageTab,
+    ) {
+        firstTab = tab
+        open = name
+    }
+
+    /** Taken once: going back to a page later is not asking for that tab again. */
+    fun takeFirstTab() = (firstTab ?: PackageTab.Changelog).also { firstTab = null }
 
     fun show(source: Source) = go(Place(Section.Discover, source = source))
 
@@ -138,6 +159,13 @@ class Navigation(
     fun bringForward() {
         windowVisible = true
         windowRequests++
+    }
+
+    /** Update all, from outside the window: the person still confirms it there. */
+    fun askToUpdateAll() {
+        show(Section.Updates)
+        confirmingUpdateAll = true
+        bringForward()
     }
 }
 

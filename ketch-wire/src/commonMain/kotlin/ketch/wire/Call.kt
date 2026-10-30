@@ -36,6 +36,13 @@ sealed interface Call {
         val limit: Int,
     ) : Call
 
+    /** Returns a [Resolution]; asks the package's source and installs nothing. */
+    @Serializable
+    @SerialName("why")
+    data class Why(
+        @SerialName("package") val pkg: String,
+    ) : Call
+
     /** Returns a list of [Upgrade]. */
     @Serializable
     @SerialName("outdated")
@@ -172,6 +179,7 @@ fun resultSerializer(call: Call): KSerializer<*> =
         Call.Root, is Call.PackageForLink -> String.serializer()
         Call.InstalledPackages, is Call.Uninstall, is Call.Pin, is Call.Unpin -> ListSerializer(Package.serializer())
         is Call.Search -> SearchResults.serializer()
+        is Call.Why -> Resolution.serializer()
         Call.Outdated -> ListSerializer(Upgrade.serializer())
         is Call.Install, is Call.Upgrade -> ListSerializer(Installed.serializer())
         is Call.ChangelogOf -> Changelog.serializer()

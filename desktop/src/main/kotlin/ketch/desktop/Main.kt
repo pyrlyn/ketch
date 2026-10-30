@@ -78,6 +78,7 @@ import pyrlyn.fluent.WindowsFrame
 import java.awt.Desktop
 import java.awt.Dimension
 import java.awt.GraphicsEnvironment
+import javax.swing.SwingUtilities
 
 fun main(args: Array<String>) {
     // `ketch://` links arrive on the command line on Windows and Linux, and through the open-URI handler on macOS.
@@ -137,7 +138,7 @@ private fun ApplicationScope.Ketch(
     val store = remember(ready) { ready?.let(::KetchStore) }
     val tray = rememberTrayState()
     val hasTray = remember { isTraySupported }
-    val parts = remember { AppParts(AppSettings(SystemKeyValues()), TrayNotifier(tray, hasTray), LoginItem.forThisSystem(), periodic = true) }
+    val parts = remember { AppParts(AppSettings(SystemKeyValues()), notifier(TrayNotifier(tray, hasTray), navigation), LoginItem.forThisSystem(), periodic = true) }
     if (store != null && hasTray) KetchTray(store, tray, navigation)
 
     val look = remember { systemLook() }
@@ -280,11 +281,19 @@ private fun ApplicationScope.act(
         }
 
         TrayAction.UpdateAll -> {
-            navigation.show(Section.Updates)
-            navigation.confirmingUpdateAll = true
-            navigation.bringForward()
+            navigation.askToUpdateAll()
         }
     }
+}
+
+/** Windows can put an Update button on a notice; a click on one comes from outside Swing's thread. */
+private fun notifier(
+    tray: UpdateNotifier,
+    navigation: Navigation,
+) = if (System.getProperty("os.name").startsWith("Windows")) {
+    WindowsToast(tray) { update -> SwingUtilities.invokeLater { if (update) navigation.askToUpdateAll() else navigation.bringForward() } }
+} else {
+    tray
 }
 
 /** Notices through the tray icon; a system without a tray has nowhere to show them. */

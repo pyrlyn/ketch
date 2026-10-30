@@ -11,18 +11,21 @@
       {
         "detail": "/Users/me/.ketch/bin is on PATH",
         "fix": null,
+        "fixable": false,
         "name": "path",
         "outcome": "ok"
       },
       {
         "detail": "1 broken link: /Users/me/.ketch/bin/old",
         "fix": "ketch doctor --fix",
+        "fixable": false,
         "name": "links",
         "outcome": "warn"
       },
       {
         "detail": "state.json is not readable",
         "fix": null,
+        "fixable": false,
         "name": "state",
         "outcome": "fail"
       }

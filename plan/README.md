@@ -123,6 +123,9 @@ Taken during the port:
   Windows 11 or on any failure the window keeps the frame T17 gave it. The wall drops out only for a
   backdrop that was really applied, on the graphics API Skiko actually got. The Parallels VM has no
   Direct3D 12, so it runs ANGLE; real hardware runs DX12.
+- **Windows notice (T19).** The Update button needs a live process to hear the click, and a packaged
+  app's COM activator needs an identity an MSI lacks. So a hidden PowerShell child posts the notice
+  and waits for it, the AppUserModelID goes under `HKCU`, and the tray's balloon is the fallback.
 - **Windows (T13).** The creator's choices on claiming it: three subtasks (T13.1–T13.3);
   mingwX64 and the Windows implementations go into kotlin-kit itself; tests run on a Windows
   VM in Parallels on the Mac (Windows on Arm, which runs the x64 binaries under emulation). No

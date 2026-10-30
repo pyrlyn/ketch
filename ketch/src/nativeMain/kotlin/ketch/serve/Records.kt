@@ -4,15 +4,18 @@ import ketch.core.changelog.Entry
 import ketch.core.changelog.Origin
 import ketch.core.changelog.sanitize
 import ketch.core.config.Config
+import ketch.core.doctor.repairable
 import ketch.core.info.Info
 import ketch.core.listing.Latest
 import ketch.core.listing.Row
 import ketch.core.model.InstalledPackage
 import ketch.core.model.Manifest
+import ketch.core.model.PackageKind
 import ketch.core.model.SourceInfo
 import ketch.core.platform.CheckStatus
 import ketch.core.platform.DoctorCheck
 import ketch.core.report.Report
+import ketch.core.resolve.ResolutionTrace
 import ketch.core.shell.Setup
 import ketch.core.shell.Status
 import ketch.wire.Changelog
@@ -28,6 +31,7 @@ import ketch.wire.PathOutcome
 import ketch.wire.PathStatus
 import ketch.wire.RegistryPackage
 import ketch.wire.Repository
+import ketch.wire.Resolution
 import ketch.wire.Settings
 import ketch.wire.ShellSetup
 import ketch.wire.ShellState
@@ -63,7 +67,23 @@ internal fun CoreInstalled.toWire() = Installed(pkg.toWire(), replaced?.toString
 internal fun registryPackage(
     manifest: Manifest,
     latest: String?,
-) = RegistryPackage(manifest.name, manifest.source.toString(), manifest.description?.let(::sanitize), latest)
+) = RegistryPackage(
+    manifest.name,
+    manifest.source.toString(),
+    manifest.description?.let(::sanitize),
+    latest,
+    isApp = manifest.kind == PackageKind.App,
+)
+
+internal fun ResolutionTrace.toWire() =
+    Resolution(
+        pkg = `package`,
+        source = sanitize("${source.scheme}:${source.id}"),
+        version = version.selected?.version?.let(::sanitize),
+        asset = candidate?.name?.let(::sanitize),
+        reason = candidate?.reason?.let(::sanitize),
+        checksum = checksum.policy,
+    )
 
 internal fun repository(
     scheme: String,
@@ -112,6 +132,7 @@ internal fun DoctorCheck.toWire() =
             },
         detail = sanitize(detail),
         fix = fix?.let(::sanitize),
+        fixable = repairable(this),
     )
 
 internal fun StatsEvent.toWire() = HistoryEvent(packageName, action, version, previousVersion, tag, source, at, checksumVerified, durationMs)

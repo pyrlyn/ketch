@@ -19,6 +19,7 @@ import ketch.core.model.TargetSpec
 import ketch.core.model.Version
 import ketch.core.model.host
 import ketch.core.platform.DoctorCheck
+import ketch.core.shell.PATH_CHECK
 import ketch.wire.Changelog
 import ketch.wire.ChangelogSource
 import ketch.wire.Check
@@ -28,6 +29,7 @@ import ketch.wire.Upgrade
 import kotlinx.io.files.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -116,6 +118,13 @@ class RecordsTest {
             Check("links", CheckOutcome.Warn, "1 broken", "ketch link x"),
             DoctorCheck.warn("links", "1 broken\u001b", "ketch link x").toWire(),
         )
+    }
+
+    @Test
+    fun onlyAFailedPathCheckIsOfferedARepair() {
+        assertTrue(DoctorCheck.fail(PATH_CHECK, "not on PATH", "ketch doctor --fix").toWire().fixable)
+        assertFalse(DoctorCheck.warn(PATH_CHECK, "restart", "open a new shell").toWire().fixable)
+        assertFalse(DoctorCheck.fail("links", "broken", "ketch link x").toWire().fixable)
     }
 
     @Test

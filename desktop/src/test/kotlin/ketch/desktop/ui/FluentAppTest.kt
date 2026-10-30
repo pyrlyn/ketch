@@ -14,7 +14,9 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
@@ -41,11 +43,18 @@ import ketch.desktop.ui.fluent.LocalWindowChrome
 import ketch.desktop.ui.fluent.WindowChrome
 import ketch.wire.Answer
 import ketch.wire.Call
+import ketch.wire.Check
+import ketch.wire.CheckOutcome
 import ketch.wire.Outcome
+import ketch.wire.PathChange
+import ketch.wire.PathOutcome
 import ketch.wire.Question
+import ketch.wire.Resolution
 import ketch.wire.Scenario
+import ketch.wire.SearchResults
 import ketch.wire.Settings
 import ketch.wire.Wire
+import kotlinx.serialization.builtins.ListSerializer
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -79,6 +88,27 @@ class FluentAppTest {
             for (name in listOf("installed", "outdated", "doctor", "search", "changelog-range") + more) script(scenario(name))
             script(Scenario("config", "the effective config", Call.Config, emptyList(), Outcome.Ok(Wire.json.encodeToJsonElement(Settings.serializer(), config))))
         }
+
+    private fun checks(vararg checks: Check) = Scenario("doctor", "", Call.Doctor, emptyList(), Outcome.Ok(Wire.json.encodeToJsonElement(ListSerializer(Check.serializer()), checks.toList())))
+
+    private fun fixed() =
+        Scenario(
+            "doctor-fix",
+            "",
+            Call.DoctorFix,
+            emptyList(),
+            Outcome.Ok(Wire.json.encodeToJsonElement(ListSerializer(PathChange.serializer()), listOf(PathChange("user PATH", null, PathOutcome.Added)))),
+        )
+
+    private fun why(resolution: Resolution) = Scenario("why", "", Call.Why(resolution.pkg), emptyList(), Outcome.Ok(Wire.json.encodeToJsonElement(Resolution.serializer(), resolution)))
+
+    /** The `search` scenario with ripgrep as an app. */
+    private fun oneApp(): Scenario {
+        val search = scenario("search")
+        val results = Wire.json.decodeFromJsonElement(SearchResults.serializer(), (search.outcome as Outcome.Ok).value)
+        val apps = results.copy(known = results.known.map { it.copy(isApp = it.name == "ripgrep") })
+        return search.copy(outcome = Outcome.Ok(Wire.json.encodeToJsonElement(SearchResults.serializer(), apps)))
+    }
 
     private fun ComposeUiTest.show(
         core: FakeCore,
@@ -278,6 +308,125 @@ class FluentAppTest {
             waitForText("2 problems found")
             onNodeWithText("Fix: ketch doctor --fix").assertIsDisplayed()
             onNodeWithText("warning").assertIsDisplayed()
+        }
+
+    @Test
+    fun fixRepairsPathAndTheCheckThenReadsFixed() =
+        runComposeUiTest {
+            val core = core().script(checks(Check("PATH", CheckOutcome.Fail, "not on PATH", "ketch doctor --fix", fixable = true)))
+            core.script(fixed())
+            show(core, Navigation(Section.Doctor))
+            waitFor("fix-PATH")
+            core.script(checks(Check("PATH", CheckOutcome.Warn, "restart your shell", null)))
+            onNodeWithTag("fix-PATH").performClick()
+            waitUntil(timeoutMillis = TIMEOUT) { core.calls.any { it is Call.DoctorFix } }
+            waitForText("Fixed")
+            waitForNo("fix-PATH")
+        }
+
+    @Test
+    fun fixSaysItIsWorkingUntilTheRepairEnds() =
+        runComposeUiTest {
+            val core = core().script(checks(Check("PATH", CheckOutcome.Fail, "not on PATH", "ketch doctor --fix", fixable = true)))
+            core.script(fixed())
+            val repair = core.hold("doctor_fix")
+            show(core, Navigation(Section.Doctor))
+            waitFor("fix-PATH")
+            onNodeWithTag("fix-PATH").performClick()
+            waitForText("Fixing…")
+            onNodeWithTag("fix-PATH").assertIsNotEnabled()
+            repair.complete(Unit)
+            waitForText("Fix")
+            onNodeWithTag("fix-PATH").assertIsEnabled()
+        }
+
+    @Test
+    fun aCheckAboutKetchsOwnFolderOffersIt() =
+        runComposeUiTest {
+            val core =
+                core().script(
+                    checks(
+                        Check("state", CheckOutcome.Fail, "state.json is not readable", null),
+                        Check("disk", CheckOutcome.Fail, "no room", null),
+                        Check("log", CheckOutcome.Ok, "fine", null),
+                    ),
+                )
+            show(core, Navigation(Section.Doctor))
+            waitFor("folder-state")
+            onNodeWithTag("folder-state").assertIsDisplayed()
+            assertTrue(onAllNodes(hasTestTag("folder-disk")).fetchSemanticsNodes().isEmpty())
+            assertTrue(onAllNodes(hasTestTag("folder-log")).fetchSemanticsNodes().isEmpty())
+        }
+
+    @Test
+    fun theKindsNarrowDiscoverAndRepositoriesAreNeitherKind() =
+        runComposeUiTest {
+            show(core().script(oneApp()))
+            onNodeWithTag("discover-query").performTextInput("grep")
+            waitFor("discover-ripgrep")
+            waitFor("discover-github:phiresky/ripgrep-all")
+            onNodeWithTag("kind-Apps").performClick()
+            waitForNo("discover-ugrep")
+            onNodeWithTag("discover-ripgrep").assertIsDisplayed()
+            assertTrue(onAllNodes(hasTestTag("discover-github:phiresky/ripgrep-all")).fetchSemanticsNodes().isEmpty())
+            onNodeWithTag("kind-Tools").performClick()
+            waitFor("discover-ugrep")
+            waitForNo("discover-ripgrep")
+        }
+
+    @Test
+    fun aPackagePageExplainsWhatAnInstallWouldPick() =
+        runComposeUiTest {
+            val core =
+                core().script(
+                    why(Resolution("ripgrep", "github:BurntSushi/ripgrep", "14.1.1", "ripgrep-14.1.1-x86_64-pc-windows-msvc.zip", "best match", "published-digest")),
+                )
+            show(core, Navigation(Section.Installed))
+            waitFor("installed-ripgrep")
+            onNodeWithTag("installed-ripgrep").performClick()
+            onNodeWithText("Overview").performClick()
+            waitFor("package-why")
+            assertEquals(Call.Why("ripgrep"), core.calls.first { it is Call.Why })
+            onNodeWithText("ketch why ripgrep", substring = true).assertIsDisplayed()
+            onNodeWithText("ripgrep-14.1.1-x86_64-pc-windows-msvc.zip", substring = true).assertIsDisplayed()
+            onNodeWithText("checked against the published sha256", substring = true).assertIsDisplayed()
+        }
+
+    @Test
+    fun theHeroLeadsToHowKetchPicksTheAsset() =
+        runComposeUiTest {
+            val core = core().script(why(Resolution("ripgrep", "github:BurntSushi/ripgrep", "14.1.1", null, null, "require")))
+            show(core)
+            waitForText("How ketch picks the asset")
+            onNodeWithText("How ketch picks the asset").performClick()
+            waitFor("package-why")
+            onNodeWithTag("package-overview").assertIsDisplayed()
+            onNodeWithText("none fits this machine", substring = true).assertIsDisplayed()
+        }
+
+    @Test
+    fun aPageThatCannotSayWhyStillOpens() =
+        runComposeUiTest {
+            show(core(), Navigation(Section.Installed))
+            waitFor("installed-ripgrep")
+            onNodeWithTag("installed-ripgrep").performClick()
+            onNodeWithText("Overview").performClick()
+            waitForText("could not ask this package's source")
+            waitForNo("package-why")
+            assertTrue(onAllNodes(hasTestTag("error-bar")).fetchSemanticsNodes().isEmpty())
+        }
+
+    @Test
+    fun theRowLastOpenedStaysMarked() =
+        runComposeUiTest {
+            val navigation = Navigation(Section.Installed)
+            show(core(), navigation)
+            waitFor("installed-ripgrep")
+            onNodeWithTag("installed-ripgrep").performClick()
+            assertEquals("ripgrep", navigation.selected)
+            navigation.back()
+            waitFor("installed-ripgrep")
+            assertEquals("ripgrep", navigation.selected)
         }
 
     @Test

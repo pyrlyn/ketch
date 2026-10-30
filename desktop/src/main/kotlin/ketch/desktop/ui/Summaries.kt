@@ -80,6 +80,16 @@ fun changelogNote(
 }
 
 /** The line of a changelog that says what changed, as plain text: its first list item, or else its first line of prose. */
+
+/** What install would do about a checksum, in words: [policy] is the core's name for it. */
+fun checksumWords(policy: String) =
+    when (policy) {
+        "published-digest" -> "checked against the published sha256"
+        "require" -> "refused unless a checksum is published"
+        "trust-on-first-use" -> "no published checksum: the first download is trusted"
+        else -> "nothing to check yet"
+    }
+
 fun firstLine(body: String): String? {
     val lines = body.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
     val item = lines.firstOrNull { it.startsWith("- ") || it.startsWith("* ") }
