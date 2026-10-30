@@ -3,8 +3,8 @@
 On macOS the desktop app wears the `ketch Store — Discover` design: all eight artboards (Discover,
 Installed, Updates, Activity, Doctor, Package, Settings with Appearance, the sheets), driven by the
 store's data. Windows and Linux keep Material 3; the Material tree is unchanged apart from the test
-pinning it. Commits on branch `T16-glass-design`, and `feat(kotlin-glass)` on branch `kotlin-glass`
-of `pyrlyn/packages`, local and not pushed yet: the app's build needs that package.
+pinning it. Commits on branch `T16-glass-design`, and the package in
+https://github.com/pyrlyn/packages/pull/1: the app's build needs that package.
 
 ## What was done
 
