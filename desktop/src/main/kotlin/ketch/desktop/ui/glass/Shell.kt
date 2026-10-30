@@ -31,7 +31,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,10 +39,12 @@ import ketch.desktop.store.UpdateChecks
 import ketch.desktop.ui.About
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.AppParts
+import ketch.desktop.ui.LIBRARY
 import ketch.desktop.ui.Navigation
 import ketch.desktop.ui.Questions
 import ketch.desktop.ui.Section
 import ketch.desktop.ui.Source
+import ketch.desktop.ui.glyph
 import ketch.desktop.ui.plural
 import ketch.wire.Settings
 import pyrlyn.glass.ButtonKind
@@ -116,20 +117,6 @@ private fun Screen(
         Section.Settings -> GlassSettings(navigation, parts, checks, config)
     }
 }
-
-/** The order of the design's sidebar; Settings stands apart at the foot. */
-private val LIBRARY = listOf(Section.Discover, Section.Installed, Section.Updates, Section.Activity, Section.Doctor)
-
-private val Section.glyph
-    get() =
-        when (this) {
-            Section.Discover -> Glyph.Compass
-            Section.Installed -> Glyph.Box
-            Section.Updates -> Glyph.Refresh
-            Section.Activity -> Glyph.Pulse
-            Section.Doctor -> Glyph.Shield
-            Section.Settings -> Glyph.Gear
-        }
 
 @Composable
 private fun Sidebar(
@@ -236,19 +223,6 @@ fun PageColumn(
         verticalArrangement = Arrangement.spacedBy(PageGap),
         content = content,
     )
-}
-
-/** The search field's focus, taken when the person asks for search with ⌘K. */
-@Composable
-fun searchFocus(navigation: Navigation): FocusRequester {
-    val focus = remember { FocusRequester() }
-    LaunchedEffect(navigation.wantsSearch) {
-        if (navigation.wantsSearch) {
-            focus.requestFocus()
-            navigation.wantsSearch = false
-        }
-    }
-    return focus
 }
 
 /** The lock held, the running operation and an error the person has not dismissed. */

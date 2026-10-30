@@ -16,9 +16,14 @@ import androidx.compose.ui.unit.dp
 import ketch.desktop.store.StoreState
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.Navigation
+import ketch.desktop.ui.pathExists
 import ketch.desktop.ui.plural
+import ketch.desktop.ui.reveal
 import ketch.desktop.ui.screens.UninstallConfirm
 import ketch.desktop.ui.screens.githubRepo
+import ketch.desktop.ui.searchFocus
+import ketch.desktop.ui.tilde
+import ketch.desktop.ui.whereTo
 import ketch.wire.Package
 import ketch.wire.Settings
 import pyrlyn.glass.Badge
@@ -31,7 +36,6 @@ import pyrlyn.glass.IconSize
 import pyrlyn.glass.LetterIcon
 import pyrlyn.glass.ListRow
 import pyrlyn.glass.SearchField
-import java.io.File
 
 @Composable
 fun GlassInstalled(
@@ -80,14 +84,9 @@ private fun InstalledRow(
 ) {
     val update = state.outdatedVersion(pkg.name)
     val held = state.held.firstOrNull { it.name == pkg.name }
-    val whereTo =
-        when {
-            held != null -> held.heldBy?.let { "held by ${tilde(it)}" }
-            else -> linkedTo(pkg.binaries)
-        }
     ListRow(
         pkg.name,
-        listOfNotNull(githubRepo(pkg.source) ?: pkg.source, pkg.version, whereTo).joinToString(" · "),
+        listOfNotNull(githubRepo(pkg.source) ?: pkg.source, pkg.version, whereTo(pkg, state)).joinToString(" · "),
         Modifier.testTag("installed-${pkg.name}"),
         onClick = { navigation.open = pkg.name },
         icon = { LetterIcon(pkg.name, IconSize.Small) },
@@ -105,15 +104,7 @@ private fun InstalledRow(
     }
 }
 
-/** `~/.ketch/bin/uv, uvx`: the first link in full, the others by name, as they share its directory. */
-fun linkedTo(
-    binaries: List<String>,
-    home: String = System.getProperty("user.home"),
-): String? = binaries.firstOrNull()?.let { first -> (listOf(tilde(first, home)) + binaries.drop(1).map { it.substringAfterLast('/') }).joinToString(", ") }
-
-/** Asks the file system once for a row, so a list does not stat on every frame. */
 @Composable
 fun RevealButton(path: String) {
-    val exists = remember(path) { File(path).exists() }
-    GlassButton("Reveal in Finder", ButtonKind.Secondary, enabled = exists) { reveal(path) }
+    GlassButton("Reveal in Finder", ButtonKind.Secondary, enabled = pathExists(path)) { reveal(path) }
 }

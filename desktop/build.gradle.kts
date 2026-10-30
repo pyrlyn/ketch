@@ -9,6 +9,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
+    implementation("pyrlyn.fluent:fluent")
     implementation("pyrlyn.glass:glass")
     implementation(libs.kotlinx.coroutines.swing)
     implementation(libs.markdown.renderer.m3)

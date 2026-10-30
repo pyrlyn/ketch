@@ -6,6 +6,11 @@ import ketch.desktop.store.LogEntry
 import ketch.desktop.store.LogLevel
 import ketch.desktop.ui.Appearance
 import ketch.desktop.ui.Tokens
+import ketch.desktop.ui.firstLine
+import ketch.desktop.ui.linkedTo
+import ketch.desktop.ui.logDays
+import ketch.desktop.ui.logText
+import ketch.desktop.ui.tilde
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset

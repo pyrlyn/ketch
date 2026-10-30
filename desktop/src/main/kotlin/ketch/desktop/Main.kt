@@ -2,11 +2,13 @@ package ketch.desktop
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -24,16 +26,20 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ApplicationScope
+import androidx.compose.ui.window.FrameWindowScope
 import androidx.compose.ui.window.Notification
 import androidx.compose.ui.window.Tray
 import androidx.compose.ui.window.TrayState
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPlacement
+import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.isTraySupported
 import androidx.compose.ui.window.rememberTrayState
@@ -56,6 +62,9 @@ import ketch.desktop.ui.Section
 import ketch.desktop.ui.Tokens
 import ketch.desktop.ui.TrayAction
 import ketch.desktop.ui.TrayEntry
+import ketch.desktop.ui.fluent.FluentWaiting
+import ketch.desktop.ui.fluent.LocalWindowChrome
+import ketch.desktop.ui.fluent.WindowChrome
 import ketch.desktop.ui.systemLook
 import ketch.desktop.ui.trayImage
 import ketch.desktop.ui.trayMenu
@@ -65,6 +74,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import java.awt.Desktop
 import java.awt.Dimension
+import java.awt.GraphicsEnvironment
 
 fun main(args: Array<String>) {
     // `ketch://` links arrive on the command line on Windows and Linux, and through the open-URI handler on macOS.
@@ -73,7 +83,7 @@ fun main(args: Array<String>) {
     val look = systemLook()
     // Lets the title bar follow the system's light or dark, which the window's content already does.
     if (look == Look.Glass) System.setProperty("apple.awt.application.appearance", "system")
-    val navigation = Navigation(if (look == Look.Glass) Section.Discover else Section.Installed)
+    val navigation = Navigation(if (look == Look.Material) Section.Installed else Section.Discover)
     if (Desktop.isDesktopSupported()) systemMenus(Desktop.getDesktop(), links, navigation)
     application { Ketch(links, navigation) }
 }
@@ -127,30 +137,56 @@ private fun ApplicationScope.Ketch(
     val parts = remember { AppParts(AppSettings(SystemKeyValues()), TrayNotifier(tray, hasTray), LoginItem.forThisSystem(), periodic = true) }
     if (store != null && hasTray) KetchTray(store, tray, navigation)
 
-    val glass = remember { systemLook() == Look.Glass }
+    val look = remember { systemLook() }
+    val windowState = rememberWindowState(size = windowSize(look))
+    // With a tray the app lives on in it, as the macOS app lives on in the menu bar; Quit is the tray's.
+    val close = { if (hasTray && store != null) navigation.windowVisible = false else exitApplication() }
     Window(
-        // With a tray the app lives on in it, as the macOS app lives on in the menu bar; Quit is the tray's.
-        onCloseRequest = { if (hasTray && store != null) navigation.windowVisible = false else exitApplication() },
+        onCloseRequest = close,
         visible = navigation.windowVisible,
         title = "Ketch",
-        state = rememberWindowState(size = windowSize(glass)),
-        onPreviewKeyEvent = { glass && navigation.findOn(it) },
+        state = windowState,
+        undecorated = look == Look.Fluent,
+        onPreviewKeyEvent = { look != Look.Material && navigation.findOn(it, look) },
     ) {
-        if (glass) LaunchedEffect(Unit) { contentUnderTitleBar(window) }
+        LaunchedEffect(Unit) { dress(window, look) }
         LaunchedEffect(navigation.windowRequests) { if (navigation.windowRequests > 0) window.toFront() }
-        KetchTheme {
-            if (store != null) KetchApp(store, links, navigation, parts) else Waiting(failure)
+        val chrome = remember(store) { ownFrame(windowState, close) }
+        CompositionLocalProvider(LocalWindowChrome provides chrome.takeIf { look == Look.Fluent }) {
+            KetchTheme(look = look) {
+                if (store != null) KetchApp(store, links, navigation, parts) else Starting(look, parts.settings, failure)
+            }
         }
     }
 }
 
-private fun windowSize(glass: Boolean) = if (glass) DpSize(GLASS_WIDTH.dp, GLASS_HEIGHT.dp) else DpSize(WIDTH.dp, HEIGHT.dp)
+@Composable
+private fun Starting(
+    look: Look,
+    settings: AppSettings,
+    failure: String?,
+) = if (look == Look.Fluent) FluentWaiting(settings, failure) else Waiting(failure)
 
-/** ⌘K: the window takes it wherever the focus is, as a Mac's search shortcut works. */
-internal fun Navigation.findOn(event: KeyEvent): Boolean {
-    val asked = event.type == KeyEventType.KeyDown && event.isMetaPressed && event.key == Key.K
+private fun windowSize(look: Look) = if (look == Look.Material) DpSize(WIDTH.dp, HEIGHT.dp) else DpSize(LOOK_WIDTH.dp, LOOK_HEIGHT.dp)
+
+/** ⌘K on a Mac and Ctrl+K on Windows: the window takes it wherever the focus is, as a system's search shortcut works. */
+internal fun Navigation.findOn(
+    event: KeyEvent,
+    look: Look = Look.Glass,
+): Boolean {
+    val modifier = if (look == Look.Fluent) event.isCtrlPressed else event.isMetaPressed
+    val asked = event.type == KeyEventType.KeyDown && modifier && event.key == Key.K
     if (asked) findSomething()
     return asked
+}
+
+private fun dress(
+    window: ComposeWindow,
+    look: Look,
+) {
+    if (look == Look.Material) return
+    if (look == Look.Glass) contentUnderTitleBar(window) else stayClearOfTheTaskbar(window)
+    window.minimumSize = Dimension(LOOK_MIN_WIDTH, LOOK_MIN_HEIGHT)
 }
 
 /** The look draws to the window's edges, with the real traffic lights over its sidebar. */
@@ -158,8 +194,24 @@ private fun contentUnderTitleBar(window: ComposeWindow) {
     window.rootPane.putClientProperty("apple.awt.fullWindowContent", true)
     window.rootPane.putClientProperty("apple.awt.transparentTitleBar", true)
     window.rootPane.putClientProperty("apple.awt.windowTitleVisible", false)
-    window.minimumSize = Dimension(GLASS_MIN_WIDTH, GLASS_MIN_HEIGHT)
 }
+
+/** An undecorated window maximizes over the whole screen; the taskbar's room has to be asked for. */
+private fun stayClearOfTheTaskbar(window: ComposeWindow) {
+    window.maximizedBounds = GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
+}
+
+/** What the look's own title bar does in place of the system's frame. */
+private fun FrameWindowScope.ownFrame(
+    state: WindowState,
+    close: () -> Unit,
+) = WindowChrome(
+    isMaximized = { state.placement == WindowPlacement.Maximized },
+    minimize = { state.isMinimized = true },
+    toggleMaximize = { state.placement = if (state.placement == WindowPlacement.Maximized) WindowPlacement.Floating else WindowPlacement.Maximized },
+    close = close,
+    drag = { modifier -> WindowDraggableArea(modifier) },
+)
 
 @Composable
 private fun ApplicationScope.KetchTray(
@@ -245,7 +297,7 @@ private fun Waiting(failure: String?) {
 
 private const val WIDTH = 1080
 private const val HEIGHT = 720
-private const val GLASS_WIDTH = 1200
-private const val GLASS_HEIGHT = 800
-private const val GLASS_MIN_WIDTH = 900
-private const val GLASS_MIN_HEIGHT = 600
+private const val LOOK_WIDTH = 1200
+private const val LOOK_HEIGHT = 800
+private const val LOOK_MIN_WIDTH = 900
+private const val LOOK_MIN_HEIGHT = 600

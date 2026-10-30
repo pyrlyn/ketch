@@ -17,7 +17,8 @@ import androidx.compose.ui.unit.dp
 import ketch.desktop.store.StoreState
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.Navigation
-import ketch.desktop.ui.plural
+import ketch.desktop.ui.doctorSummary
+import ketch.desktop.ui.word
 import ketch.wire.Check
 import ketch.wire.CheckOutcome
 import pyrlyn.glass.AutoGrid
@@ -41,12 +42,6 @@ fun GlassDoctor(
     navigation: Navigation,
 ) {
     val glass = LocalGlass.current
-    val summary =
-        when {
-            state.checks.isEmpty() -> "No checks have run yet"
-            state.problemCount == 0 -> "No problems found"
-            else -> plural(state.problemCount, "problem") + " found"
-        }
     GlassPage(
         "Doctor",
         "doctor",
@@ -54,7 +49,7 @@ fun GlassDoctor(
         toolbar = { GlassButton("Run again", ButtonKind.Primary) { actions.run { runDoctor() } } },
     ) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PageContent, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            item { Text(summary, color = glass.ink2, style = body(TextSize.BODY, FontWeight.Medium), modifier = Modifier.testTag("doctor-summary")) }
+            item { Text(doctorSummary(state), color = glass.ink2, style = body(TextSize.BODY, FontWeight.Medium), modifier = Modifier.testTag("doctor-summary")) }
             item { Stats(state.checks) }
             items(state.checks, key = { it.name }) { CheckRow(it) }
         }
@@ -89,9 +84,9 @@ private fun CheckRow(check: Check) {
     val glass = LocalGlass.current
     val verdict =
         when (check.outcome) {
-            CheckOutcome.Ok -> Verdict("OK", BadgeKind.Success, Glyph.Check, glass.success)
-            CheckOutcome.Warn -> Verdict("Warning", BadgeKind.Warning, Glyph.Warning, glass.warning)
-            CheckOutcome.Fail -> Verdict("Failed", BadgeKind.Danger, Glyph.Cross, glass.danger)
+            CheckOutcome.Ok -> Verdict(BadgeKind.Success, Glyph.Check, glass.success)
+            CheckOutcome.Warn -> Verdict(BadgeKind.Warning, Glyph.Warning, glass.warning)
+            CheckOutcome.Fail -> Verdict(BadgeKind.Danger, Glyph.Cross, glass.danger)
         }
     ListRow(
         check.name,
@@ -101,11 +96,10 @@ private fun CheckRow(check: Check) {
         detail = {
             check.fix?.let { fix -> SelectionContainer { Text("Fix: $fix", color = glass.ink2, style = mono(FIX)) } }
         },
-    ) { Badge(verdict.word, verdict.kind, Modifier.widthIn(min = BADGE_WIDTH).align(Alignment.CenterVertically)) }
+    ) { Badge(check.outcome.word, verdict.kind, Modifier.widthIn(min = BADGE_WIDTH).align(Alignment.CenterVertically)) }
 }
 
 private class Verdict(
-    val word: String,
     val kind: BadgeKind,
     val glyph: Glyph,
     val ink: Color,

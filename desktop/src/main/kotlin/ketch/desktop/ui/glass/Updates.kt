@@ -10,11 +10,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -23,9 +18,12 @@ import androidx.compose.ui.unit.dp
 import ketch.desktop.store.StoreState
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.Navigation
+import ketch.desktop.ui.VERIFIED_NOTE
+import ketch.desktop.ui.changelogNote
 import ketch.desktop.ui.screens.UpdateAllConfirm
 import ketch.desktop.ui.screens.checked
 import ketch.desktop.ui.screens.githubRepo
+import ketch.desktop.ui.tilde
 import ketch.wire.Upgrade
 import pyrlyn.glass.Badge
 import pyrlyn.glass.BadgeKind
@@ -96,15 +94,7 @@ private fun UpdateCard(
     navigation: Navigation,
 ) {
     val glass = LocalGlass.current
-    var note by remember(upgrade.name, upgrade.latest) { mutableStateOf<String?>(null) }
-    // Quiet: a card without its line is still a card, and a changelog the core lacks is no error to announce.
-    LaunchedEffect(upgrade.name, upgrade.latest) {
-        note =
-            actions.store
-                .changelog(upgrade.name, upgrade.installed, upgrade.latest, quiet = true)
-                ?.firstOrNull()
-                ?.let { firstLine(it.body) }
-    }
+    val note = changelogNote(upgrade, actions)
     val repo = state.installed.firstOrNull { it.name == upgrade.name }?.let { githubRepo(it.source) }
     Row(
         Modifier
@@ -132,19 +122,12 @@ private fun UpdateCard(
     }
 }
 
-/** The line of a changelog that says what changed, as plain text: its first list item, or else its first line of prose. */
-fun firstLine(body: String): String? {
-    val lines = body.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
-    val item = lines.firstOrNull { it.startsWith("- ") || it.startsWith("* ") }
-    return (item?.drop(2) ?: lines.firstOrNull())?.replace("`", "")?.trim()
-}
-
 @Composable
 private fun Verified() {
     val glass = LocalGlass.current
     Row(Modifier.fillMaxWidth().glass(Pane.Flat).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         GlyphIcon(Glyph.Shield, glass.accentInk, 22.dp)
-        Text("Every update is verified the same way as an install, and the previous version stays on disk for ketch rollback.", color = glass.ink2, style = body(TextSize.BODY, FontWeight.Normal))
+        Text(VERIFIED_NOTE, color = glass.ink2, style = body(TextSize.BODY, FontWeight.Normal))
     }
 }
 

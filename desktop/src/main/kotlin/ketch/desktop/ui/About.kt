@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
+import ketch.desktop.ui.fluent.FluentAbout
 import ketch.desktop.ui.glass.GlassAbout
 
 /** The app's version: the packaged launcher says it; a development run has none. */
@@ -26,9 +27,18 @@ fun About(
     coreVersion: String,
     onClose: () -> Unit,
 ) {
-    if (LocalLook.current == Look.Glass) {
-        GlassAbout(coreVersion, onClose)
-        return
+    when (LocalLook.current) {
+        Look.Glass -> {
+            GlassAbout(coreVersion, onClose)
+            return
+        }
+
+        Look.Fluent -> {
+            FluentAbout(coreVersion, onClose)
+            return
+        }
+
+        Look.Material -> {}
     }
     val uri = LocalUriHandler.current
     AlertDialog(

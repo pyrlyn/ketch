@@ -6,6 +6,7 @@ import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import ketch.desktop.ui.Look
 import ketch.desktop.ui.Navigation
 import ketch.desktop.ui.Section
 import kotlin.test.Test
@@ -22,6 +23,20 @@ class FindShortcutTest {
         assertTrue(navigation.findOn(commandK))
         assertTrue(navigation.wantsSearch)
         assertEquals(Section.Installed, navigation.section)
+    }
+
+    @Test
+    fun controlKIsTheWindowsLooksShortcut() {
+        val navigation = Navigation(Section.Installed)
+        assertTrue(navigation.findOn(KeyEvent(Key.K, KeyEventType.KeyDown, isCtrlPressed = true), Look.Fluent))
+        assertTrue(navigation.wantsSearch)
+    }
+
+    @Test
+    fun eachLookLeavesTheOtherLooksShortcut() {
+        val navigation = Navigation()
+        assertFalse(navigation.findOn(commandK, Look.Fluent))
+        assertFalse(navigation.findOn(KeyEvent(Key.K, KeyEventType.KeyDown, isCtrlPressed = true)))
     }
 
     @Test

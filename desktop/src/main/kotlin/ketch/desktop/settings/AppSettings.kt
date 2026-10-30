@@ -19,23 +19,28 @@ data class Prefs(
     val notifies: Boolean = false,
     /** `UpdateNotices.key`s already announced, so a check that finds the same upgrades stays quiet. */
     val notified: Set<String> = emptySet(),
-    /** macOS only, in the Swift app's stored forms: a preset's name or `#rrggbb`; what nothing can read is the standard. */
+    /** The macOS and Windows looks', in the Swift app's stored forms: a preset's name or `#rrggbb`; what nothing can read is the standard. */
     val tint: String = STANDARD_TINT,
     val glass: String = REGULAR_GLASS,
     val accent: String = STANDARD_ACCENT,
+    /** The Windows look's window material. */
+    val material: String = ACRYLIC,
     /** The opacity of the backdrop wash, 0..[MAX_WASH]. */
     val wash: Double = STANDARD_WASH,
 ) {
     val interval: Duration get() = intervalMinutes.minutes
 
-    /** These settings with the macOS look's own back at the standard. */
-    fun standardLook() = copy(tint = STANDARD_TINT, glass = REGULAR_GLASS, accent = STANDARD_ACCENT, wash = STANDARD_WASH)
+    /** These settings with the looks' own back at the standard. */
+    fun standardLook() = copy(tint = STANDARD_TINT, glass = REGULAR_GLASS, accent = STANDARD_ACCENT, material = ACRYLIC, wash = STANDARD_WASH)
 
     companion object {
         const val STANDARD_TINT = "clear"
         const val REGULAR_GLASS = "regular"
         const val CLEAR_GLASS = "clear"
         const val STANDARD_ACCENT = "system"
+        const val MICA = "mica"
+        const val ACRYLIC = "acrylic"
+        const val TRANSPARENT = "transparent"
 
         // tokens.json's `opacity.wash` and `opacity.washMax`, which the contrast check holds up to and no further.
         const val STANDARD_WASH = 0.14
@@ -114,6 +119,7 @@ class AppSettings(
             tint = values.get(TINT) ?: defaults.tint,
             glass = values.get(GLASS) ?: defaults.glass,
             accent = values.get(ACCENT) ?: defaults.accent,
+            material = values.get(MATERIAL) ?: defaults.material,
             wash = Prefs.clampWash(values.get(WASH)?.toDoubleOrNull() ?: defaults.wash),
         )
     }
@@ -126,6 +132,7 @@ class AppSettings(
         values.put(TINT, prefs.tint)
         values.put(GLASS, prefs.glass)
         values.put(ACCENT, prefs.accent)
+        values.put(MATERIAL, prefs.material)
         values.put(WASH, prefs.wash.toString())
     }
 
@@ -143,5 +150,6 @@ class AppSettings(
         private const val GLASS = "appearanceGlassStyle"
         private const val ACCENT = "appearanceAccent"
         private const val WASH = "appearanceWash"
+        private const val MATERIAL = "appearanceMaterial"
     }
 }

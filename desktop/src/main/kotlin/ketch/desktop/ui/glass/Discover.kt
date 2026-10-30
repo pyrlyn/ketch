@@ -41,10 +41,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ketch.desktop.store.StoreState
 import ketch.desktop.ui.Actions
+import ketch.desktop.ui.HERO_TEXT
+import ketch.desktop.ui.HERO_TITLE
 import ketch.desktop.ui.Navigation
 import ketch.desktop.ui.Section
 import ketch.desktop.ui.Source
+import ketch.desktop.ui.copyToClipboard
 import ketch.desktop.ui.screens.githubRepo
+import ketch.desktop.ui.searchFocus
 import ketch.wire.RegistryPackage
 import pyrlyn.glass.AutoGrid
 import pyrlyn.glass.Badge
@@ -265,8 +269,6 @@ private val FEATURES =
         Feature("Reproducible machines", "ketch.lock pins every package; sync installs exactly what it names.", Color(0xFF7FF0CC), Color(0xFF1FA88A), Glyph.Lock),
     )
 
-private const val HERO_TITLE = "Catch releases straight from GitHub."
-private const val HERO_TEXT = "No taps, no formulae, no build step. ketch takes the asset a project already ships, checks its published checksum and links it onto your PATH."
 private const val HERO_SIZE = 46
 private const val HERO_BODY = 16f
 private const val ART_TEXT = 12

@@ -53,10 +53,24 @@ data class Spacing(
     val xxl: Dp,
 )
 
-/** Which of the app's two faces this window wears: `ui/glass` on macOS, Material 3 elsewhere. */
-enum class Look { Material, Glass }
+/** Which of the app's faces this window wears: `ui/glass` on macOS, `ui/fluent` on Windows, Material 3 elsewhere. */
+enum class Look { Material, Glass, Fluent }
 
-fun systemLook(): Look = if (System.getProperty("os.name").startsWith("Mac")) Look.Glass else Look.Material
+fun systemLook(): Look = lookFor(System.getenv("KETCH_LOOK"), System.getProperty("os.name"), highContrast())
+
+/** [chosen] names a look to wear instead, which is how one is seen on another system. High contrast keeps Material's. */
+fun lookFor(
+    chosen: String?,
+    os: String,
+    highContrast: Boolean,
+): Look =
+    Look.entries.firstOrNull { it.name.equals(chosen, ignoreCase = true) } ?: when {
+        os.startsWith("Mac") -> Look.Glass
+        os.startsWith("Windows") && !highContrast -> Look.Fluent
+        else -> Look.Material
+    }
+
+private fun highContrast() = Toolkit.getDefaultToolkit().getDesktopProperty("win.highContrast.on") == true
 
 val LocalLook = staticCompositionLocalOf { Look.Material }
 val LocalAppearance = staticCompositionLocalOf { Appearance.Light }
@@ -72,11 +86,11 @@ val LocalMonoStyle = staticCompositionLocalOf { TextStyle(fontFamily = FontFamil
  */
 @Composable
 fun systemAppearance(): Appearance {
-    val highContrast = Toolkit.getDefaultToolkit().getDesktopProperty("win.highContrast.on") == true
+    val contrast = highContrast()
     val dark = isSystemInDarkTheme()
     return when {
-        highContrast && dark -> Appearance.HighContrastDark
-        highContrast -> Appearance.HighContrast
+        contrast && dark -> Appearance.HighContrastDark
+        contrast -> Appearance.HighContrast
         dark -> Appearance.Dark
         else -> Appearance.Light
     }

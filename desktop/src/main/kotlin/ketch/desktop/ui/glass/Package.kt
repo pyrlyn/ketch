@@ -29,13 +29,17 @@ import ketch.desktop.store.StoreState
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.ChangelogText
 import ketch.desktop.ui.Navigation
+import ketch.desktop.ui.changelogOrigin
+import ketch.desktop.ui.copyToClipboard
+import ketch.desktop.ui.packageDetails
 import ketch.desktop.ui.screens.ChangelogRead
 import ketch.desktop.ui.screens.PackageFacts
 import ketch.desktop.ui.screens.PackageTab
 import ketch.desktop.ui.screens.UninstallConfirm
 import ketch.desktop.ui.screens.readChangelog
+import ketch.desktop.ui.tilde
+import ketch.desktop.ui.trustSeal
 import ketch.wire.Changelog
-import ketch.wire.ChangelogSource
 import ketch.wire.Package
 import pyrlyn.glass.Badge
 import pyrlyn.glass.BadgeKind
@@ -190,14 +194,12 @@ private fun Article(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             SectionTitle(entry.heading ?: entry.version, small = true)
-            FactChip(origin(entry.source))
+            FactChip(changelogOrigin(entry.source))
             if (entry.version == installed) Badge("Installed", BadgeKind.Neutral)
         }
         ChangelogText(entry.body)
     }
 }
-
-private fun origin(source: ChangelogSource) = if (source is ChangelogSource.File) source.path.substringAfterLast('/') else "release notes"
 
 @Composable
 private fun Files(installed: Package?) {
@@ -217,18 +219,9 @@ private fun Details(
 ) {
     val glass = LocalGlass.current
     val installed = facts.installed
-    val rows =
-        listOfNotNull(
-            installed?.let { "Installed" to it.version },
-            facts.latest?.let { "Latest" to it },
-            installed?.let { "Source" to it.source },
-            facts.repo?.let { "Repository" to it },
-            installed?.let { linkedTo(it.binaries) }?.let { "Linked to" to it },
-            installed?.retained?.takeIf { it.isNotEmpty() }?.let { "Kept" to it.joinToString(", ") },
-        )
     Column(modifier.glass(Pane.Flat).padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Details", color = glass.ink, style = body(TextSize.HEADING, FontWeight.SemiBold))
-        Facts(rows, labelWidth = FACT_LABEL)
+        Facts(packageDetails(facts), labelWidth = FACT_LABEL)
         installed?.trust?.let { trust ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 TrustBadge(trust)
@@ -240,11 +233,8 @@ private fun Details(
 
 @Composable
 private fun TrustBadge(trust: String) {
-    when (trust) {
-        "checksum" -> Badge("SHA-256 verified", BadgeKind.Success)
-        "signed" -> Badge("Signed", BadgeKind.Success)
-        else -> Badge("First use", BadgeKind.Warning)
-    }
+    val (word, checked) = trustSeal(trust)
+    Badge(word, if (checked) BadgeKind.Success else BadgeKind.Warning)
 }
 
 private const val NAME = 30

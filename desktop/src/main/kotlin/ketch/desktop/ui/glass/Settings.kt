@@ -34,6 +34,7 @@ import ketch.desktop.ui.screens.ROOT_NOTE
 import ketch.desktop.ui.screens.TOKEN_NOTE
 import ketch.desktop.ui.screens.interval
 import ketch.desktop.ui.screens.openConfig
+import ketch.desktop.ui.tilde
 import ketch.wire.Settings
 import kotlinx.coroutines.launch
 import pyrlyn.glass.ButtonKind

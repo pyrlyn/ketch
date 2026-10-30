@@ -24,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import ketch.desktop.store.StoreState
+import ketch.desktop.ui.fluent.FluentChooseBinary
+import ketch.desktop.ui.fluent.FluentConfirm
 import ketch.desktop.ui.glass.GlassChooseBinary
 import ketch.desktop.ui.glass.GlassConfirm
 import ketch.wire.Answer
@@ -72,9 +74,18 @@ private fun ChooseBinary(
     onPick: (Int) -> Unit,
     onDecline: () -> Unit,
 ) {
-    if (LocalLook.current == Look.Glass) {
-        GlassChooseBinary(question, onPick, onDecline)
-        return
+    when (LocalLook.current) {
+        Look.Glass -> {
+            GlassChooseBinary(question, onPick, onDecline)
+            return
+        }
+
+        Look.Fluent -> {
+            FluentChooseBinary(question, onPick, onDecline)
+            return
+        }
+
+        Look.Material -> {}
     }
     var picked by remember(question) { mutableIntStateOf(0) }
     AlertDialog(
@@ -113,9 +124,18 @@ fun Confirm(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    if (LocalLook.current == Look.Glass) {
-        GlassConfirm(title, message, confirm, destructive, subject, onConfirm, onDismiss)
-        return
+    when (LocalLook.current) {
+        Look.Glass -> {
+            GlassConfirm(title, message, confirm, destructive, subject, onConfirm, onDismiss)
+            return
+        }
+
+        Look.Fluent -> {
+            FluentConfirm(title, message, confirm, destructive, subject, onConfirm, onDismiss)
+            return
+        }
+
+        Look.Material -> {}
     }
     val colors =
         if (destructive) {
