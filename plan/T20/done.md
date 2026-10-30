@@ -5,8 +5,7 @@ switcher, boxed lists, a popover menu and toasts, on real data. High contrast ke
 shows the look on any system.
 
 - `packages/kotlin-adwaita` (`pyrlyn.adwaita:adwaita`) holds the generic part, with no ketch word in it, and
-  `kotlin-glass` gains the `Menu` glyph: https://github.com/pyrlyn/packages/pull/4. Until that merges, build with
-  `KOTLIN_ADWAITA_DIR` and `KOTLIN_GLASS_DIR` pointing at its branch `t20-kotlin-adwaita`.
+  `kotlin-glass` gains the `Menu` glyph: https://github.com/pyrlyn/packages/pull/4.
 - `desktop/.../ui/adwaita/` holds the shell and every screen. `Edge.kt` gives the undecorated window resize edges.
 - Logic the looks share moved up: `Kind`, `emptyWords`, `isFixed` in `ui/Summaries.kt`, `readWhy` in `ui/screens/Package.kt`,
   the font lookup in `ui/Host.kt`.
