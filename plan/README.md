@@ -112,10 +112,17 @@ Taken during the port:
   colours of the `Pyrlyn Windows 11` design system, in place of T12's Material 3; high contrast keeps
   Material 3, which the design system has no answer for, and Linux keeps it too. The components live
   in the shared `kotlin-fluent` package and hold no business logic; compose-fluent-ui was passed over
-  because its controls carry Microsoft's stock tokens and it sits on Compose 1.8. The window is
-  undecorated and draws its own title bar, so Windows' rounded corners and Snap Layouts are not
-  offered. Logic both looks share is in `ui/Host.kt`, `ui/Log.kt` and `ui/Summaries.kt`. `KETCH_LOOK`
-  names a look to see it on another system.
+  because its controls carry Microsoft's stock tokens and it sits on Compose 1.8. Logic both looks
+  share is in `ui/Host.kt`, `ui/Log.kt` and `ui/Summaries.kt`. `KETCH_LOOK` names a look to see it on
+  another system.
+- **Windows window (T18).** The window stays Compose's undecorated one and draws its own title bar;
+  `WindowsFrame` in `kotlin-fluent` adds the system's corners, shadow, menu and Mica or Acrylic, over
+  JNA, which is `internal` there. The title bar reports `WindowZones`, and Windows treats the
+  maximize button as its own, which is what offers Snap Layouts; Compose then sees neither hover nor
+  click on the caption buttons, so both come back through `WindowZones`. `attach` fails open: off
+  Windows 11 or on any failure the window keeps the frame T17 gave it. The wall drops out only for a
+  backdrop that was really applied, on the graphics API Skiko actually got. The Parallels VM has no
+  Direct3D 12, so it runs ANGLE; real hardware runs DX12.
 - **Windows (T13).** The creator's choices on claiming it: three subtasks (T13.1–T13.3);
   mingwX64 and the Windows implementations go into kotlin-kit itself; tests run on a Windows
   VM in Parallels on the Mac (Windows on Arm, which runs the x64 binaries under emulation). No
@@ -175,8 +182,8 @@ Taken during the port:
   The MSI carries the mingwX64 release `ketch.exe` in the app's `windows-x64` resources and is
   built on a Windows host, since jpackage packages only for the host it runs on. That host
   builds kit's Conan libraries itself: Conan 2.33.0, CMake 3.31.12 and Ninja 1.13.2 sit in
-  `C:\Users\Public\tools` on the VM, put on PATH by the build's own shell only, and kit's
-  `conan.gradle.kts` reads K/N's Windows prebuilt and drives its clang with Ninja there.
+  `C:\Users\Public\tools` on the VM, on the user's PATH, and kit's `conan.gradle.kts` reads
+  K/N's Windows prebuilt and drives its clang with Ninja there.
 - **`ketch serve` (T11).** One JSON object per line each way, `:ketch-wire`'s records with the
   Rust field names: `hello` first, then `event`, `ask` and `result` per call id; the app sends
   `call`, `answer` and `cancel`. `serve` is read before the parser, as `__complete` is, so the

@@ -3,9 +3,13 @@
 package ketch.desktop.ui.fluent
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.font.FontFamily
@@ -19,6 +23,7 @@ import ketch.desktop.ui.glass.rgb
 import pyrlyn.fluent.FluentColors
 import pyrlyn.fluent.FluentFonts
 import pyrlyn.fluent.FluentTheme
+import pyrlyn.fluent.LocalWindowBackdrop
 import pyrlyn.fluent.Preset
 import pyrlyn.fluent.Presets
 import pyrlyn.fluent.WindowMaterial
@@ -77,7 +82,11 @@ fun KetchFluent(
     val prefs by settings.state.collectAsState()
     val appearance = LocalAppearance.current
     val fonts = remember { fluentFonts() }
-    FluentTheme(remember(prefs, appearance) { fluentColors(appearance, prefs) }, fonts, content)
+    val colors = remember(prefs, appearance) { fluentColors(appearance, prefs) }
+    val chrome = LocalWindowChrome.current
+    var backdrop by remember { mutableStateOf(false) }
+    LaunchedEffect(chrome, colors.material, appearance) { backdrop = chrome?.wear(colors.material, appearance == Appearance.Dark) == true }
+    CompositionLocalProvider(LocalWindowBackdrop provides backdrop) { FluentTheme(colors, fonts, content) }
 }
 
 private val TEXT = listOf("Segoe UI Variable Text", "Segoe UI", "Inter")

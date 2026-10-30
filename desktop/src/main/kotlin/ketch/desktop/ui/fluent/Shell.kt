@@ -72,6 +72,8 @@ import pyrlyn.fluent.SearchBox
 import pyrlyn.fluent.TitleBar
 import pyrlyn.fluent.Wall
 import pyrlyn.fluent.WindowMaterialLayer
+import pyrlyn.fluent.WindowZone
+import pyrlyn.fluent.windowZone
 import pyrlyn.glass.Glyph
 import pyrlyn.glass.GlyphIcon
 import kotlin.math.roundToInt
@@ -96,11 +98,20 @@ fun FluentApp(
             Column(Modifier.fillMaxSize()) {
                 WindowBar(
                     leading = {
-                        FluentIconButton(Glyph.ArrowBack, "Back", Modifier.testTag("back"), width = BACK_WIDTH, enabled = navigation.canGoBack) { navigation.back() }
+                        FluentIconButton(Glyph.ArrowBack, "Back", Modifier.testTag("back").windowZone(WindowZone.Content), width = BACK_WIDTH, enabled = navigation.canGoBack) { navigation.back() }
                         Brand()
                     },
                     center = {
-                        SearchBox(query, "Search owner/repo or name", Modifier.widthIn(max = SEARCH_WIDTH).fillMaxWidth().testTag("discover-query"), searchFocus(navigation)) {
+                        SearchBox(
+                            query,
+                            "Search owner/repo or name",
+                            Modifier
+                                .windowZone(WindowZone.Content)
+                                .widthIn(max = SEARCH_WIDTH)
+                                .fillMaxWidth()
+                                .testTag("discover-query"),
+                            searchFocus(navigation),
+                        ) {
                             query = it
                             if (navigation.section != Section.Discover || navigation.open != null) navigation.show(Section.Discover)
                         }
@@ -149,7 +160,7 @@ private fun WindowBar(
     center: @Composable BoxScope.() -> Unit = {},
 ) {
     val chrome = LocalWindowChrome.current
-    Box(Modifier.fillMaxWidth().height(TITLE_BAR)) {
+    Box(Modifier.windowZone(WindowZone.Caption).fillMaxWidth().height(TITLE_BAR)) {
         // Behind the controls, which keep their own clicks; the rest of the bar moves the window. The double click wraps
         // the area rather than sitting inside it: a tap detector inside would take the press and the window would never move.
         chrome?.drag(Modifier.fillMaxSize().pointerInput(chrome) { detectTapGestures(onDoubleTap = { chrome.toggleMaximize() }) })

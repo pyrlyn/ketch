@@ -24,6 +24,7 @@
 | org.jetbrains.kotlinx:kotlinx-coroutines-core 1.11.0 | local | https://github.com/Kotlin/kotlinx.coroutines | Concurrency, cancellation |
 | org.jetbrains.kotlinx:kotlinx-coroutines-swing 1.11.0 | local | https://github.com/Kotlin/kotlinx.coroutines | Main dispatcher for the desktop app |
 | org.jetbrains.kotlinx:kotlinx-coroutines-test 1.11.0 | local | https://github.com/Kotlin/kotlinx.coroutines | Desktop tests |
+| net.java.dev.jna:jna 5.19.1 | via kotlin-fluent | https://github.com/java-native-access/jna | Win32 and DWM calls for the Windows 11 frame |
 | org.kotlincrypto.hash:sha2 0.8.0 | local | https://github.com/KotlinCrypto/hash | Streaming SHA-256 of downloads (Rust: sha2) |
 | pyrlyn.kit:fs, toml, toml-aot, yaml-aot, semver, http-ktor, db-room, db-sqldelight, process, archive, cli, icons | local (included build) | `packages/kotlin-kit` | Crash-safe file writes (Rust: fs-kit), TOML read and comment-keeping edit, YAML read, versions, HTTP, SQLite and SQLDelight on it, hooks under a deadline (Rust: run_with_deadline), tar/zip/gzip/bzip2/xz (Rust: tar, zip, flate2, bzip2, xz2), the command line with clap's help and errors, completion scripts and man pages (Rust: clap, clap_complete, clap_mangen), status-line icons (Rust: operation-icons) |
 | pyrlyn.glass:glass | local (included build) | `packages/kotlin-glass` | Panes, controls, sheet and layout of the macOS look (macOS app: SwiftUI's Liquid Glass) |

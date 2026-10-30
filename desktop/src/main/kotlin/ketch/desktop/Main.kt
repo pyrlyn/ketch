@@ -72,6 +72,9 @@ import ketch.desktop.ui.trayTooltip
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import pyrlyn.fluent.LocalWindowZones
+import pyrlyn.fluent.WindowZones
+import pyrlyn.fluent.WindowsFrame
 import java.awt.Desktop
 import java.awt.Dimension
 import java.awt.GraphicsEnvironment
@@ -147,12 +150,19 @@ private fun ApplicationScope.Ketch(
         title = "Ketch",
         state = windowState,
         undecorated = look == Look.Fluent,
+        transparent = look == Look.Fluent && WindowsFrame.available,
         onPreviewKeyEvent = { look != Look.Material && navigation.findOn(it, look) },
     ) {
-        LaunchedEffect(Unit) { dress(window, look) }
+        val zones = remember { WindowZones() }
+        // A window composes while AWT attaches it: its native windows exist by now, and it is not on the screen yet.
+        val frame = remember { if (look == Look.Fluent) WindowsFrame.attach(window, zones) else null }
+        LaunchedEffect(Unit) { dress(window, look, frame) }
         LaunchedEffect(navigation.windowRequests) { if (navigation.windowRequests > 0) window.toFront() }
-        val chrome = remember(store) { ownFrame(windowState, close) }
-        CompositionLocalProvider(LocalWindowChrome provides chrome.takeIf { look == Look.Fluent }) {
+        val chrome = remember(store) { ownFrame(windowState, frame, close) }
+        CompositionLocalProvider(
+            LocalWindowChrome provides chrome.takeIf { look == Look.Fluent },
+            LocalWindowZones provides zones.takeIf { frame != null },
+        ) {
             KetchTheme(look = look) {
                 if (store != null) KetchApp(store, links, navigation, parts) else Starting(look, parts.settings, failure)
             }
@@ -183,9 +193,11 @@ internal fun Navigation.findOn(
 private fun dress(
     window: ComposeWindow,
     look: Look,
+    frame: WindowsFrame?,
 ) {
     if (look == Look.Material) return
-    if (look == Look.Glass) contentUnderTitleBar(window) else stayClearOfTheTaskbar(window)
+    if (look == Look.Glass) contentUnderTitleBar(window)
+    if (look == Look.Fluent && frame == null) stayClearOfTheTaskbar(window)
     window.minimumSize = Dimension(LOOK_MIN_WIDTH, LOOK_MIN_HEIGHT)
 }
 
@@ -196,7 +208,7 @@ private fun contentUnderTitleBar(window: ComposeWindow) {
     window.rootPane.putClientProperty("apple.awt.windowTitleVisible", false)
 }
 
-/** An undecorated window maximizes over the whole screen; the taskbar's room has to be asked for. */
+/** Without the system's frame a window maximizes over the whole screen; the taskbar's room has to be asked for. */
 private fun stayClearOfTheTaskbar(window: ComposeWindow) {
     window.maximizedBounds = GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
 }
@@ -204,6 +216,7 @@ private fun stayClearOfTheTaskbar(window: ComposeWindow) {
 /** What the look's own title bar does in place of the system's frame. */
 private fun FrameWindowScope.ownFrame(
     state: WindowState,
+    frame: WindowsFrame?,
     close: () -> Unit,
 ) = WindowChrome(
     isMaximized = { state.placement == WindowPlacement.Maximized },
@@ -211,6 +224,7 @@ private fun FrameWindowScope.ownFrame(
     toggleMaximize = { state.placement = if (state.placement == WindowPlacement.Maximized) WindowPlacement.Floating else WindowPlacement.Maximized },
     close = close,
     drag = { modifier -> WindowDraggableArea(modifier) },
+    wear = { material, dark -> frame?.wear(material, dark) == true },
 )
 
 @Composable

@@ -83,8 +83,8 @@ compose.desktop {
             copyright = "GPL-3.0-or-later OR royalty-free OR commercial licence"
             vendor = "pyrlyn"
             appResourcesRootDir.set(layout.dir(bundledKetch.map { it.destinationDir }))
-            // From suggestRuntimeModules: java.prefs holds the app's settings.
-            modules("java.instrument", "java.prefs", "jdk.unsupported")
+            // From suggestRuntimeModules: java.prefs holds the app's settings; JNA logs through java.logging.
+            modules("java.instrument", "java.logging", "java.prefs", "jdk.unsupported")
             macOS {
                 bundleID = "io.github.pyrlyn.ketch"
                 appCategory = "public.app-category.developer-tools"

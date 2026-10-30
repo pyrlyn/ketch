@@ -52,8 +52,9 @@ Changed because Compose or AWT cannot do what the design draws:
 - That run found what the tests could not: a tap detector inside the drag area took the press, so the
   window would not move. The double click now wraps the area, with a test. Doctor's "1 warnings" went
   the same way.
-- The installer was not built on Windows: `conan` is missing in the VM, so `ketch.exe` came from the
-  Mac and `:desktop:run` skipped the native link.
+- The installer was not built on Windows: `conan`, `cmake` and `ninja` are in the VM, in
+  `C:\Users\Public\tools`, but were not on `PATH`, so `ketch.exe` came from the Mac and
+  `:desktop:run` skipped the native link. T18 built it.
 
 Gradle's file watching reported tasks as up to date after edits here, so the final runs used
 `--no-watch-fs`.
