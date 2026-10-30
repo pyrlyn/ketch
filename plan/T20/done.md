@@ -51,10 +51,37 @@ This session found three bugs, each fixed and rechecked there:
 - A window hidden to the tray while maximized never came back: mutter held its frames (`_XWAYLAND_ALLOW_COMMITS=0`). It
   now leaves for the tray floating, so it comes back floating at its last floating size.
 
+## Rendering
+
+Measured in the same session, on 2 vCPUs and no GPU, with `skiko.fps.enabled` and the same scroll each time:
+
+| Change | Scrolling at 1200x800 | Text acuity, 15sp and 13sp |
+| --- | --- | --- |
+| Before | 18 fps | 0.603, 0.570 |
+| The wall blurred once per size, kept at quarter size | 45 fps | |
+| The wall kept at full size | 54 fps | |
+| Glyphs on whole pixels below 2x | 52 to 56 fps | 0.634, 0.585 |
+
+- The wall was a full-window `Modifier.blur`, redone on every frame. It is now painted once for each size. The picture
+  did not change: the mean difference is 0.26 of 255 and 333 of 960,000 pixels differ by more than 8.
+- Acuity is the share of the horizontal edge energy in single sharp steps, from a nearest-neighbour read of the captures.
+  Whole-pixel positions take about 3% more width. Forcing the autohinter gave the same pixels, so it is not used.
+- Live resize runs at 16 to 22 fps here, with the wall repainted for each size. The old wall was not measured on a resize.
+- Compose's other effects need nothing: its shadows are cached already.
+- Native GTK text on this machine is grayscale too. Only GNOME Shell draws LCD text, following fontconfig.
+
+LCD text is left out. Compose builds its `SkiaLayer` with `PixelGeometry.UNKNOWN`, which turns LCD text off whatever the
+font settings say, and gives no way to change it. Writing that private field by reflection did show LCD text on
+`SOFTWARE_COMPAT`, but it hangs on Skiko's internals, and Skiko's Linux `SOFTWARE_FAST` surface never reads the geometry.
+
 ## Not checked
 
-- Rendering on a real GPU: skiko cannot create a GL context in this VM (`Cannot create Linux GL context`, with any look),
-  so everything above ran in software.
+- Rendering on a real GPU: GLX works in this VM, but Skiko refuses `llvmpipe` and `virgl` by name and falls back to
+  software, with the same `Cannot create Linux GL context` for both. So the transparent window on OpenGL has never run,
+  and every number above is software.
+- A scaled display: AWT goes through XWayland, which mutter upscales above 100%, so the window would be soft there. The
+  VM's screen is too small to scale.
+- Frame rate while maximized: nothing on the page scrolls at that size.
 - `ketch` for Linux cannot be linked from the Mac as it stands: kotlin-kit's Conan bzip2 and liblzma are the host's. The
   VM run passed the VM's own libraries through `kotlin.native.linkArgs`, by hand.
 - The `.deb` was not built, so neither was its `.desktop` file. Run from a classpath, the dock shows
