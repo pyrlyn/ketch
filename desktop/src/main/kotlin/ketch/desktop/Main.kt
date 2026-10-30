@@ -30,6 +30,7 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ApplicationScope
@@ -219,9 +220,12 @@ internal fun Navigation.settingsOn(
     event: KeyEvent,
     look: Look,
 ): Boolean {
-    val asked = look == Look.Adwaita && event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.Comma
+    val held = look == Look.Adwaita && event.isCtrlPressed
+    val asked = held && event.type == KeyEventType.KeyDown && event.key == Key.Comma
+    // X also types the comma: in the search field it would change the query, and a query goes back to Discover.
+    val typed = held && event.type == KeyEventType.Unknown && event.utf16CodePoint == ','.code
     if (asked) show(Section.Settings)
-    return asked
+    return asked || typed
 }
 
 private fun dress(

@@ -50,6 +50,17 @@ class FindShortcutTest {
     }
 
     @Test
+    fun theCommaThatControlCommaTypesNeverReachesTheSearchField() {
+        val typed = KeyEvent(Key.Unknown, KeyEventType.Unknown, codePoint = ','.code, isCtrlPressed = true)
+        val plain = KeyEvent(Key.Unknown, KeyEventType.Unknown, codePoint = ','.code)
+        val navigation = Navigation(Section.Installed)
+        assertTrue(navigation.settingsOn(typed, Look.Adwaita))
+        assertFalse(navigation.settingsOn(plain, Look.Adwaita))
+        assertFalse(navigation.settingsOn(typed, Look.Fluent))
+        assertEquals(Section.Installed, navigation.section)
+    }
+
+    @Test
     fun eachLookLeavesTheOtherLooksShortcut() {
         val navigation = Navigation()
         assertFalse(navigation.findOn(commandK, Look.Fluent))
