@@ -24,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import ketch.desktop.store.StoreState
+import ketch.desktop.ui.glass.GlassChooseBinary
+import ketch.desktop.ui.glass.GlassConfirm
 import ketch.wire.Answer
 import ketch.wire.Question
 
@@ -70,6 +72,10 @@ private fun ChooseBinary(
     onPick: (Int) -> Unit,
     onDecline: () -> Unit,
 ) {
+    if (LocalLook.current == Look.Glass) {
+        GlassChooseBinary(question, onPick, onDecline)
+        return
+    }
     var picked by remember(question) { mutableIntStateOf(0) }
     AlertDialog(
         onDismissRequest = onDecline,
@@ -102,9 +108,15 @@ fun Confirm(
     message: String,
     confirm: String,
     destructive: Boolean = false,
+    /** The package this is about, for the look that shows its icon. */
+    subject: String? = null,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    if (LocalLook.current == Look.Glass) {
+        GlassConfirm(title, message, confirm, destructive, subject, onConfirm, onDismiss)
+        return
+    }
     val colors =
         if (destructive) {
             ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError)

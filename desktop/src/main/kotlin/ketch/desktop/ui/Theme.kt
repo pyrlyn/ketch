@@ -53,6 +53,13 @@ data class Spacing(
     val xxl: Dp,
 )
 
+/** Which of the app's two faces this window wears: `ui/glass` on macOS, Material 3 elsewhere. */
+enum class Look { Material, Glass }
+
+fun systemLook(): Look = if (System.getProperty("os.name").startsWith("Mac")) Look.Glass else Look.Material
+
+val LocalLook = staticCompositionLocalOf { Look.Material }
+val LocalAppearance = staticCompositionLocalOf { Appearance.Light }
 val LocalStatusColors = staticCompositionLocalOf<StatusColors> { error("KetchTheme is not applied") }
 val LocalSpacing = staticCompositionLocalOf<Spacing> { error("KetchTheme is not applied") }
 
@@ -79,6 +86,7 @@ fun systemAppearance(): Appearance {
 fun KetchTheme(
     appearance: Appearance = systemAppearance(),
     tokens: Tokens = Tokens.brand,
+    look: Look = systemLook(),
     content: @Composable () -> Unit,
 ) {
     val color = { path: String -> tokens.color(path, appearance) }
@@ -109,6 +117,8 @@ fun KetchTheme(
             extraLarge = RoundedCornerShape(radius.getValue("xl")),
         )
     CompositionLocalProvider(
+        LocalLook provides look,
+        LocalAppearance provides appearance,
         LocalStatusColors provides status,
         LocalSpacing provides spacing,
         LocalMonoStyle provides style(tokens.type.getValue("mono")).copy(fontFamily = FontFamily.Monospace),

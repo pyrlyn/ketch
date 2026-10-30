@@ -40,15 +40,27 @@ class Tokens private constructor(
     val space: Map<String, Dp>,
     val radius: Map<String, Dp>,
     val type: Map<String, TypeToken>,
+    /** The colours only macOS draws, by path without the `color.` prefix (`glass.frost`). */
+    val macColors: Map<String, Map<Appearance, Color>>,
+    /** `opacity.*`: the numbers the macOS look applies itself. */
+    val opacity: Map<String, Float>,
 ) {
     fun color(
         path: String,
         appearance: Appearance,
     ): Color = colors.getValue(path).getValue(appearance)
 
+    fun macColor(
+        path: String,
+        appearance: Appearance,
+    ): Color = macColors.getValue(path).getValue(appearance)
+
     companion object {
         /** The paths that leave macOS: `BRAND` in the Rust tree's desktop/design/build.mjs. */
         val BRAND = listOf("color.accent", "color.status", "space", "radius", "typography")
+
+        /** The colour groups [Look.Glass] adds to [BRAND]. */
+        private val MAC_COLORS = listOf("color.text", "color.background", "color.glass", "color.scrim", "color.separator", "color.fill", "color.focusRing", "color.preset")
 
         private const val EXTENSION = "com.github.pyrlyn.ketch"
 
@@ -65,11 +77,16 @@ class Tokens private constructor(
             val brand = tokens.filterKeys { path -> BRAND.any { path == it || path.startsWith("$it.") } }
 
             fun group(prefix: String) = brand.filterKeys { it.startsWith("$prefix.") }.mapKeys { it.key.removePrefix("$prefix.") }
+
+            fun colored(from: Map<String, JsonObject>) = from.mapValues { (_, token) -> Appearance.entries.associateWith { color(token, it, tokens) } }
+            val mac = tokens.filterKeys { path -> MAC_COLORS.any { path.startsWith("$it.") || path == it } }.mapKeys { it.key.removePrefix("color.") }
             return Tokens(
-                colors = group("color").mapValues { (_, token) -> Appearance.entries.associateWith { color(token, it, tokens) } },
+                colors = colored(group("color")),
                 space = group("space").mapValues { pixels(it.value.getValue("\$value")).dp },
                 radius = group("radius").mapValues { pixels(it.value.getValue("\$value")).dp },
                 type = group("typography").mapValues { typeToken(it.value.getValue("\$value").jsonObject) },
+                macColors = colored(mac),
+                opacity = tokens.filterKeys { it.startsWith("opacity.") }.entries.associate { (path, token) -> path.removePrefix("opacity.") to token.getValue("\$value").jsonPrimitive.float },
             )
         }
 

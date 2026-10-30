@@ -74,7 +74,7 @@ class SettingsTest {
         navigation: Navigation = Navigation(),
         parts: AppParts = AppParts(),
     ) {
-        setContent { KetchTheme(Appearance.Light) { KetchApp(KetchStore(core), navigation = navigation, parts = parts) } }
+        setContent { KetchTheme(Appearance.Light, look = Look.Material) { KetchApp(KetchStore(core), navigation = navigation, parts = parts) } }
         waitUntil(timeoutMillis = TIMEOUT) { core.calls.any { it is Call.Doctor } }
     }
 

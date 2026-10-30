@@ -80,7 +80,7 @@ fun SettingsScreen(
                     message = parts.login.set(on)
                     opensAtLogin = parts.login.isEnabled()
                 }
-                if (!parts.login.isAvailable) Caption("Available in the installed app.")
+                if (!parts.login.isAvailable) Caption(LOGIN_NOTE)
             }
             Root(config) { message = it }
             message?.let { Text(it, color = LocalStatusColors.current.error, modifier = Modifier.testTag("settings-message")) }
@@ -96,19 +96,22 @@ private fun Root(
     Column(verticalArrangement = Arrangement.spacedBy(LocalSpacing.current.xs)) {
         Text("ketch root", style = MaterialTheme.typography.titleSmall)
         SelectionContainer { Text(config?.root ?: "—", style = LocalMonoStyle.current, modifier = Modifier.testTag("settings-root")) }
-        Caption("Shared with the ketch CLI. Set KETCH_ROOT in the app's environment to use another root.")
+        Caption(ROOT_NOTE)
         OutlinedButton(onClick = { config?.let { onMessage(openConfig(File(it.configFile)) ?: return@let) } }, enabled = config != null) {
             Text("Open config.toml")
         }
-        Caption(
-            "The app stores no tokens. ketch reads a GitHub token from its config.toml or KETCH_GITHUB_TOKEN, " +
-                "GITHUB_TOKEN or GH_TOKEN, as the CLI does.",
-        )
+        Caption(TOKEN_NOTE)
     }
 }
 
+const val ROOT_NOTE = "Shared with the ketch CLI. Set KETCH_ROOT in the app's environment to use another root."
+const val TOKEN_NOTE =
+    "The app stores no tokens. ketch reads a GitHub token from its config.toml or KETCH_GITHUB_TOKEN, " +
+        "GITHUB_TOKEN or GH_TOKEN, as the CLI does."
+const val LOGIN_NOTE = "Available in the installed app."
+
 /** Opens [file] in the system's editor; what to tell the person when it cannot. */
-private fun openConfig(file: File): String? =
+fun openConfig(file: File): String? =
     when {
         !file.isFile -> {
             "${file.path} does not exist yet; ketch runs on its defaults until it does."
@@ -169,7 +172,7 @@ private fun Toggle(
 @Composable
 private fun Caption(text: String) = Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-private fun interval(minutes: Int) =
+fun interval(minutes: Int) =
     when {
         minutes < MINUTES_PER_HOUR -> "Every $minutes minutes"
         minutes == MINUTES_PER_HOUR -> "Every hour"

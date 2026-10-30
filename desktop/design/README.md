@@ -8,7 +8,9 @@ The app reads the brand subset the Rust Windows and Linux apps take (`BRAND` in 
 `desktop/design/build.mjs`): `color.accent`, `color.status`, `space`, `radius` and
 `typography`, in light, dark, high contrast and high contrast dark. A missing appearance falls
 back as the generator's does: high contrast dark to dark to light, high contrast to light.
-Glass, wash, elevation and motion are macOS-only and stay out; surfaces are Material 3's own.
+On Windows and Linux, glass, wash, elevation and motion stay out and surfaces are Material 3's own.
+On macOS the app also reads the macOS tokens (`Tokens.macColor`), and `ui/glass/Palette.kt` maps them
+onto the colours of the `kotlin-glass` package.
 
 The build puts the file on the classpath; `ketch.desktop.ui.Tokens` reads it at start, and
 `TokensTest` fails when a brand token is missing an appearance or its hex disagrees with its

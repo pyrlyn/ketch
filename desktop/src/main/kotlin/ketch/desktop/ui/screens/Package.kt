@@ -39,12 +39,44 @@ import ketch.desktop.ui.LocalSpacing
 import ketch.wire.Changelog
 import ketch.wire.Package
 
-private enum class Tab(
+enum class PackageTab(
     val title: String,
 ) {
     Overview("Overview"),
     Changelog("Changelog"),
     Files("Files"),
+}
+
+/** What the store knows of [name], installed or not. */
+class PackageFacts(
+    val name: String,
+    state: StoreState,
+) {
+    val installed = state.installed.firstOrNull { it.name == name }
+    val registry = state.search.known.firstOrNull { it.name == name }
+    val update = state.outdatedVersion(name)
+    val latest = update ?: registry?.latest
+    val repo = githubRepo(installed?.source ?: registry?.source.orEmpty())
+}
+
+/** The changelog a package's page shows, null when the core has none to give. */
+class ChangelogRead(
+    val loading: Boolean,
+    val entries: List<Changelog>?,
+)
+
+@Composable
+fun readChangelog(
+    facts: PackageFacts,
+    actions: Actions,
+): ChangelogRead {
+    var read by remember(facts.name) { mutableStateOf(ChangelogRead(loading = true, entries = null)) }
+    // Keyed on the name: a page that moved on cancels the read, and its reply never lands on the next package.
+    LaunchedEffect(facts.name, facts.installed?.version, facts.latest) {
+        read = ChangelogRead(loading = true, entries = read.entries)
+        read = ChangelogRead(loading = false, entries = actions.store.changelog(facts.name, facts.installed?.version, facts.latest))
+    }
+    return read
 }
 
 @Composable
@@ -54,33 +86,23 @@ fun PackageScreen(
     actions: Actions,
     onBack: () -> Unit,
 ) {
-    val installed = state.installed.firstOrNull { it.name == name }
-    val registry = state.search.known.firstOrNull { it.name == name }
-    val update = state.outdatedVersion(name)
-    val latest = update ?: registry?.latest
-    val repo = githubRepo(installed?.source ?: registry?.source.orEmpty())
-    var tab by remember(name) { mutableStateOf(Tab.Changelog) }
+    val facts = PackageFacts(name, state)
+    val installed = facts.installed
+    var tab by remember(name) { mutableStateOf(PackageTab.Changelog) }
     var uninstalling by remember(name) { mutableStateOf(false) }
-    var changelog by remember(name) { mutableStateOf<List<Changelog>?>(null) }
-    var loading by remember(name) { mutableStateOf(true) }
-    // Keyed on the name: a page that moved on cancels the read, and its reply never lands on the next package.
-    LaunchedEffect(name, installed?.version, latest) {
-        loading = true
-        changelog = if (installed != null) actions.store.changelog(name, installed.version, latest) else actions.store.changelog(name, null, latest)
-        loading = false
-    }
+    val changelog = readChangelog(facts, actions)
     val space = LocalSpacing.current
     Page(
         name,
         "package",
         buttons = { TextButton(onClick = onBack) { Text("Back") } },
     ) {
-        Text(summary(repo, installed, update, latest), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(summary(facts.repo, installed, facts.update, facts.latest), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(Modifier.padding(vertical = space.md), horizontalArrangement = Arrangement.spacedBy(space.sm)) {
-            Buttons(name, state, installed, update, repo, actions) { uninstalling = true }
+            Buttons(name, state, installed, facts.update, facts.repo, actions) { uninstalling = true }
         }
         PrimaryTabRow(selectedTabIndex = tab.ordinal, modifier = Modifier.width(TABS_WIDTH.dp)) {
-            for (each in Tab.entries) Tab(selected = each == tab, onClick = { tab = each }, text = { Text(each.title) })
+            for (each in PackageTab.entries) Tab(selected = each == tab, onClick = { tab = each }, text = { Text(each.title) })
         }
         Column(
             Modifier
@@ -90,9 +112,9 @@ fun PackageScreen(
                 .testTag("package-${tab.name.lowercase()}"),
         ) {
             when (tab) {
-                Tab.Overview -> Overview(registry?.description, installed, latest, repo)
-                Tab.Changelog -> Changes(loading, changelog)
-                Tab.Files -> Files(installed)
+                PackageTab.Overview -> Overview(facts.registry?.description, installed, facts.latest, facts.repo)
+                PackageTab.Changelog -> Changes(changelog.loading, changelog.entries)
+                PackageTab.Files -> Files(installed)
             }
         }
     }
@@ -206,6 +228,7 @@ fun UninstallConfirm(
         message = "Removes ${pkg.name} ${pkg.version}, its links and its store directory. Its own configuration is kept.",
         confirm = "Uninstall",
         destructive = true,
+        subject = pkg.name,
         onConfirm = {
             onDone()
             actions.run { uninstall(listOf(pkg.name)) }

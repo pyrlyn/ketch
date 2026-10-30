@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -34,6 +35,7 @@ import ketch.desktop.store.KetchStore
 import ketch.desktop.store.StoreState
 import ketch.desktop.store.UpdateChecks
 import ketch.desktop.store.UpdateNotifier
+import ketch.desktop.ui.glass.GlassApp
 import ketch.desktop.ui.screens.ActivityScreen
 import ketch.desktop.ui.screens.DiscoverScreen
 import ketch.desktop.ui.screens.DoctorScreen
@@ -57,11 +59,42 @@ enum class Section(
     Settings("Settings", "settings"),
 }
 
+/** Where Discover's results come from, for the sources the macOS sidebar lists. */
+enum class Source(
+    val title: String,
+    val tag: String,
+) {
+    Releases("GitHub releases", "releases"),
+    Registry("ketch-registry", "registry"),
+}
+
+/** One stop in the window's history: a section, narrowed to a [source] or with a package's [page] over it. */
+data class Place(
+    val section: Section,
+    val page: String? = null,
+    val source: Source? = null,
+)
+
 /** Where the window is, so the tray, a notice and the app menu can steer it as the sidebar does. */
-class Navigation {
-    var section by mutableStateOf(Section.Installed)
-        private set
-    var open by mutableStateOf<String?>(null)
+class Navigation(
+    start: Section = Section.Installed,
+) {
+    private var place by mutableStateOf(Place(start))
+    private val behind = mutableStateListOf<Place>()
+    private val ahead = mutableStateListOf<Place>()
+
+    val section get() = place.section
+    val source get() = place.source
+    val canGoBack get() = behind.isNotEmpty()
+    val canGoForward get() = ahead.isNotEmpty()
+
+    /** The package whose page is over the section. */
+    var open: String?
+        get() = place.page
+        set(value) = go(place.copy(page = value))
+
+    /** Set when the person asks for the search field; the screen that has one takes it. */
+    var wantsSearch by mutableStateOf(false)
     var confirmingUpdateAll by mutableStateOf(false)
     var showingAbout by mutableStateOf(false)
     var windowVisible by mutableStateOf(true)
@@ -70,9 +103,35 @@ class Navigation {
     var windowRequests by mutableStateOf(0)
         private set
 
-    fun show(section: Section) {
-        this.section = section
-        open = null
+    fun show(section: Section) = go(Place(section))
+
+    fun show(source: Source) = go(Place(Section.Discover, source = source))
+
+    fun back() {
+        behind.removeLastOrNull()?.let {
+            ahead += place
+            place = it
+        }
+    }
+
+    fun forward() {
+        ahead.removeLastOrNull()?.let {
+            behind += place
+            place = it
+        }
+    }
+
+    /** ⌘K: the search of the screen that has one, Discover's otherwise. */
+    fun findSomething() {
+        if (open != null || section !in SEARCHABLE) show(Section.Discover)
+        wantsSearch = true
+    }
+
+    private fun go(next: Place) {
+        if (next == place) return
+        behind += place
+        ahead.clear()
+        place = next
     }
 
     fun bringForward() {
@@ -139,6 +198,10 @@ fun KetchApp(
         }
     }
 
+    if (LocalLook.current == Look.Glass) {
+        GlassApp(state, actions, navigation, parts, checks)
+        return
+    }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Row {
             Sidebar(state, navigation.section, navigation::show)
@@ -213,4 +276,5 @@ fun plural(
     noun: String,
 ) = if (count == 1) "1 $noun" else "$count ${noun}s"
 
+private val SEARCHABLE = setOf(Section.Discover, Section.Installed, Section.Activity)
 private const val SIDEBAR_WIDTH = 220

@@ -32,7 +32,7 @@ class AppTest {
         }
 
     private fun ComposeUiTest.show(core: FakeCore) {
-        setContent { KetchTheme(Appearance.Light) { KetchApp(KetchStore(core)) } }
+        setContent { KetchTheme(Appearance.Light, look = Look.Material) { KetchApp(KetchStore(core)) } }
         waitUntil(timeoutMillis = TIMEOUT) { core.calls.any { it is Call.Doctor } }
     }
 

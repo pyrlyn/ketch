@@ -65,20 +65,27 @@ fun UpdatesScreen(
             }
         }
     }
-    if (confirming) {
-        Confirm(
-            title = "Update ${plural(updates.size, "package")}?",
-            message = "Each package is downloaded, verified and linked in turn. Held packages stay where they are.",
-            confirm = "Update all",
-            onConfirm = {
-                confirming = false
-                actions.run { upgrade() }
-            },
-            onDismiss = { confirming = false },
-        )
-    }
+    if (confirming) UpdateAllConfirm(updates.size, actions) { confirming = false }
+}
+
+@Composable
+fun UpdateAllConfirm(
+    count: Int,
+    actions: Actions,
+    onDone: () -> Unit,
+) {
+    Confirm(
+        title = "Update ${plural(count, "package")}?",
+        message = "Each package is downloaded, verified and linked in turn. Held packages stay where they are.",
+        confirm = "Update all",
+        onConfirm = {
+            onDone()
+            actions.run { upgrade() }
+        },
+        onDismiss = onDone,
+    )
 }
 
 private val CLOCK = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
 
-private fun checked(state: StoreState) = state.lastChecked?.let { "Checked at ${CLOCK.format(it)}" } ?: "Not checked yet"
+fun checked(state: StoreState) = state.lastChecked?.let { "Checked at ${CLOCK.format(it)}" } ?: "Not checked yet"

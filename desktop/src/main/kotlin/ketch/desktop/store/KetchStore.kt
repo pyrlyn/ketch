@@ -90,13 +90,14 @@ class KetchStore(
 
     /**
      * What changed after [from] up to [to], newest first; [to] alone when [from] is null, the installed version when
-     * both are. Null when the core could not read it. A caller cancelled while the core reads gets nothing and no
-     * alert: the page that asked has moved on.
+     * both are. Null when the core could not read it, which [quiet] keeps from an alert: a list's one line of notes is
+     * not worth one. A caller cancelled while the core reads gets nothing and no alert: the page that asked has moved on.
      */
     suspend fun changelog(
         name: String,
         from: String?,
         to: String?,
+        quiet: Boolean = false,
     ): List<Changelog>? {
         var found: List<Changelog>? = null
         caught {
@@ -106,7 +107,7 @@ class KetchStore(
                 } else {
                     core.value<List<Changelog>>(Call.ChangelogRange(name, from, to))
                 }
-        }?.let { report(it, retry = null) }
+        }?.let { if (!quiet) report(it, retry = null) }
         return found
     }
 
