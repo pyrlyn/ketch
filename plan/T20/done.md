@@ -33,10 +33,36 @@ nothing):
 - On the Mac, the app started with `KETCH_LOOK=adwaita` and logged no error. Its pixels were checked in rendered test
   screenshots, including the menu, the Select, the dialogs and About.
 
+- A real session on the same VM: GNOME Shell 50.1 on Wayland, the app through XWayland, real pointer and keyboard input
+  through `org.gnome.Mutter.RemoteDesktop`, measured with `xdotool getwindowgeometry`:
+  - The look is picked without `KETCH_LOOK`, corners are round, `ketch serve` answers.
+  - The right, top, bottom and left edges follow the pointer to the pixel, shrinking included. The SE and NE corners are
+    exact; NW was exact in 4 of 5 pulls and once came up short by 7 and 5 px, which did not happen again. The SW corner
+    was not measured.
+  - The header drags exactly. Double-click and the button maximize inside the panel and the dock, with square corners,
+    and restore returns the same geometry. Minimize and the dock bring it back.
+  - Ctrl+K with real typing searches the registry and GitHub. Ctrl+, and the main menu work.
+  - Close hides to the tray. Left click, Open Ketch and Quit Ketch work, and Quit ends the app and `ketch serve`.
+
+This session found three bugs, each fixed and rechecked there:
+
+- Resizing lost the first pixels of a pull on a slow frame, because it started from where the pointer was by then.
+- Ctrl+, in the search field also typed the comma, and the changed query went back to Discover.
+- A window hidden to the tray while maximized never came back: mutter held its frames (`_XWAYLAND_ALLOW_COMMITS=0`). It
+  now leaves for the tray floating, so it comes back floating at its last floating size.
+
 ## Not checked
 
-- A real GNOME session: the VM showed only the login screen, so the run had no GNOME Shell or XWayland. The other
-  corners and the top and left edges were not dragged; `Edge.resized` tests cover their arithmetic.
+- Rendering on a real GPU: skiko cannot create a GL context in this VM (`Cannot create Linux GL context`, with any look),
+  so everything above ran in software.
 - `ketch` for Linux cannot be linked from the Mac as it stands: kotlin-kit's Conan bzip2 and liblzma are the host's. The
   VM run passed the VM's own libraries through `kotlin.native.linkArgs`, by hand.
-- The `.deb` was not built.
+- The `.deb` was not built, so neither was its `.desktop` file. Run from a classpath, the dock shows
+  `ketch-desktop-MainKt` with a gear, and `StartupWMClass` is not configured.
+
+## Known and left
+
+- The first click after coming back from the tray is lost, on any control; the second works. The cause is unknown.
+- A second gear appears in the dock after coming back from the tray.
+- GNOME draws no shadow around the transparent window.
+- The tray menu is plain AWT.
