@@ -54,5 +54,8 @@ logic: what is ketch's stays in
   every guard the Rust code has (zip-slip, size limits, checksum checks) together with its test.
 - A third-party library sits behind our own interface, except Kotlin's own (stdlib, kotlinx.*,
   Ktor), so it can be replaced alone.
+- What the desktop app says to a person lives in
+  `desktop/src/main/composeResources/values/strings.xml`, never as a literal in Kotlin. The file's
+  head holds the key convention and the glossary. The command line stays English.
 - ktlint and detekt must be clean.
 - Commit in small green steps; every change ends in a PR once the repository has a remote.

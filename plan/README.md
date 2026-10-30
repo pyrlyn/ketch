@@ -205,6 +205,16 @@ Taken during the port:
   Linux, so `Edge.kt` draws them and reads the pull from `MouseInfo`; rounded corners need a see-through
   window, so `desktopShowsThrough` falls back to square ones where the desktop composites nothing.
   The design's controls the core has no call for stay out rather than sit idle: see `plan/T20/done.md`.
+- **Localization (T21).** The desktop app's words live in Compose resources
+  (`desktop/src/main/composeResources/values/strings.xml`): the Compose build generates a typed key
+  for each, so a missing one fails to compile, and a language is a qualified folder. The app follows
+  the system's language, and English is the only one for now. `stringResource` serves composables;
+  `tr` and `plural` (`ketch.desktop.strings`) serve the enums, the tray, the store and the core's
+  errors, since Compose's own read suspends. The command line stays English: its output must stay
+  interchangeable with Rust ketch, and so does what `ketch serve` sends (error messages, event verbs,
+  doctor checks), which the app passes on as it arrives. To add a language: copy `values/strings.xml`
+  to `values-<lang>/`, translate it, and add `<lang>` to `CFBundleLocalizations` in
+  `desktop/build.gradle.kts`. A key left out falls back to English.
 
 ## Goals of the port
 

@@ -39,7 +39,7 @@
 | io.kotest:kotest-assertions-core 6.2.6 | local | https://github.com/kotest/kotest | Test assertions |
 | io.github.optimumcode:json-schema-validator 0.5.5 | local | https://github.com/OptimumCode/json-schema-validator | Tests: manifests and config against the schemas Rust ketch publishes (Rust: jsonschema) |
 | org.jetbrains.kotlin:kotlin-test | local | https://github.com/JetBrains/kotlin | Tests |
-| Compose Multiplatform 1.12.2 (`org.jetbrains.compose`) | local | https://github.com/JetBrains/compose-multiplatform | Desktop UI, and its UI tests (`compose.uiTest`) |
+| Compose Multiplatform 1.12.2 (`org.jetbrains.compose`) | local | https://github.com/JetBrains/compose-multiplatform | Desktop UI, its strings (`compose.components.resources`), and its UI tests (`compose.uiTest`) |
 | com.mikepenz:multiplatform-markdown-renderer-m3 0.46.0 | local | https://github.com/mikepenz/multiplatform-markdown-renderer | Changelog Markdown in the desktop app (macOS app: `AttributedString(markdown:)`) |
 | org.jlleitschuh.gradle.ktlint 14.2.0 (ktlint 1.8.0) | via shared-settings | https://github.com/JLLeitschuh/ktlint-gradle | Formatting lint |
 | dev.detekt 2.0.0-alpha.6 | via shared-settings | https://github.com/detekt/detekt | Static analysis |
