@@ -20,15 +20,18 @@ its output, the config and manifest TOML, `ketch.lock`, `state.json`, the `~/.ke
 | `ketch-core/` | Port of `crates/ketch-core`; package `ketch.core.<rust module>` |
 | `ketch/` | The `ketch` executable; port of `src/` (`cli.rs`, `cmd/`, `ui.rs`, …) |
 | `ketch-wire/` | Records and JSON-lines protocol between `ketch serve` and the desktop app (port of `crates/ketch-ffi`'s surface); built for native and jvm |
-| `desktop/` | Compose desktop app (JVM); runs the native `ketch` |
+| `desktop/` | Compose desktop app (JVM); runs the native `ketch`. Glass on macOS (`ui/glass/`), Material 3 elsewhere (`ui/screens/`) |
 | `buildSrc/` | Convention plugins `ketch.kmp` and `ketch.compose` |
 | `plan/` | Tasks, one folder per task; `plan/README.md` holds the port map and decisions |
 
 ## Build and test
 
-Needs JDK 21 and the `shared-settings`, `kotlin-kit` and `kotlin-snapshot` builds in `packages/`,
-found in any ancestor directory (or `SHARED_SETTINGS_DIR`, `KOTLIN_KIT_DIR`, `KOTLIN_SNAPSHOT_DIR`).
+Needs JDK 21 and the `shared-settings`, `kotlin-kit`, `kotlin-snapshot` and `kotlin-glass` builds in
+`packages/`, found in any ancestor directory (or `SHARED_SETTINGS_DIR`, `KOTLIN_KIT_DIR`,
+`KOTLIN_SNAPSHOT_DIR`, `KOTLIN_GLASS_DIR`).
 Files, TOML, YAML, semver, HTTP and SQLite come from kotlin-kit: change them there, not here.
+Glass components come from kotlin-glass and hold no business logic: what is ketch's stays in
+`desktop/`.
 
 ```bash
 ./gradlew build                    # everything: compile, tests, ktlint, detekt
