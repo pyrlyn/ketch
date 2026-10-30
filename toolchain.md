@@ -8,6 +8,7 @@
 | shared-settings | `packages/shared-settings` above the build (or `SHARED_SETTINGS_DIR`), local included build | Shared targets, release size, ktlint, detekt, settings | `packages/shared-settings` (no remote) |
 | kotlin-kit | `packages/kotlin-kit` above the build (or `KOTLIN_KIT_DIR`), local included build | File, TOML, YAML, semver, HTTP, SQLite and child-process libraries shared with rtok-kotlin | `packages/kotlin-kit` (no remote) |
 | kotlin-snapshot | `packages/kotlin-snapshot` above the build (or `KOTLIN_SNAPSHOT_DIR`), local included build | insta-format snapshot assertions | `packages/kotlin-snapshot` (no remote) |
+| kotlin-glass | `packages/kotlin-glass` above the build (or `KOTLIN_GLASS_DIR`), local included build | Glass UI components of the macOS look | `packages/kotlin-glass` (https://github.com/pyrlyn/packages) |
 | git | system | Version control | https://git-scm.com |
 | conan 2.33.0 | mise (kotlin-kit) | Fetches the static bzip2 and liblzma that kotlin-kit's `archive` links | https://github.com/conan-io/conan |
 | zlib | Kotlin/Native platform library (`platform.zlib`), via kotlin-kit | gzip and deflate in archives | https://zlib.net |
@@ -24,6 +25,7 @@
 | org.jetbrains.kotlinx:kotlinx-coroutines-test 1.11.0 | local | https://github.com/Kotlin/kotlinx.coroutines | Desktop tests |
 | org.kotlincrypto.hash:sha2 0.8.0 | local | https://github.com/KotlinCrypto/hash | Streaming SHA-256 of downloads (Rust: sha2) |
 | pyrlyn.kit:fs, toml, toml-aot, yaml-aot, semver, http-ktor, db-room, db-sqldelight, process, archive, cli, icons | local (included build) | `packages/kotlin-kit` | Crash-safe file writes (Rust: fs-kit), TOML read and comment-keeping edit, YAML read, versions, HTTP, SQLite and SQLDelight on it, hooks under a deadline (Rust: run_with_deadline), tar/zip/gzip/bzip2/xz (Rust: tar, zip, flate2, bzip2, xz2), the command line with clap's help and errors, completion scripts and man pages (Rust: clap, clap_complete, clap_mangen), status-line icons (Rust: operation-icons) |
+| pyrlyn.glass:glass | local (included build) | `packages/kotlin-glass` | Panes, controls, sheet and layout of the macOS look (macOS app: SwiftUI's Liquid Glass) |
 | pyrlyn.snapshot:snapshot | local (included build, tests only) | `packages/kotlin-snapshot` | Rust ketch's `.snap` files, read as they are (Rust: insta) |
 | pyrlyn.kit:loopback | local (included build, tests only) | `packages/kotlin-kit` | A hand-written HTTP server on 127.0.0.1 for the download guards (Rust tests: a raw `TcpListener`) |
 | io.ktor:ktor-client-core, -darwin, -curl 3.6.0 | via kotlin-kit | https://github.com/ktorio/ktor | HTTP client (Rust: ureq) |

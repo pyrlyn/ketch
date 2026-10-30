@@ -19,6 +19,7 @@ pluginManagement {
     val sharedSettings = sharedBuild("shared-settings", "SHARED_SETTINGS_DIR")
     includeBuild(sharedSettings)
     includeBuild("$sharedSettings/settings-plugin")
+    extra["kotlinGlassDir"] = sharedBuild("kotlin-glass", "KOTLIN_GLASS_DIR")
     extra["kotlinKitDir"] = sharedBuild("kotlin-kit", "KOTLIN_KIT_DIR")
     extra["kotlinSnapshotDir"] = sharedBuild("kotlin-snapshot", "KOTLIN_SNAPSHOT_DIR")
 }
@@ -30,6 +31,9 @@ plugins {
 }
 
 rootProject.name = "ketch-kotlin"
+
+// The macOS look's generic components: a checkout of kotlin-glass.
+includeBuild(extra["kotlinGlassDir"] as String)
 
 // TOML, YAML, semver, HTTP and SQLite, shared with rtok-kotlin: a checkout of kotlin-kit.
 includeBuild(extra["kotlinKitDir"] as String)
