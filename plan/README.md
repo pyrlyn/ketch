@@ -106,9 +106,16 @@ Taken during the port:
   Liquid Glass; no self-updates (Sparkle has no counterpart for a jpackage app); the native
   `ketch` ships inside the app's package, and `KETCH_EXE` overrides it.
 - **macOS look (T16).** The creator's choices: on macOS the app wears the Liquid Glass design of
-  the `ketch Store — Discover` canvas, which replaces T12's Material 3 there; Windows and Linux
-  keep Material 3. Its components live in the shared `kotlin-glass` package and hold no business
+  the `ketch Store — Discover` canvas, which replaces T12's Material 3 there. Its components live in the shared `kotlin-glass` package and hold no business
   logic: data, token mapping and screens stay in `desktop/src/main/kotlin/ketch/desktop/ui/glass/`.
+- **Windows look (T17).** On Windows the app wears the `ketch Store — Windows 11` canvas in the
+  colours of the `Pyrlyn Windows 11` design system, in place of T12's Material 3; high contrast keeps
+  Material 3, which the design system has no answer for, and Linux keeps it too. The components live
+  in the shared `kotlin-fluent` package and hold no business logic; compose-fluent-ui was passed over
+  because its controls carry Microsoft's stock tokens and it sits on Compose 1.8. The window is
+  undecorated and draws its own title bar, so Windows' rounded corners and Snap Layouts are not
+  offered. Logic both looks share is in `ui/Host.kt`, `ui/Log.kt` and `ui/Summaries.kt`. `KETCH_LOOK`
+  names a look to see it on another system.
 - **Windows (T13).** The creator's choices on claiming it: three subtasks (T13.1–T13.3);
   mingwX64 and the Windows implementations go into kotlin-kit itself; tests run on a Windows
   VM in Parallels on the Mac (Windows on Arm, which runs the x64 binaries under emulation). No
