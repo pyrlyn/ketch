@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.ComposeWindow
+import androidx.compose.ui.awt.awtEventOrNull
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
@@ -85,7 +86,8 @@ private fun BoxScope.EdgeHandle(
             .pointerInput(edge) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false).consume()
-                    val from = MouseInfo.getPointerInfo().location
+                    // Where the press landed, not where the pointer is now: on a slow frame it has already moved on.
+                    val from = currentEvent.awtEventOrNull?.locationOnScreen ?: MouseInfo.getPointerInfo().location
                     val start = window.bounds
                     do {
                         val event = awaitPointerEvent()
