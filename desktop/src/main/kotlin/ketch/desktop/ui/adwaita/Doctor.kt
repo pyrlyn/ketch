@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.UNDER_THE_ROOT
 import ketch.desktop.ui.copyToClipboard
@@ -24,6 +25,7 @@ import ketch.desktop.ui.word
 import ketch.wire.Check
 import ketch.wire.CheckOutcome
 import ketch.wire.Settings
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.adwaita.ActionRow
 import pyrlyn.adwaita.Banner
 import pyrlyn.adwaita.BannerKind
@@ -57,7 +59,7 @@ fun AdwaitaDoctor(
     val summary = doctorSummary(state)
     val report = state.checks.map { "${it.outcome.word.lowercase().padEnd(WORD_WIDTH)} ${it.name}: ${it.detail}" }
     AdwaitaPage("doctor") {
-        PageHead("Doctor") { PillButton("Run again", glyph = Glyph.Refresh) { actions.run { runDoctor() } } }
+        PageHead(stringResource(Res.string.section_doctor)) { PillButton(stringResource(Res.string.action_run_again), glyph = Glyph.Refresh) { actions.run { runDoctor() } } }
         if (state.problemCount > 0) {
             Banner(
                 summary,
@@ -69,7 +71,7 @@ fun AdwaitaDoctor(
         } else {
             Text(summary, color = LocalAdwaita.current.ink2, style = LocalAdwaitaType.current.caption, modifier = Modifier.testTag("doctor-summary"))
         }
-        PreferencesGroup("Checks") {
+        PreferencesGroup(stringResource(Res.string.doctor_checks)) {
             BoxedList {
                 state.checks.forEachIndexed { index, check ->
                     if (index > 0) RowLine()
@@ -78,7 +80,7 @@ fun AdwaitaDoctor(
             }
         }
         if (report.isNotEmpty()) {
-            PreferencesGroup("Output", suffix = { PillButton("Copy", size = PillSize.Small, glyph = Glyph.Copy) { copyToClipboard(report.joinToString("\n")) } }) {
+            PreferencesGroup(stringResource(Res.string.doctor_output), suffix = { PillButton(stringResource(Res.string.action_copy), size = PillSize.Small, glyph = Glyph.Copy) { copyToClipboard(report.joinToString("\n")) } }) {
                 SelectionContainer { Terminal(report.map(::TerminalLine)) }
             }
         }
@@ -99,15 +101,15 @@ private fun CheckRow(
         leading = { Sphere(check.outcome, fixed) },
         trailing = {
             if (check.fixable) FixButton("fix-${check.name}", actions)
-            root?.let { PillButton("Open folder", Modifier.testTag("folder-${check.name}"), size = PillSize.Small) { openFolder(it) } }
+            root?.let { PillButton(stringResource(Res.string.action_open_folder), Modifier.testTag("folder-${check.name}"), size = PillSize.Small) { openFolder(it) } }
         },
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             RowTitle(check.name)
-            StatusPill(if (fixed) "Fixed" else check.outcome.word, check.outcome.status(fixed))
+            StatusPill(if (fixed) stringResource(Res.string.doctor_fixed) else check.outcome.word, check.outcome.status(fixed))
         }
         RowText(check.detail)
-        check.fix?.let { RowMono("Fix: $it") }
+        check.fix?.let { RowMono(stringResource(Res.string.doctor_fix_hint, it)) }
     }
 }
 
@@ -137,7 +139,7 @@ private fun FixButton(
     actions: Actions,
 ) {
     var fixing by remember { mutableStateOf(false) }
-    PillButton(if (fixing) "Fixing…" else "Fix", Modifier.testTag(tag), PillStyle.Accent, PillSize.Small, enabled = !fixing) {
+    PillButton(if (fixing) stringResource(Res.string.action_fixing) else stringResource(Res.string.action_fix), Modifier.testTag(tag), PillStyle.Accent, PillSize.Small, enabled = !fixing) {
         fixing = true
         actions.run {
             fixDoctor()

@@ -28,6 +28,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.ChangelogText
 import ketch.desktop.ui.Navigation
@@ -46,6 +47,7 @@ import ketch.desktop.ui.tilde
 import ketch.desktop.ui.trustSeal
 import ketch.wire.Changelog
 import ketch.wire.Package
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.adwaita.AvatarSize
 import pyrlyn.adwaita.Breadcrumb
 import pyrlyn.adwaita.CommandLine
@@ -117,7 +119,7 @@ private fun Header(
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(facts.name, color = c.ink, style = type.page)
-                        facts.update?.let { StatusPill("Update to $it available", Status.Update) }
+                        facts.update?.let { StatusPill(stringResource(Res.string.package_update_available, it), Status.Update) }
                     }
                     facts.repo?.let { Text(it, color = c.ink2, style = type.mono) }
                     facts.registry?.description?.let { Text(it, color = c.ink2, style = type.body) }
@@ -126,16 +128,16 @@ private fun Header(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 when {
                     installed != null && facts.update != null -> {
-                        PillButton("Update to ${facts.update}", style = PillStyle.Update, enabled = !state.isRunning) { actions.run { upgrade(listOf(facts.name)) } }
+                        PillButton(stringResource(Res.string.action_update_to, facts.update.orEmpty()), style = PillStyle.Update, enabled = !state.isRunning) { actions.run { upgrade(listOf(facts.name)) } }
                     }
 
                     installed == null -> {
-                        PillButton("Install", style = PillStyle.Accent, enabled = !state.isRunning) { actions.install(facts.name) }
+                        PillButton(stringResource(Res.string.action_install), style = PillStyle.Accent, enabled = !state.isRunning) { actions.install(facts.name) }
                     }
                 }
-                facts.repo?.let { PillButton("Open on GitHub") { uri.openUri("https://github.com/$it") } }
+                facts.repo?.let { PillButton(stringResource(Res.string.action_open_github)) { uri.openUri("https://github.com/$it") } }
                 Spacer(Modifier.weight(1f))
-                if (installed != null) PillButton("Uninstall…", style = PillStyle.FlatDanger, enabled = !state.isRunning, onClick = onUninstall)
+                if (installed != null) PillButton(stringResource(Res.string.action_uninstall_ellipsis), style = PillStyle.FlatDanger, enabled = !state.isRunning, onClick = onUninstall)
             }
         }
     }
@@ -164,8 +166,8 @@ private fun Overview(
     actions: Actions,
 ) {
     val command = "ketch install ${facts.repo ?: facts.name}"
-    Text(facts.registry?.description ?: "No description.", color = LocalAdwaita.current.ink, style = LocalAdwaitaType.current.body)
-    CommandLine(command, "Copy the command", Modifier.fillMaxWidth()) { copyToClipboard(command) }
+    Text(facts.registry?.description ?: stringResource(Res.string.package_no_description), color = LocalAdwaita.current.ink, style = LocalAdwaitaType.current.body)
+    CommandLine(command, stringResource(Res.string.action_copy_command), Modifier.fillMaxWidth()) { copyToClipboard(command) }
     Why(facts.name, actions)
 }
 
@@ -182,7 +184,7 @@ private fun Why(
         }
 
         WhyRead.Unanswered -> {
-            Text("ketch could not ask this package's source.", color = c.ink2, style = LocalAdwaitaType.current.body)
+            Text(stringResource(Res.string.package_source_failed), color = c.ink2, style = LocalAdwaitaType.current.body)
         }
 
         is WhyRead.Answered -> {
@@ -217,7 +219,7 @@ private fun Changes(
         }
 
         entries.isNullOrEmpty() -> {
-            Text("No changelog found.", color = c.ink2, style = LocalAdwaitaType.current.body)
+            Text(stringResource(Res.string.package_no_changelog), color = c.ink2, style = LocalAdwaitaType.current.body)
         }
 
         else -> {
@@ -238,7 +240,7 @@ private fun Article(
         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp), itemVerticalAlignment = Alignment.CenterVertically) {
             Text(entry.heading ?: entry.version, color = LocalAdwaita.current.ink, style = LocalAdwaitaType.current.section)
             StatusPill(changelogOrigin(entry.source), Status.Neutral)
-            if (entry.version == installed) StatusPill("Installed", Status.Neutral)
+            if (entry.version == installed) StatusPill(stringResource(Res.string.status_installed), Status.Neutral)
         }
         ChangelogText(entry.body)
     }
@@ -247,10 +249,10 @@ private fun Article(
 @Composable
 private fun Files(installed: Package?) {
     if (installed == null) {
-        Text("Not installed.", color = LocalAdwaita.current.ink2, style = LocalAdwaitaType.current.body)
+        Text(stringResource(Res.string.package_not_installed), color = LocalAdwaita.current.ink2, style = LocalAdwaitaType.current.body)
         return
     }
-    Facts(installed.binaries.map { "Binary" to tilde(it) } + ("Store" to tilde(installed.prefix)))
+    Facts(installed.binaries.map { stringResource(Res.string.package_binary) to tilde(it) } + (stringResource(Res.string.package_store) to tilde(installed.prefix)))
     FolderButton(installed.binaries.firstOrNull() ?: installed.prefix)
 }
 
@@ -260,13 +262,13 @@ private fun Details(
     modifier: Modifier,
 ) {
     Column(modifier.boxed().padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Heading("Details")
+        Heading(stringResource(Res.string.package_details))
         Facts(packageDetails(facts))
         facts.installed?.trust?.let { trust ->
             val (word, checked) = trustSeal(trust)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 StatusPill(word, if (checked) Status.Ok else Status.Warning)
-                Text("trust: $trust", color = LocalAdwaita.current.ink2, style = LocalAdwaitaType.current.caption)
+                Text(stringResource(Res.string.package_trust_line, trust), color = LocalAdwaita.current.ink2, style = LocalAdwaitaType.current.caption)
             }
         }
     }

@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.ChangelogText
 import ketch.desktop.ui.Navigation
@@ -41,6 +42,7 @@ import ketch.desktop.ui.tilde
 import ketch.desktop.ui.trustSeal
 import ketch.wire.Changelog
 import ketch.wire.Package
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.glass.Badge
 import pyrlyn.glass.BadgeKind
 import pyrlyn.glass.ButtonKind
@@ -119,16 +121,16 @@ private fun Header(
             Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 when {
                     installed != null && facts.update != null -> {
-                        GlassButton("Update to ${facts.update}", ButtonKind.Primary, enabled = !state.isRunning) { actions.run { upgrade(listOf(facts.name)) } }
+                        GlassButton(stringResource(Res.string.action_update_to, facts.update.orEmpty()), ButtonKind.Primary, enabled = !state.isRunning) { actions.run { upgrade(listOf(facts.name)) } }
                     }
 
                     installed == null -> {
-                        GlassButton("Install", ButtonKind.Primary, enabled = !state.isRunning) { actions.install(facts.name) }
+                        GlassButton(stringResource(Res.string.action_install), ButtonKind.Primary, enabled = !state.isRunning) { actions.install(facts.name) }
                     }
                 }
-                facts.repo?.let { GlassButton("Open on GitHub", ButtonKind.Ghost) { uri.openUri("https://github.com/$it") } }
+                facts.repo?.let { GlassButton(stringResource(Res.string.action_open_github), ButtonKind.Ghost) { uri.openUri("https://github.com/$it") } }
                 Spacer(Modifier.weight(1f))
-                if (installed != null) GlassButton("Uninstall", ButtonKind.Danger, enabled = !state.isRunning, onClick = onUninstall)
+                if (installed != null) GlassButton(stringResource(Res.string.action_uninstall), ButtonKind.Danger, enabled = !state.isRunning, onClick = onUninstall)
             }
         }
     }
@@ -157,8 +159,8 @@ private fun Tab(
 private fun Overview(facts: PackageFacts) {
     val glass = LocalGlass.current
     val command = "ketch install ${facts.repo ?: facts.name}"
-    Text(facts.registry?.description ?: "No description.", color = glass.ink, style = body(TextSize.BODY))
-    CommandField(command, "Copy the command", Modifier.fillMaxWidth(), fill = TERMINAL) { copyToClipboard(command) }
+    Text(facts.registry?.description ?: stringResource(Res.string.package_no_description), color = glass.ink, style = body(TextSize.BODY))
+    CommandField(command, stringResource(Res.string.action_copy_command), Modifier.fillMaxWidth(), fill = TERMINAL) { copyToClipboard(command) }
 }
 
 @Composable
@@ -174,7 +176,7 @@ private fun Changes(
         }
 
         entries.isNullOrEmpty() -> {
-            Text("No changelog found.", color = glass.ink2, style = body(TextSize.BODY))
+            Text(stringResource(Res.string.package_no_changelog), color = glass.ink2, style = body(TextSize.BODY))
         }
 
         else -> {
@@ -195,7 +197,7 @@ private fun Article(
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             SectionTitle(entry.heading ?: entry.version, small = true)
             FactChip(changelogOrigin(entry.source))
-            if (entry.version == installed) Badge("Installed", BadgeKind.Neutral)
+            if (entry.version == installed) Badge(stringResource(Res.string.status_installed), BadgeKind.Neutral)
         }
         ChangelogText(entry.body)
     }
@@ -205,10 +207,10 @@ private fun Article(
 private fun Files(installed: Package?) {
     val glass = LocalGlass.current
     if (installed == null) {
-        Text("Not installed.", color = glass.ink2, style = body(TextSize.BODY))
+        Text(stringResource(Res.string.package_not_installed), color = glass.ink2, style = body(TextSize.BODY))
         return
     }
-    Facts(installed.binaries.map { "Binary" to tilde(it) } + ("Store" to tilde(installed.prefix)))
+    Facts(installed.binaries.map { stringResource(Res.string.package_binary) to tilde(it) } + (stringResource(Res.string.package_store) to tilde(installed.prefix)))
     RevealButton(installed.binaries.firstOrNull() ?: installed.prefix)
 }
 
@@ -220,12 +222,12 @@ private fun Details(
     val glass = LocalGlass.current
     val installed = facts.installed
     Column(modifier.glass(Pane.Flat).padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Details", color = glass.ink, style = body(TextSize.HEADING, FontWeight.SemiBold))
+        Text(stringResource(Res.string.package_details), color = glass.ink, style = body(TextSize.HEADING, FontWeight.SemiBold))
         Facts(packageDetails(facts), labelWidth = FACT_LABEL)
         installed?.trust?.let { trust ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 TrustBadge(trust)
-                Text("trust: $trust", color = glass.ink2, style = body(TRUST))
+                Text(stringResource(Res.string.package_trust_line, trust), color = glass.ink2, style = body(TRUST))
             }
         }
     }

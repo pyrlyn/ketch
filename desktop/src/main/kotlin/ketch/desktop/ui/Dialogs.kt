@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.adwaita.AdwaitaChooseBinary
 import ketch.desktop.ui.adwaita.AdwaitaConfirm
 import ketch.desktop.ui.fluent.FluentChooseBinary
@@ -32,6 +33,7 @@ import ketch.desktop.ui.glass.GlassChooseBinary
 import ketch.desktop.ui.glass.GlassConfirm
 import ketch.wire.Answer
 import ketch.wire.Question
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 fun Questions(
@@ -48,9 +50,9 @@ fun Questions(
         is Question.StopProcesses -> {
             val list = question.holders.joinToString("\n") { "${it.path} (pid ${it.pid})" }
             Confirm(
-                title = "Stop running programs?",
-                message = "These programs use files the upgrade replaces:\n\n$list",
-                confirm = "Stop them",
+                title = stringResource(Res.string.dialog_stop_programs),
+                message = stringResource(Res.string.dialog_stop_programs_text, list),
+                confirm = stringResource(Res.string.action_stop_them),
                 destructive = true,
                 onConfirm = { store.answer(Answer.Confirm(true)) },
                 onDismiss = store::decline,
@@ -59,9 +61,9 @@ fun Questions(
 
         is Question.ConfirmRemoveLeftover -> {
             Confirm(
-                title = "Remove a leftover folder?",
-                message = "${question.path} was left behind by an earlier uninstall, and ketch recorded nothing in it.",
-                confirm = "Remove",
+                title = stringResource(Res.string.dialog_leftover),
+                message = stringResource(Res.string.dialog_leftover_text, question.path),
+                confirm = stringResource(Res.string.action_remove),
                 destructive = true,
                 onConfirm = { store.answer(Answer.Confirm(true)) },
                 onDismiss = store::decline,
@@ -94,10 +96,10 @@ private fun MaterialChooseBinary(
     AlertDialog(
         onDismissRequest = onDecline,
         modifier = Modifier.testTag("question-choose-binary"),
-        title = { Text("Which binary should ${question.pkg} link?") },
+        title = { Text(stringResource(Res.string.dialog_choose_binary_title, question.pkg)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(LocalSpacing.current.sm)) {
-                Text("${question.pkg} ships several programs. ketch links one onto your PATH.")
+                Text(stringResource(Res.string.dialog_choose_binary_text, question.pkg))
                 Column(Modifier.selectableGroup()) {
                     question.candidates.forEachIndexed { index, candidate ->
                         Row(
@@ -111,8 +113,8 @@ private fun MaterialChooseBinary(
                 }
             }
         },
-        confirmButton = { Button(onClick = { onPick(picked) }) { Text("Link") } },
-        dismissButton = { TextButton(onClick = onDecline) { Text("Cancel") } },
+        confirmButton = { Button(onClick = { onPick(picked) }) { Text(stringResource(Res.string.action_link)) } },
+        dismissButton = { TextButton(onClick = onDecline) { Text(stringResource(Res.string.action_cancel)) } },
     )
 }
 
@@ -156,6 +158,6 @@ private fun MaterialConfirm(
         title = { Text(title) },
         text = { Text(message) },
         confirmButton = { Button(onClick = onConfirm, colors = colors, modifier = Modifier.testTag("confirm-yes")) { Text(confirm) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.action_cancel)) } },
     )
 }

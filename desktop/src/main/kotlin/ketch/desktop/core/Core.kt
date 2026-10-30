@@ -2,6 +2,7 @@
 // cancel. The store and the screens see only this, so they run as well on FakeCore as on ServeCore.
 package ketch.desktop.core
 
+import ketch.desktop.strings.*
 import ketch.wire.Answer
 import ketch.wire.Call
 import ketch.wire.Event
@@ -35,11 +36,11 @@ class CoreException(
 /** The wording the Rust apps show for each error. */
 fun describe(error: KetchError): String =
     when (error) {
-        is KetchError.Busy -> error.pid?.let { "ketch is running in another process (pid $it)." } ?: "ketch is running in another process."
-        KetchError.Cancelled -> "Cancelled."
-        is KetchError.NotFound -> "No package named ${error.name}."
-        is KetchError.Network -> "Network error: ${error.message}"
-        is KetchError.Verification -> "Verification failed: ${error.message}"
+        is KetchError.Busy -> error.pid?.let { tr(Res.string.core_busy_pid, it) } ?: tr(Res.string.core_busy)
+        KetchError.Cancelled -> tr(Res.string.core_cancelled)
+        is KetchError.NotFound -> tr(Res.string.core_not_found, error.name)
+        is KetchError.Network -> tr(Res.string.core_network, error.message)
+        is KetchError.Verification -> tr(Res.string.core_verification, error.message)
         is KetchError.Other -> error.message
     }
 

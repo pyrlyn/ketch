@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.UNDER_THE_ROOT
 import ketch.desktop.ui.doctorSummary
@@ -21,6 +22,9 @@ import ketch.desktop.ui.word
 import ketch.wire.Check
 import ketch.wire.CheckOutcome
 import ketch.wire.Settings
+import org.jetbrains.compose.resources.PluralStringResource
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.fluent.BadgeKind
 import pyrlyn.fluent.ButtonStyle
 import pyrlyn.fluent.FluentButton
@@ -47,16 +51,16 @@ fun FluentDoctor(
     val c = LocalFluent.current
     FluentPage("doctor") {
         PageHead(
-            title = { PageTitle("Doctor") },
+            title = { PageTitle(stringResource(Res.string.section_doctor)) },
             actions = {
                 Text(doctorSummary(state), color = c.ink2, style = LocalFluentType.current.small, modifier = Modifier.testTag("doctor-summary"))
-                FluentButton("Run again") { actions.run { runDoctor() } }
+                FluentButton(stringResource(Res.string.action_run_again)) { actions.run { runDoctor() } }
             },
         )
         AutoGrid(STATS.size, STAT_WIDTH, GRID_GAP) { index ->
             val stat = STATS[index]
             val count = state.checks.count { it.outcome == stat.outcome }
-            StatCard("$count", if (count == 1) stat.one else stat.many, stat.glyph, stat.gradient)
+            StatCard("$count", pluralStringResource(stat.label, count), stat.glyph, stat.gradient)
         }
         RowGroup { for (check in state.checks) CheckRow(check, state, actions, config) }
     }
@@ -64,17 +68,16 @@ fun FluentDoctor(
 
 private class Stat(
     val outcome: CheckOutcome,
-    val one: String,
-    val many: String,
+    val label: PluralStringResource,
     val glyph: Glyph,
     val gradient: IconGradient,
 )
 
 private val STATS =
     listOf(
-        Stat(CheckOutcome.Ok, "check passed", "checks passed", Glyph.Check, IconGradient.Green),
-        Stat(CheckOutcome.Warn, "warning", "warnings", Glyph.Warning, IconGradient.Amber),
-        Stat(CheckOutcome.Fail, "failed", "failed", Glyph.Cross, IconGradient.Red),
+        Stat(CheckOutcome.Ok, Res.plurals.doctor_stat_passed, Glyph.Check, IconGradient.Green),
+        Stat(CheckOutcome.Warn, Res.plurals.doctor_stat_warnings, Glyph.Warning, IconGradient.Amber),
+        Stat(CheckOutcome.Fail, Res.plurals.doctor_stat_failed, Glyph.Cross, IconGradient.Red),
     )
 
 @Composable
@@ -91,15 +94,15 @@ private fun CheckRow(
             check.outcome == CheckOutcome.Warn -> BadgeKind.Warning
             else -> BadgeKind.Danger
         }
-    val word = if (fixed) "Fixed" else check.outcome.word
+    val word = if (fixed) stringResource(Res.string.doctor_fixed) else check.outcome.word
     val root = config?.root?.takeIf { check.name in UNDER_THE_ROOT && check.outcome != CheckOutcome.Ok }
     ListRow(Modifier.testTag("check-${check.name}"), actions = {
         if (check.fixable) FixButton(check.name, actions)
-        root?.let { FluentButton("Open folder", modifier = Modifier.testTag("folder-${check.name}")) { openFolder(it) } }
+        root?.let { FluentButton(stringResource(Res.string.action_open_folder), modifier = Modifier.testTag("folder-${check.name}")) { openFolder(it) } }
     }, leading = { StatusBadge(word, kind, Modifier.widthIn(min = BADGE_WIDTH)) }) {
         RowTitle(check.name)
         RowMeta(check.detail)
-        check.fix?.let { fix -> SelectionContainer { Text("Fix: $fix", color = LocalFluent.current.ink2, style = LocalFluentType.current.mono) } }
+        check.fix?.let { fix -> SelectionContainer { Text(stringResource(Res.string.doctor_fix_hint, fix), color = LocalFluent.current.ink2, style = LocalFluentType.current.mono) } }
     }
 }
 
@@ -110,7 +113,7 @@ private fun FixButton(
     actions: Actions,
 ) {
     var fixing by remember { mutableStateOf(false) }
-    FluentButton(if (fixing) "Fixing…" else "Fix", ButtonStyle.Accent, Modifier.testTag("fix-$name"), enabled = !fixing) {
+    FluentButton(if (fixing) stringResource(Res.string.action_fixing) else stringResource(Res.string.action_fix), ButtonStyle.Accent, Modifier.testTag("fix-$name"), enabled = !fixing) {
         fixing = true
         actions.run {
             fixDoctor()

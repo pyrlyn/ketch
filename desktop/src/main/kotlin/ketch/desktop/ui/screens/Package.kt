@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.ChangelogText
 import ketch.desktop.ui.Confirm
@@ -40,13 +41,14 @@ import ketch.desktop.ui.checksumWords
 import ketch.wire.Changelog
 import ketch.wire.Package
 import ketch.wire.Resolution
+import org.jetbrains.compose.resources.stringResource
 
 enum class PackageTab(
     val title: String,
 ) {
-    Overview("Overview"),
-    Changelog("Changelog"),
-    Files("Files"),
+    Overview(tr(Res.string.package_overview)),
+    Changelog(tr(Res.string.package_changelog)),
+    Files(tr(Res.string.package_files)),
 }
 
 /** What the store knows of [name], installed or not. */
@@ -108,8 +110,8 @@ const val WHY_RESOLVE = "resolve"
 /** The lines of `ketch why`, each a key and what it says. */
 fun whyFacts(found: Resolution) =
     listOfNotNull(
-        WHY_RESOLVE to "${found.source} → ${found.version ?: "no release"}",
-        "asset" to (found.asset ?: "none fits this machine"),
+        WHY_RESOLVE to "${found.source} → ${found.version ?: tr(Res.string.package_why_no_release)}",
+        "asset" to (found.asset ?: tr(Res.string.package_why_no_asset)),
         found.reason?.let { "reason" to it },
         "sha256" to checksumWords(found.checksum),
     )
@@ -130,7 +132,7 @@ fun PackageScreen(
     Page(
         name,
         "package",
-        buttons = { TextButton(onClick = onBack) { Text("Back") } },
+        buttons = { TextButton(onClick = onBack) { Text(stringResource(Res.string.action_back)) } },
     ) {
         Text(summary(facts.repo, installed, facts.update, facts.latest), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(Modifier.padding(vertical = space.md), horizontalArrangement = Arrangement.spacedBy(space.sm)) {
@@ -169,16 +171,16 @@ private fun Buttons(
 ) {
     val uri = LocalUriHandler.current
     when {
-        installed != null && update != null -> Button(onClick = { actions.run { upgrade(listOf(name)) } }, enabled = !state.isRunning) { Text("Update to $update") }
-        installed == null -> Button(onClick = { actions.install(name) }, enabled = !state.isRunning) { Text("Install") }
+        installed != null && update != null -> Button(onClick = { actions.run { upgrade(listOf(name)) } }, enabled = !state.isRunning) { Text(stringResource(Res.string.action_update_to, update)) }
+        installed == null -> Button(onClick = { actions.install(name) }, enabled = !state.isRunning) { Text(stringResource(Res.string.action_install)) }
     }
-    repo?.let { OutlinedButton(onClick = { uri.openUri("https://github.com/$it") }) { Text("Open on GitHub") } }
+    repo?.let { OutlinedButton(onClick = { uri.openUri("https://github.com/$it") }) { Text(stringResource(Res.string.action_open_github)) } }
     if (installed != null) {
         Button(
             onClick = onUninstall,
             enabled = !state.isRunning,
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
-        ) { Text("Uninstall") }
+        ) { Text(stringResource(Res.string.action_uninstall)) }
     }
 }
 
@@ -190,8 +192,8 @@ private fun summary(
     latest: String?,
 ) = listOfNotNull(
     repo,
-    installed?.let { "installed ${it.version}" },
-    update?.let { "$it available" } ?: latest?.takeIf { installed == null }?.let { "latest $it" },
+    installed?.let { tr(Res.string.package_installed_version, it.version) },
+    update?.let { tr(Res.string.package_version_available, it) } ?: latest?.takeIf { installed == null }?.let { tr(Res.string.package_latest_version, it) },
 ).joinToString(" · ")
 
 @Composable
@@ -201,14 +203,14 @@ private fun Overview(
     latest: String?,
     repo: String?,
 ) {
-    Text(description ?: "No description.", style = MaterialTheme.typography.bodyMedium)
+    Text(description ?: stringResource(Res.string.package_no_description), style = MaterialTheme.typography.bodyMedium)
     Column(Modifier.padding(top = LocalSpacing.current.lg), verticalArrangement = Arrangement.spacedBy(LocalSpacing.current.xs)) {
-        Fact("Installed", installed?.version)
-        Fact("Latest", latest)
-        Fact("Source", installed?.source)
-        Fact("Repository", repo)
-        Fact("Trust", installed?.trust)
-        Fact("Kept", installed?.retained?.takeIf { it.isNotEmpty() }?.joinToString(", "))
+        Fact(stringResource(Res.string.package_installed), installed?.version)
+        Fact(stringResource(Res.string.package_latest), latest)
+        Fact(stringResource(Res.string.package_source), installed?.source)
+        Fact(stringResource(Res.string.package_repository), repo)
+        Fact(stringResource(Res.string.package_trust), installed?.trust)
+        Fact(stringResource(Res.string.package_kept), installed?.retained?.takeIf { it.isNotEmpty() }?.joinToString(", "))
     }
 }
 
@@ -230,7 +232,7 @@ private fun Changes(
 ) {
     when {
         loading -> CircularProgressIndicator()
-        changelog.isNullOrEmpty() -> Text("No changelog found.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        changelog.isNullOrEmpty() -> Text(stringResource(Res.string.package_no_changelog), color = MaterialTheme.colorScheme.onSurfaceVariant)
         else -> ChangelogText(changelog.joinToString("\n\n") { "## ${it.heading ?: it.version}\n\n${it.body}" })
     }
 }
@@ -238,14 +240,14 @@ private fun Changes(
 @Composable
 private fun Files(installed: Package?) {
     if (installed == null) {
-        Text("Not installed.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(Res.string.package_not_installed), color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
     SelectionContainer {
         Column(verticalArrangement = Arrangement.spacedBy(LocalSpacing.current.xs)) {
-            Text("Store", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(Res.string.package_store), style = MaterialTheme.typography.titleSmall)
             Text(installed.prefix, style = LocalMonoStyle.current)
-            Text("Links", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = LocalSpacing.current.md))
+            Text(stringResource(Res.string.package_links), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = LocalSpacing.current.md))
             installed.binaries.forEach { Text(it, style = LocalMonoStyle.current) }
         }
     }
@@ -259,9 +261,9 @@ fun UninstallConfirm(
     onDone: () -> Unit,
 ) {
     Confirm(
-        title = "Uninstall ${pkg.name}?",
-        message = "Removes ${pkg.name} ${pkg.version}, its links and its store directory. Its own configuration is kept.",
-        confirm = "Uninstall",
+        title = stringResource(Res.string.package_uninstall_title, pkg.name),
+        message = stringResource(Res.string.package_uninstall_text, pkg.name, pkg.version),
+        confirm = stringResource(Res.string.action_uninstall),
         destructive = true,
         subject = pkg.name,
         onConfirm = {

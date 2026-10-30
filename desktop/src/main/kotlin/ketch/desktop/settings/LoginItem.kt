@@ -3,6 +3,7 @@
 // person can change it there too.
 package ketch.desktop.settings
 
+import ketch.desktop.strings.*
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -40,7 +41,7 @@ object Unavailable : LoginItem {
 
     override fun isEnabled() = false
 
-    override fun set(enabled: Boolean) = "Open at login is available in the installed app."
+    override fun set(enabled: Boolean) = tr(Res.string.login_installed_only)
 }
 
 /** A file the system reads at login: a LaunchAgent plist on macOS, an autostart entry on Linux. */
@@ -63,7 +64,7 @@ abstract class LoginFile(
             }
             null
         } catch (e: IOException) {
-            "Could not change $file: ${e.message}"
+            tr(Res.string.login_cannot_change, file, e.message.orEmpty())
         }
 }
 
@@ -135,7 +136,7 @@ class RunKey(
 
     override fun set(enabled: Boolean): String? {
         val args = if (enabled) listOf("add", KEY, "/v", NAME, "/t", "REG_SZ", "/d", "\"$launcher\"", "/f") else listOf("delete", KEY, "/v", NAME, "/f")
-        return if (reg(args) == 0 || (!enabled && !isEnabled())) null else "Windows did not change the login item."
+        return if (reg(args) == 0 || (!enabled && !isEnabled())) null else tr(Res.string.login_windows_refused)
     }
 
     companion object {

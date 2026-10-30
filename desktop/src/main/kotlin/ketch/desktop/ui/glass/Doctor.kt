@@ -15,12 +15,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.Navigation
 import ketch.desktop.ui.doctorSummary
 import ketch.desktop.ui.word
 import ketch.wire.Check
 import ketch.wire.CheckOutcome
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.glass.AutoGrid
 import pyrlyn.glass.Badge
 import pyrlyn.glass.BadgeKind
@@ -43,10 +45,10 @@ fun GlassDoctor(
 ) {
     val glass = LocalGlass.current
     GlassPage(
-        "Doctor",
+        stringResource(Res.string.section_doctor),
         "doctor",
         navigation,
-        toolbar = { GlassButton("Run again", ButtonKind.Primary) { actions.run { runDoctor() } } },
+        toolbar = { GlassButton(stringResource(Res.string.action_run_again), ButtonKind.Primary) { actions.run { runDoctor() } } },
     ) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PageContent, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item { Text(doctorSummary(state), color = glass.ink2, style = body(TextSize.BODY, FontWeight.Medium), modifier = Modifier.testTag("doctor-summary")) }
@@ -66,9 +68,9 @@ private class Stat(
 
 private val STATS =
     listOf(
-        Stat(CheckOutcome.Ok, "Passed", Color(0xFF6FE39E), Color(0xFF1F9D57), Glyph.Check),
-        Stat(CheckOutcome.Warn, "Warnings", Color(0xFFF6CF6A), Color(0xFFC98F00), Glyph.Warning),
-        Stat(CheckOutcome.Fail, "Failed", Color(0xFFFF8E9A), Color(0xFFC62A44), Glyph.Cross),
+        Stat(CheckOutcome.Ok, tr(Res.string.doctor_passed), Color(0xFF6FE39E), Color(0xFF1F9D57), Glyph.Check),
+        Stat(CheckOutcome.Warn, tr(Res.string.doctor_warnings), Color(0xFFF6CF6A), Color(0xFFC98F00), Glyph.Warning),
+        Stat(CheckOutcome.Fail, tr(Res.string.doctor_failed), Color(0xFFFF8E9A), Color(0xFFC62A44), Glyph.Cross),
     )
 
 @Composable
@@ -94,7 +96,7 @@ private fun CheckRow(check: Check) {
         Modifier.testTag("check-${check.name}"),
         icon = { GlyphIcon(verdict.glyph, verdict.ink, 22.dp) },
         detail = {
-            check.fix?.let { fix -> SelectionContainer { Text("Fix: $fix", color = glass.ink2, style = mono(FIX)) } }
+            check.fix?.let { fix -> SelectionContainer { Text(stringResource(Res.string.doctor_fix_hint, fix), color = glass.ink2, style = mono(FIX)) } }
         },
     ) { Badge(check.outcome.word, verdict.kind, Modifier.widthIn(min = BADGE_WIDTH).align(Alignment.CenterVertically)) }
 }

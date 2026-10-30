@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ketch.desktop.strings.*
 import ketch.desktop.ui.ABOUT_LICENCES
 import ketch.desktop.ui.ABOUT_LICENCE_TITLE
 import ketch.desktop.ui.ABOUT_LINK
@@ -30,6 +31,7 @@ import ketch.desktop.ui.ABOUT_REPOSITORY
 import ketch.desktop.ui.ABOUT_SUMMARY
 import ketch.desktop.ui.appVersion
 import ketch.wire.Question
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.glass.ButtonKind
 import pyrlyn.glass.GlassButton
 import pyrlyn.glass.IconSize
@@ -60,7 +62,7 @@ fun GlassConfirm(
         }
         SheetText(message)
         SheetActions {
-            GlassButton("Cancel", ButtonKind.Secondary, onClick = onDismiss)
+            GlassButton(stringResource(Res.string.action_cancel), ButtonKind.Secondary, onClick = onDismiss)
             GlassButton(confirm, if (destructive) ButtonKind.DangerFill else ButtonKind.Primary, Modifier.testTag("confirm-yes"), onClick = onConfirm)
         }
     }
@@ -75,8 +77,8 @@ fun GlassChooseBinary(
     var picked by remember(question) { mutableIntStateOf(0) }
     val glass = LocalGlass.current
     Sheet(onDecline, Modifier.testTag("question-choose-binary")) {
-        SheetTitle("Which binary should ${question.pkg} link?")
-        SheetText("${question.pkg} ships several programs. ketch links one onto your PATH.")
+        SheetTitle(stringResource(Res.string.dialog_choose_binary_title, question.pkg))
+        SheetText(stringResource(Res.string.dialog_choose_binary_text, question.pkg))
         Column(Modifier.selectableGroup()) {
             question.candidates.forEachIndexed { index, candidate ->
                 Row(
@@ -90,8 +92,8 @@ fun GlassChooseBinary(
             }
         }
         SheetActions {
-            GlassButton("Cancel", ButtonKind.Secondary, onClick = onDecline)
-            GlassButton("Link", ButtonKind.Primary) { onPick(picked) }
+            GlassButton(stringResource(Res.string.action_cancel), ButtonKind.Secondary, onClick = onDecline)
+            GlassButton(stringResource(Res.string.action_link), ButtonKind.Primary) { onPick(picked) }
         }
     }
 }
@@ -108,14 +110,14 @@ fun GlassAbout(
             Mark(MARK_SIZE)
             Column {
                 SheetTitle("Ketch")
-                Text("Version $appVersion · ketch $coreVersion", color = glass.ink2, style = mono(MONO_SIZE))
+                Text(stringResource(Res.string.about_version, appVersion, coreVersion), color = glass.ink2, style = mono(MONO_SIZE))
             }
         }
         SheetText(ABOUT_SUMMARY)
         Text(ABOUT_LICENCE_TITLE, color = glass.ink, style = body(TextSize.LABEL, FontWeight.SemiBold))
         SheetText(ABOUT_LICENCES)
         Text(ABOUT_LINK, color = glass.accentInk, style = body(TextSize.LABEL, FontWeight.Medium), modifier = Modifier.clickable { uri.openUri(ABOUT_REPOSITORY) })
-        SheetActions { GlassButton("Close", ButtonKind.Secondary, onClick = onClose) }
+        SheetActions { GlassButton(stringResource(Res.string.action_close), ButtonKind.Secondary, onClick = onClose) }
     }
 }
 

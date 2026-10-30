@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import ketch.desktop.store.LogEntry
 import ketch.desktop.store.LogLevel
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.LOG_CLOCK
 import ketch.desktop.ui.LOG_ZONE
@@ -35,6 +36,7 @@ import ketch.desktop.ui.exportLog
 import ketch.desktop.ui.logDays
 import ketch.desktop.ui.searchFocus
 import ketch.desktop.ui.word
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.glass.Badge
 import pyrlyn.glass.BadgeKind
 import pyrlyn.glass.ButtonKind
@@ -63,18 +65,18 @@ fun GlassActivity(
     val entries = state.log.filter { needle.isEmpty() || it.message.contains(needle, ignoreCase = true) }
     val focus = searchFocus(navigation)
     GlassPage(
-        "Activity",
+        stringResource(Res.string.section_activity),
         "activity",
         navigation,
         toolbar = {
-            SearchField(filter, "Filter the log", Modifier.testTag("activity-filter"), "⌘K", focus) { filter = it }
-            GlassButton("Export log", ButtonKind.Secondary, enabled = state.log.isNotEmpty()) { failure = exportLog(state.log) }
+            SearchField(filter, stringResource(Res.string.activity_filter_log), Modifier.testTag("activity-filter"), "⌘K", focus) { filter = it }
+            GlassButton(stringResource(Res.string.action_export_log), ButtonKind.Secondary, enabled = state.log.isNotEmpty()) { failure = exportLog(state.log) }
         },
     ) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PageContent, verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item { ActivityBar(state, actions) }
             failure?.let { item { Text(it, color = glass.danger, style = body(TextSize.LABEL), modifier = Modifier.testTag("activity-message")) } }
-            if (entries.isEmpty()) item { EmptyNote(if (needle.isEmpty()) "Nothing has run yet" else "No line matches \"$needle\"") }
+            if (entries.isEmpty()) item { EmptyNote(if (needle.isEmpty()) stringResource(Res.string.activity_nothing_yet) else stringResource(Res.string.activity_no_match, needle)) }
             for ((day, lines) in logDays(entries, LocalDate.now(LOG_ZONE))) {
                 item(key = "day-$day") { SectionTitle(day, small = true) }
                 item(key = "log-$day") { DayCard(lines) }

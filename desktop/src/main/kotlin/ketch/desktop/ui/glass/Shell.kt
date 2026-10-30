@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ketch.desktop.store.StoreState
 import ketch.desktop.store.UpdateChecks
+import ketch.desktop.strings.*
 import ketch.desktop.ui.About
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.AppParts
@@ -45,8 +46,8 @@ import ketch.desktop.ui.Questions
 import ketch.desktop.ui.Section
 import ketch.desktop.ui.Source
 import ketch.desktop.ui.glyph
-import ketch.desktop.ui.plural
 import ketch.wire.Settings
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.glass.ButtonKind
 import pyrlyn.glass.CountBadge
 import pyrlyn.glass.GlassButton
@@ -138,7 +139,7 @@ private fun Sidebar(
             Text("ketch", color = glass.ink, style = mono(BRAND, FontWeight.SemiBold))
         }
         for (section in LIBRARY) SectionItem(section, state, navigation)
-        SidebarLabel("Sources")
+        SidebarLabel(stringResource(Res.string.section_sources))
         for (source in Source.entries) {
             SidebarItem(source.title, navigation.source == source, Modifier.testTag("sidebar-${source.tag}"), leading = { Dot(source) }) { navigation.show(source) }
         }
@@ -157,9 +158,9 @@ private fun SectionItem(
     val selected = navigation.section == section && navigation.source == null
     val (count, noun) =
         when (section) {
-            Section.Updates -> state.pendingUpgradeCount to "update"
-            Section.Doctor -> state.problemCount to "problem"
-            else -> 0 to ""
+            Section.Updates -> state.pendingUpgradeCount to Res.plurals.updates
+            Section.Doctor -> state.problemCount to Res.plurals.problems
+            else -> 0 to Res.plurals.packages
         }
     SidebarItem(
         section.title,
@@ -205,7 +206,7 @@ fun GlassPage(
             title,
             Modifier.padding(start = 18.dp, end = 28.dp),
             crumb,
-            leading = { NavigationArrows(navigation.canGoBack, navigation.canGoForward, "Back", "Forward", navigation::back, navigation::forward) },
+            leading = { NavigationArrows(navigation.canGoBack, navigation.canGoForward, stringResource(Res.string.action_back), stringResource(Res.string.action_forward), navigation::back, navigation::forward) },
             trailing = toolbar,
         )
         content()
@@ -235,14 +236,14 @@ fun StatusBars(
 ) {
     val glass = LocalGlass.current
     state.busy?.let { busy ->
-        StatusBar("ketch is busy", busy.message, null, modifier.testTag("busy-bar"), leading = { GlyphIcon(Glyph.Lock, glass.progress, GLYPH) }) {
-            GlassButton("Retry", ButtonKind.Secondary) { actions.run { retryBusy() } }
+        StatusBar(stringResource(Res.string.window_ketch_busy), busy.message, null, modifier.testTag("busy-bar"), leading = { GlyphIcon(Glyph.Lock, glass.progress, GLYPH) }) {
+            GlassButton(stringResource(Res.string.action_retry), ButtonKind.Secondary) { actions.run { retryBusy() } }
         }
     }
     if (showActivity) ActivityBar(state, actions, modifier)
     state.error?.let { error ->
-        StatusBar("Something went wrong", error, null, modifier.testTag("error-bar"), leading = { GlyphIcon(Glyph.Warning, glass.danger, GLYPH) }) {
-            GlassButton("Dismiss", ButtonKind.Secondary) { actions.store.dismissError() }
+        StatusBar(stringResource(Res.string.window_something_wrong), error, null, modifier.testTag("error-bar"), leading = { GlyphIcon(Glyph.Warning, glass.danger, GLYPH) }) {
+            GlassButton(stringResource(Res.string.action_dismiss), ButtonKind.Secondary) { actions.store.dismissError() }
         }
     }
 }
@@ -255,7 +256,7 @@ fun ActivityBar(
 ) {
     val activity = state.activity ?: return
     StatusBar(activity.title, activity.status, activity.fraction.toFloat(), modifier.testTag("activity-bar"), leading = { Spinner() }) {
-        GlassButton("Cancel", ButtonKind.Secondary, enabled = !activity.isCancelling) { actions.store.cancel() }
+        GlassButton(stringResource(Res.string.action_cancel), ButtonKind.Secondary, enabled = !activity.isCancelling) { actions.store.cancel() }
     }
 }
 

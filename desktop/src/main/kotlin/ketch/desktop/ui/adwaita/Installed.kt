@@ -14,10 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.Navigation
 import ketch.desktop.ui.pathExists
-import ketch.desktop.ui.plural
 import ketch.desktop.ui.reveal
 import ketch.desktop.ui.screens.UninstallConfirm
 import ketch.desktop.ui.screens.githubRepo
@@ -25,6 +25,7 @@ import ketch.desktop.ui.tilde
 import ketch.desktop.ui.whereTo
 import ketch.wire.Package
 import ketch.wire.Settings
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.adwaita.ActionRow
 import pyrlyn.adwaita.BoxedList
 import pyrlyn.adwaita.EmptyNote
@@ -54,15 +55,15 @@ fun AdwaitaInstalled(
     val needle = filter.trim()
     val rows = state.installed.filter { needle.isEmpty() || it.name.contains(needle, ignoreCase = true) }.sortedBy { it.name }
     AdwaitaPage("installed") {
-        PageHead("Installed") { Entry(filter, "Filter installed", Modifier.width(FILTER_WIDTH).testTag("installed-filter"), Glyph.Search) { filter = it } }
+        PageHead(stringResource(Res.string.section_installed)) { Entry(filter, stringResource(Res.string.installed_filter), Modifier.width(FILTER_WIDTH).testTag("installed-filter"), Glyph.Search) { filter = it } }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatusPill(plural(state.installed.size, "package"), Status.Neutral)
+            StatusPill(plural(state.installed.size, Res.plurals.packages), Status.Neutral)
             config?.let { StatusPill(tilde(it.root), Status.Neutral) }
-            StatusPill("${plural(state.updates.size, "update")} · ${state.held.size} pinned", Status.Neutral)
+            StatusPill("${plural(state.updates.size, Res.plurals.updates)} · ${plural(state.held.size, Res.plurals.pinned_count)}", Status.Neutral)
         }
         when {
             rows.isNotEmpty() -> {
-                PreferencesGroup("Packages") {
+                PreferencesGroup(stringResource(Res.string.installed_packages)) {
                     BoxedList {
                         rows.forEachIndexed { index, pkg ->
                             if (index > 0) RowLine()
@@ -76,11 +77,11 @@ fun AdwaitaInstalled(
             }
 
             needle.isEmpty() -> {
-                EmptyNote("Nothing is installed yet. Find something in Explore.")
+                EmptyNote(stringResource(Res.string.installed_none_explore))
             }
 
             else -> {
-                EmptyNote("No installed package matches \"$needle\"")
+                EmptyNote(stringResource(Res.string.installed_no_match, needle))
             }
         }
     }
@@ -103,17 +104,17 @@ private fun InstalledRow(
         onClick = { navigation.open = pkg.name },
         leading = { PackageAvatar(pkg.name) },
         trailing = {
-            if (update != null) PillButton("Update", style = PillStyle.Update, size = PillSize.Small, enabled = !state.isRunning) { actions.run { upgrade(listOf(pkg.name)) } }
+            if (update != null) PillButton(stringResource(Res.string.action_update), style = PillStyle.Update, size = PillSize.Small, enabled = !state.isRunning) { actions.run { upgrade(listOf(pkg.name)) } }
             FolderButton(pkg.binaries.firstOrNull() ?: pkg.prefix)
-            PillButton("Uninstall…", style = PillStyle.FlatDanger, size = PillSize.Small, enabled = !state.isRunning, onClick = onUninstall)
+            PillButton(stringResource(Res.string.action_uninstall_ellipsis), style = PillStyle.FlatDanger, size = PillSize.Small, enabled = !state.isRunning, onClick = onUninstall)
         },
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             RowTitle(pkg.name)
             when {
-                pinned -> StatusPill("Pinned", Status.Neutral)
-                update != null -> StatusPill("Update to $update available", Status.Update)
-                else -> StatusPill("Installed", Status.Ok)
+                pinned -> StatusPill(stringResource(Res.string.status_pinned), Status.Neutral)
+                update != null -> StatusPill(stringResource(Res.string.package_update_available, update), Status.Update)
+                else -> StatusPill(stringResource(Res.string.status_installed), Status.Ok)
             }
         }
         RowMono(listOfNotNull(githubRepo(pkg.source) ?: pkg.source, pkg.version, whereTo(pkg, state)).joinToString(" · "))
@@ -122,7 +123,7 @@ private fun InstalledRow(
 
 @Composable
 fun FolderButton(path: String) {
-    FlatButton(Glyph.Folder, "Open folder", enabled = pathExists(path)) { reveal(path) }
+    FlatButton(Glyph.Folder, stringResource(Res.string.action_open_folder), enabled = pathExists(path)) { reveal(path) }
 }
 
 private val FILTER_WIDTH = 260.dp

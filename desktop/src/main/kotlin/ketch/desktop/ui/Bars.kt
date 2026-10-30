@@ -21,6 +21,8 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 fun Bars(
@@ -29,19 +31,19 @@ fun Bars(
 ) {
     val status = LocalStatusColors.current
     state.busy?.let { busy ->
-        Bar("ketch is busy", busy.message, status.busySubtle, status.busy, "busy-bar") {
-            TextButton(onClick = { actions.run { retryBusy() } }) { Text("Retry") }
+        Bar(stringResource(Res.string.window_ketch_busy), busy.message, status.busySubtle, status.busy, "busy-bar") {
+            TextButton(onClick = { actions.run { retryBusy() } }) { Text(stringResource(Res.string.action_retry)) }
         }
     }
     state.activity?.let { activity ->
         Bar(activity.title, activity.status, MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.onPrimaryContainer, "activity-bar") {
-            TextButton(onClick = { actions.store.cancel() }, enabled = !activity.isCancelling) { Text("Cancel") }
+            TextButton(onClick = { actions.store.cancel() }, enabled = !activity.isCancelling) { Text(stringResource(Res.string.action_cancel)) }
         }
         LinearProgressIndicator(progress = { activity.fraction.toFloat() }, modifier = Modifier.fillMaxWidth())
     }
     state.error?.let { error ->
-        Bar("Something went wrong", error, status.errorSubtle, status.error, "error-bar") {
-            TextButton(onClick = { actions.store.dismissError() }) { Text("Dismiss") }
+        Bar(stringResource(Res.string.window_something_wrong), error, status.errorSubtle, status.error, "error-bar") {
+            TextButton(onClick = { actions.store.dismissError() }) { Text(stringResource(Res.string.action_dismiss)) }
         }
     }
 }

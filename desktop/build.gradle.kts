@@ -9,6 +9,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
+    implementation(compose.components.resources)
     implementation("pyrlyn.adwaita:adwaita")
     implementation("pyrlyn.fluent:fluent")
     implementation("pyrlyn.glass:glass")
@@ -89,10 +90,15 @@ compose.desktop {
             macOS {
                 bundleID = "io.github.pyrlyn.ketch"
                 appCategory = "public.app-category.developer-tools"
-                // As the macOS app's Info.plist: the system hands ketch:// links to Desktop's open-URI handler.
+                // As the macOS app's Info.plist: the system hands ketch:// links to Desktop's open-URI handler. macOS gives
+                // the app only a language listed here, so every values-* folder needs its line.
                 infoPlist {
                     extraKeysRawXml =
                         """
+                        |    <key>CFBundleLocalizations</key>
+                        |    <array>
+                        |        <string>en</string>
+                        |    </array>
                         |    <key>CFBundleURLTypes</key>
                         |    <array>
                         |        <dict>
@@ -130,6 +136,12 @@ tasks.test {
         dependsOn(":ketch:linkDebugExecutable${target.replaceFirstChar(Char::uppercase)}")
         environment("KETCH_EXE", linkedKetch(target, "debug").absolutePath)
     }
+}
+
+// The accessors for src/main/composeResources, in a package of ours rather than one named after the build.
+compose.resources {
+    packageOfResClass = "ketch.desktop.strings"
+    publicResClass = false
 }
 
 // The brand tokens, copied unchanged from the Rust tree (desktop/design/README.md), read at start.

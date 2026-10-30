@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ketch.desktop.strings.*
 import ketch.desktop.ui.ABOUT_LICENCES
 import ketch.desktop.ui.ABOUT_LICENCE_TITLE
 import ketch.desktop.ui.ABOUT_LINK
@@ -24,6 +25,7 @@ import ketch.desktop.ui.ABOUT_SUMMARY
 import ketch.desktop.ui.appVersion
 import ketch.desktop.ui.glass.Mark
 import ketch.wire.Question
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.fluent.AppIconSize
 import pyrlyn.fluent.ButtonStyle
 import pyrlyn.fluent.ContentDialog
@@ -47,7 +49,7 @@ fun FluentConfirm(
         onDismiss,
         footer = {
             FluentButton(confirm, if (destructive) ButtonStyle.DangerFill else ButtonStyle.Accent, Modifier.weight(1f).testTag("confirm-yes"), onClick = onConfirm)
-            FluentButton("Cancel", modifier = Modifier.weight(1f), onClick = onDismiss)
+            FluentButton(stringResource(Res.string.action_cancel), modifier = Modifier.weight(1f), onClick = onDismiss)
         },
         Modifier.testTag("confirm"),
         leading = { subject?.let { PackageIcon(it, AppIconSize.Medium) } },
@@ -62,15 +64,15 @@ fun FluentChooseBinary(
 ) {
     var picked by remember(question) { mutableIntStateOf(0) }
     ContentDialog(
-        "Which binary should ${question.pkg} link?",
+        stringResource(Res.string.dialog_choose_binary_title, question.pkg),
         onDecline,
         footer = {
-            FluentButton("Link", ButtonStyle.Accent, Modifier.weight(1f)) { onPick(picked) }
-            FluentButton("Cancel", modifier = Modifier.weight(1f), onClick = onDecline)
+            FluentButton(stringResource(Res.string.action_link), ButtonStyle.Accent, Modifier.weight(1f)) { onPick(picked) }
+            FluentButton(stringResource(Res.string.action_cancel), modifier = Modifier.weight(1f), onClick = onDecline)
         },
         Modifier.testTag("question-choose-binary"),
     ) {
-        Words("${question.pkg} ships several programs. ketch links one onto your PATH.")
+        Words(stringResource(Res.string.dialog_choose_binary_text, question.pkg))
         RadioButtons(question.candidates.indices.toList(), picked, { question.candidates[it] }) { picked = it }
     }
 }
@@ -86,11 +88,11 @@ fun FluentAbout(
     ContentDialog(
         "Ketch",
         onClose,
-        footer = { FluentButton("Close", modifier = Modifier.fillMaxWidth(), onClick = onClose) },
+        footer = { FluentButton(stringResource(Res.string.action_close), modifier = Modifier.fillMaxWidth(), onClick = onClose) },
         Modifier.testTag("about"),
         leading = { Mark(MARK_SIZE) },
     ) {
-        Text("Version $appVersion · ketch $coreVersion", color = c.ink2, style = type.mono)
+        Text(stringResource(Res.string.about_version, appVersion, coreVersion), color = c.ink2, style = type.mono)
         Words(ABOUT_SUMMARY)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(ABOUT_LICENCE_TITLE, color = c.ink, style = type.body.copy(fontWeight = FontWeight.SemiBold))

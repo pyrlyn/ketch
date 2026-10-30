@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusRequester
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.screens.PackageFacts
 import ketch.wire.ChangelogSource
 import ketch.wire.Check
@@ -21,9 +22,9 @@ import pyrlyn.glass.Glyph
 /** The sections' order in both looks' sidebars; Settings stands apart at the foot. */
 val LIBRARY = listOf(Section.Discover, Section.Installed, Section.Updates, Section.Activity, Section.Doctor)
 
-const val HERO_TITLE = "Catch releases straight from GitHub."
-const val HERO_TEXT = "No taps, no formulae, no build step. ketch takes the asset a project already ships, checks its published checksum and links it onto your PATH."
-const val VERIFIED_NOTE = "Every update is verified the same way as an install, and the previous version stays on disk for ketch rollback."
+val HERO_TITLE get() = tr(Res.string.discover_hero_title)
+val HERO_TEXT get() = tr(Res.string.discover_hero_text)
+val VERIFIED_NOTE get() = tr(Res.string.updates_verified_note)
 
 val Section.glyph
     get() =
@@ -60,7 +61,7 @@ fun whereTo(
     pkg: Package,
     state: StoreState,
 ) = state.held.firstOrNull { it.name == pkg.name }.let { held ->
-    if (held != null) held.heldBy?.let { "held by ${tilde(it)}" } else linkedTo(pkg.binaries)
+    if (held != null) held.heldBy?.let { tr(Res.string.package_held_by, tilde(it)) } else linkedTo(pkg.binaries)
 }
 
 /** What [upgrade] brings, for its card, once the core has said. */
@@ -86,10 +87,10 @@ fun changelogNote(
 /** What install would do about a checksum, in words: [policy] is the core's name for it. */
 fun checksumWords(policy: String) =
     when (policy) {
-        "published-digest" -> "checked against the published sha256"
-        "require" -> "refused unless a checksum is published"
-        "trust-on-first-use" -> "no published checksum: the first download is trusted"
-        else -> "nothing to check yet"
+        "published-digest" -> tr(Res.string.package_checksum_published)
+        "require" -> tr(Res.string.package_checksum_required)
+        "trust-on-first-use" -> tr(Res.string.package_checksum_first_use)
+        else -> tr(Res.string.package_checksum_none)
     }
 
 fun firstLine(body: String): String? {
@@ -100,51 +101,73 @@ fun firstLine(body: String): String? {
 
 fun doctorSummary(state: StoreState) =
     when {
-        state.checks.isEmpty() -> "No checks have run yet"
-        state.problemCount == 0 -> "No problems found"
-        else -> plural(state.problemCount, "problem") + " found"
+        state.checks.isEmpty() -> tr(Res.string.doctor_no_checks)
+        state.problemCount == 0 -> tr(Res.string.doctor_no_problems)
+        else -> plural(state.problemCount, Res.plurals.problems_found)
     }
 
 val CheckOutcome.word
     get() =
         when (this) {
-            CheckOutcome.Ok -> "OK"
-            CheckOutcome.Warn -> "Warning"
-            CheckOutcome.Fail -> "Failed"
+            CheckOutcome.Ok -> tr(Res.string.doctor_ok)
+            CheckOutcome.Warn -> tr(Res.string.doctor_warning)
+            CheckOutcome.Fail -> tr(Res.string.doctor_failed)
         }
 
 /** What a package's trust level says, and whether it says the download was checked. */
 fun trustSeal(trust: String) =
     when (trust) {
-        "checksum" -> "SHA-256 verified" to true
-        "signed" -> "Signed" to true
-        else -> "First use" to false
+        "checksum" -> tr(Res.string.discover_sha256_verified) to true
+        "signed" -> tr(Res.string.package_seal_signed) to true
+        else -> tr(Res.string.package_seal_first_use) to false
     }
 
 /** Where a changelog entry came from. */
-fun changelogOrigin(source: ChangelogSource) = if (source is ChangelogSource.File) fileName(source.path) else "release notes"
+fun changelogOrigin(source: ChangelogSource) = if (source is ChangelogSource.File) fileName(source.path) else tr(Res.string.package_changelog_origin)
 
 /** The names and values of a package's Details panel. */
 fun packageDetails(facts: PackageFacts): List<Pair<String, String>> {
     val installed = facts.installed
     return listOfNotNull(
-        installed?.let { "Installed" to it.version },
-        facts.latest?.let { "Latest" to it },
-        installed?.let { "Source" to it.source },
-        facts.repo?.let { "Repository" to it },
-        installed?.let { linkedTo(it.binaries) }?.let { "Linked to" to it },
-        installed?.retained?.takeIf { it.isNotEmpty() }?.let { "Kept" to it.joinToString(", ") },
+        installed?.let { tr(Res.string.package_installed) to it.version },
+        facts.latest?.let { tr(Res.string.package_latest) to it },
+        installed?.let { tr(Res.string.package_source) to it.source },
+        facts.repo?.let { tr(Res.string.package_repository) to it },
+        installed?.let { linkedTo(it.binaries) }?.let { tr(Res.string.package_linked_to) to it },
+        installed?.retained?.takeIf { it.isNotEmpty() }?.let { tr(Res.string.package_kept) to it.joinToString(", ") },
     )
 }
+
+/** Presets are stored by their English names; a swatch says the name in the person's language. */
+private val COLOR_NAMES =
+    mapOf(
+        "sky" to Res.string.color_sky,
+        "mint" to Res.string.color_mint,
+        "sand" to Res.string.color_sand,
+        "rose" to Res.string.color_rose,
+        "lilac" to Res.string.color_lilac,
+        "smoke" to Res.string.color_smoke,
+        "navy" to Res.string.color_navy,
+        "blue" to Res.string.color_blue,
+        "purple" to Res.string.color_purple,
+        "pink" to Res.string.color_pink,
+        "red" to Res.string.color_red,
+        "orange" to Res.string.color_orange,
+        "yellow" to Res.string.color_yellow,
+        "green" to Res.string.color_green,
+        "graphite" to Res.string.color_graphite,
+    )
+
+fun colorName(stored: String) = COLOR_NAMES[stored]?.let { tr(it) } ?: stored
 
 /** Which packages a filter keeps. Few manifests name their kind, and one that does not is taken for a tool. */
 enum class Kind(
     val title: String,
     val admits: (RegistryPackage) -> Boolean,
 ) {
-    All("All", { true }),
-    Tools("CLI tools", { !it.isApp }),
-    Apps("Apps", { it.isApp }),
+    All(tr(Res.string.discover_filter_all), { true }),
+    Tools(tr(Res.string.discover_filter_tools), { !it.isApp }),
+    Apps(tr(Res.string.discover_filter_apps), { it.isApp }),
 }
 
 fun emptyWords(
@@ -152,10 +175,10 @@ fun emptyWords(
     source: Source?,
     kind: Kind,
 ) = when {
-    query.isNotBlank() -> "No package matches \"${query.trim()}\""
-    kind == Kind.Apps -> "The registry names no apps yet"
-    source == Source.Releases -> "Type owner/repo to find a project's releases"
-    else -> "The registry lists nothing yet"
+    query.isNotBlank() -> tr(Res.string.discover_no_match, query.trim())
+    kind == Kind.Apps -> tr(Res.string.discover_registry_no_apps)
+    source == Source.Releases -> tr(Res.string.discover_type_repo)
+    else -> tr(Res.string.discover_registry_empty)
 }
 
 /** Checks about files in ketch's own folder, which is where to look when they fail. */

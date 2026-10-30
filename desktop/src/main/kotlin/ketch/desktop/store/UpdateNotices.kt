@@ -3,6 +3,7 @@
 package ketch.desktop.store
 
 import ketch.desktop.settings.AppSettings
+import ketch.desktop.strings.*
 import ketch.wire.Upgrade
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -26,9 +27,9 @@ object UpdateNotices {
         upgrades: List<Upgrade>,
         listed: Int = LISTED,
     ): Pair<String, String> {
-        val title = if (upgrades.size == 1) "1 update available" else "${upgrades.size} updates available"
+        val title = plural(upgrades.size, Res.plurals.updates_available)
         val shown = upgrades.take(listed).map { printable("${it.name} ${it.installed} → ${it.latest}") }
-        val more = if (upgrades.size > listed) listOf("and ${upgrades.size - listed} more") else emptyList()
+        val more = if (upgrades.size > listed) listOf(tr(Res.string.notice_more, upgrades.size - listed)) else emptyList()
         return title to (shown + more).joinToString("\n")
     }
 
@@ -92,6 +93,6 @@ class UpdateChecks(
     }
 
     private companion object {
-        const val REFUSED = "This system has no notification area for Ketch, so notices stay off."
+        val REFUSED get() = tr(Res.string.notice_refused)
     }
 }

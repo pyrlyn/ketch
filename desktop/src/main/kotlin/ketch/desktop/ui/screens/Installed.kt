@@ -15,10 +15,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.LocalSpacing
 import ketch.desktop.ui.LocalStatusColors
 import ketch.wire.Package
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 fun InstalledScreen(
@@ -31,16 +33,16 @@ fun InstalledScreen(
     val needle = filter.trim()
     val rows = state.installed.filter { needle.isEmpty() || it.name.contains(needle, ignoreCase = true) }.sortedBy { it.name }
     val status = LocalStatusColors.current
-    Page("Installed", "installed") {
+    Page(stringResource(Res.string.section_installed), "installed") {
         OutlinedTextField(
             value = filter,
             onValueChange = { filter = it },
-            label = { Text("Filter installed packages") },
+            label = { Text(stringResource(Res.string.installed_filter_packages)) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(bottom = LocalSpacing.current.md).testTag("installed-filter"),
         )
         if (rows.isEmpty()) {
-            if (needle.isEmpty()) Empty("Nothing is installed yet", "Find something in Discover.") else Empty("No installed package matches \"$needle\"")
+            if (needle.isEmpty()) Empty(stringResource(Res.string.installed_none), stringResource(Res.string.installed_find_something)) else Empty(stringResource(Res.string.installed_no_match, needle))
         } else {
             LazyColumn {
                 items(rows, key = { it.name }) { pkg ->
@@ -48,10 +50,10 @@ fun InstalledScreen(
                     val held = state.held.any { it.name == pkg.name }
                     PackageRow(pkg.name, "${pkg.version} · ${githubRepo(pkg.source) ?: pkg.source}", "installed-${pkg.name}", { onOpen(pkg.name) }) {
                         when {
-                            update != null -> Chip("Update to $update", status.update, status.updateSubtle)
-                            held -> Chip("Held", status.warning, status.warningSubtle)
+                            update != null -> Chip(stringResource(Res.string.action_update_to, update), status.update, status.updateSubtle)
+                            held -> Chip(stringResource(Res.string.status_held), status.warning, status.warningSubtle)
                         }
-                        TextButton(onClick = { uninstalling = pkg }, enabled = !state.isRunning) { Text("Uninstall") }
+                        TextButton(onClick = { uninstalling = pkg }, enabled = !state.isRunning) { Text(stringResource(Res.string.action_uninstall)) }
                     }
                 }
             }

@@ -34,6 +34,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import ketch.desktop.store.StoreState
 import ketch.desktop.store.UpdateChecks
+import ketch.desktop.strings.*
 import ketch.desktop.ui.About
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.AppParts
@@ -43,9 +44,9 @@ import ketch.desktop.ui.Section
 import ketch.desktop.ui.Source
 import ketch.desktop.ui.fluent.LocalWindowChrome
 import ketch.desktop.ui.glyph
-import ketch.desktop.ui.plural
 import ketch.desktop.ui.searchFocus
 import ketch.wire.Settings
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.adwaita.AppAvatar
 import pyrlyn.adwaita.AvatarSize
 import pyrlyn.adwaita.Clamp
@@ -171,16 +172,16 @@ private fun Header(
     WindowHeader(
         start = {
             if (navigation.open != null) {
-                FlatButton(Glyph.ArrowBack, "Back", Modifier.testTag("back")) { navigation.back() }
+                FlatButton(Glyph.ArrowBack, stringResource(Res.string.action_back), Modifier.testTag("back")) { navigation.back() }
             }
-            FlatButton(Glyph.Search, "Search", Modifier.testTag("search"), on = searching, onClick = onSearch)
+            FlatButton(Glyph.Search, stringResource(Res.string.action_search), Modifier.testTag("search"), on = searching, onClick = onSearch)
         },
         center = {
             ViewSwitcher(switcherItems(state), navigation.section.takeIf { it in SWITCHED && navigation.source == null }) { navigation.show(it) }
         },
         menu = {
             Box {
-                FlatButton(Glyph.Menu, "Main menu", Modifier.testTag("menu"), on = menu) { menu = true }
+                FlatButton(Glyph.Menu, stringResource(Res.string.window_main_menu), Modifier.testTag("menu"), on = menu) { menu = true }
                 if (menu) MainMenu(state, navigation) { menu = false }
             }
         },
@@ -197,7 +198,7 @@ private fun switcherItems(state: StoreState) =
             badge = count.takeIf { it > 0 }?.toString(),
             modifier =
                 Modifier.testTag("sidebar-${section.tag}").semantics {
-                    if (count > 0) contentDescription = "${section.label}, ${plural(count, "update")}"
+                    if (count > 0) contentDescription = "${section.label}, ${plural(count, Res.plurals.updates)}"
                 },
         )
     }
@@ -235,7 +236,7 @@ private fun SearchBar(
     Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 10.dp), horizontalArrangement = Arrangement.Center) {
         Entry(
             query,
-            "Search owner/repo or name",
+            stringResource(Res.string.discover_search_field),
             Modifier
                 .widthIn(max = SEARCH_WIDTH)
                 .fillMaxWidth()
@@ -265,10 +266,10 @@ private fun MainMenu(
     }
     PopoverMenu(onDismiss, Modifier.testTag("main-menu")) {
         MenuItem(Section.Activity.title, Modifier.testTag("sidebar-${Section.Activity.tag}"), Section.Activity.glyph) { pick { navigation.show(Section.Activity) } }
-        val problems = state.problemCount.takeIf { it > 0 }?.let { plural(it, "problem") }
+        val problems = state.problemCount.takeIf { it > 0 }?.let { plural(it, Res.plurals.problems) }
         MenuItem(Section.Doctor.title, Modifier.testTag("sidebar-${Section.Doctor.tag}"), Section.Doctor.glyph, shortcut = problems) { pick { navigation.show(Section.Doctor) } }
         MenuSeparator()
-        MenuLabel("Sources")
+        MenuLabel(stringResource(Res.string.section_sources))
         for (source in Source.entries) {
             val color = if (source == Source.Releases) c.accent else c.info
             MenuItem(source.title, Modifier.testTag("sidebar-${source.tag}"), leading = { GlowDot(color) }) { pick { navigation.show(source) } }
@@ -277,7 +278,7 @@ private fun MainMenu(
         MenuItem(Section.Settings.title, Modifier.testTag("sidebar-${Section.Settings.tag}"), Section.Settings.glyph, shortcut = "Ctrl+,") {
             pick { navigation.show(Section.Settings) }
         }
-        MenuItem("About ketch Store", Modifier.testTag("menu-about"), Glyph.Info) { pick { navigation.showingAbout = true } }
+        MenuItem(stringResource(Res.string.window_about_store), Modifier.testTag("menu-about"), Glyph.Info) { pick { navigation.showingAbout = true } }
     }
 }
 
@@ -316,13 +317,13 @@ private fun Toasts(
 ) {
     val c = LocalAdwaita.current
     state.busy?.let { busy ->
-        Notice(busy.message, Modifier.testTag("busy-bar"), { GlyphIcon(Glyph.Lock, c.warning, TOAST_GLYPH) }, "Retry") { actions.run { retryBusy() } }
+        Notice(busy.message, Modifier.testTag("busy-bar"), { GlyphIcon(Glyph.Lock, c.warning, TOAST_GLYPH) }, stringResource(Res.string.action_retry)) { actions.run { retryBusy() } }
     }
     state.activity?.takeIf { showActivity }?.let { activity ->
-        Notice(activity.title, Modifier.testTag("activity-bar"), { Spinner(c.accent) }, "Details") { navigation.show(Section.Activity) }
+        Notice(activity.title, Modifier.testTag("activity-bar"), { Spinner(c.accent) }, stringResource(Res.string.action_details)) { navigation.show(Section.Activity) }
     }
     state.error?.let { error ->
-        Notice(error, Modifier.testTag("error-bar"), { GlyphIcon(Glyph.Warning, c.dangerText, TOAST_GLYPH) }, "Dismiss") { actions.store.dismissError() }
+        Notice(error, Modifier.testTag("error-bar"), { GlyphIcon(Glyph.Warning, c.dangerText, TOAST_GLYPH) }, stringResource(Res.string.action_dismiss)) { actions.store.dismissError() }
     }
 }
 
@@ -355,7 +356,7 @@ fun PackageAvatar(
 ) = AppAvatar(name.take(2), IconGradient.of(name), size)
 
 /** GNOME's words for what the other looks call Discover. */
-val Section.label get() = if (this == Section.Discover) "Explore" else title
+val Section.label get() = if (this == Section.Discover) tr(Res.string.section_explore) else title
 
 private val SWITCHED = listOf(Section.Discover, Section.Installed, Section.Updates)
 private val TOAST_MARGIN = 24.dp

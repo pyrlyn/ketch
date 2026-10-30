@@ -6,6 +6,7 @@
 // call with what it printed on stderr instead of leaving them waiting.
 package ketch.desktop.core
 
+import ketch.desktop.strings.*
 import ketch.wire.AppMessage
 import ketch.wire.Call
 import ketch.wire.KetchError
@@ -126,7 +127,7 @@ class ServeCore private constructor(
 
                 // Only a bug on one side makes the child reject a line; failing every call says so, waiting would not.
                 is ServeMessage.Rejected -> {
-                    end(KetchError.Other("ketch serve rejected a message: ${message.message}"))
+                    end(KetchError.Other(tr(Res.string.core_message_rejected, message.message)))
                 }
 
                 is ServeMessage.Hello, null -> {}
@@ -135,8 +136,8 @@ class ServeCore private constructor(
         process.waitFor(EXIT_WAIT_SECONDS, TimeUnit.SECONDS)
         // The last of stderr says why it stopped, and may still be in the pipe.
         withTimeoutOrNull(DRAIN_MILLIS) { drained.join() }
-        val code = if (process.isAlive) "still running" else "exit ${process.exitValue()}"
-        end(KetchError.Other(listOf("ketch serve stopped ($code)", stderr.text()).filter { it.isNotBlank() }.joinToString("\n")))
+        val code = if (process.isAlive) tr(Res.string.core_still_running) else tr(Res.string.core_exit, process.exitValue())
+        end(KetchError.Other(listOf(tr(Res.string.core_stopped, code), stderr.text()).filter { it.isNotBlank() }.joinToString("\n")))
     }
 
     private fun answer(ask: ServeMessage.Ask) {
@@ -186,12 +187,12 @@ class ServeCore private constructor(
                     try {
                         ProcessBuilder(args).apply { environment().putAll(env) }.start()
                     } catch (e: IOException) {
-                        throw CoreException(KetchError.Other("could not run $exe: ${e.message}"), e)
+                        throw CoreException(KetchError.Other(tr(Res.string.core_cannot_run, exe, e.message.orEmpty())), e)
                     }
                 val reader = process.inputStream.bufferedReader(Charsets.UTF_8)
                 val hello = reader.readLine()?.let(::decode) as? ServeMessage.Hello
                 if (hello == null || hello.protocol != PROTOCOL) {
-                    val why = hello?.let { "it speaks protocol ${it.protocol}, this app $PROTOCOL" } ?: "it did not say hello"
+                    val why = hello?.let { tr(Res.string.core_wrong_protocol, it.protocol, PROTOCOL) } ?: tr(Res.string.core_no_hello)
                     // A child that ended has said why on stderr; one still running may never close it.
                     val exited = process.waitFor(DRAIN_MILLIS, TimeUnit.MILLISECONDS)
                     val err =
@@ -204,7 +205,7 @@ class ServeCore private constructor(
                             ""
                         }
                     process.destroyForcibly()
-                    throw CoreException(KetchError.Other(listOf("$exe cannot serve this app: $why", err).filter { it.isNotEmpty() }.joinToString("\n")))
+                    throw CoreException(KetchError.Other(listOf(tr(Res.string.core_cannot_serve, exe, why), err).filter { it.isNotEmpty() }.joinToString("\n")))
                 }
                 ServeCore(process, reader, hello.version).also { it.begin() }
             }

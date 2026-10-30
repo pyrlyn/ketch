@@ -23,7 +23,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import ketch.desktop.strings.*
 import ketch.desktop.ui.LocalSpacing
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 fun Page(
@@ -69,7 +71,7 @@ fun PackageRow(
     trailing: @Composable RowScope.() -> Unit,
 ) {
     val space = LocalSpacing.current
-    val open = onOpen?.let { Modifier.clickable(onClickLabel = "Open $name", onClick = it) } ?: Modifier
+    val open = onOpen?.let { Modifier.clickable(onClickLabel = stringResource(Res.string.action_open_named, name), onClick = it) } ?: Modifier
     Row(
         Modifier
             .fillMaxWidth()

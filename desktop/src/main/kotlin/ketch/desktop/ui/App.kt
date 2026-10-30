@@ -35,6 +35,7 @@ import ketch.desktop.store.KetchStore
 import ketch.desktop.store.StoreState
 import ketch.desktop.store.UpdateChecks
 import ketch.desktop.store.UpdateNotifier
+import ketch.desktop.strings.*
 import ketch.desktop.ui.adwaita.AdwaitaApp
 import ketch.desktop.ui.fluent.FluentApp
 import ketch.desktop.ui.glass.GlassApp
@@ -54,12 +55,12 @@ enum class Section(
     val title: String,
     val tag: String,
 ) {
-    Installed("Installed", "installed"),
-    Discover("Discover", "discover"),
-    Updates("Updates", "updates"),
-    Activity("Activity", "activity"),
-    Doctor("Doctor", "doctor"),
-    Settings("Settings", "settings"),
+    Installed(tr(Res.string.section_installed), "installed"),
+    Discover(tr(Res.string.section_discover), "discover"),
+    Updates(tr(Res.string.section_updates), "updates"),
+    Activity(tr(Res.string.section_activity), "activity"),
+    Doctor(tr(Res.string.section_doctor), "doctor"),
+    Settings(tr(Res.string.section_settings), "settings"),
 }
 
 /** Where Discover's results come from, for the sources the macOS sidebar lists. */
@@ -67,8 +68,8 @@ enum class Source(
     val title: String,
     val tag: String,
 ) {
-    Releases("GitHub releases", "releases"),
-    Registry("ketch-registry", "registry"),
+    Releases(tr(Res.string.source_github_releases), "releases"),
+    Registry(tr(Res.string.source_registry), "registry"),
 }
 
 /** One stop in the window's history: a section, narrowed to a [source] or with a package's [page] over it. */
@@ -311,12 +312,7 @@ private fun Sidebar(
     }
 }
 
-private val Section.counted get() = if (this == Section.Updates) "update" else "problem"
-
-fun plural(
-    count: Int,
-    noun: String,
-) = if (count == 1) "1 $noun" else "$count ${noun}s"
+private val Section.counted get() = if (this == Section.Updates) Res.plurals.updates else Res.plurals.problems
 
 private val SEARCHABLE = setOf(Section.Discover, Section.Installed, Section.Activity)
 private const val SIDEBAR_WIDTH = 220

@@ -17,9 +17,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.LocalSpacing
 import ketch.desktop.ui.LocalStatusColors
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 fun DiscoverScreen(
@@ -33,35 +35,35 @@ fun DiscoverScreen(
     val installed = state.installed.map { it.name }.toSet()
     val found = state.search
     val status = LocalStatusColors.current
-    Page("Discover", "discover") {
+    Page(stringResource(Res.string.section_discover), "discover") {
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
-            label = { Text("Search the registry") },
+            label = { Text(stringResource(Res.string.discover_search_registry)) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(bottom = LocalSpacing.current.md).testTag("discover-query"),
         )
         if (found.known.isEmpty() && found.repositories.isEmpty()) {
-            Empty(if (query.isBlank()) "The registry lists nothing yet" else "No package matches \"${query.trim()}\"")
+            Empty(if (query.isBlank()) stringResource(Res.string.discover_registry_empty) else stringResource(Res.string.discover_no_match, query.trim()))
         } else {
             LazyColumn {
                 items(found.known, key = { "known-${it.name}" }) { pkg ->
-                    val summary = listOfNotNull(pkg.description, pkg.latest?.let { "Latest $it" }).joinToString(" · ")
+                    val summary = listOfNotNull(pkg.description, pkg.latest?.let { stringResource(Res.string.discover_latest_version, it) }).joinToString(" · ")
                     PackageRow(pkg.name, summary.ifEmpty { null }, "discover-${pkg.name}", { onOpen(pkg.name) }) {
                         if (pkg.name in installed) {
-                            Chip("Installed", status.installed, status.installedSubtle)
+                            Chip(stringResource(Res.string.status_installed), status.installed, status.installedSubtle)
                         } else {
-                            FilledTonalButton(onClick = { actions.install(pkg.name) }, enabled = !state.isRunning) { Text("Install") }
+                            FilledTonalButton(onClick = { actions.install(pkg.name) }, enabled = !state.isRunning) { Text(stringResource(Res.string.action_install)) }
                         }
                     }
                 }
                 if (found.repositories.isNotEmpty()) {
-                    item { Text("Repositories", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = LocalSpacing.current.lg)) }
+                    item { Text(stringResource(Res.string.discover_repositories), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = LocalSpacing.current.lg)) }
                 }
                 items(found.repositories, key = { "repo-${it.spec}" }) { repo ->
                     val summary = listOfNotNull(repo.description, repo.stars?.let { "★ $it" }).joinToString(" · ")
                     PackageRow(repo.spec.removePrefix("github:"), summary.ifEmpty { null }, "discover-${repo.spec}", null) {
-                        FilledTonalButton(onClick = { actions.install(repo.spec) }, enabled = !state.isRunning) { Text("Install") }
+                        FilledTonalButton(onClick = { actions.install(repo.spec) }, enabled = !state.isRunning) { Text(stringResource(Res.string.action_install)) }
                     }
                 }
             }

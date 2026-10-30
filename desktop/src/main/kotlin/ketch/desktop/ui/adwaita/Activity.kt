@@ -16,12 +16,14 @@ import ketch.desktop.store.Activity
 import ketch.desktop.store.LogEntry
 import ketch.desktop.store.LogLevel
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.LOG_CLOCK
 import ketch.desktop.ui.LOG_ZONE
 import ketch.desktop.ui.exportLog
 import ketch.desktop.ui.logDays
 import ketch.desktop.ui.word
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.adwaita.ActionRow
 import pyrlyn.adwaita.BoxedList
 import pyrlyn.adwaita.EmptyNote
@@ -53,13 +55,13 @@ fun AdwaitaActivity(
     val needle = filter.trim()
     val entries = state.log.filter { needle.isEmpty() || it.message.contains(needle, ignoreCase = true) }
     AdwaitaPage("activity") {
-        PageHead("Activity") {
-            Entry(filter, "Filter history", Modifier.width(FILTER_WIDTH).testTag("activity-filter"), Glyph.Search) { filter = it }
-            PillButton("Export log", enabled = state.log.isNotEmpty()) { failure = exportLog(state.log) }
+        PageHead(stringResource(Res.string.section_activity)) {
+            Entry(filter, stringResource(Res.string.activity_filter_history), Modifier.width(FILTER_WIDTH).testTag("activity-filter"), Glyph.Search) { filter = it }
+            PillButton(stringResource(Res.string.action_export_log), enabled = state.log.isNotEmpty()) { failure = exportLog(state.log) }
         }
         state.activity?.let { Operation(it, actions) }
         failure?.let { Text(it, color = c.dangerText, style = LocalAdwaitaType.current.caption, modifier = Modifier.testTag("activity-message")) }
-        if (entries.isEmpty()) EmptyNote(if (needle.isEmpty()) "Nothing has run yet" else "No line matches \"$needle\"")
+        if (entries.isEmpty()) EmptyNote(if (needle.isEmpty()) stringResource(Res.string.activity_nothing_yet) else stringResource(Res.string.activity_no_match, needle))
         for ((day, lines) in logDays(entries, LocalDate.now(LOG_ZONE))) {
             PreferencesGroup(day) {
                 BoxedList {
@@ -82,7 +84,7 @@ private fun Operation(
     BoxedList(Modifier.testTag("activity-bar")) {
         ActionRow(
             leading = { Spinner(LocalAdwaita.current.accent) },
-            trailing = { PillButton("Cancel", size = PillSize.Small, enabled = !activity.isCancelling) { actions.store.cancel() } },
+            trailing = { PillButton(stringResource(Res.string.action_cancel), size = PillSize.Small, enabled = !activity.isCancelling) { actions.store.cancel() } },
         ) {
             RowTitle(activity.title)
             activity.status?.let { RowText(it) }

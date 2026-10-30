@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import ketch.desktop.store.Activity
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.Navigation
 import ketch.desktop.ui.VERIFIED_NOTE
@@ -27,6 +28,7 @@ import ketch.desktop.ui.screens.githubRepo
 import ketch.desktop.ui.screens.openConfig
 import ketch.desktop.ui.tilde
 import ketch.wire.Upgrade
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.adwaita.ActionRow
 import pyrlyn.adwaita.BoxedList
 import pyrlyn.adwaita.EmptyNote
@@ -60,14 +62,14 @@ fun AdwaitaUpdates(
     val updates = state.updates
     val latest = state.installed.filter { pkg -> state.outdatedVersion(pkg.name) == null && state.held.none { it.name == pkg.name } }.sortedBy { it.name }
     AdwaitaPage("updates") {
-        PageHead("Updates") {
-            PillButton("Check now", enabled = !state.isRunning) { actions.run { refresh() } }
-            PillButton("Update all", Modifier.testTag("update-all"), PillStyle.Accent, enabled = updates.isNotEmpty() && !state.isRunning) { confirming = true }
+        PageHead(stringResource(Res.string.section_updates)) {
+            PillButton(stringResource(Res.string.action_check_now), enabled = !state.isRunning) { actions.run { refresh() } }
+            PillButton(stringResource(Res.string.action_update_all), Modifier.testTag("update-all"), PillStyle.Accent, enabled = updates.isNotEmpty() && !state.isRunning) { confirming = true }
         }
         if (updates.isEmpty()) {
-            EmptyNote("Everything is up to date")
+            EmptyNote(stringResource(Res.string.updates_everything_up_to_date))
         } else {
-            PreferencesGroup("Available", description = checked(state)) {
+            PreferencesGroup(stringResource(Res.string.updates_available), description = checked(state)) {
                 BoxedList {
                     updates.forEachIndexed { index, upgrade ->
                         if (index > 0) RowLine()
@@ -77,7 +79,7 @@ fun AdwaitaUpdates(
             }
         }
         if (state.held.isNotEmpty()) {
-            PreferencesGroup("Held back", description = "Pinned packages are skipped until you unpin them.") {
+            PreferencesGroup(stringResource(Res.string.updates_held_back), description = stringResource(Res.string.updates_pinned_note)) {
                 BoxedList {
                     state.held.forEachIndexed { index, upgrade ->
                         if (index > 0) RowLine()
@@ -88,11 +90,11 @@ fun AdwaitaUpdates(
         }
         message?.let { Text(it, color = c.dangerText, style = LocalAdwaitaType.current.caption, modifier = Modifier.testTag("updates-message")) }
         if (state.lastChecked != null && latest.isNotEmpty()) {
-            PreferencesGroup("Up to date") {
+            PreferencesGroup(stringResource(Res.string.updates_up_to_date)) {
                 BoxedList {
                     latest.forEachIndexed { index, pkg ->
                         if (index > 0) RowLine()
-                        ActionRow(onClick = { navigation.open = pkg.name }, leading = { PackageAvatar(pkg.name) }, trailing = { OkLabel("Latest") }) {
+                        ActionRow(onClick = { navigation.open = pkg.name }, leading = { PackageAvatar(pkg.name) }, trailing = { OkLabel(stringResource(Res.string.status_latest)) }) {
                             RowTitle(pkg.name)
                             RowMono(pkg.version)
                         }
@@ -121,9 +123,9 @@ private fun UpdateRow(
         leading = { PackageAvatar(upgrade.name) },
         trailing = {
             if (running != null) {
-                PillButton("Cancel", size = PillSize.Small, enabled = !running.isCancelling) { actions.store.cancel() }
+                PillButton(stringResource(Res.string.action_cancel), size = PillSize.Small, enabled = !running.isCancelling) { actions.store.cancel() }
             } else {
-                PillButton("Update", Modifier.widthIn(min = UPDATE_WIDTH), PillStyle.Update, PillSize.Small, enabled = !state.isRunning) {
+                PillButton(stringResource(Res.string.action_update), Modifier.widthIn(min = UPDATE_WIDTH), PillStyle.Update, PillSize.Small, enabled = !state.isRunning) {
                     actions.run { upgrade(listOf(upgrade.name)) }
                 }
             }
@@ -131,7 +133,7 @@ private fun UpdateRow(
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             RowTitle(upgrade.name)
-            StatusPill(if (running != null) "Updating" else upgrade.latest, if (running != null) Status.Neutral else Status.Update)
+            StatusPill(if (running != null) stringResource(Res.string.status_updating) else upgrade.latest, if (running != null) Status.Neutral else Status.Update)
         }
         RowMono(listOfNotNull(repo, "${upgrade.installed} → ${upgrade.latest}").joinToString(" · "))
         if (running != null) Running(running, upgrade.name) else note?.let { RowText(it) }
@@ -157,13 +159,13 @@ private fun HeldRow(
     ActionRow(
         Modifier.testTag("held-${upgrade.name}"),
         leading = { PackageAvatar(upgrade.name) },
-        trailing = { by?.let { PillButton("Open ketch.lock", size = PillSize.Small) { onMessage(openConfig(File(it))) } } },
+        trailing = { by?.let { PillButton(stringResource(Res.string.action_open_lock), size = PillSize.Small) { onMessage(openConfig(File(it))) } } },
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             RowTitle(upgrade.name)
-            StatusPill("Pinned", Status.Neutral)
+            StatusPill(stringResource(Res.string.status_pinned), Status.Neutral)
         }
-        RowMono("${upgrade.installed} → ${upgrade.latest} · ${by?.let { "pinned in ${tilde(it)}" } ?: "pinned"}")
+        RowMono("${upgrade.installed} → ${upgrade.latest} · ${by?.let { stringResource(Res.string.updates_pinned_in, tilde(it)) } ?: stringResource(Res.string.updates_pinned_word)}")
     }
 }
 

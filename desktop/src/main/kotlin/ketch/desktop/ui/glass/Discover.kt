@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.HERO_TEXT
 import ketch.desktop.ui.HERO_TITLE
@@ -50,6 +51,7 @@ import ketch.desktop.ui.copyToClipboard
 import ketch.desktop.ui.screens.githubRepo
 import ketch.desktop.ui.searchFocus
 import ketch.wire.RegistryPackage
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.glass.AutoGrid
 import pyrlyn.glass.Badge
 import pyrlyn.glass.BadgeKind
@@ -88,10 +90,10 @@ fun GlassDiscover(
     val repositories = if (source == Source.Registry) emptyList() else state.search.repositories
     val focus = searchFocus(navigation)
     GlassPage(
-        source?.title ?: "Discover",
+        source?.title ?: stringResource(Res.string.section_discover),
         "discover",
         navigation,
-        toolbar = { SearchField(query, "owner/repo or name", Modifier.testTag("discover-query"), "⌘K", focus) { query = it } },
+        toolbar = { SearchField(query, stringResource(Res.string.discover_search_short), Modifier.testTag("discover-query"), "⌘K", focus) { query = it } },
     ) {
         LazyVerticalGrid(
             GridCells.Adaptive(TILE_WIDTH),
@@ -106,9 +108,9 @@ fun GlassDiscover(
             if (known.isEmpty() && repositories.isEmpty()) {
                 wide { EmptyNote(emptyWords(query, source)) }
             }
-            if (known.isNotEmpty()) wide { SectionTitle(if (query.isBlank()) "In the registry" else "Results") }
+            if (known.isNotEmpty()) wide { SectionTitle(if (query.isBlank()) stringResource(Res.string.discover_in_registry) else stringResource(Res.string.discover_results)) }
             items(known, key = { "known-${it.name}" }) { KnownTile(it, state, actions, navigation) }
-            if (repositories.isNotEmpty()) wide { SectionTitle("On GitHub") }
+            if (repositories.isNotEmpty()) wide { SectionTitle(stringResource(Res.string.discover_on_github)) }
             items(repositories, key = { "repo-${it.spec}" }) { repo ->
                 val name = repo.spec.removePrefix("github:")
                 Tile(
@@ -117,7 +119,7 @@ fun GlassDiscover(
                     repo.description,
                     Modifier.testTag("discover-${repo.spec}"),
                     icon = { LetterIcon(name.substringAfterLast('/'), IconSize.Medium) },
-                    action = { GlassButton("Get", ButtonKind.Raised, enabled = !state.isRunning) { actions.install(repo.spec) } },
+                    action = { GlassButton(stringResource(Res.string.action_get), ButtonKind.Raised, enabled = !state.isRunning) { actions.install(repo.spec) } },
                 )
             }
         }
@@ -130,9 +132,9 @@ private fun emptyWords(
     query: String,
     source: Source?,
 ) = when {
-    query.isNotBlank() -> "No package matches \"${query.trim()}\""
-    source == Source.Releases -> "Type owner/repo to find a project's releases"
-    else -> "The registry lists nothing yet"
+    query.isNotBlank() -> tr(Res.string.discover_no_match, query.trim())
+    source == Source.Releases -> tr(Res.string.discover_type_repo)
+    else -> tr(Res.string.discover_registry_empty)
 }
 
 @Composable
@@ -151,9 +153,9 @@ private fun KnownTile(
         icon = { LetterIcon(pkg.name, IconSize.Medium) },
         action = {
             when {
-                state.outdatedVersion(pkg.name) != null -> GlassButton("Update", ButtonKind.Attention) { navigation.show(Section.Updates) }
-                state.installed.any { it.name == pkg.name } -> Badge("Installed", BadgeKind.Success)
-                else -> GlassButton("Get", ButtonKind.Raised, enabled = !state.isRunning) { actions.install(pkg.name) }
+                state.outdatedVersion(pkg.name) != null -> GlassButton(stringResource(Res.string.action_update), ButtonKind.Attention) { navigation.show(Section.Updates) }
+                state.installed.any { it.name == pkg.name } -> Badge(stringResource(Res.string.status_installed), BadgeKind.Success)
+                else -> GlassButton(stringResource(Res.string.action_get), ButtonKind.Raised, enabled = !state.isRunning) { actions.install(pkg.name) }
             }
         },
     )
@@ -168,13 +170,13 @@ private fun Hero(
         val roomy = maxWidth >= HERO_ROOMY
         HeroPanel {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Eyebrow("Featured release")
+                Eyebrow(stringResource(Res.string.discover_featured))
                 Text(HERO_TITLE, color = Color.White, style = display(HERO_SIZE).copy(lineHeight = 48.sp, letterSpacing = (-1.6).sp), modifier = Modifier.widthIn(max = 520.dp))
                 Text(HERO_TEXT, color = HERO_INK, style = body(HERO_BODY).copy(lineHeight = 25.sp), modifier = Modifier.widthIn(max = 460.dp))
                 pick?.let {
                     val command = "ketch install ${githubRepo(it.source) ?: it.name}"
-                    CommandField(command, "Copy the command", Modifier.widthIn(max = 460.dp)) { copyToClipboard(command) }
-                    GlassButton("See ${it.name}", ButtonKind.Hero, large = true) { onOpen(it.name) }
+                    CommandField(command, stringResource(Res.string.action_copy_command), Modifier.widthIn(max = 460.dp)) { copyToClipboard(command) }
+                    GlassButton(stringResource(Res.string.action_see, it.name), ButtonKind.Hero, large = true) { onOpen(it.name) }
                 }
             }
             if (roomy) HeroArt(pick, Modifier.weight(1f))
@@ -190,7 +192,7 @@ private fun HeroArt(
 ) {
     val name = pick?.name ?: "ketch"
     val repo = pick?.let { githubRepo(it.source) } ?: name
-    val lines = listOf("resolve $repo → latest", "asset the archive for this Mac", "sha256 ✓ matches published sum", "link $name onto PATH")
+    val lines = listOf(stringResource(Res.string.discover_line_resolve, repo), stringResource(Res.string.discover_line_asset_mac), stringResource(Res.string.discover_line_sum_mac), stringResource(Res.string.discover_line_link_path, name))
     BoxWithConstraints(
         modifier.height(ART_HEIGHT).graphicsLayer {
             rotationX = ART_BACK
@@ -222,7 +224,7 @@ private fun HeroArt(
                 .background(Brush.verticalGradient(listOf(ART_TILE_TOP, GlassColors.Deep, ART_TILE_BOTTOM))),
             contentAlignment = Alignment.Center,
         ) { Mark(96.dp, tile = false) }
-        Tag(pick?.latest ?: "latest", Modifier.offset(maxWidth * TAG_X, maxHeight * TAG_Y))
+        Tag(pick?.latest ?: stringResource(Res.string.discover_latest), Modifier.offset(maxWidth * TAG_X, maxHeight * TAG_Y))
         Row(
             Modifier
                 .align(Alignment.BottomStart)
@@ -235,7 +237,7 @@ private fun HeroArt(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             GlyphIcon(Glyph.Check, CHECK_INK, 16.dp)
-            Text("SHA-256 verified", color = CHECK_INK, style = body(TextSize.LABEL, FontWeight.SemiBold))
+            Text(stringResource(Res.string.discover_sha256_verified), color = CHECK_INK, style = body(TextSize.LABEL, FontWeight.SemiBold))
         }
     }
 }
@@ -259,14 +261,14 @@ private class Feature(
 private val FEATURES =
     listOf(
         Feature(
-            "Apps, not just binaries",
-            "An .app bundle goes to /Applications, quarantine cleared when its signature checks out, removed cleanly on uninstall.",
+            tr(Res.string.discover_apps_title),
+            tr(Res.string.discover_apps_mac),
             Color(0xFF6CB6FF),
             Color(0xFF0873E0),
             Glyph.Window,
         ),
-        Feature("Rollback without a re-download", "An upgrade keeps the previous version on disk, so going back is one relink away.", Color(0xFFFFC78A), Color(0xFFF07A12), Glyph.Undo),
-        Feature("Reproducible machines", "ketch.lock pins every package; sync installs exactly what it names.", Color(0xFF7FF0CC), Color(0xFF1FA88A), Glyph.Lock),
+        Feature(tr(Res.string.discover_rollback_title), tr(Res.string.discover_rollback_text), Color(0xFFFFC78A), Color(0xFFF07A12), Glyph.Undo),
+        Feature(tr(Res.string.discover_reproducible_title), tr(Res.string.discover_reproducible_text), Color(0xFF7FF0CC), Color(0xFF1FA88A), Glyph.Lock),
     )
 
 private const val HERO_SIZE = 46

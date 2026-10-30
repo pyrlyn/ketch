@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import ketch.desktop.strings.*
 import ketch.desktop.ui.ABOUT_LICENCES
 import ketch.desktop.ui.ABOUT_LICENCE_TITLE
 import ketch.desktop.ui.ABOUT_LINK
@@ -22,6 +23,7 @@ import ketch.desktop.ui.ABOUT_SUMMARY
 import ketch.desktop.ui.appVersion
 import ketch.desktop.ui.glass.Mark
 import ketch.wire.Question
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.adwaita.AlertDialog
 import pyrlyn.adwaita.AvatarSize
 import pyrlyn.adwaita.BoxedList
@@ -47,7 +49,7 @@ fun AdwaitaConfirm(
         title,
         onDismiss,
         footer = {
-            PillButton("Cancel", Modifier.weight(1f), onClick = onDismiss)
+            PillButton(stringResource(Res.string.action_cancel), Modifier.weight(1f), onClick = onDismiss)
             PillButton(confirm, Modifier.weight(1f).testTag("confirm-yes"), if (destructive) PillStyle.Danger else PillStyle.Accent, onClick = onConfirm)
         },
         Modifier.testTag("confirm"),
@@ -63,15 +65,15 @@ fun AdwaitaChooseBinary(
 ) {
     var picked by remember(question) { mutableIntStateOf(0) }
     AlertDialog(
-        "Which binary should ${question.pkg} link?",
+        stringResource(Res.string.dialog_choose_binary_title, question.pkg),
         onDecline,
         footer = {
-            PillButton("Cancel", Modifier.weight(1f), onClick = onDecline)
-            PillButton("Link", Modifier.weight(1f), PillStyle.Accent) { onPick(picked) }
+            PillButton(stringResource(Res.string.action_cancel), Modifier.weight(1f), onClick = onDecline)
+            PillButton(stringResource(Res.string.action_link), Modifier.weight(1f), PillStyle.Accent) { onPick(picked) }
         },
         Modifier.testTag("question-choose-binary"),
     ) {
-        DialogText("${question.pkg} ships several programs. ketch links one onto your PATH.")
+        DialogText(stringResource(Res.string.dialog_choose_binary_text, question.pkg))
         BoxedList {
             question.candidates.forEachIndexed { index, candidate ->
                 if (index > 0) RowLine()
@@ -92,11 +94,11 @@ fun AdwaitaAbout(
     AlertDialog(
         "Ketch",
         onClose,
-        footer = { PillButton("Close", Modifier.fillMaxWidth(), onClick = onClose) },
+        footer = { PillButton(stringResource(Res.string.action_close), Modifier.fillMaxWidth(), onClick = onClose) },
         Modifier.testTag("about"),
         leading = { Mark(MARK_SIZE) },
     ) {
-        Text("Version $appVersion · ketch $coreVersion", color = c.ink2, style = type.mono)
+        Text(stringResource(Res.string.about_version, appVersion, coreVersion), color = c.ink2, style = type.mono)
         DialogText(ABOUT_SUMMARY)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(ABOUT_LICENCE_TITLE, color = c.ink, style = type.bodyStrong)

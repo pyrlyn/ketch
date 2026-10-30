@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.Navigation
 import ketch.desktop.ui.VERIFIED_NOTE
@@ -27,6 +28,7 @@ import ketch.desktop.ui.screens.githubRepo
 import ketch.desktop.ui.screens.openConfig
 import ketch.desktop.ui.tilde
 import ketch.wire.Upgrade
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.fluent.AppIconSize
 import pyrlyn.fluent.BadgeKind
 import pyrlyn.fluent.BusyButton
@@ -62,23 +64,23 @@ fun FluentUpdates(
     val updates = state.updates
     FluentPage("updates") {
         PageHead(
-            title = { PageTitle("Updates") },
+            title = { PageTitle(stringResource(Res.string.section_updates)) },
             actions = {
                 Text(checked(state), color = c.ink2, style = type.small)
-                FluentButton("Check now", enabled = !state.isRunning) { actions.run { refresh() } }
-                FluentButton("Update all", ButtonStyle.Accent, Modifier.testTag("update-all"), enabled = updates.isNotEmpty() && !state.isRunning) { confirming = true }
+                FluentButton(stringResource(Res.string.action_check_now), enabled = !state.isRunning) { actions.run { refresh() } }
+                FluentButton(stringResource(Res.string.action_update_all), ButtonStyle.Accent, Modifier.testTag("update-all"), enabled = updates.isNotEmpty() && !state.isRunning) { confirming = true }
             },
         )
-        if (updates.isEmpty()) EmptyNote("Everything is up to date")
+        if (updates.isEmpty()) EmptyNote(stringResource(Res.string.updates_everything_up_to_date))
         for (upgrade in updates) UpdateCard(upgrade, state, actions, navigation)
         if (state.held.isNotEmpty()) {
             Column {
-                SectionHead("Pinned · held by ketch.lock")
+                SectionHead(stringResource(Res.string.updates_pinned_by_lock))
                 RowGroup { for (upgrade in state.held) HeldRow(upgrade) { message = it } }
             }
         }
         message?.let { Text(it, color = c.danger, style = type.small, modifier = Modifier.testTag("updates-message")) }
-        if (updates.isNotEmpty()) InfoBar("Verified, with rollback", VERIFIED_NOTE)
+        if (updates.isNotEmpty()) InfoBar(stringResource(Res.string.updates_verified), VERIFIED_NOTE)
     }
     if (confirming) UpdateAllConfirm(updates.size, actions) { confirming = false }
 }
@@ -110,11 +112,11 @@ private fun UpdateCard(
                 note?.let { Text(it, color = c.ink2, style = type.body, maxLines = 2) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                FluentButton("Changelog", ButtonStyle.Subtle) { navigation.open = upgrade.name }
+                FluentButton(stringResource(Res.string.action_changelog), ButtonStyle.Subtle) { navigation.open = upgrade.name }
                 if (state.activity?.packages?.containsKey(upgrade.name) == true) {
-                    BusyButton("Updating…")
+                    BusyButton(stringResource(Res.string.action_updating))
                 } else {
-                    FluentButton("Update", ButtonStyle.Update, Modifier.widthIn(min = UPDATE_WIDTH), enabled = !state.isRunning) { actions.run { upgrade(listOf(upgrade.name)) } }
+                    FluentButton(stringResource(Res.string.action_update), ButtonStyle.Update, Modifier.widthIn(min = UPDATE_WIDTH), enabled = !state.isRunning) { actions.run { upgrade(listOf(upgrade.name)) } }
                 }
             }
         }
@@ -130,10 +132,10 @@ private fun HeldRow(
     ListRow(
         Modifier.testTag("held-${upgrade.name}"),
         leading = { PackageIcon(upgrade.name, AppIconSize.Small, raised = it) },
-        actions = { by?.let { FluentButton("Open ketch.lock") { onMessage(openConfig(File(it))) } } },
+        actions = { by?.let { FluentButton(stringResource(Res.string.action_open_lock)) { onMessage(openConfig(File(it))) } } },
     ) {
-        RowTitle(upgrade.name) { StatusBadge("Pinned", BadgeKind.Neutral) }
-        RowMeta("${upgrade.name} ${upgrade.installed} → ${upgrade.latest} · ${by?.let { "pinned in ${tilde(it)}" } ?: "pinned"}")
+        RowTitle(upgrade.name) { StatusBadge(stringResource(Res.string.status_pinned), BadgeKind.Neutral) }
+        RowMeta("${upgrade.name} ${upgrade.installed} → ${upgrade.latest} · ${by?.let { stringResource(Res.string.updates_pinned_in, tilde(it)) } ?: stringResource(Res.string.updates_pinned_word)}")
     }
 }
 

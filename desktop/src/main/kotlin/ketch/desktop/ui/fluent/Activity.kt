@@ -16,12 +16,14 @@ import androidx.compose.ui.unit.dp
 import ketch.desktop.store.LogEntry
 import ketch.desktop.store.LogLevel
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.LOG_CLOCK
 import ketch.desktop.ui.LOG_ZONE
 import ketch.desktop.ui.exportLog
 import ketch.desktop.ui.logDays
 import ketch.desktop.ui.word
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.fluent.BadgeKind
 import pyrlyn.fluent.EmptyNote
 import pyrlyn.fluent.FluentButton
@@ -47,15 +49,15 @@ fun FluentActivity(
     val entries = state.log.filter { needle.isEmpty() || it.message.contains(needle, ignoreCase = true) }
     FluentPage("activity") {
         PageHead(
-            title = { PageTitle("Activity") },
+            title = { PageTitle(stringResource(Res.string.section_activity)) },
             actions = {
-                SearchBox(filter, "Filter history", Modifier.width(FILTER_WIDTH).testTag("activity-filter")) { filter = it }
-                FluentButton("Export log", enabled = state.log.isNotEmpty()) { failure = exportLog(state.log) }
+                SearchBox(filter, stringResource(Res.string.activity_filter_history), Modifier.width(FILTER_WIDTH).testTag("activity-filter")) { filter = it }
+                FluentButton(stringResource(Res.string.action_export_log), enabled = state.log.isNotEmpty()) { failure = exportLog(state.log) }
             },
         )
-        OperationFlyout(state) { activity -> FluentButton("Cancel", enabled = !activity.isCancelling) { actions.store.cancel() } }
+        OperationFlyout(state) { activity -> FluentButton(stringResource(Res.string.action_cancel), enabled = !activity.isCancelling) { actions.store.cancel() } }
         failure?.let { Text(it, color = c.danger, style = LocalFluentType.current.small, modifier = Modifier.testTag("activity-message")) }
-        if (entries.isEmpty()) EmptyNote(if (needle.isEmpty()) "Nothing has run yet" else "No line matches \"$needle\"")
+        if (entries.isEmpty()) EmptyNote(if (needle.isEmpty()) stringResource(Res.string.activity_nothing_yet) else stringResource(Res.string.activity_no_match, needle))
         for ((day, lines) in logDays(entries, LocalDate.now(LOG_ZONE))) {
             Column {
                 SectionHead(day)

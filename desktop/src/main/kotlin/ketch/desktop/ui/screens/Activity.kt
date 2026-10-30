@@ -15,9 +15,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import ketch.desktop.store.LogLevel
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.LocalMonoStyle
 import ketch.desktop.ui.LocalSpacing
 import ketch.desktop.ui.LocalStatusColors
+import org.jetbrains.compose.resources.stringResource
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -28,9 +30,9 @@ fun ActivityScreen(state: StoreState) {
     // The newest line is the one to read; follow it as it comes.
     LaunchedEffect(log.lastOrNull()?.id) { if (log.isNotEmpty()) list.animateScrollToItem(log.lastIndex) }
     val status = LocalStatusColors.current
-    Page("Activity", "activity") {
+    Page(stringResource(Res.string.section_activity), "activity") {
         if (log.isEmpty()) {
-            Empty("Nothing has run yet")
+            Empty(stringResource(Res.string.activity_nothing_yet))
         } else {
             SelectionContainer {
                 LazyColumn(state = list) {

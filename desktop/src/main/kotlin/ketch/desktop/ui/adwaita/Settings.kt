@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import ketch.desktop.settings.AppSettings
 import ketch.desktop.store.UpdateChecks
+import ketch.desktop.strings.*
 import ketch.desktop.ui.AppParts
 import ketch.desktop.ui.Source
 import ketch.desktop.ui.screens.LOGIN_NOTE
@@ -25,6 +26,7 @@ import ketch.desktop.ui.screens.openConfig
 import ketch.desktop.ui.tilde
 import ketch.wire.Settings
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.adwaita.ActionRow
 import pyrlyn.adwaita.BoxedList
 import pyrlyn.adwaita.LocalAdwaita
@@ -52,33 +54,33 @@ fun AdwaitaSettings(
     var message by remember { mutableStateOf<String?>(null) }
     val openFile = { config?.let { message = openConfig(File(it.configFile)) } }
     AdwaitaPage("settings") {
-        PageHead("Settings")
-        PreferencesGroup("Installation") {
+        PageHead(stringResource(Res.string.section_settings))
+        PreferencesGroup(stringResource(Res.string.settings_installation)) {
             Rows {
-                SettingRow("ketch root", value = config?.let { tilde(it.root) } ?: "—", note = ROOT_NOTE, modifier = Modifier.testTag("settings-root"))
+                SettingRow(stringResource(Res.string.settings_root), value = config?.let { tilde(it.root) } ?: "—", note = ROOT_NOTE, modifier = Modifier.testTag("settings-root"))
                 RowLine()
-                SettingRow("Links", value = config?.let { tilde(it.binDir) } ?: "—", note = "Every program ketch installs is linked here.")
+                SettingRow(stringResource(Res.string.settings_links), value = config?.let { tilde(it.binDir) } ?: "—", note = stringResource(Res.string.settings_links_note))
                 RowLine()
-                SettingRow("Create desktop entries", note = "Apps get a .desktop entry in your applications menu.") { config?.let { OnOff(it.linkApps) } }
+                SettingRow(stringResource(Res.string.settings_desktop_entries), note = stringResource(Res.string.settings_desktop_entries_note)) { config?.let { OnOff(it.linkApps) } }
             }
         }
-        PreferencesGroup("Security", suffix = { PillButton("Open config.toml", size = PillSize.Small, enabled = config != null) { openFile() } }) {
+        PreferencesGroup(stringResource(Res.string.settings_security), suffix = { PillButton(stringResource(Res.string.action_open_config), size = PillSize.Small, enabled = config != null) { openFile() } }) {
             Rows {
-                SettingRow("Require checksums", note = "Refuses a release that publishes no checksum.") { config?.let { OnOff(it.requireChecksums) } }
+                SettingRow(stringResource(Res.string.settings_checksums), note = stringResource(Res.string.settings_checksums_note)) { config?.let { OnOff(it.requireChecksums) } }
             }
         }
         UpdateSettings(parts, checks) { message = it }
-        PreferencesGroup("Sources") {
+        PreferencesGroup(stringResource(Res.string.section_sources)) {
             Rows {
-                SettingRow(Source.Releases.title, value = "github.com/<owner>/<repo>/releases") { StatusPill("Default", Status.Neutral) }
+                SettingRow(Source.Releases.title, value = "github.com/<owner>/<repo>/releases") { StatusPill(stringResource(Res.string.status_default), Status.Neutral) }
                 RowLine()
-                SettingRow(Source.Registry.title, value = config?.registry ?: "curated package names → repos")
+                SettingRow(Source.Registry.title, value = config?.registry ?: stringResource(Res.string.settings_registry_note))
             }
         }
         PreferencesGroup("GitHub") {
             Rows {
-                SettingRow("Access token", note = TOKEN_NOTE) {
-                    config?.let { StatusPill(if (it.githubToken) "Set" else "Not set", if (it.githubToken) Status.Ok else Status.Neutral) }
+                SettingRow(stringResource(Res.string.settings_access_token), note = TOKEN_NOTE) {
+                    config?.let { StatusPill(if (it.githubToken) stringResource(Res.string.status_set) else stringResource(Res.string.status_not_set), if (it.githubToken) Status.Ok else Status.Neutral) }
                 }
             }
         }
@@ -96,24 +98,24 @@ private fun UpdateSettings(
     // Read from the system each time: the person can change it there too.
     var opensAtLogin by remember { mutableStateOf(parts.login.isEnabled()) }
     val scope = rememberCoroutineScope()
-    PreferencesGroup("Updates") {
+    PreferencesGroup(stringResource(Res.string.section_updates)) {
         Rows {
-            SettingRow("Check for updates", note = "How often ketch looks for new releases in the background.") {
+            SettingRow(stringResource(Res.string.settings_check_updates), note = stringResource(Res.string.settings_check_updates_note)) {
                 Select(AppSettings.INTERVALS, prefs.intervalMinutes, ::interval, Modifier.testTag("interval"), { Modifier.testTag("interval-$it") }) { minutes ->
                     parts.settings.update { it.copy(intervalMinutes = minutes) }
                 }
             }
             RowLine()
-            SettingRow("Include prereleases when installing") {
-                ToggleSwitch(prefs.prereleases, "Include prereleases when installing", Modifier.testTag("prereleases")) { on -> parts.settings.update { it.copy(prereleases = on) } }
+            SettingRow(stringResource(Res.string.settings_prereleases)) {
+                ToggleSwitch(prefs.prereleases, stringResource(Res.string.settings_prereleases), Modifier.testTag("prereleases")) { on -> parts.settings.update { it.copy(prereleases = on) } }
             }
             RowLine()
-            SettingRow("Notify when updates are available") {
-                ToggleSwitch(prefs.notifies, "Notify when updates are available", Modifier.testTag("notices")) { on -> scope.launch { onMessage(checks.setNotifications(on)) } }
+            SettingRow(stringResource(Res.string.settings_notify)) {
+                ToggleSwitch(prefs.notifies, stringResource(Res.string.settings_notify), Modifier.testTag("notices")) { on -> scope.launch { onMessage(checks.setNotifications(on)) } }
             }
             RowLine()
-            SettingRow("Start at login", note = if (parts.login.isAvailable) null else LOGIN_NOTE) {
-                ToggleSwitch(opensAtLogin, "Start at login", Modifier.testTag("login"), enabled = parts.login.isAvailable) { on ->
+            SettingRow(stringResource(Res.string.settings_start_at_login), note = if (parts.login.isAvailable) null else LOGIN_NOTE) {
+                ToggleSwitch(opensAtLogin, stringResource(Res.string.settings_start_at_login), Modifier.testTag("login"), enabled = parts.login.isAvailable) { on ->
                     onMessage(parts.login.set(on))
                     opensAtLogin = parts.login.isEnabled()
                 }
@@ -141,4 +143,4 @@ private fun SettingRow(
 }
 
 @Composable
-private fun OnOff(on: Boolean) = StatusPill(if (on) "On" else "Off", if (on) Status.Ok else Status.Neutral)
+private fun OnOff(on: Boolean) = StatusPill(if (on) stringResource(Res.string.status_on) else stringResource(Res.string.status_off), if (on) Status.Ok else Status.Neutral)

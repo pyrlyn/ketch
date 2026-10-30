@@ -4,6 +4,7 @@
 package ketch.desktop.ui
 
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import java.awt.Color
 import java.awt.Font
 import java.awt.RenderingHints
@@ -45,30 +46,30 @@ const val TRAY_UPDATE_ROWS = 5
 fun trayMenu(state: StoreState): List<TrayEntry> =
     buildList {
         val idle = !state.isRunning
-        add(TrayEntry.Item("${plural(state.pendingUpgradeCount, "update")} · ${state.installed.size} installed"))
+        add(TrayEntry.Item("${plural(state.pendingUpgradeCount, Res.plurals.updates)} · ${plural(state.installed.size, Res.plurals.installed_count)}"))
         state.updates.take(TRAY_UPDATE_ROWS).forEach {
-            add(TrayEntry.Item("Update ${it.name} ${it.installed} → ${it.latest}", TrayAction.Update(it.name), idle))
+            add(TrayEntry.Item(tr(Res.string.tray_update_row, it.name, it.installed, it.latest), TrayAction.Update(it.name), idle))
         }
         // The confirmation is the window's; the menu only asks for it.
-        add(TrayEntry.Item("Update all…", TrayAction.UpdateAll, idle && state.pendingUpgradeCount > 0))
+        add(TrayEntry.Item(tr(Res.string.action_update_all_ellipsis), TrayAction.UpdateAll, idle && state.pendingUpgradeCount > 0))
         state.activity?.let { activity ->
             add(TrayEntry.Separator)
             add(TrayEntry.Item("${activity.title} · ${(activity.fraction * PERCENT).roundToInt()}%"))
-            add(TrayEntry.Item("Cancel", TrayAction.Cancel, !activity.isCancelling))
+            add(TrayEntry.Item(tr(Res.string.action_cancel), TrayAction.Cancel, !activity.isCancelling))
         }
         add(TrayEntry.Separator)
-        add(TrayEntry.Item("Open Ketch", TrayAction.Open))
-        add(TrayEntry.Item("Check for updates", TrayAction.Check, idle))
-        add(TrayEntry.Item("Settings…", TrayAction.Settings))
+        add(TrayEntry.Item(tr(Res.string.tray_open), TrayAction.Open))
+        add(TrayEntry.Item(tr(Res.string.settings_check_updates), TrayAction.Check, idle))
+        add(TrayEntry.Item(tr(Res.string.tray_settings), TrayAction.Settings))
         add(TrayEntry.Separator)
-        add(TrayEntry.Item("Quit Ketch", TrayAction.Quit))
+        add(TrayEntry.Item(tr(Res.string.tray_quit), TrayAction.Quit))
     }
 
 /** A bare icon says nothing to a screen reader or a hovering pointer. */
 fun trayTooltip(state: StoreState): String {
     val parts = mutableListOf("Ketch")
-    if (state.pendingUpgradeCount > 0) parts += plural(state.pendingUpgradeCount, "update") + " available"
-    if (state.isRunning) parts += "working"
+    if (state.pendingUpgradeCount > 0) parts += plural(state.pendingUpgradeCount, Res.plurals.updates_available)
+    if (state.isRunning) parts += tr(Res.string.tray_working)
     return parts.joinToString(", ")
 }
 

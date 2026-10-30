@@ -9,6 +9,7 @@ import ketch.desktop.core.Core
 import ketch.desktop.core.CoreException
 import ketch.desktop.core.describe
 import ketch.desktop.core.value
+import ketch.desktop.strings.*
 import ketch.wire.Answer
 import ketch.wire.Call
 import ketch.wire.Changelog
@@ -174,17 +175,17 @@ class KetchStore(
     suspend fun install(
         spec: String,
         prerelease: Boolean = false,
-    ): Unit = operate("Installing $spec", { install(spec, prerelease) }, Call.Install(listOf(spec), InstallOptions(prerelease = prerelease)))
+    ): Unit = operate(tr(Res.string.store_installing, spec), { install(spec, prerelease) }, Call.Install(listOf(spec), InstallOptions(prerelease = prerelease)))
 
     /** Upgrades [names], or everything outdated when empty. */
     suspend fun upgrade(names: List<String> = emptyList()): Unit =
         operate(
-            if (names.isEmpty()) "Upgrading all packages" else "Upgrading ${names.joinToString(", ")}",
+            if (names.isEmpty()) tr(Res.string.store_upgrading_all) else tr(Res.string.store_upgrading, names.joinToString(", ")),
             { upgrade(names) },
             Call.Upgrade(names),
         )
 
-    suspend fun uninstall(names: List<String>): Unit = operate("Uninstalling ${names.joinToString(", ")}", { uninstall(names) }, Call.Uninstall(names))
+    suspend fun uninstall(names: List<String>): Unit = operate(tr(Res.string.store_uninstalling, names.joinToString(", ")), { uninstall(names) }, Call.Uninstall(names))
 
     /** Asks the running operation to stop at its next step, and declines the open question so the core is not left waiting on it. */
     fun cancel() {
@@ -223,7 +224,7 @@ class KetchStore(
         call: Call,
     ) {
         if (token != null) {
-            mutable.update { it.copy(error = "Another operation is running. Wait for it or cancel it first.") }
+            mutable.update { it.copy(error = tr(Res.string.store_busy)) }
             return
         }
         val cancel = CancelToken().also { token = it }
@@ -238,7 +239,7 @@ class KetchStore(
                 decline()
                 mutable.update { it.copy(activity = null) }
             }
-        if (error == null) log(LogLevel.Success, "Done: $title") else report(error, retry)
+        if (error == null) log(LogLevel.Success, tr(Res.string.store_done, title)) else report(error, retry)
         refresh()
     }
 
@@ -363,7 +364,7 @@ class KetchStore(
             }
 
             KetchError.Cancelled -> {
-                log(LogLevel.Warning, "Cancelled")
+                log(LogLevel.Warning, tr(Res.string.store_cancelled))
             }
 
             else -> {
@@ -417,7 +418,7 @@ class KetchStore(
             } catch (e: CoreException) {
                 e.error
             } catch (e: SerializationException) {
-                KetchError.Other("ketch sent a value this app cannot read: ${e.message}")
+                KetchError.Other(tr(Res.string.store_bad_value, e.message.orEmpty()))
             }
     }
 }

@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.HERO_TITLE
 import ketch.desktop.ui.Kind
@@ -34,6 +35,7 @@ import ketch.desktop.ui.screens.githubRepo
 import ketch.wire.RegistryPackage
 import ketch.wire.Repository
 import ketch.wire.Settings
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.adwaita.ActionRow
 import pyrlyn.adwaita.BoxedList
 import pyrlyn.adwaita.Chips
@@ -79,7 +81,7 @@ fun AdwaitaDiscover(
         if (opening) {
             Hero(state.search.known.firstOrNull(), navigation, config)
         } else {
-            PageHead(source?.title ?: "Results")
+            PageHead(source?.title ?: stringResource(Res.string.discover_results))
         }
         if (source != Source.Releases) {
             Chips(Kind.entries, kind, { it.title }, optionModifier = { Modifier.testTag("kind-${it.name}") }) { kind = it }
@@ -98,7 +100,7 @@ private fun KnownPackages(
     actions: Actions,
     navigation: Navigation,
 ) {
-    PreferencesGroup("In the registry", suffix = { if (navigation.source == null) TextLink("See all") { navigation.show(Source.Registry) } }) {
+    PreferencesGroup(stringResource(Res.string.discover_in_registry), suffix = { if (navigation.source == null) TextLink(stringResource(Res.string.action_see_all)) { navigation.show(Source.Registry) } }) {
         AutoGrid(known.size, TILE_WIDTH, TILE_GAP) { KnownTile(known[it], state, actions, navigation) }
     }
 }
@@ -109,7 +111,7 @@ private fun Repositories(
     state: StoreState,
     actions: Actions,
 ) {
-    PreferencesGroup("On GitHub") {
+    PreferencesGroup(stringResource(Res.string.discover_on_github)) {
         AutoGrid(repositories.size, TILE_WIDTH, TILE_GAP) { index ->
             val repo = repositories[index]
             val name = repo.spec.removePrefix("github:")
@@ -139,9 +141,9 @@ private fun KnownTile(
         leading = { PackageAvatar(pkg.name) },
         trailing = {
             when {
-                state.activity?.packages?.containsKey(pkg.name) == true -> PillButton("Installing…", busy = true, enabled = false) {}
-                state.outdatedVersion(pkg.name) != null -> PillButton("Update", Modifier.widthIn(min = BUTTON_WIDTH), PillStyle.Update) { navigation.show(Section.Updates) }
-                state.installed.any { it.name == pkg.name } -> OkLabel("Installed")
+                state.activity?.packages?.containsKey(pkg.name) == true -> PillButton(stringResource(Res.string.action_installing), busy = true, enabled = false) {}
+                state.outdatedVersion(pkg.name) != null -> PillButton(stringResource(Res.string.action_update), Modifier.widthIn(min = BUTTON_WIDTH), PillStyle.Update) { navigation.show(Section.Updates) }
+                state.installed.any { it.name == pkg.name } -> OkLabel(stringResource(Res.string.status_installed))
                 else -> InstallPill(state) { actions.install(pkg.name) }
             }
         },
@@ -152,7 +154,7 @@ private fun KnownTile(
 private fun InstallPill(
     state: StoreState,
     onInstall: () -> Unit,
-) = PillButton("Install", Modifier.widthIn(min = BUTTON_WIDTH), PillStyle.Accent, enabled = !state.isRunning, onClick = onInstall)
+) = PillButton(stringResource(Res.string.action_install), Modifier.widthIn(min = BUTTON_WIDTH), PillStyle.Accent, enabled = !state.isRunning, onClick = onInstall)
 
 @Composable
 private fun Hero(
@@ -168,15 +170,15 @@ private fun Hero(
             val roomy = maxWidth >= SCENE_ROOM
             Row(Modifier.padding(horizontal = 40.dp, vertical = 36.dp), horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Eyebrow("Featured release")
+                    Eyebrow(stringResource(Res.string.discover_featured))
                     Text(HERO_TITLE, color = c.ink, style = type.title1, modifier = Modifier.widthIn(max = HERO_WIDTH))
                     Text(HERO_WORDS, color = c.ink2, style = type.lead, modifier = Modifier.widthIn(max = HERO_WIDTH))
                     pick?.let {
                         val command = "ketch install ${githubRepo(it.source) ?: it.name}"
-                        CommandLine(command, "Copy the command", Modifier.widthIn(max = COMMAND_WIDTH).fillMaxWidth()) { copyToClipboard(command) }
+                        CommandLine(command, stringResource(Res.string.action_copy_command), Modifier.widthIn(max = COMMAND_WIDTH).fillMaxWidth()) { copyToClipboard(command) }
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            PillButton("See ${it.name}", style = PillStyle.Accent, size = PillSize.Large) { navigation.open = it.name }
-                            PillButton("How ketch picks the asset", size = PillSize.Large) { navigation.open(it.name, PackageTab.Overview) }
+                            PillButton(stringResource(Res.string.action_see, it.name), style = PillStyle.Accent, size = PillSize.Large) { navigation.open = it.name }
+                            PillButton(stringResource(Res.string.discover_how_it_picks), size = PillSize.Large) { navigation.open(it.name, PackageTab.Overview) }
                         }
                     }
                 }
@@ -184,9 +186,9 @@ private fun Hero(
                     // The words are the idea of an install, not a real run.
                     HeroScene(
                         "resolve",
-                        pick?.latest ?: "latest",
-                        listOf(config?.target ?: "the asset for this machine", "sha256 ✓ verified", "link ~/.ketch/bin/$name"),
-                        pick?.latest ?: "latest",
+                        pick?.latest ?: stringResource(Res.string.discover_latest),
+                        listOf(config?.target ?: stringResource(Res.string.discover_asset_this_machine), stringResource(Res.string.discover_sum_verified), stringResource(Res.string.discover_line_link, name)),
+                        pick?.latest ?: stringResource(Res.string.discover_latest),
                     ) { Mark(SCENE_MARK, tile = false) }
                 }
             }
@@ -196,7 +198,7 @@ private fun Hero(
 
 @Composable
 private fun WhyKetch() {
-    PreferencesGroup("Why ketch") {
+    PreferencesGroup(stringResource(Res.string.discover_why_ketch)) {
         BoxedList {
             FEATURES.forEachIndexed { index, feature ->
                 if (index > 0) RowLine()
@@ -219,16 +221,16 @@ private class Feature(
 private val FEATURES =
     listOf(
         Feature(
-            "Apps, not just binaries",
-            "An AppImage or tarball app lands in its own folder with a .desktop entry, and leaves cleanly on uninstall.",
+            tr(Res.string.discover_apps_title),
+            tr(Res.string.discover_apps_linux),
             IconGradient.Blue,
             Glyph.Window,
         ),
-        Feature("Rollback without a re-download", "An upgrade keeps the previous version on disk, so going back is one relink away.", IconGradient.Orange, Glyph.Undo),
-        Feature("Reproducible machines", "ketch.lock pins every package; sync installs exactly what it names.", IconGradient.Mint, Glyph.Lock),
+        Feature(tr(Res.string.discover_rollback_title), tr(Res.string.discover_rollback_text), IconGradient.Orange, Glyph.Undo),
+        Feature(tr(Res.string.discover_reproducible_title), tr(Res.string.discover_reproducible_text), IconGradient.Mint, Glyph.Lock),
     )
 
-private const val HERO_WORDS = "No PPAs, no build step. ketch takes the asset a project already ships, checks its published checksum and links it into ~/.ketch/bin."
+private val HERO_WORDS get() = tr(Res.string.discover_hero_text_linux)
 private val TILE_WIDTH = 340.dp
 private val TILE_GAP = 12.dp
 private val BUTTON_WIDTH = 80.dp

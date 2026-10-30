@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.Navigation
 import ketch.desktop.ui.VERIFIED_NOTE
@@ -25,6 +26,7 @@ import ketch.desktop.ui.screens.checked
 import ketch.desktop.ui.screens.githubRepo
 import ketch.desktop.ui.tilde
 import ketch.wire.Upgrade
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.glass.Badge
 import pyrlyn.glass.BadgeKind
 import pyrlyn.glass.ButtonKind
@@ -57,27 +59,27 @@ fun GlassUpdates(
     var confirming by navigation::confirmingUpdateAll
     val updates = state.updates
     GlassPage(
-        "Updates",
+        stringResource(Res.string.section_updates),
         "updates",
         navigation,
         toolbar = {
             Text(checked(state), color = glass.ink2, style = body(TextSize.LABEL))
-            GlassButton("Check now", ButtonKind.Secondary, enabled = !state.isRunning) { actions.run { refresh() } }
-            GlassButton("Update all", ButtonKind.Primary, Modifier.testTag("update-all"), enabled = updates.isNotEmpty() && !state.isRunning) { confirming = true }
+            GlassButton(stringResource(Res.string.action_check_now), ButtonKind.Secondary, enabled = !state.isRunning) { actions.run { refresh() } }
+            GlassButton(stringResource(Res.string.action_update_all), ButtonKind.Primary, Modifier.testTag("update-all"), enabled = updates.isNotEmpty() && !state.isRunning) { confirming = true }
         },
     ) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PageContent, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            if (updates.isEmpty()) item { EmptyNote("Everything is up to date") }
+            if (updates.isEmpty()) item { EmptyNote(stringResource(Res.string.updates_everything_up_to_date)) }
             items(updates, key = { "update-${it.name}" }) { UpdateCard(it, state, actions, navigation) }
-            if (state.held.isNotEmpty()) item { SectionTitle("Pinned · held by ketch.lock", Modifier.padding(top = 14.dp), small = true) }
+            if (state.held.isNotEmpty()) item { SectionTitle(stringResource(Res.string.updates_pinned_by_lock), Modifier.padding(top = 14.dp), small = true) }
             items(state.held, key = { "held-${it.name}" }) { upgrade ->
-                val by = upgrade.heldBy?.let { "pinned in ${tilde(it)}" } ?: "pinned"
+                val by = upgrade.heldBy?.let { stringResource(Res.string.updates_pinned_in, tilde(it)) } ?: stringResource(Res.string.updates_pinned_word)
                 ListRow(
                     upgrade.name,
                     "${upgrade.installed} → ${upgrade.latest} · $by",
                     Modifier.testTag("held-${upgrade.name}"),
                     icon = { LetterIcon(upgrade.name, IconSize.Small) },
-                    badge = { Badge("Pinned", BadgeKind.Neutral) },
+                    badge = { Badge(stringResource(Res.string.status_pinned), BadgeKind.Neutral) },
                 )
             }
             if (updates.isNotEmpty()) item { Verified() }
@@ -115,8 +117,8 @@ private fun UpdateCard(
             Text(listOfNotNull(repo, "${upgrade.installed} → ${upgrade.latest}").joinToString(" · "), color = glass.ink2, style = mono(META))
             note?.let { Text(it, color = glass.ink2, style = body(TextSize.BODY), maxLines = 2) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                GlassButton("Changelog", ButtonKind.Ghost) { navigation.open = upgrade.name }
-                GlassButton("Update", ButtonKind.Attention, enabled = !state.isRunning) { actions.run { upgrade(listOf(upgrade.name)) } }
+                GlassButton(stringResource(Res.string.action_changelog), ButtonKind.Ghost) { navigation.open = upgrade.name }
+                GlassButton(stringResource(Res.string.action_update), ButtonKind.Attention, enabled = !state.isRunning) { actions.run { upgrade(listOf(upgrade.name)) } }
             }
         }
     }

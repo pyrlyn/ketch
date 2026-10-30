@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.HERO_TEXT
 import ketch.desktop.ui.HERO_TITLE
@@ -43,6 +44,7 @@ import ketch.desktop.ui.screens.PackageTab
 import ketch.desktop.ui.screens.githubRepo
 import ketch.wire.RegistryPackage
 import ketch.wire.Repository
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.fluent.AppIconSize
 import pyrlyn.fluent.BusyButton
 import pyrlyn.fluent.ButtonStyle
@@ -88,7 +90,7 @@ fun FluentDiscover(
     ) {
         block {
             PageHead(
-                title = { PageTitle(source?.title ?: "Discover") },
+                title = { PageTitle(source?.title ?: stringResource(Res.string.section_discover)) },
                 actions = {
                     if (source != Source.Releases) {
                         SelectorBar(Kind.entries, kind, { it.title }, itemModifier = { Modifier.testTag("kind-${it.name}") }) { kind = it }
@@ -115,8 +117,8 @@ private fun LazyGridScope.knownPackages(
 ) {
     if (known.isNotEmpty()) {
         wide {
-            SectionHead(if (query.isBlank()) "In the registry" else "Results", large = true) {
-                if (navigation.source == null) FluentLink("See all", glyph = Glyph.Forward) { navigation.show(Source.Registry) }
+            SectionHead(if (query.isBlank()) stringResource(Res.string.discover_in_registry) else stringResource(Res.string.discover_results), large = true) {
+                if (navigation.source == null) FluentLink(stringResource(Res.string.action_see_all), glyph = Glyph.Forward) { navigation.show(Source.Registry) }
             }
         }
     }
@@ -128,7 +130,7 @@ private fun LazyGridScope.repositoryTiles(
     state: StoreState,
     actions: Actions,
 ) {
-    if (repositories.isNotEmpty()) wide { SectionHead("On GitHub", Modifier.padding(top = PageGap - TILE_GAP), large = true) }
+    if (repositories.isNotEmpty()) wide { SectionHead(stringResource(Res.string.discover_on_github), Modifier.padding(top = PageGap - TILE_GAP), large = true) }
     items(repositories, key = { "repo-${it.spec}" }) { repo ->
         val name = repo.spec.removePrefix("github:")
         PackageTile(
@@ -136,7 +138,7 @@ private fun LazyGridScope.repositoryTiles(
             listOfNotNull(name, repo.stars?.let { "★ $it" }).joinToString(" · "),
             repo.description,
             Modifier.testTag("discover-${repo.spec}"),
-        ) { FluentButton("Get", ButtonStyle.Accent, Modifier.widthIn(min = BUTTON_WIDTH), enabled = !state.isRunning) { actions.install(repo.spec) } }
+        ) { FluentButton(stringResource(Res.string.action_get), ButtonStyle.Accent, Modifier.widthIn(min = BUTTON_WIDTH), enabled = !state.isRunning) { actions.install(repo.spec) } }
     }
 }
 
@@ -159,10 +161,10 @@ private fun KnownTile(
         Modifier.testTag("discover-${pkg.name}").clip(Corners.Overlay).clickable { navigation.open = pkg.name },
     ) {
         when {
-            state.activity?.packages?.containsKey(pkg.name) == true -> BusyButton("Installing…")
-            state.outdatedVersion(pkg.name) != null -> FluentButton("Update", ButtonStyle.Update, Modifier.widthIn(min = BUTTON_WIDTH)) { navigation.show(Section.Updates) }
-            state.installed.any { it.name == pkg.name } -> DoneMark("Installed")
-            else -> FluentButton("Get", ButtonStyle.Accent, Modifier.widthIn(min = BUTTON_WIDTH), enabled = !state.isRunning) { actions.install(pkg.name) }
+            state.activity?.packages?.containsKey(pkg.name) == true -> BusyButton(stringResource(Res.string.action_installing))
+            state.outdatedVersion(pkg.name) != null -> FluentButton(stringResource(Res.string.action_update), ButtonStyle.Update, Modifier.widthIn(min = BUTTON_WIDTH)) { navigation.show(Section.Updates) }
+            state.installed.any { it.name == pkg.name } -> DoneMark(stringResource(Res.string.status_installed))
+            else -> FluentButton(stringResource(Res.string.action_get), ButtonStyle.Accent, Modifier.widthIn(min = BUTTON_WIDTH), enabled = !state.isRunning) { actions.install(pkg.name) }
         }
     }
 }
@@ -202,21 +204,21 @@ private fun Hero(
         scene = {
             // The words are the idea of an install, not a real run.
             HeroScene(
-                listOf("resolve" to "$repo → latest", "asset" to "the archive for this PC", "sha256" to "✓ matches published sum", "link" to "$name onto PATH"),
-                pick?.latest ?: "latest",
-                "SHA-256 verified",
+                listOf("resolve" to stringResource(Res.string.discover_resolve_latest, repo), "asset" to stringResource(Res.string.discover_asset_this_pc), "sha256" to stringResource(Res.string.discover_sum_matches), "link" to stringResource(Res.string.discover_link_path, name)),
+                pick?.latest ?: stringResource(Res.string.discover_latest),
+                stringResource(Res.string.discover_sha256_verified),
             ) { Mark(SCENE_MARK, tile = false) }
         },
     ) {
-        Eyebrow("Featured release")
+        Eyebrow(stringResource(Res.string.discover_featured))
         Text(HERO_TITLE, color = Color.White, style = type.hero, modifier = Modifier.widthIn(max = 520.dp))
         Text(HERO_TEXT, color = HERO_INK, style = type.body.copy(fontSize = type.strong.fontSize), modifier = Modifier.widthIn(max = 470.dp))
         pick?.let {
             val command = "ketch install ${githubRepo(it.source) ?: it.name}"
-            CommandField(command, "Copy the command", Modifier.widthIn(max = 470.dp).fillMaxWidth()) { copyToClipboard(command) }
+            CommandField(command, stringResource(Res.string.action_copy_command), Modifier.widthIn(max = 470.dp).fillMaxWidth()) { copyToClipboard(command) }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                FluentButton("See ${it.name}", ButtonStyle.Accent, large = true) { navigation.open = it.name }
-                FluentButton("How ketch picks the asset", ButtonStyle.Glass, large = true) { navigation.open(it.name, PackageTab.Overview) }
+                FluentButton(stringResource(Res.string.action_see, it.name), ButtonStyle.Accent, large = true) { navigation.open = it.name }
+                FluentButton(stringResource(Res.string.discover_how_it_picks), ButtonStyle.Glass, large = true) { navigation.open(it.name, PackageTab.Overview) }
             }
         }
     }
@@ -240,13 +242,13 @@ private class Feature(
 private val FEATURES =
     listOf(
         Feature(
-            "Apps, not just binaries",
-            "An installer or portable app lands in its own folder with a Start menu entry, and is removed cleanly on uninstall.",
+            tr(Res.string.discover_apps_title),
+            tr(Res.string.discover_apps_windows),
             IconGradient.Blue,
             Glyph.Window,
         ),
-        Feature("Rollback without a re-download", "An upgrade keeps the previous version on disk, so going back is one relink away.", IconGradient.Orange, Glyph.Undo),
-        Feature("Reproducible machines", "ketch.lock pins every package; sync installs exactly what it names.", IconGradient.Mint, Glyph.Lock),
+        Feature(tr(Res.string.discover_rollback_title), tr(Res.string.discover_rollback_text), IconGradient.Orange, Glyph.Undo),
+        Feature(tr(Res.string.discover_reproducible_title), tr(Res.string.discover_reproducible_text), IconGradient.Mint, Glyph.Lock),
     )
 
 private val TILE_WIDTH = 280.dp

@@ -39,6 +39,7 @@ import ketch.desktop.settings.AppSettings
 import ketch.desktop.store.Activity
 import ketch.desktop.store.StoreState
 import ketch.desktop.store.UpdateChecks
+import ketch.desktop.strings.*
 import ketch.desktop.ui.About
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.AppParts
@@ -49,9 +50,9 @@ import ketch.desktop.ui.Section
 import ketch.desktop.ui.Source
 import ketch.desktop.ui.glass.Mark
 import ketch.desktop.ui.glyph
-import ketch.desktop.ui.plural
 import ketch.desktop.ui.searchFocus
 import ketch.wire.Settings
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.fluent.ActivityFlyout
 import pyrlyn.fluent.AppIcon
 import pyrlyn.fluent.AppIconSize
@@ -98,13 +99,13 @@ fun FluentApp(
             Column(Modifier.fillMaxSize()) {
                 WindowBar(
                     leading = {
-                        FluentIconButton(Glyph.ArrowBack, "Back", Modifier.testTag("back").windowZone(WindowZone.Content), width = BACK_WIDTH, enabled = navigation.canGoBack) { navigation.back() }
+                        FluentIconButton(Glyph.ArrowBack, stringResource(Res.string.action_back), Modifier.testTag("back").windowZone(WindowZone.Content), width = BACK_WIDTH, enabled = navigation.canGoBack) { navigation.back() }
                         Brand()
                     },
                     center = {
                         SearchBox(
                             query,
-                            "Search owner/repo or name",
+                            stringResource(Res.string.discover_search_field),
                             Modifier
                                 .windowZone(WindowZone.Content)
                                 .widthIn(max = SEARCH_WIDTH)
@@ -216,7 +217,7 @@ private fun NavigationView(
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         for (section in LIBRARY) SectionItem(section, state, navigation)
-        NavLabel("Sources")
+        NavLabel(stringResource(Res.string.section_sources))
         for (source in Source.entries) {
             val color = if (source == Source.Releases) c.success else c.accent
             NavItem(source.title, navigation.source == source, Modifier.testTag("sidebar-${source.tag}"), leading = { NavDot(color) }) { navigation.show(source) }
@@ -235,10 +236,10 @@ private fun SectionItem(
     val selected = navigation.section == section && navigation.source == null
     val (count, noun) =
         when (section) {
-            Section.Installed -> state.installed.size to "package"
-            Section.Updates -> state.pendingUpgradeCount to "update"
-            Section.Doctor -> state.problemCount to "problem"
-            else -> 0 to ""
+            Section.Installed -> state.installed.size to Res.plurals.packages
+            Section.Updates -> state.pendingUpgradeCount to Res.plurals.updates
+            Section.Doctor -> state.problemCount to Res.plurals.problems
+            else -> 0 to Res.plurals.packages
         }
     NavItem(
         section.title,
@@ -260,14 +261,14 @@ private fun Flyouts(
 ) {
     val c = LocalFluent.current
     state.busy?.let { busy ->
-        FlyoutNotice("ketch is busy", busy.message, Modifier.testTag("busy-bar"), leading = { GlyphIcon(Glyph.Lock, c.busy, GLYPH) }) {
-            FluentButton("Retry") { actions.run { retryBusy() } }
+        FlyoutNotice(stringResource(Res.string.window_ketch_busy), busy.message, Modifier.testTag("busy-bar"), leading = { GlyphIcon(Glyph.Lock, c.busy, GLYPH) }) {
+            FluentButton(stringResource(Res.string.action_retry)) { actions.run { retryBusy() } }
         }
     }
-    if (showActivity) OperationFlyout(state) { FluentButton("Details") { navigation.show(Section.Activity) } }
+    if (showActivity) OperationFlyout(state) { FluentButton(stringResource(Res.string.action_details)) { navigation.show(Section.Activity) } }
     state.error?.let { error ->
-        FlyoutNotice("Something went wrong", error, Modifier.testTag("error-bar"), leading = { GlyphIcon(Glyph.Warning, c.danger, GLYPH) }) {
-            FluentButton("Dismiss") { actions.store.dismissError() }
+        FlyoutNotice(stringResource(Res.string.window_something_wrong), error, Modifier.testTag("error-bar"), leading = { GlyphIcon(Glyph.Warning, c.danger, GLYPH) }) {
+            FluentButton(stringResource(Res.string.action_dismiss)) { actions.store.dismissError() }
         }
     }
 }

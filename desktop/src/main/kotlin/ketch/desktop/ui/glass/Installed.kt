@@ -14,10 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.Navigation
 import ketch.desktop.ui.pathExists
-import ketch.desktop.ui.plural
 import ketch.desktop.ui.reveal
 import ketch.desktop.ui.screens.UninstallConfirm
 import ketch.desktop.ui.screens.githubRepo
@@ -26,6 +26,7 @@ import ketch.desktop.ui.tilde
 import ketch.desktop.ui.whereTo
 import ketch.wire.Package
 import ketch.wire.Settings
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.glass.Badge
 import pyrlyn.glass.BadgeKind
 import pyrlyn.glass.ButtonKind
@@ -50,22 +51,22 @@ fun GlassInstalled(
     val rows = state.installed.filter { needle.isEmpty() || it.name.contains(needle, ignoreCase = true) }.sortedBy { it.name }
     val focus = searchFocus(navigation)
     GlassPage(
-        "Installed",
+        stringResource(Res.string.section_installed),
         "installed",
         navigation,
-        toolbar = { SearchField(filter, "Filter installed packages", Modifier.testTag("installed-filter"), "⌘K", focus) { filter = it } },
+        toolbar = { SearchField(filter, stringResource(Res.string.installed_filter_packages), Modifier.testTag("installed-filter"), "⌘K", focus) { filter = it } },
     ) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PageContent, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FactChip(plural(state.installed.size, "package"))
+                    FactChip(plural(state.installed.size, Res.plurals.packages))
                     config?.let { FactChip(tilde(it.root)) }
-                    FactChip("${plural(state.updates.size, "update")} · ${state.held.size} pinned")
+                    FactChip("${plural(state.updates.size, Res.plurals.updates)} · ${plural(state.held.size, Res.plurals.pinned_count)}")
                 }
             }
             if (rows.isEmpty()) {
                 item {
-                    if (needle.isEmpty()) EmptyNote("Nothing is installed yet", "Find something in Discover.") else EmptyNote("No installed package matches \"$needle\"")
+                    if (needle.isEmpty()) EmptyNote(stringResource(Res.string.installed_none), stringResource(Res.string.installed_find_something)) else EmptyNote(stringResource(Res.string.installed_no_match, needle))
                 }
             }
             items(rows, key = { it.name }) { pkg -> InstalledRow(pkg, state, actions, navigation) { uninstalling = pkg } }
@@ -92,19 +93,19 @@ private fun InstalledRow(
         icon = { LetterIcon(pkg.name, IconSize.Small) },
         badge = {
             when {
-                held != null -> Badge("Pinned", BadgeKind.Neutral)
-                update != null -> Badge("Update to $update", BadgeKind.Attention)
-                else -> Badge("Installed", BadgeKind.Success)
+                held != null -> Badge(stringResource(Res.string.status_pinned), BadgeKind.Neutral)
+                update != null -> Badge(stringResource(Res.string.action_update_to, update), BadgeKind.Attention)
+                else -> Badge(stringResource(Res.string.status_installed), BadgeKind.Success)
             }
         },
     ) {
         RevealButton(pkg.binaries.firstOrNull() ?: pkg.prefix)
-        GlassButton("Uninstall…", ButtonKind.Danger, enabled = !state.isRunning, onClick = onUninstall)
-        if (update != null) GlassButton("Upgrade", ButtonKind.Attention, enabled = !state.isRunning) { actions.run { upgrade(listOf(pkg.name)) } }
+        GlassButton(stringResource(Res.string.action_uninstall_ellipsis), ButtonKind.Danger, enabled = !state.isRunning, onClick = onUninstall)
+        if (update != null) GlassButton(stringResource(Res.string.action_upgrade), ButtonKind.Attention, enabled = !state.isRunning) { actions.run { upgrade(listOf(pkg.name)) } }
     }
 }
 
 @Composable
 fun RevealButton(path: String) {
-    GlassButton("Reveal in Finder", ButtonKind.Secondary, enabled = pathExists(path)) { reveal(path) }
+    GlassButton(stringResource(Res.string.action_reveal_finder), ButtonKind.Secondary, enabled = pathExists(path)) { reveal(path) }
 }

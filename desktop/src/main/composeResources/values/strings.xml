@@ -1,0 +1,400 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Every word the desktop app says. A language is a sibling folder: values-ru/strings.xml.
+    Text that ketch serve sends, commands, tags, paths and the Ketch name are not here.
+
+    Keys: <area>_<meaning>, one key per meaning: the looks share a key when they say the same thing, and the same English
+    in two roles takes two keys (section_installed, status_installed), since other languages tell them apart.
+    Values: %1$s and %1$d, numbered; a number that picks the wording makes it a plural.
+
+    Terms, so that a translation says each the same way everywhere:
+    package   what ketch installs: a CLI tool or an app
+    source    where a package comes from: a GitHub repository or the registry
+    pin       to keep a package at its version, by hand
+    hold      what a pin or a ketch.lock does to a package: updates pass it by
+    store     the folder that keeps the installed versions of a package
+    link      to put a program from the store on PATH
+-->
+<resources>
+
+    <!-- Sections of the window and the sources of Discover -->
+    <string name="section_installed">Installed</string>
+    <string name="section_discover">Discover</string>
+    <string name="section_explore">Explore</string>
+    <string name="section_updates">Updates</string>
+    <string name="section_activity">Activity</string>
+    <string name="section_doctor">Doctor</string>
+    <string name="section_settings">Settings</string>
+    <string name="section_sources">Sources</string>
+    <string name="source_github_releases">GitHub releases</string>
+    <string name="source_registry">ketch-registry</string>
+
+    <!-- Buttons and other things a person does -->
+    <string name="action_back">Back</string>
+    <string name="action_forward">Forward</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_check_now">Check now</string>
+    <string name="action_close">Close</string>
+    <string name="action_copy">Copy</string>
+    <string name="action_copy_command">Copy the command</string>
+    <string name="action_details">Details</string>
+    <string name="action_dismiss">Dismiss</string>
+    <string name="action_export_log">Export log</string>
+    <string name="action_fix">Fix</string>
+    <string name="action_fixing">Fixing…</string>
+    <string name="action_get">Get</string>
+    <string name="action_install">Install</string>
+    <string name="action_installing">Installing…</string>
+    <string name="action_link">Link</string>
+    <string name="action_open_config">Open config.toml</string>
+    <string name="action_open_folder">Open folder</string>
+    <string name="action_open_github">Open on GitHub</string>
+    <string name="action_open_lock">Open ketch.lock</string>
+    <string name="action_remove">Remove</string>
+    <string name="action_reset">Reset</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_reveal_finder">Reveal in Finder</string>
+    <string name="action_run_again">Run again</string>
+    <string name="action_run_checks">Run checks</string>
+    <string name="action_search">Search</string>
+    <string name="action_see_all">See all</string>
+    <string name="action_show_explorer">Show in Explorer</string>
+    <string name="action_stop_them">Stop them</string>
+    <string name="action_uninstall">Uninstall</string>
+    <string name="action_uninstall_ellipsis">Uninstall…</string>
+    <string name="action_update">Update</string>
+    <string name="action_update_all">Update all</string>
+    <string name="action_update_all_ellipsis">Update all…</string>
+    <string name="action_updating">Updating…</string>
+    <string name="action_upgrade">Upgrade</string>
+    <string name="action_changelog">Changelog</string>
+
+    <!-- What state a package or a setting is in -->
+    <string name="status_installed">Installed</string>
+    <string name="status_latest">Latest</string>
+    <string name="status_pinned">Pinned</string>
+    <string name="status_held">Held</string>
+    <string name="status_updating">Updating</string>
+    <string name="status_on">On</string>
+    <string name="status_off">Off</string>
+    <string name="status_set">Set</string>
+    <string name="status_not_set">Not set</string>
+    <string name="status_default">Default</string>
+
+    <!-- Discover -->
+    <string name="discover_apps_title">Apps, not just binaries</string>
+    <string name="discover_apps_mac">An .app bundle goes to /Applications, quarantine cleared when its signature checks out, removed cleanly on uninstall.</string>
+    <string name="discover_apps_linux">An AppImage or tarball app lands in its own folder with a .desktop entry, and leaves cleanly on uninstall.</string>
+    <string name="discover_apps_windows">An installer or portable app lands in its own folder with a Start menu entry, and is removed cleanly on uninstall.</string>
+    <string name="discover_rollback_title">Rollback without a re-download</string>
+    <string name="discover_rollback_text">An upgrade keeps the previous version on disk, so going back is one relink away.</string>
+    <string name="discover_reproducible_title">Reproducible machines</string>
+    <string name="discover_reproducible_text">ketch.lock pins every package; sync installs exactly what it names.</string>
+    <string name="discover_sha256_verified">SHA-256 verified</string>
+    <string name="discover_featured">Featured release</string>
+    <string name="discover_how_it_picks">How ketch picks the asset</string>
+    <string name="discover_why_ketch">Why ketch</string>
+    <string name="discover_in_registry">In the registry</string>
+    <string name="discover_on_github">On GitHub</string>
+    <string name="discover_results">Results</string>
+    <string name="discover_repositories">Repositories</string>
+    <string name="discover_search_field">Search owner/repo or name</string>
+    <string name="discover_search_short">owner/repo or name</string>
+    <string name="discover_search_registry">Search the registry</string>
+    <string name="discover_type_repo">Type owner/repo to find a project's releases</string>
+    <string name="discover_registry_empty">The registry lists nothing yet</string>
+    <string name="discover_registry_no_apps">The registry names no apps yet</string>
+    <string name="discover_filter_all">All</string>
+    <string name="discover_filter_tools">CLI tools</string>
+    <string name="discover_filter_apps">Apps</string>
+    <string name="discover_latest">latest</string>
+    <string name="discover_asset_this_machine">the asset for this machine</string>
+    <string name="discover_asset_this_pc">the archive for this PC</string>
+    <string name="discover_line_asset_mac">asset the archive for this Mac</string>
+    <string name="discover_line_sum_mac">sha256 ✓ matches published sum</string>
+    <string name="discover_sum_verified">sha256 ✓ verified</string>
+    <string name="discover_sum_matches">✓ matches published sum</string>
+
+    <!-- Installed -->
+    <string name="installed_filter">Filter installed</string>
+    <string name="installed_filter_packages">Filter installed packages</string>
+    <string name="installed_packages">Packages</string>
+    <string name="installed_none">Nothing is installed yet</string>
+    <string name="installed_none_explore">Nothing is installed yet. Find something in Explore.</string>
+    <string name="installed_find_something">Find something in Discover.</string>
+
+    <!-- Updates -->
+    <string name="updates_available">Available</string>
+    <string name="updates_held_back">Held back</string>
+    <string name="updates_up_to_date">Up to date</string>
+    <string name="updates_everything_up_to_date">Everything is up to date</string>
+    <string name="updates_not_checked">Not checked yet</string>
+    <string name="updates_verified">Verified, with rollback</string>
+    <string name="updates_held_note">A pin or a project's ketch.lock holds these, so Update all leaves them where they are.</string>
+    <string name="updates_pinned_note">Pinned packages are skipped until you unpin them.</string>
+    <string name="updates_pinned_by_lock">Pinned · held by ketch.lock</string>
+    <string name="updates_confirm_text">Each package is downloaded, verified and linked in turn. Held packages stay where they are.</string>
+    <string name="updates_pinned_word">pinned</string>
+
+    <!-- A package page -->
+    <string name="package_installed">Installed</string>
+    <string name="package_latest">Latest</string>
+    <string name="package_source">Source</string>
+    <string name="package_repository">Repository</string>
+    <string name="package_linked_to">Linked to</string>
+    <string name="package_kept">Kept</string>
+    <string name="package_store">Store</string>
+    <string name="package_links">Links</string>
+    <string name="package_binary">Binary</string>
+    <string name="package_trust">Trust</string>
+    <string name="package_details">Details</string>
+    <string name="package_overview">Overview</string>
+    <string name="package_files">Files</string>
+    <string name="package_changelog">Changelog</string>
+    <string name="package_no_changelog">No changelog found.</string>
+    <string name="package_no_description">No description.</string>
+    <string name="package_not_installed">Not installed.</string>
+    <string name="package_source_failed">ketch could not ask this package's source.</string>
+    <string name="package_seal_signed">Signed</string>
+    <string name="package_seal_first_use">First use</string>
+    <string name="package_changelog_origin">release notes</string>
+    <string name="package_why_no_release">no release</string>
+    <string name="package_why_no_asset">none fits this machine</string>
+    <string name="package_checksum_published">checked against the published sha256</string>
+    <string name="package_checksum_required">refused unless a checksum is published</string>
+    <string name="package_checksum_first_use">no published checksum: the first download is trusted</string>
+    <string name="package_checksum_none">nothing to check yet</string>
+
+    <!-- Activity -->
+    <string name="activity_nothing_yet">Nothing has run yet</string>
+    <string name="activity_filter_history">Filter history</string>
+    <string name="activity_filter_log">Filter the log</string>
+    <string name="activity_today">Today</string>
+    <string name="activity_yesterday">Yesterday</string>
+    <string name="activity_level_info">INFO</string>
+    <string name="activity_level_done">DONE</string>
+    <string name="activity_level_warn">WARN</string>
+    <string name="activity_level_error">ERROR</string>
+
+    <!-- Doctor -->
+    <string name="doctor_no_checks">No checks have run yet</string>
+    <string name="doctor_no_problems">No problems found</string>
+    <string name="doctor_checks">Checks</string>
+    <string name="doctor_output">Output</string>
+    <string name="doctor_fixed">Fixed</string>
+    <string name="doctor_ok">OK</string>
+    <string name="doctor_warning">Warning</string>
+    <string name="doctor_failed">Failed</string>
+    <string name="doctor_passed">Passed</string>
+    <string name="doctor_warnings">Warnings</string>
+
+    <!-- Settings -->
+    <string name="settings_general">General</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_installation">Installation</string>
+    <string name="settings_security">Security</string>
+    <string name="settings_configuration">Configuration</string>
+    <string name="settings_root">ketch root</string>
+    <string name="settings_links">Links</string>
+    <string name="settings_links_note">Every program ketch installs is linked here.</string>
+    <string name="settings_desktop_entries">Create desktop entries</string>
+    <string name="settings_desktop_entries_note">Apps get a .desktop entry in your applications menu.</string>
+    <string name="settings_checksums">Require checksums</string>
+    <string name="settings_checksums_note">Refuses a release that publishes no checksum.</string>
+    <string name="settings_registry_note">curated package names → repos</string>
+    <string name="settings_access_token">Access token</string>
+    <string name="settings_check_updates">Check for updates</string>
+    <string name="settings_check_updates_note">How often ketch looks for new releases in the background.</string>
+    <string name="settings_prereleases">Include prereleases when installing</string>
+    <string name="settings_notify">Notify when updates are available</string>
+    <string name="settings_notify_windows">Shows a Windows notification.</string>
+    <string name="settings_open_at_login">Open at login</string>
+    <string name="settings_start_at_login">Start at login</string>
+    <string name="settings_start_with_windows">Start with Windows</string>
+    <string name="settings_every_day">Every day</string>
+    <string name="settings_changes_mac">Changes apply at once and are kept on this Mac.</string>
+    <string name="settings_changes_pc">Changes apply at once and are kept on this PC.</string>
+    <string name="settings_tint">Tint</string>
+    <string name="settings_no_tint">No tint</string>
+    <string name="settings_glass">Glass</string>
+    <string name="settings_accent">Accent</string>
+    <string name="settings_accent_colour">Accent colour</string>
+    <string name="settings_system_accent">System accent</string>
+    <string name="settings_automatic">Automatic</string>
+    <string name="settings_automatic_note">Automatic is ketch's own blue.</string>
+    <string name="settings_backdrop_wash">Backdrop wash</string>
+    <string name="settings_window_material">Window material</string>
+    <string name="settings_window_material_note">How much of the window's backdrop shows: Mica the least, Transparent the most.</string>
+    <string name="settings_about_ketch">About Ketch</string>
+
+    <!-- Dialogs and the window -->
+    <string name="dialog_stop_programs">Stop running programs?</string>
+    <string name="dialog_leftover">Remove a leftover folder?</string>
+    <string name="window_something_wrong">Something went wrong</string>
+    <string name="window_ketch_busy">ketch is busy</string>
+    <string name="window_main_menu">Main menu</string>
+    <string name="window_about_store">About ketch Store</string>
+    <string name="about_licence_title">Licensed under any of, at your choice:</string>
+
+    <!-- The tray menu -->
+    <string name="tray_open">Open Ketch</string>
+    <string name="tray_settings">Settings…</string>
+    <string name="tray_quit">Quit Ketch</string>
+    <string name="tray_working">working</string>
+
+    <!-- Words that take values -->
+    <string name="about_version">Version %1$s · ketch %2$s</string>
+    <string name="about_summary">Installs command-line tools and apps straight from GitHub releases.</string>
+    <string name="about_licences">• GNU GPL-3.0-or-later\n• the ketch Royalty-free License\n• a commercial licence</string>
+    <string name="action_open_named">Open %1$s</string>
+    <string name="action_see">See %1$s</string>
+    <string name="action_update_to">Update to %1$s</string>
+    <string name="activity_export_failed">Could not write %1$s: %2$s</string>
+    <string name="activity_no_match">No line matches "%1$s"</string>
+    <string name="dialog_choose_binary_title">Which binary should %1$s link?</string>
+    <string name="dialog_choose_binary_text">%1$s ships several programs. ketch links one onto your PATH.</string>
+    <string name="dialog_leftover_text">%1$s was left behind by an earlier uninstall, and ketch recorded nothing in it.</string>
+    <string name="dialog_stop_programs_text">These programs use files the upgrade replaces:\n\n%1$s</string>
+    <string name="discover_hero_title">Catch releases straight from GitHub.</string>
+    <string name="discover_hero_text">No taps, no formulae, no build step. ketch takes the asset a project already ships, checks its published checksum and links it onto your PATH.</string>
+    <string name="discover_hero_text_linux">No PPAs, no build step. ketch takes the asset a project already ships, checks its published checksum and links it into ~/.ketch/bin.</string>
+    <string name="discover_latest_version">Latest %1$s</string>
+    <string name="discover_line_link">link ~/.ketch/bin/%1$s</string>
+    <string name="discover_line_link_path">link %1$s onto PATH</string>
+    <string name="discover_line_resolve">resolve %1$s → latest</string>
+    <string name="discover_link_path">%1$s onto PATH</string>
+    <string name="discover_no_match">No package matches "%1$s"</string>
+    <string name="discover_resolve_latest">%1$s → latest</string>
+    <string name="doctor_fix_hint">Fix: %1$s</string>
+    <string name="doctor_ok_word">ok</string>
+    <string name="doctor_problem_word">problem</string>
+    <string name="doctor_warning_word">warning</string>
+    <string name="installed_no_match">No installed package matches "%1$s"</string>
+    <string name="package_held_by">held by %1$s</string>
+    <string name="package_installed_version">installed %1$s</string>
+    <string name="package_latest_version">latest %1$s</string>
+    <string name="package_trust_line">trust: %1$s</string>
+    <string name="package_uninstall_title">Uninstall %1$s?</string>
+    <string name="package_uninstall_text">Removes %1$s %2$s, its links and its store directory. Its own configuration is kept.</string>
+    <string name="package_update_available">Update to %1$s available</string>
+    <string name="package_version_available">%1$s available</string>
+    <string name="settings_cannot_open">This system cannot open %1$s.</string>
+    <string name="settings_config_missing">%1$s does not exist yet; ketch runs on its defaults until it does.</string>
+    <string name="settings_login_note">Available in the installed app.</string>
+    <string name="settings_open_failed">Could not open %1$s: %2$s</string>
+    <string name="settings_root_note">Shared with the ketch CLI. Set KETCH_ROOT in the app's environment to use another root.</string>
+    <string name="settings_token_note">The app stores no tokens. ketch reads a GitHub token from its config.toml or KETCH_GITHUB_TOKEN, GITHUB_TOKEN or GH_TOKEN, as the CLI does.</string>
+    <string name="tray_update_row">Update %1$s %2$s → %3$s</string>
+    <string name="updates_checked_at">Checked at %1$s</string>
+    <string name="updates_held_by">Held by %1$s</string>
+    <string name="updates_pinned_in">pinned in %1$s</string>
+    <string name="updates_verified_note">Every update is verified the same way as an install, and the previous version stays on disk for ketch rollback.</string>
+
+    <!-- Operations and notices -->
+    <string name="store_installing">Installing %1$s</string>
+    <string name="store_upgrading_all">Upgrading all packages</string>
+    <string name="store_upgrading">Upgrading %1$s</string>
+    <string name="store_uninstalling">Uninstalling %1$s</string>
+    <string name="store_busy">Another operation is running. Wait for it or cancel it first.</string>
+    <string name="store_done">Done: %1$s</string>
+    <string name="store_cancelled">Cancelled</string>
+    <string name="store_bad_value">ketch sent a value this app cannot read: %1$s</string>
+    <string name="notice_more">and %1$s more</string>
+    <string name="notice_refused">This system has no notification area for Ketch, so notices stay off.</string>
+    <string name="window_ketch_missing">The ketch program is missing from the app. Set KETCH_EXE to a ketch to run.</string>
+    <string name="login_installed_only">Open at login is available in the installed app.</string>
+    <string name="login_cannot_change">Could not change %1$s: %2$s</string>
+    <string name="login_windows_refused">Windows did not change the login item.</string>
+
+    <!-- Errors the app words itself; what ketch serve says stays as it says it -->
+    <string name="core_busy">ketch is running in another process.</string>
+    <string name="core_busy_pid">ketch is running in another process (pid %1$s).</string>
+    <string name="core_cancelled">Cancelled.</string>
+    <string name="core_not_found">No package named %1$s.</string>
+    <string name="core_network">Network error: %1$s</string>
+    <string name="core_verification">Verification failed: %1$s</string>
+    <string name="core_message_rejected">ketch serve rejected a message: %1$s</string>
+    <string name="core_still_running">still running</string>
+    <string name="core_exit">exit %1$s</string>
+    <string name="core_stopped">ketch serve stopped (%1$s)</string>
+    <string name="core_cannot_run">could not run %1$s: %2$s</string>
+    <string name="core_wrong_protocol">it speaks protocol %1$s, this app %2$s</string>
+    <string name="core_no_hello">it did not say hello</string>
+    <string name="core_cannot_serve">%1$s cannot serve this app: %2$s</string>
+
+    <!-- Colours and materials, as their controls name them -->
+    <string name="color_sky">Sky</string>
+    <string name="color_mint">Mint</string>
+    <string name="color_sand">Sand</string>
+    <string name="color_rose">Rose</string>
+    <string name="color_lilac">Lilac</string>
+    <string name="color_smoke">Smoke</string>
+    <string name="color_navy">Navy</string>
+    <string name="color_blue">Blue</string>
+    <string name="color_purple">Purple</string>
+    <string name="color_pink">Pink</string>
+    <string name="color_red">Red</string>
+    <string name="color_orange">Orange</string>
+    <string name="color_yellow">Yellow</string>
+    <string name="color_green">Green</string>
+    <string name="color_graphite">Graphite</string>
+    <string name="material_mica">Mica</string>
+    <string name="material_acrylic">Acrylic</string>
+    <string name="material_transparent">Transparent</string>
+    <string name="glass_regular">Regular</string>
+    <string name="glass_clear">Clear</string>
+
+    <!-- Counts -->
+    <plurals name="packages">
+        <item quantity="one">%1$d package</item>
+        <item quantity="other">%1$d packages</item>
+    </plurals>
+    <plurals name="updates">
+        <item quantity="one">%1$d update</item>
+        <item quantity="other">%1$d updates</item>
+    </plurals>
+    <plurals name="problems">
+        <item quantity="one">%1$d problem</item>
+        <item quantity="other">%1$d problems</item>
+    </plurals>
+    <plurals name="problems_found">
+        <item quantity="one">%1$d problem found</item>
+        <item quantity="other">%1$d problems found</item>
+    </plurals>
+    <plurals name="updates_available">
+        <item quantity="one">%1$d update available</item>
+        <item quantity="other">%1$d updates available</item>
+    </plurals>
+    <plurals name="installed_count">
+        <item quantity="one">%1$d installed</item>
+        <item quantity="other">%1$d installed</item>
+    </plurals>
+    <plurals name="pinned_count">
+        <item quantity="one">%1$d pinned</item>
+        <item quantity="other">%1$d pinned</item>
+    </plurals>
+    <plurals name="updates_confirm_title">
+        <item quantity="one">Update %1$d package?</item>
+        <item quantity="other">Update %1$d packages?</item>
+    </plurals>
+    <plurals name="settings_every_minutes">
+        <item quantity="one">Every minute</item>
+        <item quantity="other">Every %1$d minutes</item>
+    </plurals>
+    <plurals name="settings_every_hours">
+        <item quantity="one">Every hour</item>
+        <item quantity="other">Every %1$d hours</item>
+    </plurals>
+    <plurals name="doctor_stat_passed">
+        <item quantity="one">check passed</item>
+        <item quantity="other">checks passed</item>
+    </plurals>
+    <plurals name="doctor_stat_warnings">
+        <item quantity="one">warning</item>
+        <item quantity="other">warnings</item>
+    </plurals>
+    <plurals name="doctor_stat_failed">
+        <item quantity="one">failed</item>
+        <item quantity="other">failed</item>
+    </plurals>
+</resources>

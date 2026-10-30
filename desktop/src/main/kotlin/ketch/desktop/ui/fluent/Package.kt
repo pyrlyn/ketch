@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ketch.desktop.store.StoreState
+import ketch.desktop.strings.*
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.ChangelogText
 import ketch.desktop.ui.Navigation
@@ -50,6 +51,7 @@ import ketch.desktop.ui.tilde
 import ketch.desktop.ui.trustSeal
 import ketch.wire.Changelog
 import ketch.wire.Package
+import org.jetbrains.compose.resources.stringResource
 import pyrlyn.fluent.AppIconSize
 import pyrlyn.fluent.BadgeKind
 import pyrlyn.fluent.Breadcrumb
@@ -120,7 +122,7 @@ private fun Header(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(facts.name, color = c.ink, style = type.name)
-                    facts.update?.let { StatusBadge("Update to $it available", BadgeKind.Update) }
+                    facts.update?.let { StatusBadge(stringResource(Res.string.package_update_available, it), BadgeKind.Update) }
                 }
                 facts.repo?.let { Text(it, color = c.ink2, style = type.code) }
                 facts.registry?.description?.let { Text(it, color = c.ink2, style = type.body) }
@@ -132,16 +134,16 @@ private fun Header(
         Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             when {
                 installed != null && facts.update != null -> {
-                    FluentButton("Update to ${facts.update}", ButtonStyle.Accent, enabled = !state.isRunning) { actions.run { upgrade(listOf(facts.name)) } }
+                    FluentButton(stringResource(Res.string.action_update_to, facts.update.orEmpty()), ButtonStyle.Accent, enabled = !state.isRunning) { actions.run { upgrade(listOf(facts.name)) } }
                 }
 
                 installed == null -> {
-                    FluentButton("Install", ButtonStyle.Accent, enabled = !state.isRunning) { actions.install(facts.name) }
+                    FluentButton(stringResource(Res.string.action_install), ButtonStyle.Accent, enabled = !state.isRunning) { actions.install(facts.name) }
                 }
             }
-            facts.repo?.let { FluentButton("Open on GitHub") { uri.openUri("https://github.com/$it") } }
+            facts.repo?.let { FluentButton(stringResource(Res.string.action_open_github)) { uri.openUri("https://github.com/$it") } }
             Spacer(Modifier.weight(1f))
-            if (installed != null) FluentButton("Uninstall", ButtonStyle.Danger, enabled = !state.isRunning, onClick = onUninstall)
+            if (installed != null) FluentButton(stringResource(Res.string.action_uninstall), ButtonStyle.Danger, enabled = !state.isRunning, onClick = onUninstall)
         }
     }
 }
@@ -169,8 +171,8 @@ private fun Overview(
     actions: Actions,
 ) {
     val command = "ketch install ${facts.repo ?: facts.name}"
-    Text(facts.registry?.description ?: "No description.", color = LocalFluent.current.ink, style = LocalFluentType.current.body)
-    CommandField(command, "Copy the command", Modifier.fillMaxWidth()) { copyToClipboard(command) }
+    Text(facts.registry?.description ?: stringResource(Res.string.package_no_description), color = LocalFluent.current.ink, style = LocalFluentType.current.body)
+    CommandField(command, stringResource(Res.string.action_copy_command), Modifier.fillMaxWidth()) { copyToClipboard(command) }
     Why(facts.name, actions)
 }
 
@@ -186,7 +188,7 @@ private fun Why(
         }
 
         WhyRead.Unanswered -> {
-            Text("ketch could not ask this package's source.", color = LocalFluent.current.ink2, style = LocalFluentType.current.body)
+            Text(stringResource(Res.string.package_source_failed), color = LocalFluent.current.ink2, style = LocalFluentType.current.body)
         }
 
         is WhyRead.Answered -> {
@@ -210,7 +212,7 @@ private fun Changes(
         }
 
         entries.isNullOrEmpty() -> {
-            Text("No changelog found.", color = c.ink2, style = LocalFluentType.current.body)
+            Text(stringResource(Res.string.package_no_changelog), color = c.ink2, style = LocalFluentType.current.body)
         }
 
         else -> {
@@ -232,7 +234,7 @@ private fun Article(
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(entry.heading ?: entry.version, color = LocalFluent.current.ink, style = type.strong.copy(fontSize = ARTICLE_HEAD))
             Pill(changelogOrigin(entry.source))
-            if (entry.version == installed) StatusBadge("Installed", BadgeKind.Neutral)
+            if (entry.version == installed) StatusBadge(stringResource(Res.string.status_installed), BadgeKind.Neutral)
         }
         ChangelogText(entry.body)
     }
@@ -241,10 +243,10 @@ private fun Article(
 @Composable
 private fun Files(installed: Package?) {
     if (installed == null) {
-        Text("Not installed.", color = LocalFluent.current.ink2, style = LocalFluentType.current.body)
+        Text(stringResource(Res.string.package_not_installed), color = LocalFluent.current.ink2, style = LocalFluentType.current.body)
         return
     }
-    FactsList(installed.binaries.map { "Binary" to tilde(it) } + ("Store" to tilde(installed.prefix)))
+    FactsList(installed.binaries.map { stringResource(Res.string.package_binary) to tilde(it) } + (stringResource(Res.string.package_store) to tilde(installed.prefix)))
     RevealButton(installed.binaries.firstOrNull() ?: installed.prefix)
 }
 
@@ -256,13 +258,13 @@ private fun Details(
     val c = LocalFluent.current
     val type = LocalFluentType.current
     Panel(modifier) {
-        Text("Details", color = c.ink, style = type.strong)
+        Text(stringResource(Res.string.package_details), color = c.ink, style = type.strong)
         FactsList(packageDetails(facts))
         facts.installed?.trust?.let { trust ->
             val (word, checked) = trustSeal(trust)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 StatusBadge(word, if (checked) BadgeKind.Success else BadgeKind.Warning)
-                Text("trust: $trust", color = c.ink2, style = type.caption)
+                Text(stringResource(Res.string.package_trust_line, trust), color = c.ink2, style = type.caption)
             }
         }
     }

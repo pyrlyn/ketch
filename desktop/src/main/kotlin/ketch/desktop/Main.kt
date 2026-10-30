@@ -53,6 +53,7 @@ import ketch.desktop.settings.LoginItem
 import ketch.desktop.settings.SystemKeyValues
 import ketch.desktop.store.KetchStore
 import ketch.desktop.store.UpdateNotifier
+import ketch.desktop.strings.*
 import ketch.desktop.ui.AppParts
 import ketch.desktop.ui.Appearance
 import ketch.desktop.ui.KetchApp
@@ -128,7 +129,7 @@ private fun ApplicationScope.Ketch(
     LaunchedEffect(Unit) {
         val exe = locateKetch()
         if (exe == null) {
-            failure = "The ketch program is missing from the app. Set KETCH_EXE to a ketch to run."
+            failure = tr(Res.string.window_ketch_missing)
             return@LaunchedEffect
         }
         try {
