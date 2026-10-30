@@ -19,8 +19,30 @@ data class Prefs(
     val notifies: Boolean = false,
     /** `UpdateNotices.key`s already announced, so a check that finds the same upgrades stays quiet. */
     val notified: Set<String> = emptySet(),
+    /** macOS only, in the Swift app's stored forms: a preset's name or `#rrggbb`; what nothing can read is the standard. */
+    val tint: String = STANDARD_TINT,
+    val glass: String = REGULAR_GLASS,
+    val accent: String = STANDARD_ACCENT,
+    /** The opacity of the backdrop wash, 0..[MAX_WASH]. */
+    val wash: Double = STANDARD_WASH,
 ) {
     val interval: Duration get() = intervalMinutes.minutes
+
+    /** These settings with the macOS look's own back at the standard. */
+    fun standardLook() = copy(tint = STANDARD_TINT, glass = REGULAR_GLASS, accent = STANDARD_ACCENT, wash = STANDARD_WASH)
+
+    companion object {
+        const val STANDARD_TINT = "clear"
+        const val REGULAR_GLASS = "regular"
+        const val CLEAR_GLASS = "clear"
+        const val STANDARD_ACCENT = "system"
+
+        // tokens.json's `opacity.wash` and `opacity.washMax`, which the contrast check holds up to and no further.
+        const val STANDARD_WASH = 0.14
+        const val MAX_WASH = 0.2
+
+        fun clampWash(wash: Double) = if (wash.isFinite()) wash.coerceIn(0.0, MAX_WASH) else STANDARD_WASH
+    }
 }
 
 /** Where the preferences live: `java.util.prefs` in the app, a map in tests. */
@@ -71,7 +93,7 @@ class AppSettings(
 
     fun update(change: (Prefs) -> Prefs) {
         mutable.update { old ->
-            val next = change(old)
+            val next = change(old).let { it.copy(wash = Prefs.clampWash(it.wash)) }
             if (next.intervalMinutes in INTERVALS) next else next.copy(intervalMinutes = old.intervalMinutes)
         }
         save(mutable.value)
@@ -89,6 +111,10 @@ class AppSettings(
                     ?.split('\n')
                     ?.filter { it.isNotEmpty() }
                     ?.toSet() ?: defaults.notified,
+            tint = values.get(TINT) ?: defaults.tint,
+            glass = values.get(GLASS) ?: defaults.glass,
+            accent = values.get(ACCENT) ?: defaults.accent,
+            wash = Prefs.clampWash(values.get(WASH)?.toDoubleOrNull() ?: defaults.wash),
         )
     }
 
@@ -97,6 +123,10 @@ class AppSettings(
         values.put(PRERELEASES, prefs.prereleases.toString())
         values.put(NOTIFIES, prefs.notifies.toString())
         values.put(NOTIFIED, prefs.notified.sorted().joinToString("\n"))
+        values.put(TINT, prefs.tint)
+        values.put(GLASS, prefs.glass)
+        values.put(ACCENT, prefs.accent)
+        values.put(WASH, prefs.wash.toString())
     }
 
     companion object {
@@ -109,5 +139,9 @@ class AppSettings(
         private const val PRERELEASES = "includePrereleases"
         private const val NOTIFIES = "notifiesOfUpdates"
         private const val NOTIFIED = "notifiedUpgrades"
+        private const val TINT = "appearanceTint"
+        private const val GLASS = "appearanceGlassStyle"
+        private const val ACCENT = "appearanceAccent"
+        private const val WASH = "appearanceWash"
     }
 }
