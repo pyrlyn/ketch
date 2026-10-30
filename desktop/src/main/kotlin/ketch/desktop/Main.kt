@@ -73,7 +73,9 @@ import ketch.desktop.ui.trayMenu
 import ketch.desktop.ui.trayTooltip
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import pyrlyn.fluent.LocalWindowZones
 import pyrlyn.fluent.WindowZones
 import pyrlyn.fluent.WindowsFrame
@@ -148,7 +150,8 @@ private fun ApplicationScope.Ketch(
     val translucent = remember { desktopShowsThrough() }
     val windowState = rememberWindowState(size = windowSize(look))
     // With a tray the app lives on in it, as the macOS app lives on in the menu bar; Quit is the tray's.
-    val close = { if (hasTray && store != null) navigation.windowVisible = false else exitApplication() }
+    var leaving by remember { mutableStateOf(false) }
+    val close = { if (hasTray && store != null) leaving = true else exitApplication() }
     Window(
         onCloseRequest = close,
         visible = navigation.windowVisible,
@@ -163,6 +166,13 @@ private fun ApplicationScope.Ketch(
         val frame = remember { if (look == Look.Fluent) WindowsFrame.attach(window, zones) else null }
         LaunchedEffect(Unit) { dress(window, look, frame) }
         LaunchedEffect(navigation.windowRequests) { if (navigation.windowRequests > 0) window.toFront() }
+        LaunchedEffect(leaving) {
+            if (leaving) {
+                floatBeforeHiding(window, windowState)
+                navigation.windowVisible = false
+                leaving = false
+            }
+        }
         val chrome = remember(store) { ownFrame(windowState, frame, close, look == Look.Adwaita, translucent) }
         CompositionLocalProvider(
             LocalWindowChrome provides chrome.takeIf { look.drawsItsFrame },
@@ -201,6 +211,18 @@ private fun Navigation.shortcutOn(
 private fun desktopShowsThrough() =
     !GraphicsEnvironment.isHeadless() &&
         GraphicsEnvironment.getLocalGraphicsEnvironment().defaultScreenDevice.isWindowTranslucencySupported(GraphicsDevice.WindowTranslucency.PERPIXEL_TRANSLUCENT)
+
+/** Mapped maximized, a window never gets its frames past GNOME and stays unseen, so it leaves for the tray floating. */
+private suspend fun floatBeforeHiding(
+    window: ComposeWindow,
+    state: WindowState,
+) {
+    if (state.placement != WindowPlacement.Maximized || System.getProperty("os.name") != "Linux") return
+    val maximized = window.size
+    state.placement = WindowPlacement.Floating
+    // Hidden before the system has answered, AWT would still map it maximized next time.
+    withTimeoutOrNull(FLOAT_TIMEOUT_MS) { while (window.size == maximized) delay(FLOAT_POLL_MS) }
+}
 
 private fun windowSize(look: Look) = if (look == Look.Material) DpSize(WIDTH.dp, HEIGHT.dp) else DpSize(LOOK_WIDTH.dp, LOOK_HEIGHT.dp)
 
@@ -365,3 +387,5 @@ private const val LOOK_WIDTH = 1200
 private const val LOOK_HEIGHT = 800
 private const val LOOK_MIN_WIDTH = 900
 private const val LOOK_MIN_HEIGHT = 600
+private const val FLOAT_TIMEOUT_MS = 1000L
+private const val FLOAT_POLL_MS = 16L
