@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
+import ketch.desktop.ui.adwaita.AdwaitaAbout
 import ketch.desktop.ui.fluent.FluentAbout
 import ketch.desktop.ui.glass.GlassAbout
 
@@ -28,18 +29,18 @@ fun About(
     onClose: () -> Unit,
 ) {
     when (LocalLook.current) {
-        Look.Glass -> {
-            GlassAbout(coreVersion, onClose)
-            return
-        }
-
-        Look.Fluent -> {
-            FluentAbout(coreVersion, onClose)
-            return
-        }
-
-        Look.Material -> {}
+        Look.Glass -> GlassAbout(coreVersion, onClose)
+        Look.Fluent -> FluentAbout(coreVersion, onClose)
+        Look.Adwaita -> AdwaitaAbout(coreVersion, onClose)
+        Look.Material -> MaterialAbout(coreVersion, onClose)
     }
+}
+
+@Composable
+private fun MaterialAbout(
+    coreVersion: String,
+    onClose: () -> Unit,
+) {
     val uri = LocalUriHandler.current
     AlertDialog(
         onDismissRequest = onClose,

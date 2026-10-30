@@ -26,15 +26,20 @@ class FluentHelpersTest {
     fun eachSystemWearsItsLook() {
         assertEquals(Look.Fluent, lookFor(null, "Windows 11", highContrast = false))
         assertEquals(Look.Glass, lookFor(null, "Mac OS X", highContrast = false))
-        assertEquals(Look.Material, lookFor(null, "Linux", highContrast = false))
+        assertEquals(Look.Adwaita, lookFor(null, "Linux", highContrast = false))
+        assertEquals(Look.Material, lookFor(null, "FreeBSD", highContrast = false))
     }
 
     @Test
-    fun highContrastKeepsMaterial() = assertEquals(Look.Material, lookFor(null, "Windows 11", highContrast = true))
+    fun highContrastKeepsMaterial() {
+        assertEquals(Look.Material, lookFor(null, "Windows 11", highContrast = true))
+        assertEquals(Look.Material, lookFor(null, "Linux", highContrast = true))
+    }
 
     @Test
     fun aNamedLookIsWornAnywhereAndAnUnknownOneIsIgnored() {
         assertEquals(Look.Fluent, lookFor("fluent", "Mac OS X", highContrast = false))
+        assertEquals(Look.Adwaita, lookFor("adwaita", "Mac OS X", highContrast = false))
         assertEquals(Look.Glass, lookFor("nonsense", "Mac OS X", highContrast = false))
     }
 

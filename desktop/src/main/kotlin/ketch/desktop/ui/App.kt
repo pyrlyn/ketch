@@ -35,6 +35,7 @@ import ketch.desktop.store.KetchStore
 import ketch.desktop.store.StoreState
 import ketch.desktop.store.UpdateChecks
 import ketch.desktop.store.UpdateNotifier
+import ketch.desktop.ui.adwaita.AdwaitaApp
 import ketch.desktop.ui.fluent.FluentApp
 import ketch.desktop.ui.glass.GlassApp
 import ketch.desktop.ui.screens.ActivityScreen
@@ -228,18 +229,21 @@ fun KetchApp(
     }
 
     when (LocalLook.current) {
-        Look.Glass -> {
-            GlassApp(state, actions, navigation, parts, checks)
-            return
-        }
-
-        Look.Fluent -> {
-            FluentApp(state, actions, navigation, parts, checks)
-            return
-        }
-
-        Look.Material -> {}
+        Look.Glass -> GlassApp(state, actions, navigation, parts, checks)
+        Look.Fluent -> FluentApp(state, actions, navigation, parts, checks)
+        Look.Adwaita -> AdwaitaApp(state, actions, navigation, parts, checks)
+        Look.Material -> MaterialApp(state, actions, navigation, parts, checks)
     }
+}
+
+@Composable
+private fun MaterialApp(
+    state: StoreState,
+    actions: Actions,
+    navigation: Navigation,
+    parts: AppParts,
+    checks: UpdateChecks,
+) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Row {
             Sidebar(state, navigation.section, navigation::show)
@@ -254,7 +258,7 @@ fun KetchApp(
             }
         }
         Questions(state, actions)
-        if (navigation.showingAbout) About(store.coreVersion) { navigation.showingAbout = false }
+        if (navigation.showingAbout) About(actions.store.coreVersion) { navigation.showingAbout = false }
     }
 }
 

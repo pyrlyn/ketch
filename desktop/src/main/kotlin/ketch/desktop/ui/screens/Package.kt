@@ -36,8 +36,10 @@ import ketch.desktop.ui.ChangelogText
 import ketch.desktop.ui.Confirm
 import ketch.desktop.ui.LocalMonoStyle
 import ketch.desktop.ui.LocalSpacing
+import ketch.desktop.ui.checksumWords
 import ketch.wire.Changelog
 import ketch.wire.Package
+import ketch.wire.Resolution
 
 enum class PackageTab(
     val title: String,
@@ -78,6 +80,39 @@ fun readChangelog(
     }
     return read
 }
+
+/** What `ketch why` has said so far. */
+sealed interface WhyRead {
+    data object Asking : WhyRead
+
+    data object Unanswered : WhyRead
+
+    data class Answered(
+        val resolution: Resolution,
+    ) : WhyRead
+}
+
+@Composable
+fun readWhy(
+    name: String,
+    actions: Actions,
+): WhyRead {
+    var read by remember(name) { mutableStateOf<WhyRead>(WhyRead.Asking) }
+    // Keyed on the name: a page that moved on cancels the question, and its reply never lands on the next package.
+    LaunchedEffect(name) { read = actions.store.why(name)?.let(WhyRead::Answered) ?: WhyRead.Unanswered }
+    return read
+}
+
+const val WHY_RESOLVE = "resolve"
+
+/** The lines of `ketch why`, each a key and what it says. */
+fun whyFacts(found: Resolution) =
+    listOfNotNull(
+        WHY_RESOLVE to "${found.source} → ${found.version ?: "no release"}",
+        "asset" to (found.asset ?: "none fits this machine"),
+        found.reason?.let { "reason" to it },
+        "sha256" to checksumWords(found.checksum),
+    )
 
 @Composable
 fun PackageScreen(

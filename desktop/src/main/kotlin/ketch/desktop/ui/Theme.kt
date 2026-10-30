@@ -53,8 +53,8 @@ data class Spacing(
     val xxl: Dp,
 )
 
-/** Which of the app's faces this window wears: `ui/glass` on macOS, `ui/fluent` on Windows, Material 3 elsewhere. */
-enum class Look { Material, Glass, Fluent }
+/** Which of the app's faces this window wears: `ui/glass` on macOS, `ui/fluent` on Windows, `ui/adwaita` on Linux, Material 3 elsewhere. */
+enum class Look { Material, Glass, Fluent, Adwaita }
 
 fun systemLook(): Look = lookFor(System.getenv("KETCH_LOOK"), System.getProperty("os.name"), highContrast())
 
@@ -67,6 +67,7 @@ fun lookFor(
     Look.entries.firstOrNull { it.name.equals(chosen, ignoreCase = true) } ?: when {
         os.startsWith("Mac") -> Look.Glass
         os.startsWith("Windows") && !highContrast -> Look.Fluent
+        os.startsWith("Linux") && !highContrast -> Look.Adwaita
         else -> Look.Material
     }
 

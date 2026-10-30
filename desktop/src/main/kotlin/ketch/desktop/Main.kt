@@ -62,6 +62,7 @@ import ketch.desktop.ui.Section
 import ketch.desktop.ui.Tokens
 import ketch.desktop.ui.TrayAction
 import ketch.desktop.ui.TrayEntry
+import ketch.desktop.ui.adwaita.AdwaitaWaiting
 import ketch.desktop.ui.fluent.FluentWaiting
 import ketch.desktop.ui.fluent.LocalWindowChrome
 import ketch.desktop.ui.fluent.WindowChrome
@@ -77,6 +78,7 @@ import pyrlyn.fluent.WindowZones
 import pyrlyn.fluent.WindowsFrame
 import java.awt.Desktop
 import java.awt.Dimension
+import java.awt.GraphicsDevice
 import java.awt.GraphicsEnvironment
 import javax.swing.SwingUtilities
 
@@ -142,6 +144,7 @@ private fun ApplicationScope.Ketch(
     if (store != null && hasTray) KetchTray(store, tray, navigation)
 
     val look = remember { systemLook() }
+    val translucent = remember { desktopShowsThrough() }
     val windowState = rememberWindowState(size = windowSize(look))
     // With a tray the app lives on in it, as the macOS app lives on in the menu bar; Quit is the tray's.
     val close = { if (hasTray && store != null) navigation.windowVisible = false else exitApplication() }
@@ -150,18 +153,18 @@ private fun ApplicationScope.Ketch(
         visible = navigation.windowVisible,
         title = "Ketch",
         state = windowState,
-        undecorated = look == Look.Fluent,
-        transparent = look == Look.Fluent && WindowsFrame.available,
-        onPreviewKeyEvent = { look != Look.Material && navigation.findOn(it, look) },
+        undecorated = look.drawsItsFrame,
+        transparent = look.seeThrough(translucent),
+        onPreviewKeyEvent = { navigation.shortcutOn(it, look) },
     ) {
         val zones = remember { WindowZones() }
         // A window composes while AWT attaches it: its native windows exist by now, and it is not on the screen yet.
         val frame = remember { if (look == Look.Fluent) WindowsFrame.attach(window, zones) else null }
         LaunchedEffect(Unit) { dress(window, look, frame) }
         LaunchedEffect(navigation.windowRequests) { if (navigation.windowRequests > 0) window.toFront() }
-        val chrome = remember(store) { ownFrame(windowState, frame, close) }
+        val chrome = remember(store) { ownFrame(windowState, frame, close, look == Look.Adwaita, translucent) }
         CompositionLocalProvider(
-            LocalWindowChrome provides chrome.takeIf { look == Look.Fluent },
+            LocalWindowChrome provides chrome.takeIf { look.drawsItsFrame },
             LocalWindowZones provides zones.takeIf { frame != null },
         ) {
             KetchTheme(look = look) {
@@ -176,18 +179,48 @@ private fun Starting(
     look: Look,
     settings: AppSettings,
     failure: String?,
-) = if (look == Look.Fluent) FluentWaiting(settings, failure) else Waiting(failure)
+) = when (look) {
+    Look.Fluent -> FluentWaiting(settings, failure)
+    Look.Adwaita -> AdwaitaWaiting(failure)
+    else -> Waiting(failure)
+}
+
+/** The looks that draw their own title bar; on Windows the system's frame still sits around it. */
+private val Look.drawsItsFrame get() = this == Look.Fluent || this == Look.Adwaita
+
+private fun Look.seeThrough(translucent: Boolean) = (this == Look.Fluent && WindowsFrame.available) || (this == Look.Adwaita && translucent)
+
+/** The window's own shortcuts; Material's has none. */
+private fun Navigation.shortcutOn(
+    event: KeyEvent,
+    look: Look,
+) = look != Look.Material && (findOn(event, look) || settingsOn(event, look))
+
+/** Rounded corners need a compositor behind the window; without one the cut-off corners would come out black. */
+private fun desktopShowsThrough() =
+    !GraphicsEnvironment.isHeadless() &&
+        GraphicsEnvironment.getLocalGraphicsEnvironment().defaultScreenDevice.isWindowTranslucencySupported(GraphicsDevice.WindowTranslucency.PERPIXEL_TRANSLUCENT)
 
 private fun windowSize(look: Look) = if (look == Look.Material) DpSize(WIDTH.dp, HEIGHT.dp) else DpSize(LOOK_WIDTH.dp, LOOK_HEIGHT.dp)
 
-/** ⌘K on a Mac and Ctrl+K on Windows: the window takes it wherever the focus is, as a system's search shortcut works. */
+/** ⌘K on a Mac and Ctrl+K elsewhere: the window takes it wherever the focus is, as a system's search shortcut works. */
 internal fun Navigation.findOn(
     event: KeyEvent,
     look: Look = Look.Glass,
 ): Boolean {
-    val modifier = if (look == Look.Fluent) event.isCtrlPressed else event.isMetaPressed
+    val modifier = if (look == Look.Glass) event.isMetaPressed else event.isCtrlPressed
     val asked = event.type == KeyEventType.KeyDown && modifier && event.key == Key.K
     if (asked) findSomething()
+    return asked
+}
+
+/** Ctrl+, opens Settings where the look's menu names that shortcut. */
+internal fun Navigation.settingsOn(
+    event: KeyEvent,
+    look: Look,
+): Boolean {
+    val asked = look == Look.Adwaita && event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.Comma
+    if (asked) show(Section.Settings)
     return asked
 }
 
@@ -198,7 +231,7 @@ private fun dress(
 ) {
     if (look == Look.Material) return
     if (look == Look.Glass) contentUnderTitleBar(window)
-    if (look == Look.Fluent && frame == null) stayClearOfTheTaskbar(window)
+    if (look.drawsItsFrame && frame == null) stayClearOfTheTaskbar(window)
     window.minimumSize = Dimension(LOOK_MIN_WIDTH, LOOK_MIN_HEIGHT)
 }
 
@@ -219,6 +252,8 @@ private fun FrameWindowScope.ownFrame(
     state: WindowState,
     frame: WindowsFrame?,
     close: () -> Unit,
+    pulledByItsEdges: Boolean,
+    translucent: Boolean,
 ) = WindowChrome(
     isMaximized = { state.placement == WindowPlacement.Maximized },
     minimize = { state.isMinimized = true },
@@ -226,6 +261,8 @@ private fun FrameWindowScope.ownFrame(
     close = close,
     drag = { modifier -> WindowDraggableArea(modifier) },
     wear = { material, dark -> frame?.wear(material, dark) == true },
+    rounded = { translucent && state.placement == WindowPlacement.Floating },
+    edges = { if (pulledByItsEdges && state.placement == WindowPlacement.Floating) ResizeEdges(window) },
 )
 
 @Composable

@@ -19,6 +19,7 @@ pluginManagement {
     val sharedSettings = sharedBuild("shared-settings", "SHARED_SETTINGS_DIR")
     includeBuild(sharedSettings)
     includeBuild("$sharedSettings/settings-plugin")
+    extra["kotlinAdwaitaDir"] = sharedBuild("kotlin-adwaita", "KOTLIN_ADWAITA_DIR")
     extra["kotlinFluentDir"] = sharedBuild("kotlin-fluent", "KOTLIN_FLUENT_DIR")
     extra["kotlinGlassDir"] = sharedBuild("kotlin-glass", "KOTLIN_GLASS_DIR")
     extra["kotlinKitDir"] = sharedBuild("kotlin-kit", "KOTLIN_KIT_DIR")
@@ -37,6 +38,7 @@ rootProject.name = "ketch-kotlin"
 includeBuild(extra["kotlinGlassDir"] as String)
 
 // The Windows look's generic components: a checkout of kotlin-fluent.
+includeBuild(extra["kotlinAdwaitaDir"] as String)
 includeBuild(extra["kotlinFluentDir"] as String)
 
 // TOML, YAML, semver, HTTP and SQLite, shared with rtok-kotlin: a checkout of kotlin-kit.

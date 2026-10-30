@@ -110,7 +110,7 @@ Taken during the port:
   logic: data, token mapping and screens stay in `desktop/src/main/kotlin/ketch/desktop/ui/glass/`.
 - **Windows look (T17).** On Windows the app wears the `ketch Store — Windows 11` canvas in the
   colours of the `Pyrlyn Windows 11` design system, in place of T12's Material 3; high contrast keeps
-  Material 3, which the design system has no answer for, and Linux keeps it too. The components live
+  Material 3, which the design system has no answer for, and Linux kept it until T20. The components live
   in the shared `kotlin-fluent` package and hold no business logic; compose-fluent-ui was passed over
   because its controls carry Microsoft's stock tokens and it sits on Compose 1.8. Logic both looks
   share is in `ui/Host.kt`, `ui/Log.kt` and `ui/Summaries.kt`. `KETCH_LOOK` names a look to see it on
@@ -197,6 +197,14 @@ Taken during the port:
   use, gets `rejected`; an answer or cancel for a call that ended is dropped. `KetchCore`
   (`lib.rs`) passes the call's cancel into `Ctx` too, because the Kotlin core checks it in
   lookups and the registry download.
+- **Linux look (T20).** On Linux the app wears the `Ketch Linux` design, dark only, in place of
+  T12's Material 3; high contrast keeps Material 3, and `KETCH_LOOK=adwaita` shows it elsewhere. The
+  components live in the shared `kotlin-adwaita` package and hold no business logic; no ready Compose
+  Adwaita library exists. Sections sit in a view switcher and the hamburger menu instead of a
+  sidebar, and search in a bar under the header. An undecorated AWT window has no resize edges on
+  Linux, so `Edge.kt` draws them and reads the pull from `MouseInfo`; rounded corners need a see-through
+  window, so `desktopShowsThrough` falls back to square ones where the desktop composites nothing.
+  The design's controls the core has no call for stay out rather than sit idle: see `plan/T20/done.md`.
 
 ## Goals of the port
 

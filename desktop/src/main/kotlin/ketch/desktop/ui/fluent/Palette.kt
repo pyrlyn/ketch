@@ -11,15 +11,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.ExperimentalTextApi
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.platform.SystemFont
 import ketch.desktop.settings.AppSettings
 import ketch.desktop.settings.Prefs
 import ketch.desktop.ui.Appearance
 import ketch.desktop.ui.LocalAppearance
 import ketch.desktop.ui.glass.rgb
+import ketch.desktop.ui.installedFamilies
+import ketch.desktop.ui.systemFamily
 import pyrlyn.fluent.FluentColors
 import pyrlyn.fluent.FluentFonts
 import pyrlyn.fluent.FluentTheme
@@ -27,7 +25,6 @@ import pyrlyn.fluent.LocalWindowBackdrop
 import pyrlyn.fluent.Preset
 import pyrlyn.fluent.Presets
 import pyrlyn.fluent.WindowMaterial
-import java.awt.GraphicsEnvironment
 
 /** The name a preset is stored under. */
 val Preset.stored get() = name.lowercase()
@@ -58,21 +55,14 @@ private fun chosen(
 ): Color? = presets.firstOrNull { it.stored == stored }?.color ?: rgb(stored)
 
 /** The first family of each list that this machine has; a machine with none of them keeps Compose's defaults. */
-@OptIn(ExperimentalTextApi::class)
 fun fluentFonts(families: Set<String> = installedFamilies()): FluentFonts {
-    fun first(names: List<String>) =
-        names.firstOrNull { it in families }?.let { name ->
-            FontFamily(WEIGHTS.map { SystemFont(name, it) })
-        }
     val standard = FluentFonts()
     return FluentFonts(
-        text = first(TEXT) ?: standard.text,
-        display = first(DISPLAY) ?: standard.display,
-        mono = first(MONO) ?: standard.mono,
+        text = systemFamily(TEXT, families) ?: standard.text,
+        display = systemFamily(DISPLAY, families) ?: standard.display,
+        mono = systemFamily(MONO, families) ?: standard.mono,
     )
 }
-
-private fun installedFamilies() = if (GraphicsEnvironment.isHeadless()) emptySet() else GraphicsEnvironment.getLocalGraphicsEnvironment().availableFontFamilyNames.toSet()
 
 @Composable
 fun KetchFluent(
@@ -92,4 +82,3 @@ fun KetchFluent(
 private val TEXT = listOf("Segoe UI Variable Text", "Segoe UI", "Inter")
 private val DISPLAY = listOf("Segoe UI Variable Display", "Segoe UI", "Inter")
 private val MONO = listOf("JetBrains Mono", "Cascadia Mono", "Consolas")
-private val WEIGHTS = listOf(FontWeight.Normal, FontWeight.Medium, FontWeight.SemiBold, FontWeight.Bold)

@@ -8,7 +8,8 @@ The app reads the brand subset the Rust Windows and Linux apps take (`BRAND` in 
 `desktop/design/build.mjs`): `color.accent`, `color.status`, `space`, `radius` and
 `typography`, in light, dark, high contrast and high contrast dark. A missing appearance falls
 back as the generator's does: high contrast dark to dark to light, high contrast to light.
-On Windows and Linux, glass, wash, elevation and motion stay out and surfaces are Material 3's own.
+Under Material 3, glass, wash, elevation and motion stay out and surfaces are Material 3's own.
+The Linux look reads none of this: its colours are the tokens in the `kotlin-adwaita` package.
 On macOS the app also reads the macOS tokens (`Tokens.macColor`), and `ui/glass/Palette.kt` maps them
 onto the colours of the `kotlin-glass` package.
 

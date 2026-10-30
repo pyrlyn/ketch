@@ -33,6 +33,23 @@ class FindShortcutTest {
     }
 
     @Test
+    fun controlKIsTheLinuxLooksShortcutToo() {
+        val navigation = Navigation(Section.Installed)
+        assertTrue(navigation.findOn(KeyEvent(Key.K, KeyEventType.KeyDown, isCtrlPressed = true), Look.Adwaita))
+        assertTrue(navigation.wantsSearch)
+    }
+
+    @Test
+    fun controlCommaOpensSettingsWhereTheMenuSaysSo() {
+        val comma = KeyEvent(Key.Comma, KeyEventType.KeyDown, isCtrlPressed = true)
+        val navigation = Navigation(Section.Installed)
+        assertFalse(navigation.settingsOn(comma, Look.Fluent))
+        assertEquals(Section.Installed, navigation.section)
+        assertTrue(navigation.settingsOn(comma, Look.Adwaita))
+        assertEquals(Section.Settings, navigation.section)
+    }
+
+    @Test
     fun eachLookLeavesTheOtherLooksShortcut() {
         val navigation = Navigation()
         assertFalse(navigation.findOn(commandK, Look.Fluent))

@@ -24,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import ketch.desktop.store.StoreState
+import ketch.desktop.ui.adwaita.AdwaitaChooseBinary
+import ketch.desktop.ui.adwaita.AdwaitaConfirm
 import ketch.desktop.ui.fluent.FluentChooseBinary
 import ketch.desktop.ui.fluent.FluentConfirm
 import ketch.desktop.ui.glass.GlassChooseBinary
@@ -75,18 +77,19 @@ private fun ChooseBinary(
     onDecline: () -> Unit,
 ) {
     when (LocalLook.current) {
-        Look.Glass -> {
-            GlassChooseBinary(question, onPick, onDecline)
-            return
-        }
-
-        Look.Fluent -> {
-            FluentChooseBinary(question, onPick, onDecline)
-            return
-        }
-
-        Look.Material -> {}
+        Look.Glass -> GlassChooseBinary(question, onPick, onDecline)
+        Look.Fluent -> FluentChooseBinary(question, onPick, onDecline)
+        Look.Adwaita -> AdwaitaChooseBinary(question, onPick, onDecline)
+        Look.Material -> MaterialChooseBinary(question, onPick, onDecline)
     }
+}
+
+@Composable
+private fun MaterialChooseBinary(
+    question: Question.ChooseBinary,
+    onPick: (Int) -> Unit,
+    onDecline: () -> Unit,
+) {
     var picked by remember(question) { mutableIntStateOf(0) }
     AlertDialog(
         onDismissRequest = onDecline,
@@ -125,18 +128,22 @@ fun Confirm(
     onDismiss: () -> Unit,
 ) {
     when (LocalLook.current) {
-        Look.Glass -> {
-            GlassConfirm(title, message, confirm, destructive, subject, onConfirm, onDismiss)
-            return
-        }
-
-        Look.Fluent -> {
-            FluentConfirm(title, message, confirm, destructive, subject, onConfirm, onDismiss)
-            return
-        }
-
-        Look.Material -> {}
+        Look.Glass -> GlassConfirm(title, message, confirm, destructive, subject, onConfirm, onDismiss)
+        Look.Fluent -> FluentConfirm(title, message, confirm, destructive, subject, onConfirm, onDismiss)
+        Look.Adwaita -> AdwaitaConfirm(title, message, confirm, destructive, subject, onConfirm, onDismiss)
+        Look.Material -> MaterialConfirm(title, message, confirm, destructive, onConfirm, onDismiss)
     }
+}
+
+@Composable
+private fun MaterialConfirm(
+    title: String,
+    message: String,
+    confirm: String,
+    destructive: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val colors =
         if (destructive) {
             ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError)

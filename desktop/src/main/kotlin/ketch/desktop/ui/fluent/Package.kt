@@ -35,19 +35,21 @@ import ketch.desktop.ui.Actions
 import ketch.desktop.ui.ChangelogText
 import ketch.desktop.ui.Navigation
 import ketch.desktop.ui.changelogOrigin
-import ketch.desktop.ui.checksumWords
 import ketch.desktop.ui.copyToClipboard
 import ketch.desktop.ui.packageDetails
 import ketch.desktop.ui.screens.ChangelogRead
 import ketch.desktop.ui.screens.PackageFacts
 import ketch.desktop.ui.screens.PackageTab
 import ketch.desktop.ui.screens.UninstallConfirm
+import ketch.desktop.ui.screens.WHY_RESOLVE
+import ketch.desktop.ui.screens.WhyRead
 import ketch.desktop.ui.screens.readChangelog
+import ketch.desktop.ui.screens.readWhy
+import ketch.desktop.ui.screens.whyFacts
 import ketch.desktop.ui.tilde
 import ketch.desktop.ui.trustSeal
 import ketch.wire.Changelog
 import ketch.wire.Package
-import ketch.wire.Resolution
 import pyrlyn.fluent.AppIconSize
 import pyrlyn.fluent.BadgeKind
 import pyrlyn.fluent.Breadcrumb
@@ -178,36 +180,22 @@ private fun Why(
     name: String,
     actions: Actions,
 ) {
-    var asked by remember(name) { mutableStateOf(false) }
-    var resolution by remember(name) { mutableStateOf<Resolution?>(null) }
-    // Keyed on the name: a page that moved on cancels the question, and its reply never lands on the next package.
-    LaunchedEffect(name) {
-        resolution = actions.store.why(name)
-        asked = true
-    }
-    val found = resolution
-    when {
-        !asked -> {
+    when (val read = readWhy(name, actions)) {
+        WhyRead.Asking -> {
             ProgressRing()
         }
 
-        found == null -> {
+        WhyRead.Unanswered -> {
             Text("ketch could not ask this package's source.", color = LocalFluent.current.ink2, style = LocalFluentType.current.body)
         }
 
-        else -> {
-            SelectionContainer { TerminalOutput("ketch why $name", whyLines(found), Modifier.fillMaxWidth().testTag("package-why")) }
+        is WhyRead.Answered -> {
+            val found = read.resolution
+            val lines = whyFacts(found).map { (key, value) -> TerminalLine(key, value, good = key == WHY_RESOLVE && found.version != null) }
+            SelectionContainer { TerminalOutput("ketch why $name", lines, Modifier.fillMaxWidth().testTag("package-why")) }
         }
     }
 }
-
-private fun whyLines(found: Resolution) =
-    listOfNotNull(
-        TerminalLine("resolve", "${found.source} → ${found.version ?: "no release"}", good = found.version != null),
-        TerminalLine("asset", found.asset ?: "none fits this machine"),
-        found.reason?.let { TerminalLine("reason", it) },
-        TerminalLine("sha256", checksumWords(found.checksum)),
-    )
 
 @Composable
 private fun Changes(

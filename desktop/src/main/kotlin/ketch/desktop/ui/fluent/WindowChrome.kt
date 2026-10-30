@@ -14,6 +14,10 @@ class WindowChrome(
     val drag: @Composable (Modifier) -> Unit,
     /** Puts a system material behind the window; false when the window has to draw its own wall. */
     val wear: (WindowMaterial, dark: Boolean) -> Boolean = { _, _ -> false },
+    /** Whether the window's corners may be cut: the desktop has to show through them, and a maximized window has none. */
+    val rounded: () -> Boolean = { false },
+    /** What pulls a window without the system's edges. */
+    val edges: @Composable () -> Unit = {},
 )
 
 val LocalWindowChrome = staticCompositionLocalOf<WindowChrome?> { null }

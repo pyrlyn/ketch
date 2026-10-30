@@ -32,10 +32,12 @@ import ketch.desktop.store.StoreState
 import ketch.desktop.ui.Actions
 import ketch.desktop.ui.HERO_TEXT
 import ketch.desktop.ui.HERO_TITLE
+import ketch.desktop.ui.Kind
 import ketch.desktop.ui.Navigation
 import ketch.desktop.ui.Section
 import ketch.desktop.ui.Source
 import ketch.desktop.ui.copyToClipboard
+import ketch.desktop.ui.emptyWords
 import ketch.desktop.ui.glass.Mark
 import ketch.desktop.ui.screens.PackageTab
 import ketch.desktop.ui.screens.githubRepo
@@ -138,31 +140,10 @@ private fun LazyGridScope.repositoryTiles(
     }
 }
 
-/** Which packages a filter keeps. Few manifests name their kind, and one that does not is taken for a tool. */
-private enum class Kind(
-    val title: String,
-    val admits: (RegistryPackage) -> Boolean,
-) {
-    All("All", { true }),
-    Tools("CLI tools", { !it.isApp }),
-    Apps("Apps", { it.isApp }),
-}
-
 private fun LazyGridScope.wide(content: @Composable () -> Unit) = item(span = { GridItemSpan(maxLineSpan) }) { content() }
 
 /** A whole-width part of the page, standing the page's gap from the next one where the grid's own is narrower. */
 private fun LazyGridScope.block(content: @Composable () -> Unit) = wide { Column(Modifier.padding(bottom = PageGap - TILE_GAP)) { content() } }
-
-private fun emptyWords(
-    query: String,
-    source: Source?,
-    kind: Kind,
-) = when {
-    query.isNotBlank() -> "No package matches \"${query.trim()}\""
-    kind == Kind.Apps -> "The registry names no apps yet"
-    source == Source.Releases -> "Type owner/repo to find a project's releases"
-    else -> "The registry lists nothing yet"
-}
 
 @Composable
 private fun KnownTile(

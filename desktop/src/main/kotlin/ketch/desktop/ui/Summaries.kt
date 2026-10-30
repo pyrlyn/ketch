@@ -11,8 +11,10 @@ import androidx.compose.ui.focus.FocusRequester
 import ketch.desktop.store.StoreState
 import ketch.desktop.ui.screens.PackageFacts
 import ketch.wire.ChangelogSource
+import ketch.wire.Check
 import ketch.wire.CheckOutcome
 import ketch.wire.Package
+import ketch.wire.RegistryPackage
 import ketch.wire.Upgrade
 import pyrlyn.glass.Glyph
 
@@ -134,3 +136,30 @@ fun packageDetails(facts: PackageFacts): List<Pair<String, String>> {
         installed?.retained?.takeIf { it.isNotEmpty() }?.let { "Kept" to it.joinToString(", ") },
     )
 }
+
+/** Which packages a filter keeps. Few manifests name their kind, and one that does not is taken for a tool. */
+enum class Kind(
+    val title: String,
+    val admits: (RegistryPackage) -> Boolean,
+) {
+    All("All", { true }),
+    Tools("CLI tools", { !it.isApp }),
+    Apps("Apps", { it.isApp }),
+}
+
+fun emptyWords(
+    query: String,
+    source: Source?,
+    kind: Kind,
+) = when {
+    query.isNotBlank() -> "No package matches \"${query.trim()}\""
+    kind == Kind.Apps -> "The registry names no apps yet"
+    source == Source.Releases -> "Type owner/repo to find a project's releases"
+    else -> "The registry lists nothing yet"
+}
+
+/** Checks about files in ketch's own folder, which is where to look when they fail. */
+val UNDER_THE_ROOT = setOf("state", "lock", "log", "packages")
+
+/** A repair of PATH reaches the next shell, not this process, so the check that follows it is only a warning. */
+fun Check.isFixed(state: StoreState) = name in state.fixed && outcome != CheckOutcome.Fail

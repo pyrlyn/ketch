@@ -13,7 +13,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import ketch.desktop.store.StoreState
 import ketch.desktop.ui.Actions
+import ketch.desktop.ui.UNDER_THE_ROOT
 import ketch.desktop.ui.doctorSummary
+import ketch.desktop.ui.isFixed
 import ketch.desktop.ui.openFolder
 import ketch.desktop.ui.word
 import ketch.wire.Check
@@ -82,8 +84,7 @@ private fun CheckRow(
     actions: Actions,
     config: Settings?,
 ) {
-    // A repair of PATH reaches the next shell, not this process, so the check that follows it is only a warning.
-    val fixed = check.name in state.fixed && check.outcome != CheckOutcome.Fail
+    val fixed = check.isFixed(state)
     val kind =
         when {
             fixed || check.outcome == CheckOutcome.Ok -> BadgeKind.Success
@@ -117,9 +118,6 @@ private fun FixButton(
         }
     }
 }
-
-/** Checks about files in ketch's own folder, which is where to look when they fail. */
-private val UNDER_THE_ROOT = setOf("state", "lock", "log", "packages")
 
 private val STAT_WIDTH = 200.dp
 private val GRID_GAP = 12.dp
