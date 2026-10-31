@@ -6,7 +6,7 @@ set -eu
 cd "$(dirname "$0")/../../.."
 export DOCKER_CONTEXT=colima
 
-packages=$(dirname "${KOTLIN_KIT_DIR:-$(cd ../.. && pwd)/packages/kotlin-kit}")
+packages=$(desktop/e2e/packages.sh)
 libs=$PWD/build/e2e-linux/libs
 image=ketch-e2e-linux
 

@@ -215,6 +215,17 @@ Taken during the port:
   doctor checks), which the app passes on as it arrives. To add a language: copy `values/strings.xml`
   to `values-<lang>/`, translate it, and add `<lang>` to `CFBundleLocalizations` in
   `desktop/build.gradle.kts`. A key left out falls back to English.
+- **End-to-end tests (T22).** `:desktop:e2e` is the creator's choice of level: the window, `ServeCore`,
+  the real `ketch serve` and a stand-in GitHub on the JDK's `HttpServer`, in a scratch root, so a test
+  proves a package reached the disk. It stays apart from `test` because it needs the linked `ketch`
+  and a reference means something only on the system that recorded it. Each system walks its own look
+  and Material, light and dark; Adwaita is dark only, so its two sets are identical on purpose. It is
+  Compose's offscreen test scene, so the OS window frame is in no reference. Linux runs in a Docker
+  image on Colima rather than the shared Lima VM: the image fixes the JDK and the fonts. It needs
+  Xvfb, or AWT lists no fonts. Kotlin/Native has no Linux arm64 host, so `ketch` is cross-linked on
+  the Mac; Windows gets a cross-linked `ketch.exe` too, only for speed. The VM skips lint, which the
+  Mac does: shared-settings' ktlint filter looks for `/build/`, so on Windows it lints generated code.
+  A release's asset there is named for `x86_64`, as the JDK and `ketch` both run under emulation.
 
 ## Goals of the port
 

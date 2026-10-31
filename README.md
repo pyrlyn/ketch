@@ -47,6 +47,11 @@ links and smoke-tests the macOS arm64 and Linux x64 binaries, and creates a draf
 publishing the draft creates the tag. It refuses a version whose tag already exists. CI
 (`.github/workflows/ci.yml`) builds and tests both targets on every push and pull request.
 
+`./gradlew :desktop:e2e` drives the desktop app through the real `ketch serve` against a local stand-in GitHub, installing,
+updating and removing packages, and compares every screen with the references in `desktop/e2e/references/<system>/`.
+`desktop/e2e/linux/run.sh` runs it from a Mac in a Docker image on Colima, and `desktop/e2e/windows/run.sh` in a Parallels
+Windows VM; `-Pe2e.record` writes the references.
+
 ## License
 
 The same terms as ketch: GPL-3.0-or-later, the ketch royalty-free licence or a commercial licence.
