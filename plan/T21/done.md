@@ -15,7 +15,7 @@ and give a typed key per string, so a missing one fails to compile; no version c
 Out of scope, and still English: the command line, whose output must stay interchangeable with Rust ketch, and what
 `ketch serve` sends. Commands, tags, paths, date patterns, the exported log's format and the Ketch name stay literals.
 
-Commit: on branch `T21-localization`; the repository has no remote, so there is no PR.
+Commit: `7092f19` on `main`; the repository has no remote, so there is no PR.
 
 Checked:
 
