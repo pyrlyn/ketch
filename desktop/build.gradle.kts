@@ -18,6 +18,7 @@ dependencies {
     implementation(libs.markdown.renderer.m3)
     @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
     testImplementation(compose.uiTest)
+    testImplementation(libs.roborazzi.compose.desktop)
 }
 
 // The native ketch this host links: ServeCore's tests run it and the app's package carries it. A host with no native
@@ -146,11 +147,41 @@ fun <T> T.runsDebugKetch() where T : Task, T : ProcessForkOptions {
     }
 }
 
-tasks.test { runsDebugKetch() }
+tasks.test {
+    runsDebugKetch()
+    exclude("ketch/desktop/e2e/**")
+}
 tasks.withType<AbstractComposeHotRun>().configureEach {
     runsDebugKetch()
     // A hot run starts its own JVM and ignores compose.desktop's jvmArgs.
     jvmArgumentProviders += CommandLineArgumentProvider { listOf(nativeAccess) }
+}
+
+// The app against the real ketch and a stand-in GitHub, every screen compared with this system's references in e2e/. Apart
+// from `test` because a reference depends on the system's fonts, so it only means something on the system that recorded it.
+// `-Pe2e.record` writes the references instead.
+tasks.register<Test>("e2e") {
+    group = "verification"
+    description = "Runs the app against the real ketch and compares its screens with this system's references"
+    testClassesDirs =
+        sourceSets.test
+            .get()
+            .output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    include("ketch/desktop/e2e/**")
+    runsDebugKetch()
+    // One root, so the runs take turns.
+    maxParallelForks = 1
+    systemProperty("user.language", "en")
+    systemProperty("user.country", "US")
+    systemProperty("user.timezone", "UTC")
+    systemProperty(if (providers.gradleProperty("e2e.record").isPresent) "roborazzi.test.record" else "roborazzi.test.verify", "true")
+    // What the person running it has set must not reach a screen.
+    environment = environment.filterKeys { it == "KETCH_EXE" || !(it.startsWith("KETCH_") || it == "GITHUB_TOKEN" || it == "GH_TOKEN") }
+    outputs.upToDateWhen { false }
+    testLogging.showStandardStreams = true
+}
+
 }
 
 // The accessors for src/main/composeResources, in a package of ours rather than one named after the build.

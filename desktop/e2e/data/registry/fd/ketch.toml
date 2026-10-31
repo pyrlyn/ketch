@@ -1,0 +1,3 @@
+source = "github:sharkdp/fd"
+description = "A simple, fast alternative to find"
+homepage = "https://github.com/sharkdp/fd"

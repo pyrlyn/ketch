@@ -1,0 +1,34 @@
+{
+  "BurntSushi/ripgrep": {
+    "description": "ripgrep recursively searches directories for a regex pattern",
+    "homepage": "https://github.com/BurntSushi/ripgrep",
+    "stargazers_count": 50000,
+    "license": { "spdx_id": "MIT" },
+    "tool": "rg",
+    "releases": [
+      { "tag_name": "14.1.1", "published_at": "2024-09-08T17:00:00Z", "body": "- Fix a regression in the glob matcher\n- Print the path of a binary file" },
+      { "tag_name": "14.1.0", "published_at": "2024-01-06T12:00:00Z", "body": "- Add support for hyperlinks" }
+    ]
+  },
+  "sharkdp/fd": {
+    "description": "A simple, fast and user-friendly alternative to find",
+    "homepage": "https://github.com/sharkdp/fd",
+    "stargazers_count": 35000,
+    "license": { "spdx_id": "Apache-2.0" },
+    "tool": "fd",
+    "releases": [
+      { "tag_name": "v10.2.0", "published_at": "2024-08-23T09:00:00Z", "body": "- Add --hyperlink\n- Faster directory walking" },
+      { "tag_name": "v10.1.0", "published_at": "2024-05-08T09:00:00Z", "body": "- Allow a negated --size" }
+    ]
+  },
+  "sharkdp/bat": {
+    "description": "A cat(1) clone with wings",
+    "homepage": "https://github.com/sharkdp/bat",
+    "stargazers_count": 50000,
+    "license": { "spdx_id": "MIT" },
+    "tool": "bat",
+    "releases": [
+      { "tag_name": "v0.24.0", "published_at": "2023-10-11T10:00:00Z", "body": "- Add a --squeeze-blank option" }
+    ]
+  }
+}
