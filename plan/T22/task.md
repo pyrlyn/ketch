@@ -2,7 +2,7 @@
 status: in progress
 priority: P1
 complexity: 4
-readiness: 45%
+readiness: 65%
 agent: Claude Code / claude-opus-5-5
 ---
 
@@ -26,7 +26,8 @@ platform. A changed screen fails the test and leaves the reference, the new imag
    counts once two in a row agree, so no fade lands in a reference. A running install is not captured: its spinner never rests.
 4. Scenarios: every section, the package page and a dialog, in the host's look and in Material, light and dark. References in
    `desktop/e2e/references/<os>/`.
-5. Record and compare on macOS here, Linux in Lima, Windows in the Parallels VM.
+5. Record and compare on macOS here, Linux in a Docker image on Colima (fixed JDK and fonts, and the shared Lima VM stays as it
+   is; Kotlin/Native has no Linux arm64 host, so `ketch` is linked on the Mac), Windows in the Parallels VM.
 6. Docs: `AGENTS.md`, `README.md`, `toolchain.md`, `plan/README.md`.
 
 Check: `./gradlew :desktop:e2e` passes on each of the three systems, a deliberate change to a screen fails it with a diff, and

@@ -86,7 +86,6 @@ class EndToEndTest {
 
     private inner class Run(
         val test: DesktopComposeUiTest,
-        val look: Look,
         val store: KetchStore,
         val navigation: Navigation,
         val prefix: String,
@@ -108,7 +107,8 @@ class EndToEndTest {
         }
 
         fun search(text: String) {
-            if (look == Look.Adwaita) {
+            // Adwaita keeps the field behind a toggle, which stays open between searches.
+            if (test.onAllNodes(hasTestTag("discover-query")).fetchSemanticsNodes().isEmpty()) {
                 test.onNodeWithTag("search").performClick()
                 waitFor("discover-query")
             }
@@ -179,7 +179,7 @@ class EndToEndTest {
             waitFor("installed-ripgrep")
             test.onNodeWithTag("installed-ripgrep").performClick()
             waitFor("page-package")
-            test.onNodeWithText("Uninstall").performClick()
+            test.onNodeWithText("Uninstall", substring = true).performClick()
             waitFor("confirm")
             test.onNodeWithTag("confirm-yes").performClick()
             test.waitUntil(timeoutMillis = TIMEOUT) {
@@ -213,7 +213,7 @@ class EndToEndTest {
             val store = KetchStore(core) { CLOCK }
             val navigation = Navigation(Section.Discover)
             setContent { KetchTheme(appearance, look = look) { KetchApp(store, navigation = navigation, parts = AppParts()) } }
-            val run = Run(this, look, store, navigation, "${look.name}-${appearance.name}".lowercase())
+            val run = Run(this, store, navigation, "${look.name}-${appearance.name}".lowercase())
 
             run.discoverAndInstall()
             run.lookAtWhatIsInstalled()
