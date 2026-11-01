@@ -62,7 +62,6 @@ import pyrlyn.glass.Spinner
 import pyrlyn.glass.StatusBar
 import pyrlyn.glass.Toolbar
 import pyrlyn.glass.Wallpaper
-import pyrlyn.glass.body
 import pyrlyn.glass.glass
 import pyrlyn.glass.mono
 
@@ -168,10 +167,7 @@ private fun SectionItem(
         Modifier.testTag("sidebar-${section.tag}"),
         description = if (count > 0) "${section.title}, ${plural(count, noun)}" else null,
         leading = { GlyphIcon(section.glyph, if (selected) glass.accent else glass.accentInk) },
-        trailing = {
-            if (count > 0) CountBadge(count)
-            if (section == Section.Installed && state.installed.isNotEmpty()) Text("${state.installed.size}", color = glass.ink2, style = body(COUNT))
-        },
+        trailing = { if (count > 0) CountBadge(count) },
     ) { navigation.show(section) }
 }
 
@@ -261,7 +257,6 @@ fun ActivityBar(
 }
 
 private const val BRAND = 17
-private const val COUNT = 12f
 private val SIDEBAR_MARGIN = 10.dp
 private val SIDEBAR_WIDTH = 232.dp
 private val STATUS_WIDTH = 560.dp
