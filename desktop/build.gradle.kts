@@ -74,9 +74,14 @@ tasks.matching { it.name == "createDistributable" || it.name == "createReleaseDi
     }
 }
 
+// Skiko loads its native renderer with System.load; JDK 24+ warns about that and will block it. `run` uses the JDK
+// that runs Gradle, not the toolchain's 21.
+val nativeAccess = "--enable-native-access=ALL-UNNAMED"
+
 compose.desktop {
     application {
         mainClass = "ketch.desktop.MainKt"
+        jvmArgs += nativeAccess
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "Ketch"
@@ -142,7 +147,11 @@ fun <T> T.runsDebugKetch() where T : Task, T : ProcessForkOptions {
 }
 
 tasks.test { runsDebugKetch() }
-tasks.withType<AbstractComposeHotRun>().configureEach { runsDebugKetch() }
+tasks.withType<AbstractComposeHotRun>().configureEach {
+    runsDebugKetch()
+    // A hot run starts its own JVM and ignores compose.desktop's jvmArgs.
+    jvmArgumentProviders += CommandLineArgumentProvider { listOf(nativeAccess) }
+}
 
 // The accessors for src/main/composeResources, in a package of ours rather than one named after the build.
 compose.resources {
