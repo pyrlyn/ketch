@@ -1,6 +1,6 @@
 # ketch-kotlin
 
-No GitHub repository yet (local only).
+https://github.com/pyrlyn/ketch-kotlin
 
 A port of ketch (Rust, `../ketch`, ~53k lines plus ~10k of tests) to Kotlin/Native for the core
 and the command line, with one Compose Multiplatform desktop app.
