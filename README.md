@@ -31,7 +31,8 @@ elsewhere.
 
 `-Pdiffuser.allTargets=true` adds the Linux targets. `mise run release` links the shipped
 release binary. `packageDmg` (or `packageDeb`, `packageMsi` on those hosts) builds the desktop app
-with the release `ketch` inside; `:desktop:run` uses the same one unless `KETCH_EXE` names another.
+with the release `ketch` inside; `:desktop:run` uses the same one and `:desktop:hotRun` the debug one,
+unless `KETCH_EXE` names another.
 
 ## License
 

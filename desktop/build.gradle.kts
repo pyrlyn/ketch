@@ -1,4 +1,5 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.jetbrains.compose.reload.gradle.AbstractComposeHotRun
 
 // One Compose desktop app for macOS, Windows and Linux in place of desktop/macos (SwiftUI) and
 // desktop/windows (WinUI). It runs the native `ketch` and speaks :ketch-wire with it.
@@ -131,12 +132,17 @@ compose.desktop {
     }
 }
 
-tasks.test {
+// Tests and hot runs do not start through the launcher that hands `run` the resource folder, so they are told which
+// ketch to run: the debug one, quick to link, unless KETCH_EXE already names another.
+fun <T> T.runsDebugKetch() where T : Task, T : ProcessForkOptions {
     hostTarget?.let { target ->
         dependsOn(":ketch:linkDebugExecutable${target.replaceFirstChar(Char::uppercase)}")
-        environment("KETCH_EXE", linkedKetch(target, "debug").absolutePath)
+        environment("KETCH_EXE", providers.environmentVariable("KETCH_EXE").getOrElse(linkedKetch(target, "debug").absolutePath))
     }
 }
+
+tasks.test { runsDebugKetch() }
+tasks.withType<AbstractComposeHotRun>().configureEach { runsDebugKetch() }
 
 // The accessors for src/main/composeResources, in a package of ours rather than one named after the build.
 compose.resources {
