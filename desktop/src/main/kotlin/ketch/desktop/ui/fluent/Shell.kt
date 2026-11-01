@@ -236,7 +236,6 @@ private fun SectionItem(
     val selected = navigation.section == section && navigation.source == null
     val (count, noun) =
         when (section) {
-            Section.Installed -> state.installed.size to Res.plurals.packages
             Section.Updates -> state.pendingUpgradeCount to Res.plurals.updates
             Section.Doctor -> state.problemCount to Res.plurals.problems
             else -> 0 to Res.plurals.packages
@@ -246,7 +245,7 @@ private fun SectionItem(
         selected,
         Modifier.testTag("sidebar-${section.tag}").semantics { if (count > 0) contentDescription = "${section.title}, ${plural(count, noun)}" },
         badge = count.takeIf { it > 0 },
-        badgeUpdate = section != Section.Installed,
+        badgeUpdate = true,
         leading = { NavIcon(section.glyph, selected) },
     ) { navigation.show(section) }
 }
