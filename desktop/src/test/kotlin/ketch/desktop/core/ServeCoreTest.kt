@@ -10,6 +10,8 @@ import ketch.wire.Package
 import ketch.wire.Question
 import ketch.wire.Stage
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.nio.file.Files
@@ -112,16 +114,40 @@ class ServeCoreTest {
         serving { core ->
             val leftover = leftover()
             val cancel = CancelToken()
+            val stopped = CompletableDeferred<Unit>()
             val waiting =
                 object : Callbacks {
                     override suspend fun ask(question: Question): Answer {
-                        cancel.cancel()
-                        return CompletableDeferred<Answer>().await()
+                        try {
+                            cancel.cancel()
+                            return CompletableDeferred<Answer>().await()
+                        } finally {
+                            stopped.complete(Unit)
+                        }
                     }
                 }
             assertFailsWith<CoreException> { core.call(Call.Uninstall(listOf("ghost")), waiting, cancel) }
+            withTimeout(2.seconds) { stopped.await() }
             assertTrue(leftover.exists(), "a cancel is no consent")
             assertEquals(root.toString(), core.value<String>(Call.Root), "the core still serves")
+        }
+
+    @Test
+    fun closingFailsOpenAndFutureCallsEvenWhileStderrIsStillDraining() =
+        runBlocking {
+            val fake = script("""echo '{"type":"hello","protocol":1,"version":"x"}'; sleep 2 >&2 & cat >/dev/null""")
+            val core = ServeCore.start(fake)
+            try {
+                val pending = async(start = CoroutineStart.UNDISPATCHED) { assertFailsWith<CoreException> { core.call(Call.Root) } }
+                core.close()
+                withTimeout(1.seconds) {
+                    pending.await()
+                    assertFailsWith<CoreException> { core.call(Call.Root) }
+                    Unit
+                }
+            } finally {
+                core.close()
+            }
         }
 
     @Test

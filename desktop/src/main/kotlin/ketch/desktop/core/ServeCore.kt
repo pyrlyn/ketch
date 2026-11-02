@@ -62,8 +62,16 @@ class ServeCore private constructor(
 
     private class Open(
         val callbacks: Callbacks,
+        parent: CoroutineScope,
         val outcome: CompletableDeferred<Outcome> = CompletableDeferred(),
-    )
+    ) {
+        val questions = CoroutineScope(parent.coroutineContext + SupervisorJob(parent.coroutineContext[Job]))
+
+        fun finish(result: Outcome) {
+            questions.cancel()
+            outcome.complete(result)
+        }
+    }
 
     private fun begin() {
         val drained = scope.launch { stderr.drain(process.errorStream.bufferedReader(Charsets.UTF_8)) }
@@ -76,10 +84,10 @@ class ServeCore private constructor(
         cancel: CancelToken,
     ): JsonElement {
         val id = ids.incrementAndGet()
-        val open = Open(callbacks)
+        val open = Open(callbacks, scope)
         calls[id] = open
         // A child that ended after the check would have failed the call already; one that ended before never will.
-        ended?.let { calls.remove(id)?.outcome?.complete(Outcome.Error(it)) }
+        ended?.let { calls.remove(id)?.finish(Outcome.Error(it)) }
         send(AppMessage.Start(id, call))
         cancel.onCancel { send(AppMessage.Cancel(id)) }
         val outcome =
@@ -89,6 +97,9 @@ class ServeCore private constructor(
                 // Nobody waits for this result any more; the core still stops at its next check.
                 send(AppMessage.Cancel(id))
                 throw e
+            } finally {
+                calls.remove(id)
+                open.questions.cancel()
             }
         return when (outcome) {
             is Outcome.Ok -> outcome.value
@@ -122,7 +133,7 @@ class ServeCore private constructor(
                 }
 
                 is ServeMessage.Result -> {
-                    calls.remove(message.id)?.outcome?.complete(message.outcome)
+                    calls.remove(message.id)?.finish(message.outcome)
                 }
 
                 // Only a bug on one side makes the child reject a line; failing every call says so, waiting would not.
@@ -142,7 +153,7 @@ class ServeCore private constructor(
 
     private fun answer(ask: ServeMessage.Ask) {
         val open = calls[ask.id] ?: return
-        scope.launch {
+        open.questions.launch {
             val answer =
                 try {
                     open.callbacks.ask(ask.question)
@@ -156,12 +167,14 @@ class ServeCore private constructor(
 
     private fun end(error: KetchError) {
         ended = error
-        calls.keys.toList().forEach { id -> calls.remove(id)?.outcome?.complete(Outcome.Error(error)) }
+        calls.keys.toList().forEach { id -> calls.remove(id)?.finish(Outcome.Error(error)) }
     }
 
     /** Stops what runs, lets the child end on its own for a moment, then kills it. */
     override fun close() {
         calls.keys.forEach { send(AppMessage.Cancel(it)) }
+        // The reader may still be draining stderr when its scope is cancelled below.
+        end(KetchError.Cancelled)
         try {
             writer.close()
         } catch (_: IOException) {
