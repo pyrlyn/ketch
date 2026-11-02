@@ -34,6 +34,7 @@ data class TaskId(
     }
 }
 
+/** What a begun task is, so a front end knows how to show it. */
 sealed interface Task {
     data object Batch : Task
 
@@ -53,6 +54,7 @@ sealed interface Task {
     ) : Task
 }
 
+/** One thing the core reports to a [Reporter]. */
 sealed interface Event {
     data class Step(
         val packageName: String,
@@ -113,6 +115,7 @@ fun interface Reporter {
     fun event(event: Event)
 }
 
+/** A [Reporter] that drops every event. */
 object Silent : Reporter {
     override fun event(event: Event) = Unit
 }
@@ -230,6 +233,7 @@ class Handle internal constructor(
     }
 }
 
+/** An open-ended task with a message and no progress; ends on [close]. */
 class Activity internal constructor(
     private val done: Handle,
 ) : AutoCloseable {
@@ -241,6 +245,7 @@ class Activity internal constructor(
     override fun close() = done.close()
 }
 
+/** A group of downloads shown together; ends on [close]. */
 class Batch internal constructor(
     private val done: Handle,
 ) : AutoCloseable {
@@ -249,6 +254,7 @@ class Batch internal constructor(
     override fun close() = done.close()
 }
 
+/** A task counted in steps up to a known total; ends on [close]. */
 class Counter internal constructor(
     private val done: Handle,
     private val total: Long,
@@ -272,6 +278,7 @@ interface ProgressSink {
     fun finish(message: String)
 }
 
+/** A [ProgressSink] that ignores every call. */
 object SilentProgress : ProgressSink {
     override fun start(
         total: Long?,

@@ -17,6 +17,7 @@ import kotlinx.serialization.json.JsonIgnoreUnknownKeys
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
+/** What a package's payload is installed as. */
 @Serializable
 enum class PackageKind {
     /** Decide from what the payload actually contains. */
