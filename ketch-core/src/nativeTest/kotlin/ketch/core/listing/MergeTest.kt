@@ -38,6 +38,28 @@ class MergeTest {
     }
 
     @Test
+    fun mergingALargeRegistryWithoutInstalledPackagesKeepsEveryOffer() {
+        val available = (10_000 downTo 1).map { offer("package-${it.toString().padStart(5, '0')}") }
+        val rows = merge(emptyList(), available)
+        assertEquals(available.reversed(), rows.map { it.available })
+        assertTrue(rows.all { it.local == null })
+    }
+
+    @Test
+    fun mergingPrefersTheNameAndConsumesEachInstalledRowOnlyOnce() {
+        val source = PackageRef.github("owner/shared")
+        val renamed = local("alias", "1.0.0").copy(source = source)
+        val named = local("tool", "2.0.0")
+        val first = offer("TOOL").copy(source = source)
+        val second = offer("renamed").copy(source = source)
+        val duplicate = offer("extra").copy(source = source)
+        val rows = merge(listOf(renamed, named), listOf(first, second, duplicate))
+        assertEquals(listOf("alias", "extra", "tool"), names(rows))
+        assertEquals(listOf(second, duplicate, first), rows.map { it.available })
+        assertEquals(listOf(renamed, null, named), rows.map { it.local })
+    }
+
+    @Test
     fun mergingAnInstalledRegistryPackageGivesOneRowWithBothHalves() {
         val rows = merge(listOf(local("alpha", "1.0.0")), listOf(offer("alpha"), offer("bravo")))
         assertEquals(listOf("alpha", "bravo"), names(rows))
