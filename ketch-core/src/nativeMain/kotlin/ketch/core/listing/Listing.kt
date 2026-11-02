@@ -246,13 +246,14 @@ fun merge(
     locals: List<Local>,
     available: List<Available>,
 ): List<Row> {
-    val rows = locals.map(Row::installed).toMutableList()
+    val installed = locals.map(Row::installed)
+    val rows = installed.toMutableList()
     for (offer in available) {
         val wanted = normalizeName(offer.name)
-        val free = rows.filter { it.available == null && it.local != null }
+        // Offered-only rows can never match; scanning the growing output makes a registry-only listing quadratic.
         val match =
-            free.firstOrNull { normalizeName(it.local!!.name) == wanted }
-                ?: free.firstOrNull { sameSource(it.local!!.source, offer.source) }
+            installed.firstOrNull { it.available == null && normalizeName(it.local!!.name) == wanted }
+                ?: installed.firstOrNull { it.available == null && sameSource(it.local!!.source, offer.source) }
         if (match != null) match.available = offer else rows += Row.offered(offer)
     }
     return sort(rows)
