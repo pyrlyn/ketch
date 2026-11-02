@@ -2,7 +2,7 @@
 status: in progress
 priority: P1
 complexity: 3
-readiness: 75%
+readiness: 100%
 agent: Codex / GPT-6
 ---
 
