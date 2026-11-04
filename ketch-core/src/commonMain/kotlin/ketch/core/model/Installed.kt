@@ -87,6 +87,7 @@ enum class LocalKind(
     override fun toString() = asStr
 }
 
+/** How an installed file is exposed outside the store. */
 @Serializable
 enum class LinkKind {
     /** Symlink in the bin dir pointing into the store. */
@@ -123,6 +124,7 @@ enum class LinkRole {
     Completion,
 }
 
+/** A link ketch created for a package, recorded so removal can undo exactly it. */
 @Serializable
 @JsonIgnoreUnknownKeys
 data class LinkRecord(
@@ -135,6 +137,7 @@ data class LinkRecord(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val role: LinkRole = LinkRole.Binary,
 )
 
+/** One installed package as recorded in `state.json`: version, source, asset, checksum and links. */
 @Serializable
 @JsonIgnoreUnknownKeys
 data class InstalledPackage(

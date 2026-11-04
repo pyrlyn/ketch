@@ -5,6 +5,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonIgnoreUnknownKeys
 
+/** An operating system ketch installs for, with the tokens that name it in asset file names. */
 @Serializable
 enum class Os(
     private val display: String,
@@ -24,6 +25,7 @@ enum class Os(
     override fun toString() = display
 }
 
+/** A CPU architecture, with the tokens that name it in asset file names. */
 @Serializable
 enum class Arch(
     private val display: String,
@@ -43,6 +45,7 @@ enum class Arch(
     override fun toString() = display
 }
 
+/** The OS and architecture an asset is picked for. */
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 @JsonIgnoreUnknownKeys
