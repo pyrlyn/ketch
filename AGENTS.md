@@ -24,6 +24,34 @@ its output, the config and manifest TOML, `ketch.lock`, `state.json`, the `~/.ke
 | `buildSrc/` | Convention plugins `ketch.kmp` and `ketch.compose` |
 | `plan/` | Tasks, one folder per task; `plan/README.md` holds the port map and decisions |
 
+## Design
+
+The Linux look (`desktop/.../ui/adwaita/`, components from kotlin-adwaita) follows the
+**Ketch Linux** design, a GNOME/libadwaita frosted-glass style.
+
+- Figma: <https://www.figma.com/design/kjFRSE8wBULXeegP5pl7bf>
+  - **UI Kit** page: variables (`Ketch Linux · Color`, `Ketch Linux · Size`), text and effect
+    styles, 37 icons, and 29 components with variants and properties (Button, StatusPill, Switch,
+    ActionRow, HeaderBar, Dialog, FormField, …).
+  - **Screens** page: 13 desktop frames built from kit instances. Discover, Installed, Updates,
+    Activity, Main menu, Package detail, Doctor, Settings, Uninstall dialog, Sign in, Create
+    account, Profile, Account settings.
+- Design system with tokens, component specs and usage notes:
+  <https://claude.ai/artifact/48tdpYBEYVGL7pYjbGSjrw>
+- Interactive canvas of the same screens: <https://claude.ai/artifact/QyfBhRwhfGjJAFFKotsaKw>
+
+Rules for agents:
+
+- Read the Figma file (Figma MCP: `get_design_context`, `get_screenshot`,
+  `get_variable_defs`) before you build or change a Linux screen.
+- Map Figma variables to theme tokens. Don't hard-code colours, radii or spacing.
+- When a screen needs something the kit lacks, add it to the UI Kit page as a component, then
+  use an instance of it on the screen.
+- Keep the style flat: icons, status badges and dock tiles use a solid colour plus a 1–2 px
+  shadow. Only the wallpaper and the window glass have depth.
+- Use GNOME patterns: a header bar with a view switcher, a hamburger main menu, boxed lists and
+  GNOME switches. Don't make it look like Windows or iOS.
+
 ## Build and test
 
 Needs JDK 21 and the `shared-settings`, `kotlin-kit`, `kotlin-snapshot`, `kotlin-glass`, `kotlin-fluent` and `kotlin-adwaita` builds in
