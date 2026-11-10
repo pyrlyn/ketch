@@ -1,0 +1,199 @@
+# Prerelease of the ketch CLI, started by hand from main (workflow_dispatch).
+#
+# The version has one source: VERSION in ketch-core/src/commonMain/kotlin/ketch/core/Version.kt.
+# Bump it through a normal PR first; this workflow then releases main as tag v<VERSION>:
+#   checks  -> read VERSION, refuse a tag that already exists, write the release notes
+#              (commits since the previous release tag)
+#   build   -> test, link the release binary per target, smoke-test --version, tar.gz + sha256
+#   release -> only when dry-run is false: a DRAFT prerelease with every archive and SHA256SUMS,
+#              targeting the exact main commit; publishing the draft creates the tag.
+# A pull request that changes this file runs checks and build as a dry run, so the workflow is
+# proven before it reaches main.
+name: release
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Run checks and build only; never create a release.'
+        type: boolean
+        required: false
+        default: true
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  VERSION_FILE: ketch-core/src/commonMain/kotlin/ketch/core/Version.kt
+  SHARED_SETTINGS_DIR: ${{ github.workspace }}/packages/shared-settings
+  KOTLIN_ADWAITA_DIR: ${{ github.workspace }}/packages/kotlin-adwaita
+  KOTLIN_FLUENT_DIR: ${{ github.workspace }}/packages/kotlin-fluent
+  KOTLIN_GLASS_DIR: ${{ github.workspace }}/packages/kotlin-glass
+  KOTLIN_KIT_DIR: ${{ github.workspace }}/packages/kotlin-kit
+  KOTLIN_SNAPSHOT_DIR: ${{ github.workspace }}/packages/kotlin-snapshot
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      dry-run: ${{ steps.version.outputs.dry-run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: version
+        name: Version and tag
+        env:
+          DRY_RUN: ${{ github.event_name != 'workflow_dispatch' || inputs.dry-run }}
+        run: |
+          set -euo pipefail
+          version="$(sed -nE 's/^const val VERSION = "([^"]+)"$/\1/p' "$VERSION_FILE")"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::cannot parse VERSION '$version'"; exit 1; }
+          tag="v$version"
+          if [ "$DRY_RUN" != true ]; then
+            [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error title=release::run from main, not $GITHUB_REF"; exit 1; }
+          fi
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            if [ "$DRY_RUN" = true ]; then
+              echo "::warning title=release::tag $tag already exists; bump VERSION in $VERSION_FILE before a real release"
+            else
+              echo "::error title=release::tag $tag already exists; bump VERSION in $VERSION_FILE through a PR first"; exit 1
+            fi
+          fi
+          {
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "dry-run=$DRY_RUN"
+          } >> "$GITHUB_OUTPUT"
+          echo "### ketch $version ($tag), dry run: $DRY_RUN" >> "$GITHUB_STEP_SUMMARY"
+      - name: Release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          # Release tags may sit on commits that are not ancestors of main (e.g. a bump branch), so
+          # `git describe` is not enough: take the highest version tag other than this one
+          # (a prerelease sorts before its final release) and list the commits it does not contain.
+          last="$(git -c versionsort.suffix=- tag -l 'v[0-9]*' --sort=-v:refname | grep -vxF "$TAG" | head -n1 || true)"
+          mkdir -p "$RUNNER_TEMP/notes"
+          {
+            echo "ketch $VERSION (Kotlin preview), built from \`main\` at \`$sha\`."
+            echo
+            echo "Assets: macOS arm64 (\`aarch64-apple-darwin\`) and Linux x64 (\`x86_64-unknown-linux-gnu\`) CLI tarballs, each with a \`.sha256\`, and \`SHA256SUMS\`."
+            echo
+            echo "## Changes since ${last:-the first commit}"
+            echo
+            git log --no-merges --format='- %s (%h)' "${last:+$last..}HEAD" | grep -vE '^- release: [0-9]+\.[0-9]+\.[0-9]+' || true
+          } > "$RUNNER_TEMP/notes/notes.md"
+          cat "$RUNNER_TEMP/notes/notes.md" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: notes
+          path: ${{ runner.temp }}/notes
+          if-no-files-found: error
+  build:
+    name: build ${{ matrix.target }}
+    needs: checks
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    env:
+      TARGET: ${{ matrix.target }}
+      TRIPLE: ${{ matrix.triple }}
+      VERSION: ${{ needs.checks.outputs.version }}
+      TAG: ${{ needs.checks.outputs.tag }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: macos-15
+            target: macosArm64
+            triple: aarch64-apple-darwin
+            command: ./gradlew build :ketch:linkReleaseExecutableMacosArm64 --console=plain
+          - os: ubuntu-latest
+            target: linuxX64
+            triple: x86_64-unknown-linux-gnu
+            command: ./gradlew -Pdiffuser.allTargets=true linuxX64Test :ketch:linkReleaseExecutableLinuxX64 --continue --console=plain
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: pyrlyn/packages
+          ref: '0.0.5'
+          path: packages
+          persist-credentials: false
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
+        with:
+          cache-read-only: true
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml', 'mise.toml') }}
+          restore-keys: konan-${{ runner.os }}-
+      - name: Test and build
+        run: ${{ matrix.command }}
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          out="$(ketch/build/bin/$TARGET/releaseExecutable/ketch.kexe --version)"
+          echo "$out"
+          grep -qF "ketch $VERSION" <<<"$out" || { echo "::error::--version does not report $VERSION"; exit 1; }
+      - name: Package
+        run: |
+          set -euo pipefail
+          name="ketch-$TAG-$TRIPLE"
+          stage="$RUNNER_TEMP/stage/$name"; mkdir -p "$stage" "$RUNNER_TEMP/dist"
+          cp "ketch/build/bin/$TARGET/releaseExecutable/ketch.kexe" "$stage/ketch"
+          cp README.md "$stage/"
+          tar -C "$RUNNER_TEMP/stage" -czf "$RUNNER_TEMP/dist/$name.tar.gz" "$name"
+          cd "$RUNNER_TEMP/dist"
+          if command -v sha256sum >/dev/null; then sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
+          else shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"; fi
+          cat "$name.tar.gz.sha256"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: release-${{ matrix.target }}
+          path: ${{ runner.temp }}/dist
+          if-no-files-found: error
+  release:
+    needs: [checks, build]
+    if: ${{ needs.checks.outputs.dry-run != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.checks.outputs.tag }}
+      VERSION: ${{ needs.checks.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: notes
+          path: notes
+      - name: Draft prerelease
+        run: |
+          set -euo pipefail
+          (cd dist && cat ./*.sha256 > SHA256SUMS && cat SHA256SUMS)
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --draft --prerelease --latest=false \
+            --target "$GITHUB_SHA" --title "Ketch $VERSION (Kotlin preview)" --notes-file notes/notes.md \
+            dist/*.tar.gz dist/*.sha256 dist/SHA256SUMS
+          echo "Draft prerelease $TAG created on $GITHUB_SHA; publish it by hand after review (that creates the tag)." >> "$GITHUB_STEP_SUMMARY"

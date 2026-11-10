@@ -1,0 +1,66 @@
+# CI for the ketch CLI: build, lint and test on every push to main and every pull request.
+# macOS arm64 runs the full `./gradlew build` (lint, every test, desktop); Linux x64 runs the
+# linuxX64 tests and links the release binary. Shared builds come from pyrlyn/packages at a pinned tag.
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request: {}
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  SHARED_SETTINGS_DIR: ${{ github.workspace }}/packages/shared-settings
+  KOTLIN_ADWAITA_DIR: ${{ github.workspace }}/packages/kotlin-adwaita
+  KOTLIN_FLUENT_DIR: ${{ github.workspace }}/packages/kotlin-fluent
+  KOTLIN_GLASS_DIR: ${{ github.workspace }}/packages/kotlin-glass
+  KOTLIN_KIT_DIR: ${{ github.workspace }}/packages/kotlin-kit
+  KOTLIN_SNAPSHOT_DIR: ${{ github.workspace }}/packages/kotlin-snapshot
+jobs:
+  test:
+    name: test ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: macosArm64
+            command: ./gradlew build :ketch:linkReleaseExecutableMacosArm64 --console=plain
+          - os: ubuntu-latest
+            target: linuxX64
+            # Lint runs on macOS; here only the Linux tests and the release link.
+            command: ./gradlew -Pdiffuser.allTargets=true linuxX64Test :ketch:linkReleaseExecutableLinuxX64 --continue --console=plain
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: pyrlyn/packages
+          # Pinned release tag; bump when ketch needs newer shared builds.
+          ref: '0.0.5'
+          path: packages
+          persist-credentials: false
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml', 'mise.toml') }}
+          restore-keys: konan-${{ runner.os }}-
+      - name: Build and test
+        run: ${{ matrix.command }}
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          version="$(sed -nE 's/^const val VERSION = "([^"]+)"$/\1/p' ketch-core/src/commonMain/kotlin/ketch/core/Version.kt)"
+          out="$(ketch/build/bin/${{ matrix.target }}/releaseExecutable/ketch.kexe --version)"
+          echo "$out"
+          grep -qF "ketch $version" <<<"$out" || { echo "::error::--version does not report $version"; exit 1; }
