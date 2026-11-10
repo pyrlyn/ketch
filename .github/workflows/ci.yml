@@ -69,6 +69,15 @@ jobs:
             ./gradlew -p scripts/ci/konan-bootstrap linkDebugExecutable${{ matrix.bootstrap }} --console=plain
       - name: Build and test
         run: ${{ matrix.command }}
+      - name: Test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: test-reports-${{ matrix.target }}
+          path: |
+            **/build/test-results/
+            **/build/reports/tests/
+          if-no-files-found: ignore
       - name: Smoke test
         run: |
           set -euo pipefail
