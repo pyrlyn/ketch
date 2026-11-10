@@ -80,7 +80,9 @@ class HttpTest {
     @Test
     fun aBodyStreamingPastAConfiguredCapIsRefusedAndLeavesNoFile(): Unit =
         withTempDir { dir ->
-            val reply = "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".encodeToByteArray() + ByteArray(1024 * 1024) { 7 }
+            // Just over the 64 KiB cap. A 1 MiB reply was arriving empty on the Linux Curl engine in CI
+            // ("got 0 of 1048576 bytes"), so the cap never ran and the close showed up as CancellationException.
+            val reply = "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".encodeToByteArray() + ByteArray(96 * 1024) { 7 }
             LoopbackServer { reply }.use { server ->
                 val dest = joinPath(dir, "big.bin")
                 val http = Http(null, Report.silent()).withMaxDownload(64 * 1024)
@@ -116,7 +118,8 @@ class HttpTest {
     @Test
     fun aCancelledDownloadLeavesNoFileBehind(): Unit =
         withTempDir { dir ->
-            val reply = "HTTP/1.1 200 OK\r\nContent-Length: 1048576\r\n\r\n".encodeToByteArray() + ByteArray(1024 * 1024) { 7 }
+            val bodySize = 96 * 1024
+            val reply = "HTTP/1.1 200 OK\r\nContent-Length: $bodySize\r\nConnection: close\r\n\r\n".encodeToByteArray() + ByteArray(bodySize) { 7 }
             LoopbackServer { reply }.use { server ->
                 val cancel = Cancel()
                 val stopAfterFirstChunk =
