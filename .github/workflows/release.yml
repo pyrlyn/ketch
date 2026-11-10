@@ -115,10 +115,12 @@ jobs:
         include:
           - os: macos-15
             target: macosArm64
+            bootstrap: MacosArm64
             triple: aarch64-apple-darwin
             command: ./gradlew build :ketch:linkReleaseExecutableMacosArm64 --console=plain
           - os: ubuntu-latest
             target: linuxX64
+            bootstrap: LinuxX64 linkDebugExecutableLinuxArm64
             triple: x86_64-unknown-linux-gnu
             command: ./gradlew -Pdiffuser.allTargets=true linuxX64Test :ketch:linkReleaseExecutableLinuxX64 --continue --console=plain
     defaults:
@@ -141,8 +143,13 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ~/.konan
-          key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml', 'mise.toml') }}
+          key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml', 'mise.toml', 'scripts/ci/konan-bootstrap/**') }}
           restore-keys: konan-${{ runner.os }}-
+      - name: Prepare the Kotlin/Native toolchain
+        run: |
+          set -euo pipefail
+          KOTLIN_VERSION="$(sed -nE 's/^kotlin = "([^"]+)"$/\1/p' gradle/libs.versions.toml)" \
+            ./gradlew -p scripts/ci/konan-bootstrap linkDebugExecutable${{ matrix.bootstrap }} --console=plain
       - name: Test and build
         run: ${{ matrix.command }}
       - name: Smoke test
