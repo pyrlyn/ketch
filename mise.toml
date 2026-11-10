@@ -3,6 +3,7 @@
 [tools]
 java = "temurin-21"   # JDK for Gradle, the Kotlin daemon and the desktop app
 gradle = "9.8.2"      # same as the wrapper
+conan = "2.33.0"      # kotlin-kit :archive links bzip2/liblzma from ConanCenter (`conan install` during the build)
 
 [tasks.release]
 description = "Release binary, full whole-program optimization (for shipping)"
