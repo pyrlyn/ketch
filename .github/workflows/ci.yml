@@ -1,5 +1,6 @@
 # CI for the ketch CLI: build, lint and test on every push to main and every pull request.
-# macOS arm64 runs the full `./gradlew build` (lint, every test, desktop); Linux x64 runs the
+# macOS arm64 runs lint and the macosArm64 tests (Windows cross-builds stay out: they need a source-built
+# Conan toolchain); Linux x64 runs the
 # linuxX64 tests and links the release binary. Shared builds come from pyrlyn/packages at a pinned tag.
 name: CI
 on:
@@ -30,7 +31,7 @@ jobs:
           - os: macos-15
             target: macosArm64
             bootstrap: MacosArm64
-            command: ./gradlew build :ketch:linkReleaseExecutableMacosArm64 --console=plain
+            command: ./gradlew macosArm64Test ktlintCheck detekt :ketch:linkReleaseExecutableMacosArm64 --console=plain
           - os: ubuntu-latest
             target: linuxX64
             bootstrap: LinuxX64 linkDebugExecutableLinuxArm64
@@ -57,6 +58,10 @@ jobs:
           path: ~/.konan
           key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml', 'mise.toml', 'scripts/ci/konan-bootstrap/**') }}
           restore-keys: konan-${{ runner.os }}-
+      - name: Linux system libraries
+        if: runner.os == 'Linux'
+        # The ketch-core test binary links libunistring, which the runner image has only as a runtime library.
+        run: sudo apt-get update -q && sudo apt-get install -y -q libunistring-dev
       - name: Prepare the Kotlin/Native toolchain
         run: |
           set -euo pipefail

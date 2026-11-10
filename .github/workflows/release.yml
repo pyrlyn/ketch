@@ -117,7 +117,7 @@ jobs:
             target: macosArm64
             bootstrap: MacosArm64
             triple: aarch64-apple-darwin
-            command: ./gradlew build :ketch:linkReleaseExecutableMacosArm64 --console=plain
+            command: ./gradlew macosArm64Test ktlintCheck detekt :ketch:linkReleaseExecutableMacosArm64 --console=plain
           - os: ubuntu-latest
             target: linuxX64
             bootstrap: LinuxX64 linkDebugExecutableLinuxArm64
@@ -145,6 +145,10 @@ jobs:
           path: ~/.konan
           key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml', 'mise.toml', 'scripts/ci/konan-bootstrap/**') }}
           restore-keys: konan-${{ runner.os }}-
+      - name: Linux system libraries
+        if: runner.os == 'Linux'
+        # The ketch-core test binary links libunistring, which the runner image has only as a runtime library.
+        run: sudo apt-get update -q && sudo apt-get install -y -q libunistring-dev
       - name: Prepare the Kotlin/Native toolchain
         run: |
           set -euo pipefail
