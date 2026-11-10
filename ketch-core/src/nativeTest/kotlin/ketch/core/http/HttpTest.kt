@@ -16,6 +16,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import loopback.LoopbackServer
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -171,4 +172,92 @@ class HttpTest {
             path.write("abc")
             assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", sha256File(path))
         }
+
+    /**
+     * The Curl engine on Linux cancels the body channel when the caller stops mid-stream; that must
+     * not hide the refusal already thrown (a size cap, or a user cancel).
+     */
+    @Test
+    fun aTransportCancelOnCloseDoesNotHideTheDownloadRefusal(): Unit =
+        withTempDir { dir ->
+            val dest = joinPath(dir, "big.bin")
+            val err =
+                assertFailsWith<KetchError> {
+                    download(Http(null, Report.silent(), client = cancellingOnClose(streamingBody())).withMaxDownload(64 * 1024), "https://x/big.bin", dest)
+                }
+            assertTrue("refusing the download" in err.message, err.message)
+            assertTrue("max_download_mib" in err.message, err.message)
+            assertEquals(emptyList(), SystemFileSystem.list(dir))
+        }
+
+    @Test
+    fun aTransportCancelOnCloseDoesNotHideAUserCancel(): Unit =
+        withTempDir { dir ->
+            val cancel = Cancel()
+            val stopAfterFirstChunk =
+                object : ProgressSink {
+                    override fun start(
+                        total: Long?,
+                        label: String,
+                    ) = Unit
+
+                    override fun advance(delta: Long) = cancel.cancel()
+
+                    override fun finish(message: String) = Unit
+                }
+            val dest = joinPath(dir, "c.bin")
+            assertFailsWith<KetchError.Cancelled> {
+                download(Http(null, Report.silent(), client = cancellingOnClose(streamingBody())), "https://x/c.bin", dest, stopAfterFirstChunk, cancel)
+            }
+            assertEquals(emptyList(), SystemFileSystem.list(dir))
+        }
 }
+
+/** A body that yields more than the 64 KiB cap used in the close-on-cancel tests, in more than one chunk. */
+private fun streamingBody(): HttpClient =
+    object : HttpClient {
+        override suspend fun post(req: HttpRequest) = error("no POST")
+
+        override suspend fun <T> stream(
+            req: HttpRequest,
+            handle: suspend (HttpHead, HttpBody) -> T,
+        ): T {
+            val body =
+                object : HttpBody {
+                    var left = 256 * 1024
+
+                    override suspend fun read(buffer: ByteArray): Int {
+                        if (left <= 0) return -1
+                        val n = minOf(buffer.size, left, 32 * 1024)
+                        left -= n
+                        return n
+                    }
+                }
+            return handle(HttpHead(200, emptyList()), body)
+        }
+
+        override fun close() = Unit
+    }
+
+/**
+ * Drops the handler's exception and throws [CancellationException], as the Curl engine does on Linux
+ * when the response body is closed mid-stream.
+ */
+private fun cancellingOnClose(inner: HttpClient): HttpClient =
+    object : HttpClient {
+        override suspend fun post(req: HttpRequest) = inner.post(req)
+
+        override suspend fun <T> stream(
+            req: HttpRequest,
+            handle: suspend (HttpHead, HttpBody) -> T,
+        ): T =
+            try {
+                inner.stream(req, handle)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: KetchError) {
+                throw CancellationException("curl body closed", e)
+            }
+
+        override fun close() = inner.close()
+    }
