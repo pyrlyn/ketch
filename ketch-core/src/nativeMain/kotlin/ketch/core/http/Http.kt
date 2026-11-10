@@ -183,7 +183,7 @@ class Http(
         cancel.check()
         report.debug("GET $url -> $dest")
         val req = request(url, "application/octet-stream", authed, headers)
-        return runBlocking {
+        return httpBlocking {
             stream(url, req) { head, body ->
                 val total = head.header("Content-Length")?.toLongOrNull()?.takeIf { it > 0 }
                 if (total != null && total > maxDownload) throw tooLarge(url, maxDownload)
@@ -226,7 +226,7 @@ class Http(
         url: String,
         req: HttpRequest,
         read: suspend (HttpBody) -> T,
-    ): T = runBlocking { stream(url, req) { _, body -> read(body) } }
+    ): T = httpBlocking { stream(url, req) { _, body -> read(body) } }
 
     /**
      * [HttpClient.stream] with an error status classified and a request that got no response made a network error.
@@ -252,6 +252,26 @@ class Http(
         } catch (e: CancellationException) {
             throwKept(refusal, e)
         }
+    }
+}
+
+/**
+ * Run [block] on this thread. The Curl engine's worker is a child of this scope and may throw
+ * [CancellationException] after [block] has already failed with a [KetchError]; keep the [KetchError].
+ */
+private fun <T> httpBlocking(block: suspend () -> T): T {
+    var refusal: KetchError? = null
+    return try {
+        runBlocking {
+            try {
+                block()
+            } catch (e: KetchError) {
+                refusal = e
+                throw e
+            }
+        }
+    } catch (e: CancellationException) {
+        throwKept(refusal, e)
     }
 }
 
