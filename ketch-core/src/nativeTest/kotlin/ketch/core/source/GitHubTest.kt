@@ -8,6 +8,7 @@ import ketch.core.model.ReleaseAsset
 import ketch.core.model.Version
 import ketch.core.model.VersionSpec
 import ketch.core.report.Report
+import ketch.core.testing.withFreshHttp
 import loopback.LoopbackServer
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -164,8 +165,10 @@ class GitHubTest {
     @Test
     fun anExactTagNotOnTheFirstListPageIsStillResolved() {
         LoopbackServer(::serveReleaseList).use { server ->
-            val got = source(server.url).resolve("acme/busy", VersionSpec.Exact("old-0.1.0"), ListOpts())
-            assertEquals("old-0.1.0", got.tag)
+            withFreshHttp { http ->
+                val got = GitHubSource(http, server.url).resolve("acme/busy", VersionSpec.Exact("old-0.1.0"), ListOpts())
+                assertEquals("old-0.1.0", got.tag)
+            }
         }
     }
 
