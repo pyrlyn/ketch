@@ -10,6 +10,7 @@ import ketch.core.error.KetchError
 import ketch.core.report.ProgressSink
 import ketch.core.report.Report
 import ketch.core.report.SilentProgress
+import ketch.core.testing.withFreshHttp
 import ketch.core.testing.withTempDir
 import ketch.core.testing.write
 import kotlinx.coroutines.runBlocking
@@ -85,11 +86,12 @@ class HttpTest {
             val reply = "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".encodeToByteArray() + ByteArray(96 * 1024) { 7 }
             LoopbackServer { reply }.use { server ->
                 val dest = joinPath(dir, "big.bin")
-                val http = Http(null, Report.silent()).withMaxDownload(64 * 1024)
-                val err = assertFailsWith<KetchError> { download(http, "${server.url}/big.bin", dest) }
-                assertTrue("refusing the download" in err.message, err.message)
-                assertTrue("max_download_mib" in err.message, err.message)
-                assertEquals(emptyList(), SystemFileSystem.list(dir), "no staging file")
+                withFreshHttp { http ->
+                    val err = assertFailsWith<KetchError> { download(http.withMaxDownload(64 * 1024), "${server.url}/big.bin", dest) }
+                    assertTrue("refusing the download" in err.message, err.message)
+                    assertTrue("max_download_mib" in err.message, err.message)
+                    assertEquals(emptyList(), SystemFileSystem.list(dir), "no staging file")
+                }
             }
         }
 
@@ -134,10 +136,12 @@ class HttpTest {
                         override fun finish(message: String) = Unit
                     }
                 val dest = joinPath(dir, "c.bin")
-                assertFailsWith<KetchError.Cancelled> {
-                    download(Http(null, Report.silent()), "${server.url}/c.bin", dest, stopAfterFirstChunk, cancel)
+                withFreshHttp { http ->
+                    assertFailsWith<KetchError.Cancelled> {
+                        download(http, "${server.url}/c.bin", dest, stopAfterFirstChunk, cancel)
+                    }
+                    assertEquals(emptyList(), SystemFileSystem.list(dir))
                 }
-                assertEquals(emptyList(), SystemFileSystem.list(dir))
             }
         }
 
@@ -147,9 +151,11 @@ class HttpTest {
         withTempDir { dir ->
             LoopbackServer { "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nabc".encodeToByteArray() }.use { server ->
                 val dest = joinPath(dir, "sub/f")
-                val hex = download(Http(null, Report.silent()), "${server.url}/f", dest)
-                assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", hex)
-                assertEquals(hex, sha256File(dest))
+                withFreshHttp { http ->
+                    val hex = download(http, "${server.url}/f", dest)
+                    assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", hex)
+                    assertEquals(hex, sha256File(dest))
+                }
             }
         }
 
@@ -161,11 +167,12 @@ class HttpTest {
             val body = """{"message":"API rate limit exceeded"}"""
             "HTTP/1.1 $status\r\nContent-Length: ${body.length}\r\n\r\n$body".encodeToByteArray()
         }.use { server ->
-            val http = Http(null, Report.silent())
-            val err = assertFailsWith<KetchError.Http> { http.getText("${server.url}/limited", authed = false) }
-            assertEquals(403, err.status)
-            assertEquals("API rate limit exceeded", err.detail)
-            assertNull(http.getJsonOpt<Map<String, String>>("${server.url}/missing", authed = false))
+            withFreshHttp { http ->
+                val err = assertFailsWith<KetchError.Http> { http.getText("${server.url}/limited", authed = false) }
+                assertEquals(403, err.status)
+                assertEquals("API rate limit exceeded", err.detail)
+                assertNull(http.getJsonOpt<Map<String, String>>("${server.url}/missing", authed = false))
+            }
         }
 
     @Test
