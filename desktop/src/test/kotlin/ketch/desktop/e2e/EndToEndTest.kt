@@ -126,6 +126,13 @@ class EndToEndTest {
             }
             assertEquals(null, store.state.value.error)
             settled()
+            // A search shows only the latest version the core has cached, and the listing that caches it races the one
+            // the page starts itself; asking in this order leaves one answer to draw.
+            runBlocking {
+                store.refresh()
+                store.search(name)
+            }
+            test.waitForIdle()
         }
 
         fun discoverAndInstall() {

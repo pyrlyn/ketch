@@ -27,8 +27,8 @@ private val system =
 
 private val references = File("e2e/references/$system")
 
-// Identical on one machine; this leaves room for a font rasterizer's update, which moves a few edge pixels of text.
-private const val CHANGED_SHARE = 0.002f
+// 96 pixels: a label's changed word moves thousands, and the log's size on the Doctor screen moves a digit between runs on Windows.
+private const val CHANGED_SHARE = 0.0001f
 private const val SETTLE_MILLIS = 500L
 private const val MAX_LOOKS = 20
 
