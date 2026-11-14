@@ -16,6 +16,7 @@ dependencies {
     implementation("pyrlyn.glass:glass")
     implementation(libs.kotlinx.coroutines.swing)
     implementation(libs.markdown.renderer.m3)
+    implementation(libs.jna)
     @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
     testImplementation(compose.uiTest)
 }
