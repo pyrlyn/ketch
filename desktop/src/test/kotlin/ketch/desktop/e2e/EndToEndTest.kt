@@ -133,6 +133,13 @@ class EndToEndTest {
                 store.search(name)
             }
             test.waitForIdle()
+            // A search card only shows the latest version once the listing cache has it.
+            // Wait on that field, not on the word "Latest": Glass never writes that word.
+            test.waitUntil(timeoutMillis = TIMEOUT) {
+                store.state.value.search.known
+                    .any { it.name == name && it.latest != null }
+            }
+            test.waitForIdle()
         }
 
         fun discoverAndInstall() {
