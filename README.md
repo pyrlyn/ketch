@@ -34,6 +34,15 @@ release binary. `packageDmg` (or `packageDeb`, `packageMsi` on those hosts) buil
 with the release `ketch` inside; `:desktop:run` uses the same one and `:desktop:hotRun` the debug one,
 unless `KETCH_EXE` names another.
 
+## Releasing
+
+The version has one source: `VERSION` in `ketch-core/src/commonMain/kotlin/ketch/core/Version.kt`.
+Bump it through a PR, then run the `release` workflow on `main` with `dry-run` off. It tests,
+links and smoke-tests the macOS arm64 and Linux x64 binaries, and creates a draft prerelease
+`v<VERSION>` on that main commit with the tarballs, their `.sha256` files and `SHA256SUMS`;
+publishing the draft creates the tag. It refuses a version whose tag already exists. CI
+(`.github/workflows/ci.yml`) builds and tests both targets on every push and pull request.
+
 ## License
 
 The same terms as ketch: GPL-3.0-or-later, the ketch royalty-free licence or a commercial licence.

@@ -34,6 +34,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.serializer
+import kotlin.coroutines.cancellation.CancellationException
 
 private const val MIB = 1024L * 1024
 
@@ -182,7 +183,7 @@ class Http(
         cancel.check()
         report.debug("GET $url -> $dest")
         val req = request(url, "application/octet-stream", authed, headers)
-        return runBlocking {
+        return httpBlocking {
             stream(url, req) { head, body ->
                 val total = head.header("Content-Length")?.toLongOrNull()?.takeIf { it > 0 }
                 if (total != null && total > maxDownload) throw tooLarge(url, maxDownload)
@@ -225,22 +226,69 @@ class Http(
         url: String,
         req: HttpRequest,
         read: suspend (HttpBody) -> T,
-    ): T = runBlocking { stream(url, req) { _, body -> read(body) } }
+    ): T = httpBlocking { stream(url, req) { _, body -> read(body) } }
 
-    /** [HttpClient.stream] with an error status classified and a request that got no response made a network error. */
+    /**
+     * [HttpClient.stream] with an error status classified and a request that got no response made a network error.
+     *
+     * The Curl engine (Linux) cancels the body channel when [handle] stops mid-stream, and that
+     * [CancellationException] can replace the refusal [handle] already threw (a size cap or a user
+     * cancel). Keep the refusal.
+     */
     private suspend fun <T> stream(
         url: String,
         req: HttpRequest,
         handle: suspend (http.HttpHead, HttpBody) -> T,
-    ): T =
-        try {
+    ): T {
+        var refusal: KetchError? = null
+        return try {
             client.stream(req) { head, body ->
-                if (head.status >= FIRST_ERROR_STATUS) throw statusError(url, head.status, body)
-                handle(head, body)
+                runCatching { openStream(url, head, body, handle) }
+                    .onFailure { e -> if (e is KetchError) refusal = e }
+                    .getOrThrow()
             }
         } catch (e: HttpException) {
-            throw KetchError.Network(url, e)
+            throwKept(refusal, KetchError.Network(url, e))
+        } catch (e: CancellationException) {
+            throwKept(refusal, e)
         }
+    }
+}
+
+/**
+ * Run [block] on this thread. The Curl engine's worker is a child of this scope and may throw
+ * [CancellationException] after [block] has already failed with a [KetchError]; keep the [KetchError].
+ */
+private fun <T> httpBlocking(block: suspend () -> T): T {
+    var refusal: KetchError? = null
+    return try {
+        runBlocking {
+            try {
+                block()
+            } catch (e: KetchError) {
+                refusal = e
+                throw e
+            }
+        }
+    } catch (e: CancellationException) {
+        throwKept(refusal, e)
+    }
+}
+
+/** Prefer the handler's own refusal when a later transport exception would hide it. */
+private fun throwKept(
+    refusal: KetchError?,
+    fallback: Exception,
+): Nothing = throw (refusal ?: fallback)
+
+private suspend fun <T> openStream(
+    url: String,
+    head: http.HttpHead,
+    body: HttpBody,
+    handle: suspend (http.HttpHead, HttpBody) -> T,
+): T {
+    if (head.status >= FIRST_ERROR_STATUS) throw statusError(url, head.status, body)
+    return handle(head, body)
 }
 
 /** A whole response's body, or the error its status is. */

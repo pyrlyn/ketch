@@ -1,7 +1,7 @@
 package ketch.core.process
 
-import fs.joinPath
 import fs.bytesIfExists
+import fs.joinPath
 import fs.listDir
 import fs.readLink
 import ketch.core.report.Report
