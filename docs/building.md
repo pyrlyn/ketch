@@ -35,7 +35,15 @@ unless `KETCH_EXE` names another.
 ```bash
 ./gradlew build                    # everything: compile, tests, ktlint, detekt
 ./gradlew macosArm64Test           # native unit tests
+./gradlew :desktop:e2e             # desktop app, real ketch, screenshot comparison
 ```
 
 Tests never touch the real `HOME`: the build points `HOME` and `KETCH_HOME` at `build/test-home`
 for every native test run, and no test uses the network.
+
+`:desktop:e2e` is separate from `test` because it needs the linked `ketch` and compares screens
+with references that are only valid on the system that recorded them (`desktop/e2e/references/<system>/`).
+`desktop/e2e/linux/run.sh` runs the same tests in a Docker image on Colima, and
+`desktop/e2e/windows/run.sh` in a Parallels Windows VM. `-Pe2e.record` writes the references
+instead of comparing. A failed comparison leaves `<screen>_compare.png` and `<screen>_actual.png`
+in `desktop/build/e2e`.

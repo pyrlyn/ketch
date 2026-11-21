@@ -182,8 +182,6 @@ tasks.register<Test>("e2e") {
     testLogging.showStandardStreams = true
 }
 
-}
-
 // The accessors for src/main/composeResources, in a package of ours rather than one named after the build.
 compose.resources {
     packageOfResClass = "ketch.desktop.strings"
