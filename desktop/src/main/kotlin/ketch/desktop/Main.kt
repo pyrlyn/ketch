@@ -267,6 +267,7 @@ private fun contentUnderTitleBar(window: ComposeWindow) {
     window.rootPane.putClientProperty("apple.awt.fullWindowContent", true)
     window.rootPane.putClientProperty("apple.awt.transparentTitleBar", true)
     window.rootPane.putClientProperty("apple.awt.windowTitleVisible", false)
+    System.getenv("KETCH_TOOLBAR")?.let { tallTitleBar(window, it.toLong()) }
 }
 
 /** Without the system's frame a window maximizes over the whole screen; the taskbar's room has to be asked for. */

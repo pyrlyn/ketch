@@ -8,6 +8,7 @@ kotest = "6.2.6"
 kotlincrypto-hash = "0.8.0"
 json-schema-validator = "0.5.5"
 sqldelight = "2.4.1"
+jna = "5.19.1"
 markdown-renderer = "0.46.0"
 
 [libraries]
@@ -18,6 +19,7 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 kotlinx-io-core = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version.ref = "kotlinx-io" }
 kotlincrypto-sha2 = { module = "org.kotlincrypto.hash:sha2", version.ref = "kotlincrypto-hash" }
 kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 markdown-renderer-m3 = { module = "com.mikepenz:multiplatform-markdown-renderer-m3", version.ref = "markdown-renderer" }
 json-schema-validator = { module = "io.github.optimumcode:json-schema-validator", version.ref = "json-schema-validator" }
 
