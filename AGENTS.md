@@ -24,6 +24,31 @@ its output, the config and manifest TOML, `ketch.lock`, `state.json`, the `~/.ke
 | `buildSrc/` | Convention plugins `ketch.kmp` and `ketch.compose` |
 | `plan/` | Tasks, one folder per task; `plan/README.md` holds the port map and decisions |
 
+## Design
+
+The Windows (Fluent) look of the desktop app is designed in Figma:
+[ketch Store — Windows 11](https://www.figma.com/design/gZ6nDsVkPPKjGlZSdbEPdq).
+
+| Page | What |
+| --- | --- |
+| [Foundations](https://www.figma.com/design/gZ6nDsVkPPKjGlZSdbEPdq?node-id=2-2) | Variables `Color` (modes Light / Dark) and `Size`, text styles, effect styles (Acrylic window, flyout, card glass) |
+| [UI Kit](https://www.figma.com/design/gZ6nDsVkPPKjGlZSdbEPdq?node-id=2-3) | The Ketch Windows 11 component library: icons, Button, StatusBadge, TextBox, ToggleSwitch, NavigationItem, TitleBar, AppIcon, ListItem, SettingsCard, AppTile, ContentDialog and more |
+| [Screens](https://www.figma.com/design/gZ6nDsVkPPKjGlZSdbEPdq?node-id=2-4) | Every screen of the app, built only from UI Kit instances, plus a dark-mode copy of Discover |
+
+When you work on the Windows look (`desktop/…/ui/fluent/`):
+
+- Read the screen in Figma first (Figma MCP `get_design_context` / `get_screenshot` on the frame)
+  and build it from the matching `kotlin-fluent` component; the UI Kit component's description
+  says what it is for.
+- Colours, spacing and radii come from `desktop/design/tokens.json` in code. Each Figma variable
+  carries its CSS name as code syntax (`var(--accent)`); when the two disagree, `tokens.json` wins
+  and the Figma variable is the one to fix.
+- New screens or components in Figma are built from UI Kit instances and bound to its variables
+  and styles, never from raw colours or detached copies. Add a missing control to the UI Kit
+  first, then use it.
+- Figma uses Open Sans because Segoe UI Variable is not available there; the app uses the
+  system's Segoe UI Variable.
+
 ## Build and test
 
 Needs JDK 21 and the `shared-settings`, `kotlin-kit`, `kotlin-snapshot`, `kotlin-glass`, `kotlin-fluent` and `kotlin-adwaita` builds in
