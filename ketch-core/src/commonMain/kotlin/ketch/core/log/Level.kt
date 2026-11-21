@@ -94,8 +94,10 @@ abstract class ParsedSerializer<T : Any>(
         }
 }
 
+/** Reads and writes a [Level], parsed from its text form. */
 object LevelSerializer : ParsedSerializer<Level>("ketch.core.log.Level", Level::parse)
 
+/** Reads and writes a [Format], parsed from its text form. */
 object FormatSerializer : ParsedSerializer<Format>("ketch.core.log.Format", Format::parse)
 
 /**

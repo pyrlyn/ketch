@@ -8,6 +8,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonIgnoreUnknownKeys
 
+/** A published checksum of a release asset. */
 @Serializable
 @JsonIgnoreUnknownKeys
 data class Checksum(
@@ -20,6 +21,7 @@ data class Checksum(
     }
 }
 
+/** One downloadable file of a release, with its published [Checksum] when the source gives one. */
 @Serializable
 @JsonIgnoreUnknownKeys
 data class ReleaseAsset(
@@ -33,6 +35,7 @@ data class ReleaseAsset(
     @Serializable(with = SortedStringMapSerializer::class) val headers: Map<String, String> = emptyMap(),
 )
 
+/** One release of a package, as a source lists it. */
 @Serializable
 @JsonIgnoreUnknownKeys
 data class Release(
