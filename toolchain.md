@@ -15,6 +15,8 @@
 | conan 2.33.0 | mise (kotlin-kit) | Fetches the static bzip2 and liblzma that kotlin-kit's `archive` links | https://github.com/conan-io/conan |
 | zlib | Kotlin/Native platform library (`platform.zlib`), via kotlin-kit | gzip and deflate in archives | https://zlib.net |
 | hdiutil, pkgutil, ditto | macOS system | Unpacking `.dmg` and `.pkg` releases | https://developer.apple.com |
+| Docker on Colima | Homebrew | Runs `:desktop:e2e` on Linux, in `desktop/e2e/linux/Dockerfile` (Temurin 21, Cantarell, Xvfb) | https://github.com/abiosoft/colima |
+| Parallels Desktop | Parallels installer | The Windows 11 VM `desktop/e2e/windows/run.sh` runs `:desktop:e2e` in | https://www.parallels.com |
 
 ## Gradle
 
@@ -39,6 +41,7 @@
 | io.kotest:kotest-assertions-core 6.2.6 | local | https://github.com/kotest/kotest | Test assertions |
 | io.github.optimumcode:json-schema-validator 0.5.5 | local | https://github.com/OptimumCode/json-schema-validator | Tests: manifests and config against the schemas Rust ketch publishes (Rust: jsonschema) |
 | org.jetbrains.kotlin:kotlin-test | local | https://github.com/JetBrains/kotlin | Tests |
+| io.github.takahirom.roborazzi:roborazzi-compose-desktop 1.77.0 | local | https://github.com/takahirom/roborazzi | Tests: compares `:desktop:e2e`'s screens with their references and draws the diff |
 | Compose Multiplatform 1.12.2 (`org.jetbrains.compose`) | local | https://github.com/JetBrains/compose-multiplatform | Desktop UI, its strings (`compose.components.resources`), and its UI tests (`compose.uiTest`) |
 | com.mikepenz:multiplatform-markdown-renderer-m3 0.46.0 | local | https://github.com/mikepenz/multiplatform-markdown-renderer | Changelog Markdown in the desktop app (macOS app: `AttributedString(markdown:)`) |
 | org.jlleitschuh.gradle.ktlint 14.2.0 (ktlint 1.8.0) | via shared-settings | https://github.com/JLLeitschuh/ktlint-gradle | Formatting lint |

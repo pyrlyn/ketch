@@ -21,6 +21,7 @@ its output, the config and manifest TOML, `ketch.lock`, `state.json`, the `~/.ke
 | `ketch/` | The `ketch` executable; port of `src/` (`cli.rs`, `cmd/`, `ui.rs`, …) |
 | `ketch-wire/` | Records and JSON-lines protocol between `ketch serve` and the desktop app (port of `crates/ketch-ffi`'s surface); built for native and jvm |
 | `desktop/` | Compose desktop app (JVM); runs the native `ketch`. Glass on macOS (`ui/glass/`), Fluent on Windows (`ui/fluent/`), Adwaita on Linux (`ui/adwaita/`), Material 3 elsewhere (`ui/screens/`) |
+| `desktop/e2e/` | The end-to-end tests' data, each system's reference images and the Linux and Windows runs; the tests are in `desktop/src/test/kotlin/ketch/desktop/e2e/` |
 | `buildSrc/` | Convention plugins `ketch.kmp` and `ketch.compose` |
 | `plan/` | Tasks, one folder per task; `plan/README.md` holds the port map and decisions |
 
@@ -98,7 +99,14 @@ logic: what is ketch's stays in
 ./gradlew :desktop:run             # the desktop app; KETCH_LOOK=fluent shows another system's look
 ./gradlew :desktop:packageDmg      # the app's package, with the release ketch inside
 ./gradlew ktlintFormat             # fix formatting
+./gradlew :desktop:e2e             # the window, the real ketch and a stand-in GitHub, every screen against its reference
+desktop/e2e/linux/run.sh           # the same on Linux, in a Docker image on Colima
+desktop/e2e/windows/run.sh         # the same in the Parallels Windows VM
 ```
+
+`-Pe2e.record`, on any of the three, writes the references instead of comparing. A failed comparison leaves
+`<screen>_compare.png` and `<screen>_actual.png` in `desktop/build/e2e`. A change that moves a screen records on all three
+systems, since each draws its own fonts, and every changed image is looked at before it is committed.
 
 ## Rules
 

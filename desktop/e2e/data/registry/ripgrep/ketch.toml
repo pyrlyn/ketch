@@ -1,0 +1,3 @@
+source = "github:BurntSushi/ripgrep"
+description = "Recursively searches directories for a regex pattern"
+homepage = "https://github.com/BurntSushi/ripgrep"

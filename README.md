@@ -37,6 +37,7 @@ The command line matches Rust ketch; `ketch --help` and `ketch <command> --help`
 - [Building](docs/building.md): toolchain, shared builds, Gradle and mise tasks, packaging, tests.
 - [Architecture](docs/architecture.md): modules and how they fit together.
 - [Contributing](docs/contributing.md): rules for changes.
+- Desktop end-to-end screenshots: `./gradlew :desktop:e2e` (see [Building](docs/building.md)).
 
 ## Releasing
 

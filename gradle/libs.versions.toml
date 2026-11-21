@@ -9,8 +9,10 @@ kotlincrypto-hash = "0.8.0"
 json-schema-validator = "0.5.5"
 sqldelight = "2.4.1"
 markdown-renderer = "0.46.0"
+roborazzi = "1.77.0"
 
 [libraries]
+roborazzi-compose-desktop = { module = "io.github.takahirom.roborazzi:roborazzi-compose-desktop", version.ref = "roborazzi" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }

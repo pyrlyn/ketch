@@ -1,0 +1,3 @@
+source = "github:sharkdp/bat"
+description = "A cat clone with wings"
+homepage = "https://github.com/sharkdp/bat"
