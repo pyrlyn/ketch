@@ -192,4 +192,81 @@ class ScoringTest {
         assertTrue(isSidecar("bundle.intoto.jsonl"))
         assertFalse(isSidecar("rg-14.tar.gz"))
     }
+
+    @Test
+    fun normalizesKotlinNativePlatformNames() {
+        assertEquals("macos-arm64", normalizeAssetName("macosArm64"))
+        assertEquals("macos-x64", normalizeAssetName("macosX64"))
+        assertEquals("linux-x64", normalizeAssetName("linuxX64"))
+        assertEquals("linux-arm64", normalizeAssetName("linuxArm64"))
+        assertEquals("mingw-x64", normalizeAssetName("mingwX64"))
+        assertEquals("windows-x64", normalizeAssetName("windowsX64"))
+        // Already lowercased packed names, with no camelCase boundary, still split.
+        assertEquals("macos-arm64", normalizeAssetName("macosarm64"))
+        assertEquals("linux-x64", normalizeAssetName("linuxx64"))
+        // Existing hyphenated names and Rust triples stay the same.
+        assertEquals("macos-arm64", normalizeAssetName("macos-arm64"))
+        assertEquals("rg-14.1.0-aarch64-apple-darwin.tar.gz", normalizeAssetName("rg-14.1.0-aarch64-apple-darwin.tar.gz"))
+        // macosx is itself an alias, not mac + osx; install/darwin must not be split on all/win.
+        assertEquals("macosx", normalizeAssetName("macosx"))
+        assertEquals("install", normalizeAssetName("install"))
+        assertEquals("darwin", normalizeAssetName("darwin"))
+        assertFalse("x64" in normalizeAssetName("macosArm64"), "x64 must not be carved out of arm64")
+        // Lowercasing first must leave dSYM as the whole token dsym, not d-sym.
+        assertEquals("tool-macos-arm64.dsym.zip", normalizeAssetName("tool-macos-arm64.dSYM.zip"))
+    }
+
+    @Test
+    fun scoresExactRtokKotlinNativeReleaseAssets() {
+        val macos = assertNotNull(scoreMacosAsset("rtok-v0.18.0-alpha.3-macosArm64.tar.gz", Arch.Aarch64, true))
+        assertEquals(Arch.Aarch64, macos.arch)
+        assertFalse(macos.emulated)
+        assertEquals("macos / aarch64 / tar.gz", macos.reason)
+        assertNull(scoreMacosAsset("rtok-v0.18.0-alpha.3-linuxX64.tar.gz", Arch.Aarch64, true))
+        assertNull(scoreMacosAsset("SHA256SUMS", Arch.Aarch64, true))
+
+        val linux = assertNotNull(scoreLinuxAsset("rtok-v0.18.0-alpha.3-linuxX64.tar.gz", Arch.X86_64, true, false))
+        assertEquals(Arch.X86_64, linux.arch)
+        assertFalse(linux.emulated)
+        assertNull(scoreLinuxAsset("rtok-v0.18.0-alpha.3-macosArm64.tar.gz", Arch.X86_64, true, false))
+        assertNull(scoreLinuxAsset("SHA256SUMS", Arch.X86_64, true, false))
+    }
+
+    @Test
+    fun scoresKotlinNativeAliasesOnEachOs() {
+        val macosX64OnArm = assertNotNull(scoreMacosAsset("tool-macosX64.tar.gz", Arch.Aarch64, true))
+        assertTrue(macosX64OnArm.emulated)
+        assertEquals(Arch.X86_64, macosX64OnArm.arch)
+        assertNull(scoreMacosAsset("tool-macosX64.tar.gz", Arch.Aarch64, false))
+        val macosX64Native = assertNotNull(scoreMacosAsset("tool-macosX64.tar.gz", Arch.X86_64, true))
+        assertFalse(macosX64Native.emulated)
+
+        val linuxArm = assertNotNull(scoreLinuxAsset("tool-linuxArm64.tar.gz", Arch.Aarch64, true, false))
+        assertEquals(Arch.Aarch64, linuxArm.arch)
+        assertFalse(linuxArm.emulated)
+        val linuxX64OnArm = assertNotNull(scoreLinuxAsset("tool-linuxX64.tar.gz", Arch.Aarch64, true, false))
+        assertTrue(linuxX64OnArm.emulated)
+
+        val mingw = assertNotNull(scoreWindowsAsset("tool-mingwX64.zip", Arch.X86_64))
+        assertEquals(Arch.X86_64, mingw.arch)
+        assertFalse(mingw.emulated)
+        assertNotNull(scoreWindowsAsset("tool-windowsX64.zip", Arch.X86_64))
+        assertNull(scoreMacosAsset("tool-mingwX64.zip", Arch.Aarch64, true))
+        assertNull(scoreLinuxAsset("tool-mingwX64.zip", Arch.X86_64, true, false))
+        assertNull(scoreWindowsAsset("tool-macosArm64.tar.gz", Arch.X86_64))
+        assertNull(scoreWindowsAsset("tool-linuxX64.tar.gz", Arch.X86_64))
+    }
+
+    @Test
+    fun prefersNativeKotlinNativeAssetOverEmulated() {
+        val native = assertNotNull(scoreMacosAsset("rtok-macosArm64.tar.gz", Arch.Aarch64, true))
+        val rosetta = assertNotNull(scoreMacosAsset("rtok-macosX64.tar.gz", Arch.Aarch64, true))
+        assertTrue(native.score > rosetta.score)
+    }
+
+    @Test
+    fun camelCaseBinaryNamesLookLikeBuildArtifacts() {
+        assertTrue(looksLikeBuildArtifact("jq-macosArm64"))
+        assertTrue(looksLikeBuildArtifact("jq-linuxX64"))
+    }
 }
