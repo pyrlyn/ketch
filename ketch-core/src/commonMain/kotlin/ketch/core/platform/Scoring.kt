@@ -36,6 +36,72 @@ fun findToken(
     tokens: List<String>,
 ): String? = tokens.firstOrNull { tokenAt(haystack, it) }
 
+/**
+ * File-name form used for token matching. ASCII case is folded first, then adjacent known
+ * OS and architecture tokens packed into one run are split, so Kotlin/Native names such as
+ * `macosArm64` and the already-lowercased spelling `macosarm64` both become `macos-arm64`.
+ * Lowercasing first keeps markers like `dSYM` as the whole token `dsym`.
+ */
+fun normalizeAssetName(name: String): String = separatePackedTokens(name.trim().asciiLowercase())
+
+/** Known OS and architecture aliases, longest first, so `macosx` is not split into `mac` + `osx`. */
+private val PLATFORM_TOKENS: List<String> =
+    (Os.entries.flatMap { it.tokens } + Arch.entries.flatMap { it.tokens })
+        .filter { it.isNotEmpty() }
+        .distinct()
+        .sortedByDescending { it.length }
+
+/**
+ * Insert a hyphen between adjacent known OS or architecture tokens packed into one
+ * alphanumeric run. The longest token that leaves a clean remainder — the end of
+ * the name, a non-alphanumeric, or another known token — wins, so `macosx` stays
+ * `macosx` while `macosx64` becomes `macos-x64` rather than swallowing `x64` into
+ * the `macosx` alias. `x64` is not taken out of `arm64`.
+ */
+private fun separatePackedTokens(lower: String): String {
+    val breaks = mutableSetOf<Int>()
+    var i = 0
+    var prevTokenEnd = -1
+    while (i < lower.length) {
+        val canStart = i == 0 || !lower[i - 1].isAsciiAlphanumeric() || i == prevTokenEnd
+        if (!canStart) {
+            i++
+            continue
+        }
+        val tok = packedTokenAt(lower, i)
+        if (tok != null) {
+            if (prevTokenEnd == i && i > 0) breaks += i
+            prevTokenEnd = i + tok.length
+            i = prevTokenEnd
+        } else {
+            prevTokenEnd = -1
+            i++
+        }
+    }
+    if (breaks.isEmpty()) return lower
+    return buildString(lower.length + breaks.size) {
+        for (idx in lower.indices) {
+            if (idx in breaks) append('-')
+            append(lower[idx])
+        }
+    }
+}
+
+/** Longest known token at [i] that leaves a clean packed remainder; otherwise the longest match. */
+private fun packedTokenAt(
+    lower: String,
+    i: Int,
+): String? {
+    val candidates = PLATFORM_TOKENS.filter { t -> i + t.length <= lower.length && lower.startsWith(t, i) }
+    if (candidates.isEmpty()) return null
+    val clean =
+        candidates.firstOrNull { t ->
+            val end = i + t.length
+            end == lower.length || !lower[end].isAsciiAlphanumeric() || packedTokenAt(lower, end) != null
+        }
+    return clean ?: candidates.first()
+}
+
 /** True when the asset name names an OS ketch does not support. */
 fun namesForeignOs(lower: String) = findToken(lower, FOREIGN_OS_TOKENS) != null
 
@@ -86,7 +152,7 @@ fun isRejected(
  * PATH. Rename to the package name only when the discovered name plainly carries build metadata.
  */
 fun looksLikeBuildArtifact(name: String): Boolean {
-    val lower = name.asciiLowercase()
+    val lower = normalizeAssetName(name)
     val platformToken =
         listOf(Os.MacOs.tokens, Os.Linux.tokens, Os.Windows.tokens, Arch.Aarch64.tokens, Arch.X86_64.tokens, Arch.Universal.tokens)
             .flatten()
@@ -181,7 +247,7 @@ fun scoreMacosAsset(
     hostArch: Arch,
     allowEmulation: Boolean,
 ): AssetScore? {
-    val lower = assetName.trim().asciiLowercase()
+    val lower = normalizeAssetName(assetName)
     // Anything that names a foreign OS is not ours, whatever else it says.
     val refused = refusedEverywhere(lower, BYPRODUCT_TOKENS) || lower.endsWith(".exe") || namesOs(lower, Os.Linux) || namesOs(lower, Os.Windows)
     if (refused) return null
@@ -204,7 +270,7 @@ fun scoreLinuxAsset(
     allowEmulation: Boolean,
     muslHost: Boolean,
 ): AssetScore? {
-    val lower = assetName.trim().asciiLowercase()
+    val lower = normalizeAssetName(assetName)
     val hasLinux = tokenAt(lower, "linux")
     val hasMusl = tokenAt(lower, "musl")
     val hasGnu = tokenAt(lower, "gnu")
@@ -246,7 +312,7 @@ fun scoreWindowsAsset(
     assetName: String,
     hostArch: Arch,
 ): AssetScore? {
-    val lower = assetName.trim().asciiLowercase()
+    val lower = normalizeAssetName(assetName)
     val refused = refusedEverywhere(lower, emptyList()) || namesOs(lower, Os.MacOs) || tokenAt(lower, "linux") || tokenAt(lower, "musl")
     if (refused) return null
     val reason = mutableListOf<String>()

@@ -18,7 +18,7 @@ enum class Os(
     Linux("linux", listOf("linux", "gnu", "musl")),
 
     @SerialName("windows")
-    Windows("windows", listOf("windows", "win32", "win64", "win", "msvc")),
+    Windows("windows", listOf("windows", "win32", "win64", "win", "msvc", "mingw")),
     ;
 
     override fun toString() = display
