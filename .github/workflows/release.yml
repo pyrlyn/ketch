@@ -87,7 +87,7 @@ jobs:
           {
             echo "ketch $VERSION (Kotlin preview), built from \`main\` at \`$sha\`."
             echo
-            echo "Assets: macOS arm64 (\`aarch64-apple-darwin\`) and Linux x64 (\`x86_64-unknown-linux-gnu\`) CLI tarballs, each with a \`.sha256\`, and \`SHA256SUMS\`."
+            echo "Assets: macOS arm64 (\`aarch64-apple-darwin\`), Linux x64 (\`x86_64-unknown-linux-gnu\`) and Windows x64 (\`x86_64-pc-windows-gnu\`) CLI tarballs, each with a \`.sha256\`, and \`SHA256SUMS\`."
             echo
             echo "## Changes since ${last:-the first commit}"
             echo
@@ -107,6 +107,7 @@ jobs:
     env:
       TARGET: ${{ matrix.target }}
       TRIPLE: ${{ matrix.triple }}
+      EXE: ${{ matrix.exe }}
       VERSION: ${{ needs.checks.outputs.version }}
       TAG: ${{ needs.checks.outputs.tag }}
     strategy:
@@ -117,16 +118,30 @@ jobs:
             target: macosArm64
             bootstrap: MacosArm64
             triple: aarch64-apple-darwin
+            exe: kexe
             command: ./gradlew macosArm64Test ktlintCheck detekt :ketch:linkReleaseExecutableMacosArm64 --console=plain
           - os: ubuntu-latest
             target: linuxX64
             bootstrap: LinuxX64 linkDebugExecutableLinuxArm64
             triple: x86_64-unknown-linux-gnu
+            exe: kexe
             command: ./gradlew -Pdiffuser.allTargets=true linuxX64Test :ketch:linkReleaseExecutableLinuxX64 --continue --console=plain
+          # Kotlin/Native names a Windows executable `.exe`; the archive holds `ketch.exe`.
+          - os: windows-latest
+            target: mingwX64
+            bootstrap: MingwX64
+            triple: x86_64-pc-windows-gnu
+            exe: exe
+            # ktlint's build/ and generated/ excludes match "/" paths only, so on Windows it lints
+            # SQLDelight output; the Linux entry and the checks job lint the same sources.
+            command: ./gradlew mingwX64Test :ketch:linkReleaseExecutableMingwX64 -x ktlintCheck --console=plain
     defaults:
       run:
         shell: bash
     steps:
+      # Snapshots and fixtures are compared byte for byte; keep LF on the Windows runner.
+      - if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
@@ -168,7 +183,7 @@ jobs:
       - name: Smoke test
         run: |
           set -euo pipefail
-          out="$(ketch/build/bin/$TARGET/releaseExecutable/ketch.kexe --version)"
+          out="$("ketch/build/bin/$TARGET/releaseExecutable/ketch.$EXE" --version)"
           echo "$out"
           grep -qF "ketch $VERSION" <<<"$out" || { echo "::error::--version does not report $VERSION"; exit 1; }
       - name: Package
@@ -176,10 +191,12 @@ jobs:
           set -euo pipefail
           name="ketch-$TAG-$TRIPLE"
           stage="$RUNNER_TEMP/stage/$name"; mkdir -p "$stage" "$RUNNER_TEMP/dist"
-          cp "ketch/build/bin/$TARGET/releaseExecutable/ketch.kexe" "$stage/ketch"
+          bin=ketch; [ "$EXE" = exe ] && bin=ketch.exe
+          cp "ketch/build/bin/$TARGET/releaseExecutable/ketch.$EXE" "$stage/$bin"
           cp README.md "$stage/"
-          tar -C "$RUNNER_TEMP/stage" -czf "$RUNNER_TEMP/dist/$name.tar.gz" "$name"
           cd "$RUNNER_TEMP/dist"
+          # A relative archive name: GNU tar reads "D:\..." on Windows as host:path.
+          tar -C "$RUNNER_TEMP/stage" -czf "$name.tar.gz" "$name"
           if command -v sha256sum >/dev/null; then sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
           else shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"; fi
           cat "$name.tar.gz.sha256"
