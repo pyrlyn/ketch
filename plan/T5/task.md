@@ -18,10 +18,10 @@ libraries through cinterop; the choice is recorded in `plan/README.md`.
 About 2.5k lines of Rust and 52 tests (`mod.rs` 8, `archive.rs` 34, `macos.rs` 10), ported from
 41738f64. Creator decisions: the C codecs come from Conan (`bzip2/1.0.8`, `xz_utils/5.8.4`,
 pinned by a lockfile, static, ConanCenter prebuilt binaries); zlib is K/N's `platform.zlib`; the
-format readers live in a new kotlin-kit module and the guards stay in ketch-core.
+format readers live in a new pyrlyn-kit module and the guards stay in ketch-core.
 
-1. kotlin-kit `fs`: `symlink`, `setMode`, `createDir` (one level, refusing an existing entry).
-2. kotlin-kit `archive` (package `archive`), behind its own API:
+1. pyrlyn-kit `fs`: `symlink`, `setMode`, `createDir` (one level, refusing an existing entry).
+2. pyrlyn-kit `archive` (package `archive`), behind its own API:
    - `conanfile.txt`, `conan.lock` and a host profile; a Gradle task runs `conan install` with
      the `direct_deploy` deployer into `build/conan/<target>`, and the cinterop for bzip2 and
      liblzma links the static libraries from there;
@@ -40,4 +40,4 @@ format readers live in a new kotlin-kit module and the guards stay in ketch-core
 
 Rust tests that build archives with `tar::Builder`, `flate2`, `bzip2` and `zip` use the kit's
 writers and encoders; the xz fixtures are the Rust test's bytes. Check: `./gradlew build` here
-and `./gradlew check` in kotlin-kit green after each step.
+and `./gradlew check` in pyrlyn-kit green after each step.

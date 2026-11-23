@@ -12,7 +12,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-// The composite build resolves each kotlin-kit library ketch uses, and the SHA-256 wrapper, on this target.
+// The composite build resolves each pyrlyn-kit library ketch uses, and the SHA-256 wrapper, on this target.
 class SharedLibsTest {
     @Test
     fun tomlReadsAndTheEditorKeepsComments() {

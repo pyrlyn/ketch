@@ -3,15 +3,15 @@
 On Windows the desktop app wears the `ketch Store — Windows 11` canvas in the colours of the
 `Pyrlyn Windows 11` design system: every screen and dialog of the canvas, driven by the store's
 data. Linux and Windows high contrast keep Material 3. `KETCH_LOOK` shows a look on another system.
-Commits on branch `T17-fluent-design`, and the `kotlin-fluent` package in
+Commits on branch `T17-fluent-design`, and the `pyrlyn-fluent` package in
 https://github.com/pyrlyn/packages/pull/2, which stands on https://github.com/pyrlyn/packages/pull/1:
 the app's build needs both packages.
 
 ## What was done
 
-- The `kotlin-fluent` package (`packages/kotlin-fluent`): palette, surfaces, controls, layout and
+- The `pyrlyn-fluent` package (`packages/pyrlyn-fluent`): palette, surfaces, controls, layout and
   dialog for jvm and wasmJs. No business logic: every word, colour and action comes from the caller.
-  It reuses `Glyph` and `AutoGrid` from kotlin-glass, which gained the new glyphs.
+  It reuses `Glyph` and `AutoGrid` from pyrlyn-glass, which gained the new glyphs.
 - `desktop/src/main/kotlin/ketch/desktop/ui/fluent/`: the palette mapping, the shell, one file per
   screen, the dialogs.
 - What both looks need moved to `ui/Host.kt`, `ui/Log.kt` and `ui/Summaries.kt` instead of being
@@ -43,7 +43,7 @@ Changed because Compose or AWT cannot do what the design draws:
 
 - `./gradlew build` in ketch-kotlin: compile, 176 desktop tests, ktlint and detekt, 0 failures.
   `FluentAppTest`, `FluentHelpersTest` and `FindShortcutTest` cover the screens, the helpers and Ctrl+K.
-- `./gradlew check` in `packages/kotlin-fluent` (24 tests) and `packages/kotlin-glass`.
+- `./gradlew check` in `packages/pyrlyn-fluent` (24 tests) and `packages/pyrlyn-glass`.
 - Every screen rendered off-screen to PNG, light and dark, and compared with the artboards.
 - The app run on Windows 11 on Arm in the Parallels VM, on Temurin 21 x64 with a cross-compiled
   `ketch.exe`: Segoe UI is picked, `ketch serve` answers Doctor and a live search, all screens open,

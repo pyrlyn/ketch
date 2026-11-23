@@ -17,7 +17,7 @@ round-trip tests over fixtures copied from `../ketch`.
 About 8.4k lines of Rust and 190 tests, with cycles between the modules (`model` ↔ `config` ↔
 `manifest`, `report` ↔ `log` ↔ `config`), so the work lands in small green commits in this order:
 
-1. `fs-kit` → `pyrlyn.kit:fs` in `packages/kotlin-kit` (package `fs`), the part ketch uses:
+1. `fs-kit` → `pyrlyn.kit:fs` in `packages/pyrlyn-kit` (package `fs`), the part ketch uses:
    - atomic write `Options`, `textOrEmpty`, `bytesIfExists`;
    - `removeAny`, `copyTree` with `Links`, `canon`, `canonicalize`;
    - `FsException` carrying the path, the kind and errno.
@@ -26,7 +26,7 @@ About 8.4k lines of Rust and 190 tests, with cycles between the modules (`model`
    `fs_kit` error test lands with it. rtok-kotlin's `rtok-sys` `Fs.kt` is not reused: its
    writes are not atomic, it ignores modes and links, and it removes a tree through
    `system("rm -rf")`.
-2. `toml_file`: typed TOML read and write over kotlin-kit's `toml` (`TomlParser`, `TomlWriter`) with kotlinx-serialization, and
+2. `toml_file`: typed TOML read and write over pyrlyn-kit's `toml` (`TomlParser`, `TomlWriter`) with kotlinx-serialization, and
    comment-keeping edits over `toml-aot`.
 3. `model`: the package, asset and source types. The types it reads from later phases
    (`extract`, `trust`, `registry`, `source`) come in as the minimal declarations it needs.
@@ -35,7 +35,7 @@ About 8.4k lines of Rust and 190 tests, with cycles between the modules (`model`
 6. `lockfile`, `state`, `link`, with the insta snapshot as a fixture.
 
 Every Rust test of these files is ported. Check: `./gradlew build` here and `./gradlew check` in
-kotlin-kit green after each step.
+pyrlyn-kit green after each step.
 
 Moved out of the `model` step:
 
@@ -72,5 +72,5 @@ Notes on the `lockfile`, `state`, `link` step:
   skips them; types that deny them in Rust still refuse them.
 - The cross-process lock test reruns the test binary filtered to one contender test
   (`--ktest_filter`); its children prove they ran by writing a file.
-- kotlin-kit's `fs` gained exclusive create, hard links, file removal and modification times
+- pyrlyn-kit's `fs` gained exclusive create, hard links, file removal and modification times
   for the lock. The Windows `tasklist` liveness check: T13.

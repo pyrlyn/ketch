@@ -21,6 +21,6 @@ tests record them.
 
 ## Shared libraries
 
-Files, TOML, YAML, semver, HTTP and SQLite come from `kotlin-kit` in the workspace's `packages/`;
-the desktop looks come from `kotlin-glass`, `kotlin-fluent` and `kotlin-adwaita`, which hold no
+Files, TOML, YAML, semver, HTTP and SQLite come from `pyrlyn-kit` in the workspace's `packages/`;
+the desktop looks come from `pyrlyn-glass`, `pyrlyn-fluent` and `pyrlyn-adwaita`, which hold no
 business logic. See [building.md](building.md).

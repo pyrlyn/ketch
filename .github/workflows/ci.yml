@@ -14,11 +14,11 @@ concurrency:
   cancel-in-progress: true
 env:
   SHARED_SETTINGS_DIR: ${{ github.workspace }}/packages/shared-settings
-  KOTLIN_ADWAITA_DIR: ${{ github.workspace }}/packages/kotlin-adwaita
-  KOTLIN_FLUENT_DIR: ${{ github.workspace }}/packages/kotlin-fluent
-  KOTLIN_GLASS_DIR: ${{ github.workspace }}/packages/kotlin-glass
-  KOTLIN_KIT_DIR: ${{ github.workspace }}/packages/kotlin-kit
-  KOTLIN_SNAPSHOT_DIR: ${{ github.workspace }}/packages/kotlin-snapshot
+  KOTLIN_ADWAITA_DIR: ${{ github.workspace }}/packages/pyrlyn-adwaita
+  KOTLIN_FLUENT_DIR: ${{ github.workspace }}/packages/pyrlyn-fluent
+  KOTLIN_GLASS_DIR: ${{ github.workspace }}/packages/pyrlyn-glass
+  KOTLIN_KIT_DIR: ${{ github.workspace }}/packages/pyrlyn-kit
+  KOTLIN_SNAPSHOT_DIR: ${{ github.workspace }}/packages/pyrlyn-snapshot
 jobs:
   test:
     name: test ${{ matrix.target }}

@@ -1,6 +1,6 @@
 # T13.1. Done
 
-kotlin-kit declares `mingwX64` next to macOS arm64 and Linux x64/arm64. POSIX code moved to a
+pyrlyn-kit declares `mingwX64` next to macOS arm64 and Linux x64/arm64. POSIX code moved to a
 `unixMain` source set; each module's Windows side sits in `mingwMain` behind the same API.
 
 - `cli`: console width and colour (GetConsoleScreenBufferInfo, virtual-terminal mode).
@@ -27,7 +27,7 @@ kotlin-kit declares `mingwX64` next to macOS arm64 and Linux x64/arm64. POSIX co
   every open. New `db-testing` holds the driver checks both adapters' tests run; db-sqldelight's
   tests pick db-room or db-native per target.
 
-Checked: `./gradlew check` in kotlin-kit on the Mac; every module's tests compile for linuxX64
+Checked: `./gradlew check` in pyrlyn-kit on the Mac; every module's tests compile for linuxX64
 and linuxArm64. Every mingwX64 test binary ran on the Parallels Windows 11 VM, both as the user
 and as SYSTEM (which has the symlink privilege): archive 41, cli 41, db-native 8, db-sqldelight 2,
 fs 56, http-ktor 11, icons 8, loopback 2, process 25, semver 3, toml 32, toml-aot 12,
@@ -41,5 +41,5 @@ process each have their own FormatMessageW wrapper; they are independent modules
 code. The archive's mingw file reads do not go through an error-capturing shim yet, so a
 failed open can name the wrong error code. ketch itself does not build for Windows yet (T13.2).
 
-kotlin-kit commits: `07ad4a8` build, `7aa5f2f` cli, `3d59759` fs, `e027217` process, `8d81a38`
+pyrlyn-kit commits: `07ad4a8` build, `7aa5f2f` cli, `3d59759` fs, `e027217` process, `8d81a38`
 http-ktor, `b58b552` archive, `73669f3` loopback, `bb060dc` db-native, `3055d79` docs.

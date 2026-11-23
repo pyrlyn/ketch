@@ -28,4 +28,4 @@ Checked:
   a scratch home with nothing on stdout or stderr. That shows the trimmed runtime loads the resources' code; nobody
   looked at that window.
 - The checks ran against an export of `packages` at `origin/main`, because the local checkout of `packages/` is on
-  branch `kotlin-glass` and has no `kotlin-adwaita`.
+  branch `pyrlyn-glass` and has no `pyrlyn-adwaita`.

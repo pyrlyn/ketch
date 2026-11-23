@@ -18,19 +18,19 @@ The `ketch` command line builds and runs on Windows, and the desktop app's MSI c
   stays in T15.
 - MSI: `bundledKetch` copies the mingwX64 release `ketch.exe` into the app's `windows-x64`
   resources.
-- kotlin-kit: the tests' `setEnv`/`unsetEnv` in `process`, `appendSink` shared for deletion, and
+- pyrlyn-kit: the tests' `setEnv`/`unsetEnv` in `process`, `appendSink` shared for deletion, and
   the Conan build of the mingw libraries on a Windows host (K/N's Windows prebuilt, its clang,
   Ninja, forward-slash paths).
 
 ketch-kotlin commits: `073989a` claim, `de80c66` ketch-core paths, `43acc56` test env, `8ec9079`
 log, `75a8341` archive links, `53fced4` command line paths, `1b1a046` console and system,
-`e2d278d` e2e suite, `0200569` MSI. kotlin-kit commits: `654a114` `joinPath`, `c8ece06`
+`e2d278d` e2e suite, `0200569` MSI. pyrlyn-kit commits: `654a114` `joinPath`, `c8ece06`
 `appendSink`, `cec6ab1` job breakaway, `9b557c6` `setEnv`/`unsetEnv`, `2d09ab8` Conan on a
 Windows host.
 
 Checked:
 
-- `./gradlew build` in kotlin-kit and in ketch-kotlin on the Mac (compile, tests, ktlint,
+- `./gradlew build` in pyrlyn-kit and in ketch-kotlin on the Mac (compile, tests, ktlint,
   detekt). kit's `conanInstallMingwX64` still builds on the Mac after the Windows-host change.
 - On the Parallels Windows 11 VM: ketch-core's mingwX64 tests, 726 of 726, as the user and as
   SYSTEM; `:ketch`'s, 259 of 259, as SYSTEM after the last ketch-core fix and as the user just

@@ -12,7 +12,7 @@ kotlin {
         commonMain.dependencies {
             api(libs.kotlinx.io.core)
             api(libs.kotlinx.coroutines.core)
-            // Shared libraries from kotlin-kit: config and manifest TOML, winget YAML, versions,
+            // Shared libraries from pyrlyn-kit: config and manifest TOML, winget YAML, versions,
             // GitHub over HTTP, stats.db.
             implementation("pyrlyn.kit:toml")
             implementation("pyrlyn.kit:toml-aot")

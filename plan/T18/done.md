@@ -5,7 +5,7 @@ stay unconfirmed: a Snap Layouts choice and a second monitor. See "Not confirmed
 
 ## What was done
 
-- `WindowsFrame` in `kotlin-fluent`'s `jvmMain`, over JNA, without business logic: the window keeps
+- `WindowsFrame` in `pyrlyn-fluent`'s `jvmMain`, over JNA, without business logic: the window keeps
   Compose's undecorated window and gets DWM's rounded corners and shadow, the system menu, and Mica or
   Acrylic behind a see-through canvas. Windows is told what lies under the pointer through
   `WindowZones`, so it treats the maximize button as its own and offers Snap Layouts. It replaces
@@ -21,10 +21,10 @@ stay unconfirmed: a Snap Layouts choice and a second monitor. See "Not confirmed
 
 Package commits, in https://github.com/pyrlyn/packages/pull/3. They came after
 https://github.com/pyrlyn/packages/pull/2 was merged, so until that one is merged this task builds
-only against the `kotlin-fluent` branch:
+only against the `pyrlyn-fluent` branch:
 
-- `a558f7b` `feat(kotlin-fluent): give an undecorated window Windows 11's frame`
-- `17f1fe1` `fix(kotlin-kit): keep a zip member's bytes past one buffer segment`, found while running
+- `a558f7b` `feat(pyrlyn-fluent): give an undecorated window Windows 11's frame`
+- `17f1fe1` `fix(pyrlyn-kit): keep a zip member's bytes past one buffer segment`, found while running
   the installed app. kotlinx-io's `readAtMostTo` stops at one 8 KiB segment, so a zip member larger
   than that lost bytes on a large read: `ripgrep` failed its CRC check and could not update. A
   regression test failed before the fix and passes after it.
@@ -32,7 +32,7 @@ only against the `kotlin-fluent` branch:
 ## How it was checked
 
 - `./gradlew build --no-watch-fs` on the Mac, with the local packages: compile, tests, ktlint, detekt,
-  successful. `./gradlew check` in `kotlin-fluent` and `:archive:macosArm64Test` in `kotlin-kit`.
+  successful. `./gradlew check` in `pyrlyn-fluent` and `:archive:macosArm64Test` in `pyrlyn-kit`.
 - `Ketch-1.0.0.msi` (72.7 MB) built in the VM (Windows 11 Pro build 26300 on Arm, Parallels 27),
   installed per user, exit code 0. `jna-5.19.1` is in the app's folder, and `runtime/release` lists
   `java.logging`.

@@ -16,7 +16,7 @@ ketch.
 
 About 7.4k lines of Rust in `src/` (without `tui`) and 12k lines of tests, ported from 41738f64.
 
-1. kotlin-kit `:cli`, a module of its own (the creator's choice over Clikt behind an adapter):
+1. pyrlyn-kit `:cli`, a module of its own (the creator's choice over Clikt behind an adapter):
    a declarative command tree with clap's semantics (global, short and long options, visible
    and hidden aliases, hidden commands, `required`, `required_unless_present`,
    `conflicts_with`, `requires`, value enums, defaults, ranged numbers, flattened groups), a

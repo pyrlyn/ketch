@@ -22,7 +22,7 @@ Taken by the creator before the port started:
   then a manifest whose `trust` table requires a signature is refused with a clear error, as Rust
   ketch built without its `trust` feature does.
 - **Shared libraries (T3).** TOML, YAML, semver, HTTP and SQLite come from the new included build
-  `packages/kotlin-kit`, extracted from rtok-kotlin's `libs/` with neutral package names
+  `packages/pyrlyn-kit`, extracted from rtok-kotlin's `libs/` with neutral package names
   (`toml`, `tomlaot`, `yamlaot`, `semver`, `http`, `db`). rtok-kotlin moves onto it in a separate
   session.
 
@@ -30,20 +30,20 @@ Taken during the port:
 
 - **SHA-256.** `org.kotlincrypto.hash:sha2` rather than rtok-kotlin's `Sha256`: that one hashes a
   whole byte array in memory, and ketch hashes downloads in chunks.
-- **Files (T4).** Rust `fs-kit` is ported into kotlin-kit as `pyrlyn.kit:fs` (atomic, durable
+- **Files (T4).** Rust `fs-kit` is ported into pyrlyn-kit as `pyrlyn.kit:fs` (atomic, durable
   writes that keep modes and links; tree copy and removal) over POSIX. rtok-kotlin's `Fs.kt` was
   not reused: its writes are not atomic and it removes trees through `rm -rf`.
-- **Writing TOML (T4).** kotlin-kit's `toml.TomlWriter` lays a file out exactly as Rust `toml`
+- **Writing TOML (T4).** pyrlyn-kit's `toml.TomlWriter` lays a file out exactly as Rust `toml`
   1.1 `to_string_pretty` does (string forms, multi-line arrays, implicit tables), checked against
   that crate's own output, so `ketch.lock` and `config.toml` are byte-identical across the two.
   No library encoder is used for writing. Values are mapped through kotlinx-serialization JSON
   trees: a null is an absent key, a default is written out.
-- **Reading TOML (T4).** kotlin-kit's own `toml.TomlParser`, a strict TOML 1.1 reader (the spec
+- **Reading TOML (T4).** pyrlyn-kit's own `toml.TomlParser`, a strict TOML 1.1 reader (the spec
   Rust `toml` 1.1 reads) that passes every TOML 1.1.0 file of toml-test, with Rust's nesting bound
   of 80. ktoml 0.7.1 refuses inline tables inside a multi-line array (manifests' `extra_paths`);
   tomlkt 0.6.1 refuses quotes right before a closing `'''`/`"""`, which Rust writes, and accepts
   70 of toml-test's invalid files. A datetime reads as the text Rust's Display gives it.
-- **Archives (T5).** The tar and zip readers and writers are kotlin-kit's own `pyrlyn.kit:archive`
+- **Archives (T5).** The tar and zip readers and writers are pyrlyn-kit's own `pyrlyn.kit:archive`
   (package `archive`); ketch-core keeps every guard (member paths, links, budgets, modes). gzip
   and deflate use zlib through K/N's `platform.zlib`. bzip2 1.0.8 and liblzma from xz_utils 5.8.4
   are the C libraries, linked statically from ConanCenter prebuilt binaries pinned by
@@ -54,7 +54,7 @@ Taken during the port:
   count against the central directory's size and ignores a stale Unicode path field. A zip that
   fails while a member is read is a parse error. `hdiutil`, `pkgutil` and `ditto` run under a
   60-minute deadline (Rust has none); a missed deadline is a `KetchError.Command`.
-- **Platform, processes, shell (T6).** `walkdir` and `tempfile` are kotlin-kit's `fs.walk` and
+- **Platform, processes, shell (T6).** `walkdir` and `tempfile` are pyrlyn-kit's `fs.walk` and
   `fs.TempDir`. `LinuxPlatform` sits in nativeMain, so its placement is tested on the Mac too;
   `host()` picks the backend per target. Stopping a process is `kill(2)` (SIGTERM, then SIGKILL
   after 200 ms) rather than the `kill` command, and `codesign`, `spctl`, `xattr` and `lsof` run
@@ -63,9 +63,9 @@ Taken during the port:
   and the Windows-only helpers Rust compiles everywhere as dead code (`windows_path_*`, PowerShell
   profile writing, AutoRun, the user PATH in the registry), came with T13.2; on Unix those entry
   points answer "nothing here", as Rust's do.
-- **Sources and resolution (T7).** HTTP goes through kotlin-kit's `http` client, which now
+- **Sources and resolution (T7).** HTTP goes through pyrlyn-kit's `http` client, which now
   streams a GET body as it arrives, so ketch caps a body while it downloads and hashes it on the
-  way; GitHub, local and plugin sources are tested against recorded responses and kotlin-kit's
+  way; GitHub, local and plugin sources are tested against recorded responses and pyrlyn-kit's
   `pyrlyn.kit:loopback`, a hand-written HTTP/1.1 server on 127.0.0.1 that can break its own
   framing, in place of Rust's `TcpListener` tests. No test touches the network. Plugins run
   through the bounded runner of `pyrlyn.kit:process` (30 s, 8 MiB of output). `ketch update`
@@ -83,7 +83,7 @@ Taken during the port:
   (T10), so a package asked for twice installs cleanly as it does in Rust. For the same
   reason `ketch list` asks each source for its `latest` one after another, not `jobs` at a time.
 - **Statistics (T8).** `stats.db` goes through SQLDelight 2.4.1 (the creator's choice; Rust uses
-  diesel) on kotlin-kit's `pyrlyn.kit:db-sqldelight`, a `SqlDriver` over kit `db`, so SQLite stays
+  diesel) on pyrlyn-kit's `pyrlyn.kit:db-sqldelight`, a `SqlDriver` over kit `db`, so SQLite stays
   the bundled one. The schema is Rust's migration with its declared column types (`INTEGER`,
   `TEXT`) and `IF NOT EXISTS`; a new database also gets diesel's `__diesel_schema_migrations`
   row, so either ketch opens a `stats.db` the other wrote.
@@ -106,17 +106,17 @@ Taken during the port:
   Liquid Glass; no self-updates (Sparkle has no counterpart for a jpackage app); the native
   `ketch` ships inside the app's package, and `KETCH_EXE` overrides it.
 - **macOS look (T16).** The creator's choices: on macOS the app wears the Liquid Glass design of
-  the `ketch Store — Discover` canvas, which replaces T12's Material 3 there. Its components live in the shared `kotlin-glass` package and hold no business
+  the `ketch Store — Discover` canvas, which replaces T12's Material 3 there. Its components live in the shared `pyrlyn-glass` package and hold no business
   logic: data, token mapping and screens stay in `desktop/src/main/kotlin/ketch/desktop/ui/glass/`.
 - **Windows look (T17).** On Windows the app wears the `ketch Store — Windows 11` canvas in the
   colours of the `Pyrlyn Windows 11` design system, in place of T12's Material 3; high contrast keeps
   Material 3, which the design system has no answer for, and Linux kept it until T20. The components live
-  in the shared `kotlin-fluent` package and hold no business logic; compose-fluent-ui was passed over
+  in the shared `pyrlyn-fluent` package and hold no business logic; compose-fluent-ui was passed over
   because its controls carry Microsoft's stock tokens and it sits on Compose 1.8. Logic both looks
   share is in `ui/Host.kt`, `ui/Log.kt` and `ui/Summaries.kt`. `KETCH_LOOK` names a look to see it on
   another system.
 - **Windows window (T18).** The window stays Compose's undecorated one and draws its own title bar;
-  `WindowsFrame` in `kotlin-fluent` adds the system's corners, shadow, menu and Mica or Acrylic, over
+  `WindowsFrame` in `pyrlyn-fluent` adds the system's corners, shadow, menu and Mica or Acrylic, over
   JNA, which is `internal` there. The title bar reports `WindowZones`, and Windows treats the
   maximize button as its own, which is what offers Snap Layouts; Compose then sees neither hover nor
   click on the caption buttons, so both come back through `WindowZones`. `attach` fails open: off
@@ -127,7 +127,7 @@ Taken during the port:
   app's COM activator needs an identity an MSI lacks. So a hidden PowerShell child posts the notice
   and waits for it, the AppUserModelID goes under `HKCU`, and the tray's balloon is the fallback.
 - **Windows (T13).** The creator's choices on claiming it: three subtasks (T13.1–T13.3);
-  mingwX64 and the Windows implementations go into kotlin-kit itself; tests run on a Windows
+  mingwX64 and the Windows implementations go into pyrlyn-kit itself; tests run on a Windows
   VM in Parallels on the Mac (Windows on Arm, which runs the x64 binaries under emulation). No
   subtask closes without that run.
   SQLite on Windows is kit `db-native` (the creator's choice after androidx.sqlite turned out
@@ -199,7 +199,7 @@ Taken during the port:
   lookups and the registry download.
 - **Linux look (T20).** On Linux the app wears the `Ketch Linux` design, dark only, in place of
   T12's Material 3; high contrast keeps Material 3, and `KETCH_LOOK=adwaita` shows it elsewhere. The
-  components live in the shared `kotlin-adwaita` package and hold no business logic; no ready Compose
+  components live in the shared `pyrlyn-adwaita` package and hold no business logic; no ready Compose
   Adwaita library exists. Sections sit in a view switcher and the hamburger menu instead of a
   sidebar, and search in a bar under the header. An undecorated AWT window has no resize edges on
   Linux, so `Edge.kt` draws them and reads the pull from `MouseInfo`; rounded corners need a see-through

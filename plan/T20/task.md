@@ -10,15 +10,15 @@ agent: Claude Code / claude-opus-5-5
 
 On Linux the app still shows plain Material 3 while macOS has glass and Windows has Fluent. The creator's design "Ketch
 Linux" is a dark glass window with GNOME's shapes: a header bar with a view switcher, boxed lists, pill buttons, a
-popover menu, a toast and round window controls. Its generic part goes into a reusable package, as kotlin-glass and
-kotlin-fluent did for the other looks.
+popover menu, a toast and round window controls. Its generic part goes into a reusable package, as pyrlyn-glass and
+pyrlyn-fluent did for the other looks.
 
 Done means: a Linux window opens in this look by default, every screen of the design shows real data, every control does
-what it says, and what is generic lives in `packages/kotlin-adwaita` with no ketch word in it.
+what it says, and what is generic lives in `packages/pyrlyn-adwaita` with no ketch word in it.
 
 ## Plan
 
-1. `packages/kotlin-adwaita` (`pyrlyn.adwaita:adwaita`): theme, wall, header bar, view switcher, boxed lists, pills,
+1. `packages/pyrlyn-adwaita` (`pyrlyn.adwaita:adwaita`): theme, wall, header bar, view switcher, boxed lists, pills,
    chips, linked toggle, switch, entry, status pills, terminal, popover menu, toast, banner, alert dialog; tests.
 2. `desktop/src/main/kotlin/ketch/desktop/ui/adwaita/`: the shell and the screens, on the store.
 3. `Look.Adwaita`: `lookFor` picks it on Linux, high contrast keeps Material; `KetchApp`, `Dialogs.kt`, `About.kt`, `Main.kt`

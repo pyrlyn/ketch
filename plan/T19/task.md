@@ -19,7 +19,7 @@ done honestly is named in `done.md` rather than drawn as a control that does not
    `Resolution`. Serve keeps sanitizing what a release wrote.
 2. Store: `why`, `fixDoctor`, the checks it fixed. Navigation: the row last acted on and the page's
    first tab.
-3. `kotlin-fluent`: a terminal output block.
+3. `pyrlyn-fluent`: a terminal output block.
 4. `ui/fluent/`: the selector, the hero's second button, the block on Overview, Fix and Open folder,
    the selected row.
 5. A Windows notification with an Update button, in place of the tray's balloon, which has no

@@ -22,11 +22,11 @@ ketch-core builds for mingwX64 next to macOS arm64 and Linux x64/arm64, with `un
 - Tests: every Rust test of these files. Rust's `#[cfg(unix)]` tests moved to `unixTest`,
   its `#[cfg(windows)]` ones are in `mingwTest` (probe, process listing and timeouts, a running
   `.exe` cleared for replacement, device names, the real registry).
-- kotlin-kit: `Command.rawArg`, `Command.spawnDetached`, `systemTempDir`, and a Windows `rename`
+- pyrlyn-kit: `Command.rawArg`, `Command.spawnDetached`, `systemTempDir`, and a Windows `rename`
   that retries with the POSIX rename, as Rust's std does, when another process has the target
   open.
 
-Checked: `./gradlew build` in kotlin-kit and in ketch-kotlin on the Mac. The ketch-core mingwX64
+Checked: `./gradlew build` in pyrlyn-kit and in ketch-kotlin on the Mac. The ketch-core mingwX64
 test binary ran on the Parallels Windows 11 VM: 723 of 723 pass as the user and as SYSTEM. The
 kit's fs (58) and process (28) Windows test binaries pass there as the user and as SYSTEM.
 
@@ -34,7 +34,7 @@ Not done: the intermediate commits were not built one by one, only the last one.
 with mixed separators until T13.3 settles display.
 
 ketch-kotlin commits: `61d555d` build, `d183ed3` platform, `09ab4fa` process, `9ee20d0` shell,
-`7ce3d6c` hooks, `be5c425` links and sources, `f48c77a` self-update and doctor. kotlin-kit
+`7ce3d6c` hooks, `be5c425` links and sources, `f48c77a` self-update and doctor. pyrlyn-kit
 commits: `b768a79` raw arguments, `99d364a` detached spawn, `13a1f5a` rename, `eb831c2` temp dir.
 
 Follow-up: the non-UTF-8 sibling test is ported for unpaired surrogates (with kit's lossless

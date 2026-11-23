@@ -9,7 +9,7 @@ What T17 dropped from the canvas now works on real data, with one exception, nam
 - **"How ketch picks the asset"** and the **`ketch why`** block on a package's Overview. `Call.Why` asks
   the package's source, installs nothing and returns a `Resolution` that serve sanitizes like every
   other thing a release wrote. A page that cannot get an answer still opens. The block is
-  `TerminalOutput` in `kotlin-fluent`, which holds no business logic.
+  `TerminalOutput` in `pyrlyn-fluent`, which holds no business logic.
 - **Fix** on Doctor. `Check.fixable` comes from `repairable` in `ketch-core`, the only check
   `ketch doctor --fix` answers: a `PATH` set up nowhere. The button says `Fixing…` while it runs, as
   the repair goes through PowerShell and took 4.9 s in the VM; a press with no answer looked like a
@@ -24,7 +24,7 @@ packaged app's COM activator needs an identity an MSI does not give. So a hidden
 posts the notice and waits for it, for up to 10 minutes, and the app's AppUserModelID is written
 under `HKCU`. Any failure falls back to the tray's balloon.
 
-Package commit: `d397cbf` `feat(kotlin-fluent): add TerminalOutput, a command and what it printed`,
+Package commit: `d397cbf` `feat(pyrlyn-fluent): add TerminalOutput, a command and what it printed`,
 in https://github.com/pyrlyn/packages/pull/3, with T18's package commits.
 
 ## What was not done
