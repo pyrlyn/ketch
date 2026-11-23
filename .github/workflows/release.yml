@@ -132,7 +132,9 @@ jobs:
             bootstrap: MingwX64
             triple: x86_64-pc-windows-gnu
             exe: exe
-            command: ./gradlew mingwX64Test :ketch:linkReleaseExecutableMingwX64 --console=plain
+            # ktlint's build/ and generated/ excludes match "/" paths only, so on Windows it lints
+            # SQLDelight output; the Linux entry and the checks job lint the same sources.
+            command: ./gradlew mingwX64Test :ketch:linkReleaseExecutableMingwX64 -x ktlintCheck --console=plain
     defaults:
       run:
         shell: bash
