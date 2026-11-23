@@ -1,4 +1,4 @@
-# AGENTS.md — ketch-kotlin
+# AGENTS.md — ketch
 
 If an `AGENTS.md` or `CLAUDE.md` exists higher in the tree, follow it too; on conflict, ask the creator.
 
@@ -43,7 +43,7 @@ The Windows look of the desktop app is designed in Figma:
 When you work on the Windows look (`desktop/…/ui/fluent/`):
 
 - Read the screen in Figma first (Figma MCP `get_design_context` / `get_screenshot` on the frame)
-  and build it from the matching `kotlin-fluent` component; the UI Kit component's description
+  and build it from the matching `pyrlyn-fluent` component; the UI Kit component's description
   says what it is for.
 - Colours, spacing and radii come from `desktop/design/tokens.json` in code. Each Figma variable
   carries its CSS name as code syntax (`var(--accent)`); when the two disagree, `tokens.json` wins
@@ -56,7 +56,7 @@ When you work on the Windows look (`desktop/…/ui/fluent/`):
 
 ### Linux (Adwaita)
 
-The Linux look (`desktop/.../ui/adwaita/`, components from kotlin-adwaita) follows the
+The Linux look (`desktop/.../ui/adwaita/`, components from pyrlyn-adwaita) follows the
 **Ketch Linux** design, a GNOME/libadwaita frosted-glass style.
 
 - Figma: <https://www.figma.com/design/kjFRSE8wBULXeegP5pl7bf>
@@ -84,12 +84,12 @@ Rules for agents:
 
 ## Build and test
 
-Needs JDK 21 and the `shared-settings`, `kotlin-kit`, `kotlin-snapshot`, `kotlin-glass`, `kotlin-fluent` and `kotlin-adwaita` builds in
+Needs JDK 21 and the `shared-settings`, `pyrlyn-kit`, `pyrlyn-snapshot`, `pyrlyn-glass`, `pyrlyn-fluent` and `pyrlyn-adwaita` builds in
 `packages/`, found in any ancestor directory (or `SHARED_SETTINGS_DIR`, `KOTLIN_KIT_DIR`,
 `KOTLIN_SNAPSHOT_DIR`, `KOTLIN_GLASS_DIR`, `KOTLIN_FLUENT_DIR`, `KOTLIN_ADWAITA_DIR`).
-Files, TOML, YAML, semver, HTTP and SQLite come from kotlin-kit: change them there, not here.
-Glass components come from kotlin-glass, Windows ones from kotlin-fluent and Linux ones from
-kotlin-adwaita; none holds business
+Files, TOML, YAML, semver, HTTP and SQLite come from pyrlyn-kit: change them there, not here.
+Glass components come from pyrlyn-glass, Windows ones from pyrlyn-fluent and Linux ones from
+pyrlyn-adwaita; none holds business
 logic: what is ketch's stays in
 `desktop/`.
 

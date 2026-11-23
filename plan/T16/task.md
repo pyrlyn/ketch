@@ -17,7 +17,7 @@ store's real data, and `./gradlew build` is green.
 ## Execution plan
 
 1. `Look` (Glass on macOS, Material elsewhere) in `ui/Theme.kt`; the macOS tokens in `ui/Tokens.kt`.
-2. The `kotlin-glass` package in `packages/` (on the creator's word, during the task): surfaces,
+2. The `pyrlyn-glass` package in `packages/` (on the creator's word, during the task): surfaces,
    controls, sheet and layout, without business logic. `ui/glass/`: the palette from the design's
    `bundle.css`, the shell, one file per screen. The Material tree stays as it is; shared logic
    stays shared.

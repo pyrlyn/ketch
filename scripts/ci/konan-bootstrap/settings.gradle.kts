@@ -1,5 +1,5 @@
 // A throwaway Kotlin/Native build for CI: linking it makes Kotlin/Native download its distribution, clang and
-// sysroots into ~/.konan, which the main build (kotlin-kit's per-target conan/cinterop tasks) reads while it is still
+// sysroots into ~/.konan, which the main build (pyrlyn-kit's per-target conan/cinterop tasks) reads while it is still
 // configuring. Same idea as pyrlyn/rtok's scripts/ci/konan-bootstrap.
 pluginManagement {
     repositories { gradlePluginPortal(); mavenCentral() }

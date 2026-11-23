@@ -1,6 +1,6 @@
 # Architecture
 
-ketch-kotlin ports [ketch](https://github.com/pyrlyn/ketch) (Rust). The Rust tree is the source of
+ketch is a Kotlin port of the earlier Rust ketch ([pyrlyn-archive/ketch](https://github.com/pyrlyn-archive/ketch)). The Rust tree is the source of
 truth for behaviour: the command line, its output, the config and manifest TOML, `ketch.lock`,
 `state.json`, the `~/.ketch` layout and `stats.db` stay interchangeable with Rust ketch.
 
@@ -21,6 +21,6 @@ tests record them.
 
 ## Shared libraries
 
-Files, TOML, YAML, semver, HTTP and SQLite come from `kotlin-kit` in the workspace's `packages/`;
-the desktop looks come from `kotlin-glass`, `kotlin-fluent` and `kotlin-adwaita`, which hold no
+Files, TOML, YAML, semver, HTTP and SQLite come from `pyrlyn-kit` in the workspace's `packages/`;
+the desktop looks come from `pyrlyn-glass`, `pyrlyn-fluent` and `pyrlyn-adwaita`, which hold no
 business logic. See [building.md](building.md).

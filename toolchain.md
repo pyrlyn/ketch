@@ -6,14 +6,14 @@
 | Gradle 9.8.2 | wrapper (`./gradlew`) | Build | https://github.com/gradle/gradle |
 | Kotlin 2.4.21 | Gradle plugin | Language, Kotlin/Native, Kotlin Multiplatform | https://github.com/JetBrains/kotlin |
 | shared-settings | `packages/shared-settings` above the build (or `SHARED_SETTINGS_DIR`), local included build | Shared targets, release size, ktlint, detekt, settings | `packages/shared-settings` (no remote) |
-| kotlin-kit | `packages/kotlin-kit` above the build (or `KOTLIN_KIT_DIR`), local included build | File, TOML, YAML, semver, HTTP, SQLite and child-process libraries shared with rtok-kotlin | `packages/kotlin-kit` (no remote) |
-| kotlin-snapshot | `packages/kotlin-snapshot` above the build (or `KOTLIN_SNAPSHOT_DIR`), local included build | insta-format snapshot assertions | `packages/kotlin-snapshot` (no remote) |
-| kotlin-glass | `packages/kotlin-glass` above the build (or `KOTLIN_GLASS_DIR`), local included build | Glass UI components of the macOS look | `packages/kotlin-glass` (https://github.com/pyrlyn/packages) |
-| kotlin-fluent | `packages/kotlin-fluent` above the build (or `KOTLIN_FLUENT_DIR`), local included build | Windows 11 UI components of the Windows look | `packages/kotlin-fluent` (https://github.com/pyrlyn/packages) |
-| kotlin-adwaita | `packages/kotlin-adwaita` above the build (or `KOTLIN_ADWAITA_DIR`), local included build | Adwaita-style UI components of the Linux look | `packages/kotlin-adwaita` (https://github.com/pyrlyn/packages) |
+| pyrlyn-kit | `packages/pyrlyn-kit` above the build (or `KOTLIN_KIT_DIR`), local included build | File, TOML, YAML, semver, HTTP, SQLite and child-process libraries shared with rtok-kotlin | `packages/pyrlyn-kit` (no remote) |
+| pyrlyn-snapshot | `packages/pyrlyn-snapshot` above the build (or `KOTLIN_SNAPSHOT_DIR`), local included build | insta-format snapshot assertions | `packages/pyrlyn-snapshot` (no remote) |
+| pyrlyn-glass | `packages/pyrlyn-glass` above the build (or `KOTLIN_GLASS_DIR`), local included build | Glass UI components of the macOS look | `packages/pyrlyn-glass` (https://github.com/pyrlyn/packages) |
+| pyrlyn-fluent | `packages/pyrlyn-fluent` above the build (or `KOTLIN_FLUENT_DIR`), local included build | Windows 11 UI components of the Windows look | `packages/pyrlyn-fluent` (https://github.com/pyrlyn/packages) |
+| pyrlyn-adwaita | `packages/pyrlyn-adwaita` above the build (or `KOTLIN_ADWAITA_DIR`), local included build | Adwaita-style UI components of the Linux look | `packages/pyrlyn-adwaita` (https://github.com/pyrlyn/packages) |
 | git | system | Version control | https://git-scm.com |
-| conan 2.33.0 | mise (kotlin-kit) | Fetches the static bzip2 and liblzma that kotlin-kit's `archive` links | https://github.com/conan-io/conan |
-| zlib | Kotlin/Native platform library (`platform.zlib`), via kotlin-kit | gzip and deflate in archives | https://zlib.net |
+| conan 2.33.0 | mise (pyrlyn-kit) | Fetches the static bzip2 and liblzma that pyrlyn-kit's `archive` links | https://github.com/conan-io/conan |
+| zlib | Kotlin/Native platform library (`platform.zlib`), via pyrlyn-kit | gzip and deflate in archives | https://zlib.net |
 | hdiutil, pkgutil, ditto | macOS system | Unpacking `.dmg` and `.pkg` releases | https://developer.apple.com |
 | Docker on Colima | Homebrew | Runs `:desktop:e2e` on Linux, in `desktop/e2e/linux/Dockerfile` (Temurin 21, Cantarell, Xvfb) | https://github.com/abiosoft/colima |
 | Parallels Desktop | Parallels installer | The Windows 11 VM `desktop/e2e/windows/run.sh` runs `:desktop:e2e` in | https://www.parallels.com |
@@ -27,17 +27,17 @@
 | org.jetbrains.kotlinx:kotlinx-coroutines-core 1.11.0 | local | https://github.com/Kotlin/kotlinx.coroutines | Concurrency, cancellation |
 | org.jetbrains.kotlinx:kotlinx-coroutines-swing 1.11.0 | local | https://github.com/Kotlin/kotlinx.coroutines | Main dispatcher for the desktop app |
 | org.jetbrains.kotlinx:kotlinx-coroutines-test 1.11.0 | local | https://github.com/Kotlin/kotlinx.coroutines | Desktop tests |
-| net.java.dev.jna:jna 5.19.1 | via kotlin-fluent | https://github.com/java-native-access/jna | Win32 and DWM calls for the Windows 11 frame |
+| net.java.dev.jna:jna 5.19.1 | via pyrlyn-fluent | https://github.com/java-native-access/jna | Win32 and DWM calls for the Windows 11 frame |
 | org.kotlincrypto.hash:sha2 0.8.0 | local | https://github.com/KotlinCrypto/hash | Streaming SHA-256 of downloads (Rust: sha2) |
-| pyrlyn.kit:fs, toml, toml-aot, yaml-aot, semver, http-ktor, db-room, db-sqldelight, process, archive, cli, icons | local (included build) | `packages/kotlin-kit` | Crash-safe file writes (Rust: fs-kit), TOML read and comment-keeping edit, YAML read, versions, HTTP, SQLite and SQLDelight on it, hooks under a deadline (Rust: run_with_deadline), tar/zip/gzip/bzip2/xz (Rust: tar, zip, flate2, bzip2, xz2), the command line with clap's help and errors, completion scripts and man pages (Rust: clap, clap_complete, clap_mangen), status-line icons (Rust: operation-icons) |
-| pyrlyn.glass:glass | local (included build) | `packages/kotlin-glass` | Panes, controls, sheet and layout of the macOS look (macOS app: SwiftUI's Liquid Glass) |
-| pyrlyn.fluent:fluent | local (included build) | `packages/kotlin-fluent` | Surfaces, controls, navigation and dialog of the Windows look (Windows app: WinUI) |
-| pyrlyn.adwaita:adwaita | local (included build) | `packages/kotlin-adwaita` | Surfaces, controls, lists and overlays of the Linux look |
-| pyrlyn.snapshot:snapshot | local (included build, tests only) | `packages/kotlin-snapshot` | Rust ketch's `.snap` files, read as they are (Rust: insta) |
-| pyrlyn.kit:loopback | local (included build, tests only) | `packages/kotlin-kit` | A hand-written HTTP server on 127.0.0.1 for the download guards (Rust tests: a raw `TcpListener`) |
-| io.ktor:ktor-client-core, -darwin, -curl 3.6.0 | via kotlin-kit | https://github.com/ktorio/ktor | HTTP client (Rust: ureq) |
-| androidx.sqlite:sqlite-bundled 2.7.1 | via kotlin-kit | https://developer.android.com/jetpack/androidx/releases/sqlite | SQLite with SQLite bundled (Rust: libsqlite3-sys, bundled) |
-| app.cash.sqldelight (Gradle plugin, runtime, sqlite-3-38-dialect) 2.4.1 | local; runtime via kotlin-kit | https://github.com/sqldelight/sqldelight | `stats.db` queries typed and checked against its schema at build time (Rust: diesel) |
+| pyrlyn.kit:fs, toml, toml-aot, yaml-aot, semver, http-ktor, db-room, db-sqldelight, process, archive, cli, icons | local (included build) | `packages/pyrlyn-kit` | Crash-safe file writes (Rust: fs-kit), TOML read and comment-keeping edit, YAML read, versions, HTTP, SQLite and SQLDelight on it, hooks under a deadline (Rust: run_with_deadline), tar/zip/gzip/bzip2/xz (Rust: tar, zip, flate2, bzip2, xz2), the command line with clap's help and errors, completion scripts and man pages (Rust: clap, clap_complete, clap_mangen), status-line icons (Rust: operation-icons) |
+| pyrlyn.glass:glass | local (included build) | `packages/pyrlyn-glass` | Panes, controls, sheet and layout of the macOS look (macOS app: SwiftUI's Liquid Glass) |
+| pyrlyn.fluent:fluent | local (included build) | `packages/pyrlyn-fluent` | Surfaces, controls, navigation and dialog of the Windows look (Windows app: WinUI) |
+| pyrlyn.adwaita:adwaita | local (included build) | `packages/pyrlyn-adwaita` | Surfaces, controls, lists and overlays of the Linux look |
+| pyrlyn.snapshot:snapshot | local (included build, tests only) | `packages/pyrlyn-snapshot` | Rust ketch's `.snap` files, read as they are (Rust: insta) |
+| pyrlyn.kit:loopback | local (included build, tests only) | `packages/pyrlyn-kit` | A hand-written HTTP server on 127.0.0.1 for the download guards (Rust tests: a raw `TcpListener`) |
+| io.ktor:ktor-client-core, -darwin, -curl 3.6.0 | via pyrlyn-kit | https://github.com/ktorio/ktor | HTTP client (Rust: ureq) |
+| androidx.sqlite:sqlite-bundled 2.7.1 | via pyrlyn-kit | https://developer.android.com/jetpack/androidx/releases/sqlite | SQLite with SQLite bundled (Rust: libsqlite3-sys, bundled) |
+| app.cash.sqldelight (Gradle plugin, runtime, sqlite-3-38-dialect) 2.4.1 | local; runtime via pyrlyn-kit | https://github.com/sqldelight/sqldelight | `stats.db` queries typed and checked against its schema at build time (Rust: diesel) |
 | io.kotest:kotest-assertions-core 6.2.6 | local | https://github.com/kotest/kotest | Test assertions |
 | io.github.optimumcode:json-schema-validator 0.5.5 | local | https://github.com/OptimumCode/json-schema-validator | Tests: manifests and config against the schemas Rust ketch publishes (Rust: jsonschema) |
 | org.jetbrains.kotlin:kotlin-test | local | https://github.com/JetBrains/kotlin | Tests |
@@ -48,12 +48,12 @@
 | dev.detekt 2.0.0-alpha.6 | via shared-settings | https://github.com/detekt/detekt | Static analysis |
 | com.github.burrunan.s3-build-cache 1.9.10 | local (settings) | https://github.com/burrunan/gradle-s3-build-cache | Optional S3/R2 remote build cache; off without its keys |
 
-## Conan (ConanCenter, via kotlin-kit)
+## Conan (ConanCenter, via pyrlyn-kit)
 
 | Package | Where | Source | Why here |
 | --- | --- | --- | --- |
-| bzip2 1.0.8 | via kotlin-kit (`archive/conan.lock`) | https://sourceware.org/bzip2/ | bzip2 codec, linked statically |
-| xz_utils 5.8.4 | via kotlin-kit (`archive/conan.lock`) | https://github.com/tukaani-project/xz | xz decoder (liblzma), linked statically |
+| bzip2 1.0.8 | via pyrlyn-kit (`archive/conan.lock`) | https://sourceware.org/bzip2/ | bzip2 codec, linked statically |
+| xz_utils 5.8.4 | via pyrlyn-kit (`archive/conan.lock`) | https://github.com/tukaani-project/xz | xz decoder (liblzma), linked statically |
 
 ## mise
 

@@ -15,7 +15,7 @@ agent: Claude Code / claude-opus-5-5
 
 About 6.2k lines of Rust and 117 tests, ported from 41738f64.
 
-1. kotlin-kit `http`: a streaming GET (status, headers, body read in chunks) so ketch can cap a
+1. pyrlyn-kit `http`: a streaming GET (status, headers, body read in chunks) so ketch can cap a
    body while it arrives, stop on cancel and see `Content-Length`; Ktor adapter and MockEngine
    tests. Check that a redirect to another host drops `Authorization` (GitHub asset downloads
    redirect to a CDN).
@@ -30,7 +30,7 @@ About 6.2k lines of Rust and 117 tests, ported from 41738f64.
 6. `info`, `registry` (update, swap-in, check, metadata, fixtures).
 
 Files: `ketch-core/src/nativeMain/kotlin/ketch/core/{http,source,releases,resolve,changelog,info,
-registry}/`, tests beside them; kotlin-kit `http`, `http-ktor`. Check: `./gradlew build`, the
+registry}/`, tests beside them; pyrlyn-kit `http`, `http-ktor`. Check: `./gradlew build`, the
 linuxArm64 compile with `-Pdiffuser.allTargets=true`, kit `check`, every ported test green on
 the Mac.
 

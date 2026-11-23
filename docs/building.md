@@ -2,9 +2,9 @@
 
 Needs JDK 21 and six shared builds in the workspace's `packages/` (`../../packages/` from the
 main checkout): `shared-settings` supplies the shared Kotlin/Native settings, ktlint, detekt and the
-optional remote build cache; `kotlin-kit` supplies the TOML, YAML, semver, HTTP and SQLite
-libraries; `kotlin-snapshot` supplies the snapshot assertions the tests use; `kotlin-glass`, `kotlin-fluent` and
-`kotlin-adwaita` supply the components of the desktop app's macOS, Windows and Linux looks. Every directory above the build is searched for
+optional remote build cache; `pyrlyn-kit` supplies the TOML, YAML, semver, HTTP and SQLite
+libraries; `pyrlyn-snapshot` supplies the snapshot assertions the tests use; `pyrlyn-glass`, `pyrlyn-fluent` and
+`pyrlyn-adwaita` supply the components of the desktop app's macOS, Windows and Linux looks. Every directory above the build is searched for
 `packages/`, so a nested worktree finds them too; set `SHARED_SETTINGS_DIR`, `KOTLIN_KIT_DIR`,
 `KOTLIN_SNAPSHOT_DIR`, `KOTLIN_GLASS_DIR`, `KOTLIN_FLUENT_DIR` or `KOTLIN_ADWAITA_DIR` when they live
 elsewhere.

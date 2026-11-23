@@ -28,10 +28,10 @@ About 4.2k lines of Rust and 85 tests (plus the two wizard tests), ported from 4
 4. `push` in `ketch.core.push`: `load`, `open`, `current`, `plan` over an `Api` interface, and a
    GitHub implementation on the project's HTTP client. octocrab has no Kotlin counterpart; the
    handful of REST calls go through the existing `Http` client, which gains POST, PUT and PATCH
-   through kotlin-kit's `http` interface.
+   through pyrlyn-kit's `http` interface.
 5. The two push-gated wizard tests.
 
 Files: `ketch-core/src/{commonMain,nativeMain}/kotlin/ketch/core/{importer,push}/`, tests beside
-them; kotlin-kit `http` and `http-ktor` for the new methods. Check: `./gradlew build`, the
+them; pyrlyn-kit `http` and `http-ktor` for the new methods. Check: `./gradlew build`, the
 linuxArm64 compile with `-Pdiffuser.allTargets=true`, kit `check`, every ported test green on
 the Mac, no network in tests.

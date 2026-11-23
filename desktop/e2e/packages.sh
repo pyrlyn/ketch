@@ -5,8 +5,8 @@ if [ -n "${KOTLIN_KIT_DIR:-}" ]; then
     exit
 fi
 dir=$PWD
-until [ -d "$dir/packages/kotlin-kit" ]; do
-    [ "$dir" != / ] || { echo "packages/kotlin-kit not found above $PWD; set KOTLIN_KIT_DIR" >&2; exit 1; }
+until [ -d "$dir/packages/pyrlyn-kit" ]; do
+    [ "$dir" != / ] || { echo "packages/pyrlyn-kit not found above $PWD; set KOTLIN_KIT_DIR" >&2; exit 1; }
     dir=$(dirname "$dir")
 done
 echo "$dir/packages"

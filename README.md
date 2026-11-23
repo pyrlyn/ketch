@@ -1,13 +1,11 @@
-# ketch-kotlin
+# ketch
 
-A Kotlin port of [ketch](https://github.com/pyrlyn/ketch): install any CLI tool or app straight
-from its GitHub releases — no formula, checked against the published checksum, versioned, and
-cleanly removable.
+Install any CLI tool or app straight from its GitHub releases — no formula, checked against the published checksum, versioned, and cleanly removable.
 
-- **`ketch`** — the command line, built with Kotlin/Native for macOS (arm64) and Linux
-  (x86_64, arm64); Windows follows.
-- **Ketch desktop** — one Compose Multiplatform app for macOS, Windows and Linux: Liquid Glass on
-  macOS, a Windows 11 look on Windows, a dark Adwaita-style look on Linux. It runs the native `ketch` and talks to it over a JSON-lines protocol.
+This is the Kotlin implementation of ketch. The earlier Rust tree lives in [pyrlyn-archive/ketch](https://github.com/pyrlyn-archive/ketch).
+
+- **`ketch`** — the command line, built with Kotlin/Native for macOS (arm64) and Linux (x86_64, arm64); Windows follows.
+- **Ketch desktop** — one Compose Multiplatform app for macOS, Windows and Linux: Liquid Glass on macOS, a Windows 11 look on Windows, a dark Adwaita-style look on Linux. It runs the native `ketch` and talks to it over a JSON-lines protocol.
 
 Status: early port. What is ported so far is tracked in [plan/README.md](plan/README.md).
 
@@ -21,6 +19,8 @@ Needs JDK 21 and the shared builds in the workspace's `packages/` ([details](doc
 ./gradlew :desktop:run
 ```
 
+The binary path above is the Kotlin/Native debug executable on macOS arm64. Linux paths and packaging are in [Building](docs/building.md).
+
 ## Example
 
 ```bash
@@ -30,7 +30,7 @@ ketch upgrade                # every unpinned package to its latest release
 ketch uninstall repo         # remove it again
 ```
 
-The command line matches Rust ketch; `ketch --help` and `ketch <command> --help` list every option.
+`ketch --help` and `ketch <command> --help` list every option. The command set also includes `update`, `outdated`, `info`, `search`, `pin`, `rollback`, `doctor`, `self`, and others.
 
 ## Documentation
 
@@ -50,4 +50,5 @@ publishing the draft creates the tag. It refuses a version whose tag already exi
 
 ## License
 
-The same terms as ketch: GPL-3.0-or-later, the ketch royalty-free licence or a commercial licence.
+No license file is present in this repository. Desktop package metadata records
+`GPL-3.0-or-later OR royalty-free OR commercial licence`.

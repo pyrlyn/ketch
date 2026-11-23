@@ -12,13 +12,13 @@ foreign package formats and installers refused by name, a hand-written manifest 
 overwritten, a contents-API file over 1 MB refused instead of read as empty, and a pull request
 into another base not taken for this proposal's.
 
-kotlin-kit `http` gained PUT and PATCH (Ktor adapter included, with a test); ketch's `Http`
+pyrlyn-kit `http` gained PUT and PATCH (Ktor adapter included, with a test); ketch's `Http`
 gained `sendJson`. The winget YAML goes through kit `yaml-aot`. See `plan/README.md` for the
 decisions.
 
-Commits: kotlin-kit 9cbb047; ketch-kotlin 8b658e5, 182b02f, ba00936, 97cf5c0, 8bee4b2,
+Commits: pyrlyn-kit 9cbb047; ketch-kotlin 8b658e5, 182b02f, ba00936, 97cf5c0, 8bee4b2,
 fbb7b07, 67696a4 and this close.
 
 Checked on the Mac: `./gradlew build` (776 native tests, ktlint, detekt) is green, `./gradlew
-check` in kotlin-kit is green, and `-Pdiffuser.allTargets=true :ketch-core:compileKotlinLinuxArm64
+check` in pyrlyn-kit is green, and `-Pdiffuser.allTargets=true :ketch-core:compileKotlinLinuxArm64
 :ketch-core:compileTestKotlinLinuxArm64` compiles. No test reaches the network or the real HOME.

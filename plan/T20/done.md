@@ -4,8 +4,8 @@ On Linux the app now opens in the `Ketch Linux` design by default: a dark glass 
 switcher, boxed lists, a popover menu and toasts, on real data. High contrast keeps Material 3; `KETCH_LOOK=adwaita`
 shows the look on any system.
 
-- `packages/kotlin-adwaita` (`pyrlyn.adwaita:adwaita`) holds the generic part, with no ketch word in it, and
-  `kotlin-glass` gains the `Menu` glyph: https://github.com/pyrlyn/packages/pull/4.
+- `packages/pyrlyn-adwaita` (`pyrlyn.adwaita:adwaita`) holds the generic part, with no ketch word in it, and
+  `pyrlyn-glass` gains the `Menu` glyph: https://github.com/pyrlyn/packages/pull/4.
 - `desktop/.../ui/adwaita/` holds the shell and every screen. `Edge.kt` gives the undecorated window resize edges.
 - Logic the looks share moved up: `Kind`, `emptyWords`, `isFixed` in `ui/Summaries.kt`, `readWhy` in `ui/screens/Package.kt`,
   the font lookup in `ui/Host.kt`.
@@ -23,8 +23,8 @@ nothing):
 
 ## How it was checked
 
-- `./gradlew build`: compile, 230 desktop tests, ktlint, detekt. `./gradlew check` in `kotlin-adwaita` (11 tests) and
-  `kotlin-glass`.
+- `./gradlew build`: compile, 230 desktop tests, ktlint, detekt. `./gradlew check` in `pyrlyn-adwaita` (11 tests) and
+  `pyrlyn-glass`.
 - Ubuntu 26.04 ARM64 VM, the app with a real `ketch` for linuxArm64, on Xvfb with openbox and picom: the look is picked
   without `KETCH_LOOK`, corners are round, the right and bottom edges resize, the header drags and double-click
   maximizes and restores, the menu, Ctrl+, and Ctrl+K work, ripgrep searched, installed and uninstalled through the UI,
@@ -81,7 +81,7 @@ font settings say, and gives no way to change it. Writing that private field by 
 - A scaled display: AWT goes through XWayland, which mutter upscales above 100%, so the window would be soft there. The
   VM's screen is too small to scale.
 - Frame rate while maximized: nothing on the page scrolls at that size.
-- `ketch` for Linux cannot be linked from the Mac as it stands: kotlin-kit's Conan bzip2 and liblzma are the host's. The
+- `ketch` for Linux cannot be linked from the Mac as it stands: pyrlyn-kit's Conan bzip2 and liblzma are the host's. The
   VM run passed the VM's own libraries through `kotlin.native.linkArgs`, by hand.
 - The `.deb` was not built, so neither was its `.desktop` file. Run from a classpath, the dock shows
   `ketch-desktop-MainKt` with a gear, and `StartupWMClass` is not configured.

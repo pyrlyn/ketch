@@ -18,7 +18,7 @@ built and run in the VM, and a second monitor has been tried or the reason it co
 
 1. Build `:desktop:packageMsi` in the VM with `conan`, `cmake` and `ninja` on the user `PATH`; install
    the package and start it.
-2. `kotlin-fluent`, jvmMain: a window-frame helper over JNA, without business logic. It subclasses the
+2. `pyrlyn-fluent`, jvmMain: a window-frame helper over JNA, without business logic. It subclasses the
    window and the Skia layer, asks DWM for corners and the backdrop, and reports the caption buttons
    to Windows, so the maximize button gets Snap Layouts.
 3. `Main.kt` wears it on `Look.Fluent`. Any failure leaves the window as T17 made it: fail open.

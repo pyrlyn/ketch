@@ -24,4 +24,4 @@ Checked on the Mac (arm64):
   green.
 - `./gradlew :ketch:compileTestKotlinLinuxArm64 :ketch:compileTestKotlinLinuxX64 -Pdiffuser.allTargets=true`,
   plus ktlint and detekt with the same flag: clean. The Linux tests are compiled, not run.
-- kotlin-kit `./gradlew check`: green.
+- pyrlyn-kit `./gradlew check`: green.

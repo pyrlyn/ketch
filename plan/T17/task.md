@@ -17,9 +17,9 @@ artboard is in the app on Windows, driven by the store's real data, and `./gradl
 
 ## Execution plan
 
-1. `packages/kotlin-fluent` (module `:fluent`, package `pyrlyn.fluent`), on the `kotlin-fluent` branch
+1. `packages/pyrlyn-fluent` (module `:fluent`, package `pyrlyn.fluent`), on the `pyrlyn-fluent` branch
    of pyrlyn/packages: the design system's palette, surfaces, controls, layout and dialog. It reuses
-   `Glyph` and `AutoGrid` from kotlin-glass; the new glyphs go there.
+   `Glyph` and `AutoGrid` from pyrlyn-glass; the new glyphs go there.
 2. `Look.Fluent` on Windows in `ui/Theme.kt`, `KETCH_LOOK` to see it elsewhere. High contrast keeps
    Material 3, which the design system has no answer for. Linux keeps Material 3.
 3. `ui/fluent/`: the palette mapping, the shell (title bar, navigation, bars), one file per screen,

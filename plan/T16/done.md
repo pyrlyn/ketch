@@ -8,7 +8,7 @@ https://github.com/pyrlyn/packages/pull/1: the app's build needs that package.
 
 ## What was done
 
-- The `kotlin-glass` package (`packages/kotlin-glass`): panes, controls, sheet, status bar, tiles,
+- The `pyrlyn-glass` package (`packages/pyrlyn-glass`): panes, controls, sheet, status bar, tiles,
   sidebar and toolbar for jvm and wasmJs. No business logic: every word, colour and action comes
   from the caller.
 - `desktop/src/main/kotlin/ketch/desktop/ui/glass/`: the palette from the macOS tokens, the shell,
@@ -36,7 +36,7 @@ Changed because Compose or AWT cannot do what the design draws:
 
 - `./gradlew build` in ketch-kotlin: compile, tests, ktlint and detekt; `GlassAppTest`,
   `GlassHelpersTest` and `FindShortcutTest` cover the screens, the helpers and ⌘K.
-- `./gradlew check` in `packages/kotlin-glass`.
+- `./gradlew check` in `packages/pyrlyn-glass`.
 - Every screen rendered off-screen to PNG, light and dark, and compared with the artboards.
 
 ## Not checked
