@@ -194,8 +194,9 @@ jobs:
           bin=ketch; [ "$EXE" = exe ] && bin=ketch.exe
           cp "ketch/build/bin/$TARGET/releaseExecutable/ketch.$EXE" "$stage/$bin"
           cp README.md "$stage/"
-          tar -C "$RUNNER_TEMP/stage" -czf "$RUNNER_TEMP/dist/$name.tar.gz" "$name"
           cd "$RUNNER_TEMP/dist"
+          # A relative archive name: GNU tar reads "D:\..." on Windows as host:path.
+          tar -C "$RUNNER_TEMP/stage" -czf "$name.tar.gz" "$name"
           if command -v sha256sum >/dev/null; then sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
           else shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"; fi
           cat "$name.tar.gz.sha256"
