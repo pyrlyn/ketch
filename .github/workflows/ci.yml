@@ -48,7 +48,7 @@ jobs:
         with:
           repository: pyrlyn/packages
           # Pinned release tag; bump when ketch needs newer shared builds.
-          ref: '0.0.5'
+          ref: 'cc286918bf40a71aa09dd5cfcf6497fc173d36de'
           path: packages
           persist-credentials: false
       - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d
