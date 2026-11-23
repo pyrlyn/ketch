@@ -1,6 +1,6 @@
 # Architecture
 
-ketch-kotlin ports [ketch](https://github.com/pyrlyn/ketch) (Rust). The Rust tree is the source of
+ketch is a Kotlin port of the earlier Rust ketch ([pyrlyn-archive/ketch](https://github.com/pyrlyn-archive/ketch)). The Rust tree is the source of
 truth for behaviour: the command line, its output, the config and manifest TOML, `ketch.lock`,
 `state.json`, the `~/.ketch` layout and `stats.db` stay interchangeable with Rust ketch.
 

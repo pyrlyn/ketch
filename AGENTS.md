@@ -1,4 +1,4 @@
-# AGENTS.md — ketch-kotlin
+# AGENTS.md — ketch
 
 If an `AGENTS.md` or `CLAUDE.md` exists higher in the tree, follow it too; on conflict, ask the creator.
 
